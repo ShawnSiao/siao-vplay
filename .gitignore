@@ -1,0 +1,18 @@
+node_modules/
+dist/
+coverage/
+test-results/
+playwright-report/
+*.log
+.tmp/
+user-media/
+
+# Local-only product and planning materials
+/AGENTS.md
+/docs/
+/local-docs/
+/designs/
+/local-tools/
+/planning/
+/requirements/
+/roadmap/
