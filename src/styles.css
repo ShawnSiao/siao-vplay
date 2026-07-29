@@ -1,0 +1,206 @@
+:root {
+  color: #f5f1e8;
+  background: #10100f;
+  font-family:
+    Inter, "SF Pro Display", "Segoe UI", "PingFang SC", "Microsoft YaHei",
+    sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 15% 12%, rgb(159 116 64 / 20%), transparent 32rem),
+    linear-gradient(135deg, #10100f 0%, #161512 58%, #0d0d0c 100%);
+}
+
+button,
+a {
+  font: inherit;
+}
+
+button:focus-visible,
+a:focus-visible {
+  outline: 2px solid #d6ad73;
+  outline-offset: 3px;
+}
+
+.app-shell {
+  min-height: 100vh;
+  padding: 0 5vw 5rem;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 5.25rem;
+  border-bottom: 1px solid rgb(255 255 255 / 9%);
+}
+
+.brand {
+  display: inline-flex;
+  gap: 0.75rem;
+  align-items: center;
+  color: inherit;
+  font-size: 1.05rem;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  text-decoration: none;
+}
+
+.brand-mark {
+  display: grid;
+  width: 2rem;
+  height: 2rem;
+  place-items: center;
+  border: 1px solid rgb(214 173 115 / 55%);
+  border-radius: 50%;
+  color: #e6c08b;
+  font-family: Georgia, serif;
+}
+
+.phase-badge {
+  border: 1px solid rgb(255 255 255 / 12%);
+  border-radius: 999px;
+  padding: 0.4rem 0.8rem;
+  color: #bbb5a9;
+  font-size: 0.78rem;
+}
+
+.hero {
+  max-width: 64rem;
+  padding: clamp(5rem, 12vh, 9rem) 0 4rem;
+}
+
+.eyebrow {
+  margin: 0 0 1rem;
+  color: #d6ad73;
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+h1,
+h2,
+p {
+  margin-top: 0;
+}
+
+h1 {
+  max-width: 13ch;
+  margin-bottom: 1.5rem;
+  font-family: "Noto Serif SC", "Source Han Serif SC", SimSun, serif;
+  font-size: clamp(3.4rem, 7.2vw, 7.5rem);
+  font-weight: 500;
+  letter-spacing: -0.055em;
+  line-height: 0.98;
+}
+
+.hero-copy {
+  max-width: 42rem;
+  color: #bbb5a9;
+  font-size: clamp(1rem, 1.4vw, 1.18rem);
+  line-height: 1.8;
+}
+
+.hero-actions {
+  display: flex;
+  gap: 1.25rem;
+  align-items: center;
+  margin-top: 2.25rem;
+  color: #827d73;
+  font-size: 0.85rem;
+}
+
+.primary-action {
+  border: 0;
+  border-radius: 999px;
+  padding: 0.9rem 1.45rem;
+  color: #17130e;
+  background: #d6ad73;
+  font-weight: 750;
+}
+
+.primary-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.75;
+}
+
+.status-panel {
+  display: grid;
+  grid-template-columns: minmax(12rem, 0.7fr) minmax(30rem, 1.3fr);
+  gap: 2rem;
+  max-width: 72rem;
+  border-top: 1px solid rgb(255 255 255 / 12%);
+  padding-top: 2rem;
+}
+
+.status-panel h2 {
+  font-size: 1.35rem;
+  font-weight: 600;
+}
+
+.status-panel dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1.25rem 2rem;
+  margin: 0;
+}
+
+.status-panel dl div {
+  min-width: 0;
+}
+
+.status-panel dt {
+  margin-bottom: 0.35rem;
+  color: #777268;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.status-panel dd {
+  overflow: hidden;
+  margin: 0;
+  color: #dcd7cd;
+  font-family: "Cascadia Code", Consolas, monospace;
+  font-size: 0.82rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.error-copy {
+  color: #e79787;
+}
+
+@media (max-width: 760px) {
+  .phase-badge {
+    display: none;
+  }
+
+  h1 {
+    font-size: clamp(3rem, 16vw, 5rem);
+  }
+
+  .hero-actions {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .status-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .status-panel dl {
+    grid-template-columns: 1fr;
+  }
+}
