@@ -16,26 +16,33 @@ struct AppStatus {
     version: &'static str,
     platform: &'static str,
     data_directory: String,
+    startup_media_path: Option<String>,
 }
 
 #[tauri::command]
-fn app_status(data_directory: &Path) -> AppStatus {
+fn app_status(data_directory: &Path, startup_media_path: Option<String>) -> AppStatus {
     AppStatus {
         app_name: "SiaoVPlay",
         version: env!("CARGO_PKG_VERSION"),
         platform: "windows-desktop",
         data_directory: data_directory.to_string_lossy().into_owned(),
+        startup_media_path,
     }
 }
 
+struct StartupMediaPath(Option<String>);
+
 #[tauri::command]
-fn get_app_status(store: State<'_, ProjectStore>) -> AppStatus {
+fn get_app_status(
+    store: State<'_, ProjectStore>,
+    startup_media_path: State<'_, StartupMediaPath>,
+) -> AppStatus {
     let data_directory = store
         .database_path()
         .parent()
         .and_then(Path::parent)
         .unwrap_or_else(|| Path::new("."));
-    app_status(data_directory)
+    app_status(data_directory, startup_media_path.0.clone())
 }
 
 fn resolve_data_directory(app: &tauri::App) -> Result<PathBuf, Box<dyn std::error::Error>> {
@@ -48,6 +55,14 @@ fn resolve_data_directory(app: &tauri::App) -> Result<PathBuf, Box<dyn std::erro
     Ok(app.path().app_local_data_dir()?)
 }
 
+fn resolve_startup_media_path() -> Option<String> {
+    std::env::args_os()
+        .skip(1)
+        .map(PathBuf::from)
+        .find(|path| path.is_file())
+        .map(|path| path.to_string_lossy().into_owned())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -58,6 +73,7 @@ pub fn run() {
             let store = ProjectStore::open(database_path)?;
             store.recover_running_media_artifacts()?;
             app.manage(store);
+            app.manage(StartupMediaPath(resolve_startup_media_path()));
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -85,10 +101,11 @@ mod tests {
 
     #[test]
     fn app_status_uses_the_siaovplay_identity() {
-        let status = app_status(Path::new("W:/SiaoVPlay/app-data"));
+        let status = app_status(Path::new("W:/SiaoVPlay/app-data"), None);
 
         assert_eq!(status.app_name, "SiaoVPlay");
         assert_eq!(status.platform, "windows-desktop");
         assert_eq!(status.data_directory, "W:/SiaoVPlay/app-data");
+        assert_eq!(status.startup_media_path, None);
     }
 }

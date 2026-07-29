@@ -1,5 +1,5 @@
 use serde::Serialize;
-use tauri::State;
+use tauri::{AppHandle, Manager, State};
 
 use crate::{
     domain::{
@@ -141,13 +141,21 @@ pub async fn inspect_project_media(
 
 #[tauri::command]
 pub async fn prepare_project_media(
+    app: AppHandle,
     store: State<'_, ProjectStore>,
     input: PrepareProjectMediaInput,
 ) -> Result<MediaPreparation, CommandError> {
     let store = store.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || {
+    let preparation = tauri::async_runtime::spawn_blocking(move || {
         media::prepare_project_media(&store, input).map_err(CommandError::from)
     })
     .await
-    .map_err(CommandError::background_task_failed)?
+    .map_err(CommandError::background_task_failed)??;
+    app.asset_protocol_scope()
+        .allow_file(&preparation.playback_path)
+        .map_err(|error| CommandError {
+            code: "asset_scope_error",
+            message: format!("无法授权播放器读取已准备的媒体：{error}"),
+        })?;
+    Ok(preparation)
 }
