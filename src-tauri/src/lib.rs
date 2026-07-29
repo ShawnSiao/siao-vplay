@@ -1,5 +1,6 @@
 mod commands;
 mod domain;
+mod media;
 mod store;
 
 use std::path::{Path, PathBuf};
@@ -54,7 +55,9 @@ pub fn run() {
         .setup(|app| {
             let data_directory = resolve_data_directory(app)?;
             let database_path = data_directory.join("projects").join("siaovplay.db");
-            app.manage(ProjectStore::open(database_path)?);
+            let store = ProjectStore::open(database_path)?;
+            store.recover_running_media_artifacts()?;
+            app.manage(store);
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -65,7 +68,10 @@ pub fn run() {
             commands::mark_project_opened,
             commands::update_playback_state,
             commands::relink_project_media,
-            commands::delete_project
+            commands::delete_project,
+            commands::get_media_runtime_status,
+            commands::inspect_project_media,
+            commands::prepare_project_media
         ])
         .run(tauri::generate_context!())
         .expect("failed to run SiaoVPlay");

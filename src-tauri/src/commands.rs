@@ -3,9 +3,10 @@ use tauri::State;
 
 use crate::{
     domain::{
-        CreateLocalProjectInput, DeleteProjectResult, Project, RelinkProjectMediaInput,
-        UpdatePlaybackStateInput,
+        CreateLocalProjectInput, DeleteProjectResult, PrepareProjectMediaInput, Project,
+        RelinkProjectMediaInput, UpdatePlaybackStateInput,
     },
+    media::{self, MediaError, MediaInspection, MediaPreparation, MediaRuntimeStatus},
     store::{ProjectStore, StoreError},
 };
 
@@ -23,11 +24,46 @@ impl From<StoreError> for CommandError {
             StoreError::Validation(_) => "validation_error",
             StoreError::UnsupportedSchema { .. } => "unsupported_schema",
             StoreError::FileSystem(_) => "filesystem_error",
-            StoreError::Database(_) | StoreError::InvalidMediaSourceKind(_) => "database_error",
+            StoreError::Database(_)
+            | StoreError::InvalidMediaSourceKind(_)
+            | StoreError::InvalidMediaArtifactStatus(_) => "database_error",
         };
         Self {
             code,
             message: error.to_string(),
+        }
+    }
+}
+
+impl From<MediaError> for CommandError {
+    fn from(error: MediaError) -> Self {
+        let code = match &error {
+            MediaError::Store(StoreError::ProjectNotFound(_)) => "project_not_found",
+            MediaError::Store(StoreError::Validation(_)) => "validation_error",
+            MediaError::Store(StoreError::UnsupportedSchema { .. }) => "unsupported_schema",
+            MediaError::Store(StoreError::FileSystem(_)) | MediaError::FileSystem(_) => {
+                "filesystem_error"
+            }
+            MediaError::Store(_) => "database_error",
+            MediaError::RuntimeUnavailable(_) => "media_runtime_unavailable",
+            MediaError::ProbeFailed(_) => "media_probe_failed",
+            MediaError::SourceChanged => "media_source_changed",
+            MediaError::MissingVideo => "missing_video_stream",
+            MediaError::ProxyFailed(_) => "playback_proxy_failed",
+            MediaError::Serialization(_) => "media_probe_serialization_failed",
+        };
+        Self {
+            code,
+            message: error.to_string(),
+        }
+    }
+}
+
+impl CommandError {
+    fn background_task_failed(message: impl ToString) -> Self {
+        Self {
+            code: "background_task_failed",
+            message: message.to_string(),
         }
     }
 }
@@ -83,4 +119,35 @@ pub fn delete_project(
     project_id: String,
 ) -> Result<DeleteProjectResult, CommandError> {
     store.delete_project(&project_id).map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn get_media_runtime_status() -> MediaRuntimeStatus {
+    media::media_runtime_status()
+}
+
+#[tauri::command]
+pub async fn inspect_project_media(
+    store: State<'_, ProjectStore>,
+    project_id: String,
+) -> Result<MediaInspection, CommandError> {
+    let store = store.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        media::inspect_project_media(&store, &project_id).map_err(CommandError::from)
+    })
+    .await
+    .map_err(CommandError::background_task_failed)?
+}
+
+#[tauri::command]
+pub async fn prepare_project_media(
+    store: State<'_, ProjectStore>,
+    input: PrepareProjectMediaInput,
+) -> Result<MediaPreparation, CommandError> {
+    let store = store.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        media::prepare_project_media(&store, input).map_err(CommandError::from)
+    })
+    .await
+    .map_err(CommandError::background_task_failed)?
 }

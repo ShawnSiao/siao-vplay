@@ -9,11 +9,12 @@ use thiserror::Error;
 use uuid::Uuid;
 
 use crate::domain::{
-    CreateLocalProjectInput, DeleteProjectResult, MediaSource, MediaSourceKind, PlaybackState,
-    Project, ProjectStatus, RelinkProjectMediaInput, UpdatePlaybackStateInput,
+    CreateLocalProjectInput, DeleteProjectResult, MediaArtifact, MediaArtifactStatus, MediaSource,
+    MediaSourceKind, PlaybackState, Project, ProjectStatus, RelinkProjectMediaInput,
+    UpdatePlaybackStateInput,
 };
 
-const CURRENT_SCHEMA_VERSION: i64 = 1;
+const CURRENT_SCHEMA_VERSION: i64 = 2;
 
 #[derive(Debug, Error)]
 pub enum StoreError {
@@ -29,6 +30,8 @@ pub enum StoreError {
     UnsupportedSchema { found: i64, supported: i64 },
     #[error("数据库中的媒体来源类型无效：{0}")]
     InvalidMediaSourceKind(String),
+    #[error("数据库中的媒体产物状态无效：{0}")]
+    InvalidMediaArtifactStatus(String),
 }
 
 #[derive(Clone, Debug)]
@@ -51,6 +54,13 @@ impl ProjectStore {
 
     pub fn database_path(&self) -> &Path {
         &self.database_path
+    }
+
+    pub fn data_directory(&self) -> &Path {
+        self.database_path
+            .parent()
+            .and_then(Path::parent)
+            .unwrap_or_else(|| Path::new("."))
     }
 
     #[cfg(test)]
@@ -233,6 +243,192 @@ impl ProjectStore {
         self.get_project(&input.project_id)
     }
 
+    pub fn record_media_probe(
+        &self,
+        project_id: &str,
+        media_source_id: &str,
+        source_sha256: &str,
+        probe_json: &str,
+    ) -> Result<Project, StoreError> {
+        validate_project_id(project_id)?;
+        validate_uuid(media_source_id, "媒体来源 ID")?;
+        validate_sha256(source_sha256)?;
+        let timestamp = now_ms()?;
+        let connection = self.connect()?;
+        let changed = connection.execute(
+            "UPDATE media_sources
+             SET source_sha256 = ?3,
+                 probe_json = ?4,
+                 probed_at_ms = ?5,
+                 updated_at_ms = ?5
+             WHERE id = ?2 AND project_id = ?1 AND is_primary = 1",
+            params![
+                project_id,
+                media_source_id,
+                source_sha256,
+                probe_json,
+                timestamp
+            ],
+        )?;
+        if changed == 0 {
+            return Err(StoreError::Validation(
+                "项目的主要媒体来源已经发生变化，请重新探测".to_owned(),
+            ));
+        }
+        Self::load_project(&connection, project_id)
+    }
+
+    pub fn find_completed_playback_proxy(
+        &self,
+        project_id: &str,
+        source_sha256: &str,
+        profile: &str,
+    ) -> Result<Option<MediaArtifact>, StoreError> {
+        validate_project_id(project_id)?;
+        validate_sha256(source_sha256)?;
+        let connection = self.connect()?;
+        connection
+            .query_row(
+                "SELECT
+                    id, project_id, source_media_id, status, path, source_sha256,
+                    profile, error_code, error_message, created_at_ms, updated_at_ms
+                 FROM media_artifacts
+                 WHERE project_id = ?1
+                   AND kind = 'playback_proxy'
+                   AND source_sha256 = ?2
+                   AND profile = ?3
+                   AND status = 'completed'",
+                params![project_id, source_sha256, profile],
+                map_media_artifact,
+            )
+            .optional()
+            .map_err(Into::into)
+    }
+
+    pub fn begin_playback_proxy(
+        &self,
+        project_id: &str,
+        source_media_id: &str,
+        source_sha256: &str,
+        profile: &str,
+        artifact_path: &Path,
+    ) -> Result<MediaArtifact, StoreError> {
+        validate_project_id(project_id)?;
+        validate_uuid(source_media_id, "媒体来源 ID")?;
+        validate_sha256(source_sha256)?;
+        if profile.trim().is_empty() {
+            return Err(StoreError::Validation("代理配置不能为空".to_owned()));
+        }
+        let artifact_path = path_to_string(artifact_path);
+        let artifact_id = Uuid::new_v4().to_string();
+        let timestamp = now_ms()?;
+        let mut connection = self.connect()?;
+        let transaction = connection.transaction()?;
+        ensure_project_exists(&transaction, project_id)?;
+        let source_exists = transaction
+            .query_row(
+                "SELECT 1
+                 FROM media_sources
+                 WHERE id = ?1 AND project_id = ?2 AND is_primary = 1",
+                params![source_media_id, project_id],
+                |_| Ok(()),
+            )
+            .optional()?
+            .is_some();
+        if !source_exists {
+            return Err(StoreError::Validation(
+                "项目的主要媒体来源已经发生变化，请重新准备".to_owned(),
+            ));
+        }
+        transaction.execute(
+            "INSERT INTO media_artifacts (
+                id, project_id, source_media_id, kind, status, path,
+                source_sha256, profile, error_code, error_message,
+                created_at_ms, updated_at_ms
+             ) VALUES (
+                ?1, ?2, ?3, 'playback_proxy', 'queued', ?4,
+                ?5, ?6, NULL, NULL, ?7, ?7
+             )
+             ON CONFLICT(project_id, kind, source_sha256, profile)
+             DO UPDATE SET
+                source_media_id = excluded.source_media_id,
+                status = 'queued',
+                path = excluded.path,
+                error_code = NULL,
+                error_message = NULL,
+                updated_at_ms = excluded.updated_at_ms",
+            params![
+                artifact_id,
+                project_id,
+                source_media_id,
+                artifact_path,
+                source_sha256,
+                profile,
+                timestamp
+            ],
+        )?;
+        let persisted_id: String = transaction.query_row(
+            "SELECT id
+             FROM media_artifacts
+             WHERE project_id = ?1
+               AND kind = 'playback_proxy'
+               AND source_sha256 = ?2
+               AND profile = ?3",
+            params![project_id, source_sha256, profile],
+            |row| row.get(0),
+        )?;
+        transaction.commit()?;
+        self.get_media_artifact(&persisted_id)
+    }
+
+    pub fn update_media_artifact_status(
+        &self,
+        artifact_id: &str,
+        status: MediaArtifactStatus,
+        error_code: Option<&str>,
+        error_message: Option<&str>,
+    ) -> Result<MediaArtifact, StoreError> {
+        validate_uuid(artifact_id, "媒体产物 ID")?;
+        let timestamp = now_ms()?;
+        let connection = self.connect()?;
+        let changed = connection.execute(
+            "UPDATE media_artifacts
+             SET status = ?2,
+                 error_code = ?3,
+                 error_message = ?4,
+                 updated_at_ms = ?5
+             WHERE id = ?1",
+            params![
+                artifact_id,
+                status.as_database_value(),
+                error_code,
+                error_message,
+                timestamp
+            ],
+        )?;
+        if changed == 0 {
+            return Err(StoreError::Validation(format!(
+                "找不到媒体产物：{artifact_id}"
+            )));
+        }
+        Self::load_media_artifact(&connection, artifact_id)
+    }
+
+    pub fn recover_running_media_artifacts(&self) -> Result<usize, StoreError> {
+        let timestamp = now_ms()?;
+        let connection = self.connect()?;
+        let changed = connection.execute(
+            "UPDATE media_artifacts
+             SET status = 'interrupted',
+                 error_code = 'app_restarted',
+                 error_message = '应用退出前代理任务尚未完成，可以重新开始',
+                 updated_at_ms = ?1
+             WHERE status = 'running'",
+            params![timestamp],
+        )?;
+        Ok(changed)
+    }
+
     pub fn delete_project(&self, project_id: &str) -> Result<DeleteProjectResult, StoreError> {
         validate_project_id(project_id)?;
         let connection = self.connect()?;
@@ -244,6 +440,11 @@ impl ProjectStore {
             deleted: changed > 0,
             source_media_deleted: false,
         })
+    }
+
+    fn get_media_artifact(&self, artifact_id: &str) -> Result<MediaArtifact, StoreError> {
+        let connection = self.connect()?;
+        Self::load_media_artifact(&connection, artifact_id)
     }
 
     fn connect(&self) -> Result<Connection, StoreError> {
@@ -264,7 +465,7 @@ impl ProjectStore {
                 applied_at_ms INTEGER NOT NULL
              );",
         )?;
-        let current_version: i64 = connection.query_row(
+        let mut current_version: i64 = connection.query_row(
             "SELECT COALESCE(MAX(version), 0) FROM schema_migrations",
             [],
             |row| row.get(0),
@@ -281,6 +482,16 @@ impl ProjectStore {
             Self::apply_migration_1(&transaction)?;
             transaction.execute(
                 "INSERT INTO schema_migrations (version, applied_at_ms) VALUES (1, ?1)",
+                params![now_ms()?],
+            )?;
+            transaction.commit()?;
+            current_version = 1;
+        }
+        if current_version < 2 {
+            let transaction = connection.transaction()?;
+            Self::apply_migration_2(&transaction)?;
+            transaction.execute(
+                "INSERT INTO schema_migrations (version, applied_at_ms) VALUES (2, ?1)",
                 params![now_ms()?],
             )?;
             transaction.commit()?;
@@ -333,6 +544,35 @@ impl ProjectStore {
         Ok(())
     }
 
+    fn apply_migration_2(transaction: &Transaction<'_>) -> Result<(), StoreError> {
+        transaction.execute_batch(
+            "ALTER TABLE media_sources ADD COLUMN source_sha256 TEXT;
+             ALTER TABLE media_sources ADD COLUMN probe_json TEXT;
+             ALTER TABLE media_sources ADD COLUMN probed_at_ms INTEGER;
+
+             CREATE TABLE media_artifacts (
+                id TEXT PRIMARY KEY,
+                project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+                source_media_id TEXT NOT NULL REFERENCES media_sources(id) ON DELETE CASCADE,
+                kind TEXT NOT NULL CHECK (kind IN ('playback_proxy')),
+                status TEXT NOT NULL
+                    CHECK (status IN ('queued', 'running', 'completed', 'failed', 'interrupted')),
+                path TEXT NOT NULL,
+                source_sha256 TEXT NOT NULL,
+                profile TEXT NOT NULL,
+                error_code TEXT,
+                error_message TEXT,
+                created_at_ms INTEGER NOT NULL,
+                updated_at_ms INTEGER NOT NULL,
+                UNIQUE(project_id, kind, source_sha256, profile)
+             );
+
+             CREATE INDEX media_artifacts_project_id
+             ON media_artifacts(project_id, status);",
+        )?;
+        Ok(())
+    }
+
     fn load_project(connection: &Connection, project_id: &str) -> Result<Project, StoreError> {
         let row = connection
             .query_row(
@@ -347,6 +587,8 @@ impl ProjectStore {
                     m.kind,
                     m.locator,
                     m.display_name,
+                    m.source_sha256,
+                    m.probed_at_ms,
                     m.created_at_ms,
                     m.updated_at_ms,
                     s.position_ms,
@@ -373,13 +615,15 @@ impl ProjectStore {
                         row.get::<_, String>(7)?,
                         row.get::<_, String>(8)?,
                         row.get::<_, String>(9)?,
-                        row.get::<_, i64>(10)?,
-                        row.get::<_, i64>(11)?,
+                        row.get::<_, Option<String>>(10)?,
+                        row.get::<_, Option<i64>>(11)?,
                         row.get::<_, i64>(12)?,
-                        row.get::<_, Option<i64>>(13)?,
-                        row.get::<_, f64>(14)?,
-                        row.get::<_, f64>(15)?,
-                        row.get::<_, i64>(16)?,
+                        row.get::<_, i64>(13)?,
+                        row.get::<_, i64>(14)?,
+                        row.get::<_, Option<i64>>(15)?,
+                        row.get::<_, f64>(16)?,
+                        row.get::<_, f64>(17)?,
+                        row.get::<_, i64>(18)?,
                     ))
                 },
             )
@@ -411,18 +655,62 @@ impl ProjectStore {
                 locator: row.8,
                 display_name: row.9,
                 is_available,
-                created_at_ms: row.10,
-                updated_at_ms: row.11,
+                source_sha256: row.10,
+                probed_at_ms: row.11,
+                created_at_ms: row.12,
+                updated_at_ms: row.13,
             },
             playback_state: PlaybackState {
-                position_ms: row.12,
-                duration_ms: row.13,
-                volume: row.14,
-                playback_rate: row.15,
-                updated_at_ms: row.16,
+                position_ms: row.14,
+                duration_ms: row.15,
+                volume: row.16,
+                playback_rate: row.17,
+                updated_at_ms: row.18,
             },
         })
     }
+
+    fn load_media_artifact(
+        connection: &Connection,
+        artifact_id: &str,
+    ) -> Result<MediaArtifact, StoreError> {
+        connection
+            .query_row(
+                "SELECT
+                    id, project_id, source_media_id, status, path, source_sha256,
+                    profile, error_code, error_message, created_at_ms, updated_at_ms
+                 FROM media_artifacts
+                 WHERE id = ?1",
+                params![artifact_id],
+                map_media_artifact,
+            )
+            .optional()?
+            .ok_or_else(|| StoreError::Validation(format!("找不到媒体产物：{artifact_id}")))
+    }
+}
+
+fn map_media_artifact(row: &rusqlite::Row<'_>) -> rusqlite::Result<MediaArtifact> {
+    let status_value = row.get::<_, String>(3)?;
+    let status = MediaArtifactStatus::from_database_value(&status_value).ok_or_else(|| {
+        rusqlite::Error::FromSqlConversionFailure(
+            3,
+            rusqlite::types::Type::Text,
+            Box::new(StoreError::InvalidMediaArtifactStatus(status_value)),
+        )
+    })?;
+    Ok(MediaArtifact {
+        id: row.get(0)?,
+        project_id: row.get(1)?,
+        source_media_id: row.get(2)?,
+        status,
+        path: row.get(4)?,
+        source_sha256: row.get(5)?,
+        profile: row.get(6)?,
+        error_code: row.get(7)?,
+        error_message: row.get(8)?,
+        created_at_ms: row.get(9)?,
+        updated_at_ms: row.get(10)?,
+    })
 }
 
 fn ensure_project_exists(
@@ -494,9 +782,22 @@ fn normalize_project_title(value: Option<&str>, media_path: &Path) -> Result<Str
 }
 
 fn validate_project_id(project_id: &str) -> Result<(), StoreError> {
-    Uuid::parse_str(project_id)
+    validate_uuid(project_id, "项目 ID")
+}
+
+fn validate_uuid(value: &str, label: &str) -> Result<(), StoreError> {
+    Uuid::parse_str(value)
         .map(|_| ())
-        .map_err(|_| StoreError::Validation("项目 ID 格式无效".to_owned()))
+        .map_err(|_| StoreError::Validation(format!("{label} 格式无效")))
+}
+
+fn validate_sha256(value: &str) -> Result<(), StoreError> {
+    let valid = value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit());
+    if valid {
+        Ok(())
+    } else {
+        Err(StoreError::Validation("媒体 SHA-256 格式无效".to_owned()))
+    }
 }
 
 fn validate_playback_state(input: &UpdatePlaybackStateInput) -> Result<(), StoreError> {
@@ -708,5 +1009,84 @@ mod tests {
                 supported: CURRENT_SCHEMA_VERSION
             })
         ));
+    }
+
+    #[test]
+    fn migrates_a_v1_database_to_media_artifact_schema() {
+        let temp_dir = tempfile::tempdir().expect("temp directory should be created");
+        let database_path = temp_dir.path().join("v1.sqlite3");
+        let mut connection = Connection::open(&database_path).expect("database should open");
+        connection
+            .execute_batch(
+                "PRAGMA foreign_keys = ON;
+                 CREATE TABLE schema_migrations (
+                    version INTEGER PRIMARY KEY,
+                    applied_at_ms INTEGER NOT NULL
+                 );",
+            )
+            .expect("migration table should be created");
+        let transaction = connection.transaction().expect("transaction should open");
+        ProjectStore::apply_migration_1(&transaction).expect("v1 schema should apply");
+        transaction
+            .execute(
+                "INSERT INTO schema_migrations (version, applied_at_ms) VALUES (1, 0)",
+                [],
+            )
+            .expect("v1 migration should be recorded");
+        transaction.commit().expect("transaction should commit");
+        drop(connection);
+
+        let store = ProjectStore::open(database_path).expect("v1 store should upgrade");
+        assert_eq!(
+            store.schema_version().expect("schema version"),
+            CURRENT_SCHEMA_VERSION
+        );
+        let connection = store.connect().expect("database should reopen");
+        let artifact_table_exists = connection
+            .query_row(
+                "SELECT 1 FROM sqlite_master
+                 WHERE type = 'table' AND name = 'media_artifacts'",
+                [],
+                |_| Ok(()),
+            )
+            .optional()
+            .expect("schema query should run")
+            .is_some();
+        assert!(artifact_table_exists);
+    }
+
+    #[test]
+    fn recovers_running_proxy_as_interrupted() {
+        let fixture = Fixture::new();
+        let media_path = fixture.media_file("proxy-source.mp4");
+        let project = fixture.create_project(&media_path);
+        let artifact = fixture
+            .store
+            .begin_playback_proxy(
+                &project.id,
+                &project.media_source.id,
+                &"a".repeat(64),
+                "h264-yuv420p-aac-v1",
+                &fixture.temp_dir.path().join("proxy.mp4"),
+            )
+            .expect("artifact should begin");
+        fixture
+            .store
+            .update_media_artifact_status(&artifact.id, MediaArtifactStatus::Running, None, None)
+            .expect("artifact should run");
+
+        assert_eq!(
+            fixture
+                .store
+                .recover_running_media_artifacts()
+                .expect("recovery should run"),
+            1
+        );
+        let recovered = fixture
+            .store
+            .get_media_artifact(&artifact.id)
+            .expect("artifact should load");
+        assert_eq!(recovered.status, MediaArtifactStatus::Interrupted);
+        assert_eq!(recovered.error_code.as_deref(), Some("app_restarted"));
     }
 }
