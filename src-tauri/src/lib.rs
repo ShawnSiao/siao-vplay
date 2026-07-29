@@ -1,4 +1,12 @@
+mod commands;
+mod domain;
+mod store;
+
+use std::path::{Path, PathBuf};
+
 use serde::Serialize;
+use store::ProjectStore;
+use tauri::{Manager, State};
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -10,34 +18,71 @@ struct AppStatus {
 }
 
 #[tauri::command]
-fn get_app_status() -> AppStatus {
+fn app_status(data_directory: &Path) -> AppStatus {
     AppStatus {
         app_name: "SiaoVPlay",
         version: env!("CARGO_PKG_VERSION"),
         platform: "windows-desktop",
-        data_directory: std::env::var("SIAOVPLAY_DATA_DIR")
-            .unwrap_or_else(|_| "local-app-data".to_owned()),
+        data_directory: data_directory.to_string_lossy().into_owned(),
     }
+}
+
+#[tauri::command]
+fn get_app_status(store: State<'_, ProjectStore>) -> AppStatus {
+    let data_directory = store
+        .database_path()
+        .parent()
+        .and_then(Path::parent)
+        .unwrap_or_else(|| Path::new("."));
+    app_status(data_directory)
+}
+
+fn resolve_data_directory(app: &tauri::App) -> Result<PathBuf, Box<dyn std::error::Error>> {
+    if let Some(data_directory) = std::env::var_os("SIAOVPLAY_DATA_DIR")
+        .filter(|value| !value.is_empty())
+        .map(PathBuf::from)
+    {
+        return Ok(data_directory);
+    }
+    Ok(app.path().app_local_data_dir()?)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
-        .invoke_handler(tauri::generate_handler![get_app_status])
+        .setup(|app| {
+            let data_directory = resolve_data_directory(app)?;
+            let database_path = data_directory.join("projects").join("siaovplay.db");
+            app.manage(ProjectStore::open(database_path)?);
+            Ok(())
+        })
+        .invoke_handler(tauri::generate_handler![
+            get_app_status,
+            commands::create_local_project,
+            commands::list_projects,
+            commands::get_project,
+            commands::mark_project_opened,
+            commands::update_playback_state,
+            commands::relink_project_media,
+            commands::delete_project
+        ])
         .run(tauri::generate_context!())
         .expect("failed to run SiaoVPlay");
 }
 
 #[cfg(test)]
 mod tests {
-    use super::get_app_status;
+    use std::path::Path;
+
+    use super::app_status;
 
     #[test]
     fn app_status_uses_the_siaovplay_identity() {
-        let status = get_app_status();
+        let status = app_status(Path::new("W:/SiaoVPlay/app-data"));
 
         assert_eq!(status.app_name, "SiaoVPlay");
         assert_eq!(status.platform, "windows-desktop");
+        assert_eq!(status.data_directory, "W:/SiaoVPlay/app-data");
     }
 }
