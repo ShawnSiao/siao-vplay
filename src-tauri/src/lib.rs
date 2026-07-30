@@ -1,5 +1,6 @@
 mod codex_runner;
 mod commands;
+mod delivery;
 mod domain;
 mod learning;
 mod media;
@@ -154,7 +155,8 @@ pub fn run() {
             commands::get_learning_card,
             commands::list_learning_cards,
             commands::delete_learning_card,
-            commands::export_learning_cards
+            commands::export_learning_cards,
+            commands::export_subtitles
         ])
         .run(tauri::generate_context!())
         .expect("failed to run SiaoVPlay");

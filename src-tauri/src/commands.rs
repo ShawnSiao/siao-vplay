@@ -3,6 +3,7 @@ use tauri::{AppHandle, Manager, State};
 
 use crate::{
     codex_runner::{self, CodexRunnerError, CodexRuntimeStatus, StartCodexTranslationInput},
+    delivery::{self, DeliveryError, ExportSubtitlesInput, SubtitleExport},
     domain::{
         CreateLocalProjectInput, DeleteProjectResult, PrepareProjectMediaInput, Project,
         RelinkProjectMediaInput, UpdatePlaybackStateInput,
@@ -136,6 +137,15 @@ impl From<SubtitleError> for CommandError {
         };
         Self {
             code,
+            message: error.to_string(),
+        }
+    }
+}
+
+impl From<DeliveryError> for CommandError {
+    fn from(error: DeliveryError) -> Self {
+        Self {
+            code: error.code(),
             message: error.to_string(),
         }
     }
@@ -990,6 +1000,19 @@ pub async fn export_learning_cards(
     let store = store.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
         learning::export_learning_cards(&store, input).map_err(CommandError::from)
+    })
+    .await
+    .map_err(CommandError::background_task_failed)?
+}
+
+#[tauri::command]
+pub async fn export_subtitles(
+    store: State<'_, ProjectStore>,
+    input: ExportSubtitlesInput,
+) -> Result<SubtitleExport, CommandError> {
+    let store = store.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        delivery::export_subtitles(&store, input).map_err(CommandError::from)
     })
     .await
     .map_err(CommandError::background_task_failed)?
