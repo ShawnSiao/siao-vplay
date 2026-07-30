@@ -4,6 +4,7 @@ use std::{
     io::{BufReader, Read},
     path::{Path, PathBuf},
     process::{Command, Output},
+    sync::OnceLock,
     time::SystemTime,
 };
 
@@ -18,6 +19,7 @@ use crate::{
 
 const PLAYBACK_PROXY_PROFILE: &str = "h264-yuv420p-aac-v1";
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+static MEDIA_RUNTIME: OnceLock<MediaRuntime> = OnceLock::new();
 
 #[derive(Debug, Error)]
 pub enum MediaError {
@@ -35,6 +37,8 @@ pub enum MediaError {
     MissingVideo,
     #[error("播放代理生成失败：{0}")]
     ProxyFailed(String),
+    #[error("视频封面生成失败：{0}")]
+    PosterFailed(String),
     #[error("媒体探测结果无法序列化：{0}")]
     Serialization(#[from] serde_json::Error),
 }
@@ -56,7 +60,7 @@ pub struct PlaybackGate {
     pub requires_runtime_video_check: bool,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct VideoStream {
     pub index: i64,
@@ -69,7 +73,7 @@ pub struct VideoStream {
     pub duration_ms: Option<i64>,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AudioStream {
     pub index: i64,
@@ -79,7 +83,7 @@ pub struct AudioStream {
     pub duration_ms: Option<i64>,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SubtitleStream {
     pub index: i64,
@@ -87,7 +91,7 @@ pub struct SubtitleStream {
     pub language: Option<String>,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MediaProbe {
     pub container_formats: Vec<String>,
@@ -108,6 +112,7 @@ pub struct MediaInspection {
     pub probe: MediaProbe,
     pub playback_gate: PlaybackGate,
     pub ffmpeg_version: String,
+    pub reused_probe: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
@@ -146,14 +151,19 @@ struct MediaRuntime {
 
 impl MediaRuntime {
     fn resolve() -> Result<Self, MediaError> {
+        if let Some(runtime) = MEDIA_RUNTIME.get() {
+            return Ok(runtime.clone());
+        }
         let ffmpeg_path = resolve_runtime_tool("SIAOVPLAY_FFMPEG", "ffmpeg.exe")?;
         let ffprobe_path = resolve_runtime_tool("SIAOVPLAY_FFPROBE", "ffprobe.exe")?;
         let version = tool_version(&ffmpeg_path)?;
-        Ok(Self {
+        let runtime = Self {
             ffmpeg_path,
             ffprobe_path,
             version,
-        })
+        };
+        let _ = MEDIA_RUNTIME.set(runtime.clone());
+        Ok(runtime)
     }
 
     fn status() -> MediaRuntimeStatus {
@@ -247,6 +257,69 @@ pub fn prepare_project_media(
     })
 }
 
+pub fn ensure_project_poster(
+    store: &ProjectStore,
+    project_id: &str,
+) -> Result<crate::domain::Project, MediaError> {
+    let runtime = MediaRuntime::resolve()?;
+    let inspection = inspect_with_runtime(store, project_id, &runtime)?;
+    let project = store.get_project(project_id)?;
+    let source_path = PathBuf::from(&project.media_source.locator);
+    let project_cache = store.data_directory().join("media-cache").join(&project.id);
+    fs::create_dir_all(&project_cache)?;
+    let fingerprint_prefix = &inspection.source_sha256[..16];
+    let final_path = project_cache.join(format!("poster-{fingerprint_prefix}.jpg"));
+
+    if project.media_source.poster_path.as_deref() == Some(path_to_string(&final_path).as_str())
+        && valid_poster(&final_path)
+    {
+        return Ok(project);
+    }
+
+    let temporary_path = project_cache.join(format!("poster-{fingerprint_prefix}.part.jpg"));
+    remove_controlled_file_if_present(&temporary_path, &project_cache)?;
+    remove_controlled_file_if_present(&final_path, &project_cache)?;
+
+    let seek_seconds = inspection
+        .probe
+        .duration_ms
+        .map(|duration_ms| ((duration_ms as f64 / 1_000.0) * 0.08).clamp(0.0, 30.0))
+        .unwrap_or(0.0);
+    let output = hidden_command(&runtime.ffmpeg_path)
+        .args(["-y", "-hide_banner", "-nostdin", "-v", "error", "-ss"])
+        .arg(format!("{seek_seconds:.3}"))
+        .arg("-i")
+        .arg(&source_path)
+        .args([
+            "-map",
+            "0:v:0",
+            "-vf",
+            "thumbnail=120,scale=640:360:force_original_aspect_ratio=decrease,pad=640:360:(ow-iw)/2:(oh-ih)/2:color=0x0b0d12",
+            "-frames:v",
+            "1",
+            "-an",
+            "-sn",
+            "-q:v",
+            "3",
+        ])
+        .arg(&temporary_path)
+        .output()
+        .map_err(|error| MediaError::PosterFailed(error.to_string()))?;
+    if !output.status.success() || !valid_poster(&temporary_path) {
+        let _ = remove_controlled_file_if_present(&temporary_path, &project_cache);
+        return Err(MediaError::PosterFailed(command_error_message(&output)));
+    }
+    fs::rename(&temporary_path, &final_path)?;
+    store
+        .record_media_poster(
+            &project.id,
+            &project.media_source.id,
+            &inspection.source_sha256,
+            &final_path,
+        )
+        .map_err(Into::into)
+}
+
 fn inspect_with_runtime(
     store: &ProjectStore,
     project_id: &str,
@@ -260,6 +333,20 @@ fn inspect_with_runtime(
     }
     let source_path = PathBuf::from(&project.media_source.locator);
     let before = FileIdentity::read(&source_path)?;
+    if let Some(cached) = store.cached_media_probe(project_id, &project.media_source.id)?
+        && before.matches_cache(cached.source_size_bytes, cached.source_modified_at_ms)
+        && let Ok(probe) = serde_json::from_str::<MediaProbe>(&cached.probe_json)
+    {
+        return Ok(MediaInspection {
+            project_id: project_id.to_owned(),
+            media_source_id: project.media_source.id,
+            source_sha256: cached.source_sha256,
+            playback_gate: playback_gate(&probe),
+            probe,
+            ffmpeg_version: runtime.version.clone(),
+            reused_probe: true,
+        });
+    }
     let source_sha256 = hash_file(&source_path)?;
     let probe = runtime.probe(&source_path)?;
     let after = FileIdentity::read(&source_path)?;
@@ -274,6 +361,8 @@ fn inspect_with_runtime(
         &project.media_source.id,
         &source_sha256,
         &probe_json,
+        before.size,
+        before.modified_at_ms(),
     )?;
 
     Ok(MediaInspection {
@@ -283,7 +372,14 @@ fn inspect_with_runtime(
         probe,
         playback_gate,
         ffmpeg_version: runtime.version.clone(),
+        reused_probe: false,
     })
+}
+
+fn valid_poster(path: &Path) -> bool {
+    fs::metadata(path)
+        .map(|metadata| metadata.is_file() && metadata.len() > 100)
+        .unwrap_or(false)
 }
 
 fn generate_playback_proxy(
@@ -695,6 +791,17 @@ impl FileIdentity {
             modified: metadata.modified().ok(),
         })
     }
+
+    fn modified_at_ms(&self) -> Option<i64> {
+        let duration = self.modified?.duration_since(SystemTime::UNIX_EPOCH).ok()?;
+        i64::try_from(duration.as_millis()).ok()
+    }
+
+    fn matches_cache(&self, size: u64, modified_at_ms: Option<i64>) -> bool {
+        self.size == size
+            && self.modified_at_ms().is_some()
+            && self.modified_at_ms() == modified_at_ms
+    }
 }
 
 fn hash_file(path: &Path) -> Result<String, MediaError> {
@@ -1049,12 +1156,21 @@ mod tests {
         let second = prepare_project_media(
             &store,
             PrepareProjectMediaInput {
-                project_id: project.id,
+                project_id: project.id.clone(),
                 force_proxy: false,
             },
         )
         .expect("completed proxy should be reused");
         assert!(second.reused_proxy);
+        assert!(second.inspection.reused_probe);
+
+        let project_with_poster =
+            ensure_project_poster(&store, &project.id).expect("poster should be generated");
+        let poster_path = project_with_poster
+            .media_source
+            .poster_path
+            .expect("poster path should be persisted");
+        assert!(valid_poster(Path::new(&poster_path)));
         assert_eq!(
             hash_file(&source_path).expect("source should still hash"),
             source_hash_before

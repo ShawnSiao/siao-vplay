@@ -14,7 +14,15 @@ use crate::domain::{
     UpdatePlaybackStateInput,
 };
 
-const CURRENT_SCHEMA_VERSION: i64 = 2;
+const CURRENT_SCHEMA_VERSION: i64 = 3;
+
+#[derive(Clone, Debug)]
+pub(crate) struct CachedMediaProbe {
+    pub source_sha256: String,
+    pub probe_json: String,
+    pub source_size_bytes: u64,
+    pub source_modified_at_ms: Option<i64>,
+}
 
 #[derive(Debug, Error)]
 pub enum StoreError {
@@ -215,6 +223,12 @@ impl ProjectStore {
              SET kind = ?2,
                  locator = ?3,
                  display_name = ?4,
+                 source_sha256 = NULL,
+                 probe_json = NULL,
+                 probed_at_ms = NULL,
+                 source_size_bytes = NULL,
+                 source_modified_at_ms = NULL,
+                 poster_path = NULL,
                  updated_at_ms = ?5
              WHERE project_id = ?1 AND is_primary = 1",
             params![
@@ -249,6 +263,87 @@ impl ProjectStore {
         media_source_id: &str,
         source_sha256: &str,
         probe_json: &str,
+        source_size_bytes: u64,
+        source_modified_at_ms: Option<i64>,
+    ) -> Result<Project, StoreError> {
+        validate_project_id(project_id)?;
+        validate_uuid(media_source_id, "媒体来源 ID")?;
+        validate_sha256(source_sha256)?;
+        let source_size_bytes = i64::try_from(source_size_bytes)
+            .map_err(|_| StoreError::Validation("媒体文件大小超出支持范围".to_owned()))?;
+        let timestamp = now_ms()?;
+        let connection = self.connect()?;
+        let changed = connection.execute(
+            "UPDATE media_sources
+             SET source_sha256 = ?3,
+                 probe_json = ?4,
+                 source_size_bytes = ?5,
+                 source_modified_at_ms = ?6,
+                 probed_at_ms = ?7,
+                 updated_at_ms = ?7
+             WHERE id = ?2 AND project_id = ?1 AND is_primary = 1",
+            params![
+                project_id,
+                media_source_id,
+                source_sha256,
+                probe_json,
+                source_size_bytes,
+                source_modified_at_ms,
+                timestamp
+            ],
+        )?;
+        if changed == 0 {
+            return Err(StoreError::Validation(
+                "项目的主要媒体来源已经发生变化，请重新探测".to_owned(),
+            ));
+        }
+        Self::load_project(&connection, project_id)
+    }
+
+    pub(crate) fn cached_media_probe(
+        &self,
+        project_id: &str,
+        media_source_id: &str,
+    ) -> Result<Option<CachedMediaProbe>, StoreError> {
+        validate_project_id(project_id)?;
+        validate_uuid(media_source_id, "媒体来源 ID")?;
+        let connection = self.connect()?;
+        connection
+            .query_row(
+                "SELECT source_sha256, probe_json, source_size_bytes, source_modified_at_ms
+                 FROM media_sources
+                 WHERE id = ?2 AND project_id = ?1 AND is_primary = 1
+                   AND source_sha256 IS NOT NULL
+                   AND probe_json IS NOT NULL
+                   AND source_size_bytes IS NOT NULL",
+                params![project_id, media_source_id],
+                |row| {
+                    let size = row.get::<_, i64>(2)?;
+                    let source_size_bytes = u64::try_from(size).map_err(|error| {
+                        rusqlite::Error::FromSqlConversionFailure(
+                            2,
+                            rusqlite::types::Type::Integer,
+                            Box::new(error),
+                        )
+                    })?;
+                    Ok(CachedMediaProbe {
+                        source_sha256: row.get(0)?,
+                        probe_json: row.get(1)?,
+                        source_size_bytes,
+                        source_modified_at_ms: row.get(3)?,
+                    })
+                },
+            )
+            .optional()
+            .map_err(Into::into)
+    }
+
+    pub fn record_media_poster(
+        &self,
+        project_id: &str,
+        media_source_id: &str,
+        source_sha256: &str,
+        poster_path: &Path,
     ) -> Result<Project, StoreError> {
         validate_project_id(project_id)?;
         validate_uuid(media_source_id, "媒体来源 ID")?;
@@ -257,22 +352,21 @@ impl ProjectStore {
         let connection = self.connect()?;
         let changed = connection.execute(
             "UPDATE media_sources
-             SET source_sha256 = ?3,
-                 probe_json = ?4,
-                 probed_at_ms = ?5,
+             SET poster_path = ?4,
                  updated_at_ms = ?5
-             WHERE id = ?2 AND project_id = ?1 AND is_primary = 1",
+             WHERE id = ?2 AND project_id = ?1 AND is_primary = 1
+               AND source_sha256 = ?3",
             params![
                 project_id,
                 media_source_id,
                 source_sha256,
-                probe_json,
+                path_to_string(poster_path),
                 timestamp
             ],
         )?;
         if changed == 0 {
             return Err(StoreError::Validation(
-                "项目的主要媒体来源已经发生变化，请重新探测".to_owned(),
+                "媒体来源已变化，未保存旧媒体的封面".to_owned(),
             ));
         }
         Self::load_project(&connection, project_id)
@@ -495,6 +589,16 @@ impl ProjectStore {
                 params![now_ms()?],
             )?;
             transaction.commit()?;
+            current_version = 2;
+        }
+        if current_version < 3 {
+            let transaction = connection.transaction()?;
+            Self::apply_migration_3(&transaction)?;
+            transaction.execute(
+                "INSERT INTO schema_migrations (version, applied_at_ms) VALUES (3, ?1)",
+                params![now_ms()?],
+            )?;
+            transaction.commit()?;
         }
         Ok(())
     }
@@ -573,6 +677,15 @@ impl ProjectStore {
         Ok(())
     }
 
+    fn apply_migration_3(transaction: &Transaction<'_>) -> Result<(), StoreError> {
+        transaction.execute_batch(
+            "ALTER TABLE media_sources ADD COLUMN source_size_bytes INTEGER;
+             ALTER TABLE media_sources ADD COLUMN source_modified_at_ms INTEGER;
+             ALTER TABLE media_sources ADD COLUMN poster_path TEXT;",
+        )?;
+        Ok(())
+    }
+
     fn load_project(connection: &Connection, project_id: &str) -> Result<Project, StoreError> {
         let row = connection
             .query_row(
@@ -589,6 +702,7 @@ impl ProjectStore {
                     m.display_name,
                     m.source_sha256,
                     m.probed_at_ms,
+                    m.poster_path,
                     m.created_at_ms,
                     m.updated_at_ms,
                     s.position_ms,
@@ -617,13 +731,14 @@ impl ProjectStore {
                         row.get::<_, String>(9)?,
                         row.get::<_, Option<String>>(10)?,
                         row.get::<_, Option<i64>>(11)?,
-                        row.get::<_, i64>(12)?,
+                        row.get::<_, Option<String>>(12)?,
                         row.get::<_, i64>(13)?,
                         row.get::<_, i64>(14)?,
-                        row.get::<_, Option<i64>>(15)?,
-                        row.get::<_, f64>(16)?,
+                        row.get::<_, i64>(15)?,
+                        row.get::<_, Option<i64>>(16)?,
                         row.get::<_, f64>(17)?,
-                        row.get::<_, i64>(18)?,
+                        row.get::<_, f64>(18)?,
+                        row.get::<_, i64>(19)?,
                     ))
                 },
             )
@@ -657,15 +772,16 @@ impl ProjectStore {
                 is_available,
                 source_sha256: row.10,
                 probed_at_ms: row.11,
-                created_at_ms: row.12,
-                updated_at_ms: row.13,
+                poster_path: row.12,
+                created_at_ms: row.13,
+                updated_at_ms: row.14,
             },
             playback_state: PlaybackState {
-                position_ms: row.14,
-                duration_ms: row.15,
-                volume: row.16,
-                playback_rate: row.17,
-                updated_at_ms: row.18,
+                position_ms: row.15,
+                duration_ms: row.16,
+                volume: row.17,
+                playback_rate: row.18,
+                updated_at_ms: row.19,
             },
         })
     }
@@ -926,6 +1042,50 @@ mod tests {
         assert_eq!(relinked.status, ProjectStatus::Ready);
         assert_eq!(relinked.revision, 2);
         assert!(relinked.media_source.is_available);
+    }
+
+    #[test]
+    fn relinking_media_invalidates_probe_and_poster_cache() {
+        let fixture = Fixture::new();
+        let original_path = fixture.media_file("original.mp4");
+        let project = fixture.create_project(&original_path);
+        let source_sha256 = "a".repeat(64);
+        fixture
+            .store
+            .record_media_probe(
+                &project.id,
+                &project.media_source.id,
+                &source_sha256,
+                "{}",
+                10,
+                Some(123),
+            )
+            .expect("probe should be recorded");
+        let poster_path = fixture.temp_dir.path().join("poster.jpg");
+        fs::write(&poster_path, b"poster").expect("poster fixture should be written");
+        let with_poster = fixture
+            .store
+            .record_media_poster(
+                &project.id,
+                &project.media_source.id,
+                &source_sha256,
+                &poster_path,
+            )
+            .expect("poster should be recorded");
+        assert!(with_poster.media_source.poster_path.is_some());
+
+        let replacement_path = fixture.media_file("replacement.mp4");
+        let relinked = fixture
+            .store
+            .relink_project_media(RelinkProjectMediaInput {
+                project_id: project.id,
+                media_path: path_to_string(&replacement_path),
+            })
+            .expect("project should relink");
+
+        assert_eq!(relinked.media_source.source_sha256, None);
+        assert_eq!(relinked.media_source.probed_at_ms, None);
+        assert_eq!(relinked.media_source.poster_path, None);
     }
 
     #[test]

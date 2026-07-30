@@ -1,4 +1,5 @@
 import type { AppStatus, MediaRuntimeStatus, Project } from "../types";
+import { playbackUrl } from "../lib/desktop";
 import {
   fileExtension,
   formatDuration,
@@ -30,6 +31,7 @@ function ProjectCard({
   onDelete: (project: Project) => void;
 }) {
   const needsRelink = project.status === "needs_relink";
+  const posterPath = project.mediaSource.posterPath;
   const progress =
     project.playbackState.durationMs && project.playbackState.durationMs > 0
       ? Math.round(
@@ -48,14 +50,22 @@ function ProjectCard({
   return (
     <article className="project-card">
       <button
-        className="project-poster"
+        className={`project-poster ${posterPath ? "poster-has-image" : ""}`}
         type="button"
         onClick={() => (needsRelink ? onRelink(project) : onOpen(project))}
         aria-label={`${needsRelink ? "重新定位" : "打开"} ${project.title}`}
       >
-        <span className="poster-extension">
-          {fileExtension(project.mediaSource.displayName)}
-        </span>
+        {posterPath ? (
+          <img
+            className="poster-image"
+            src={playbackUrl(posterPath)}
+            alt=""
+          />
+        ) : (
+          <span className="poster-extension">
+            {fileExtension(project.mediaSource.displayName)}
+          </span>
+        )}
         <span className="poster-status">
           {needsRelink ? "媒体文件已移动" : "本地视频"}
         </span>

@@ -16,6 +16,7 @@ export type MediaSource = {
   isAvailable: boolean;
   sourceSha256: string | null;
   probedAtMs: number | null;
+  posterPath: string | null;
   createdAtMs: number;
   updatedAtMs: number;
 };
@@ -113,6 +114,7 @@ export type MediaInspection = {
     requiresRuntimeVideoCheck: boolean;
   };
   ffmpegVersion: string;
+  reusedProbe: boolean;
 };
 
 export type MediaPreparation = {

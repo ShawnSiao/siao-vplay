@@ -9,6 +9,7 @@ import {
   commandError,
   createLocalProject,
   deleteProject,
+  ensureProjectPoster,
   getAppStatus,
   getMediaRuntimeStatus,
   isDesktopApp,
@@ -30,6 +31,7 @@ type Screen = "library" | "preparing" | "player";
 export default function App() {
   const operationTokenRef = useRef(0);
   const startupMediaHandledRef = useRef(false);
+  const posterJobsRef = useRef(new Set<string>());
   const [screen, setScreen] = useState<Screen>("library");
   const [appStatus, setAppStatus] = useState<AppStatus | null>(null);
   const [runtimeStatus, setRuntimeStatus] =
@@ -115,6 +117,35 @@ export default function App() {
     return () => window.clearTimeout(timer);
   }, [toast]);
 
+  useEffect(() => {
+    if (!isDesktopApp) {
+      return;
+    }
+    for (const project of projects) {
+      if (
+        project.status !== "ready" ||
+        project.mediaSource.posterPath ||
+        posterJobsRef.current.has(project.id)
+      ) {
+        continue;
+      }
+      posterJobsRef.current.add(project.id);
+      void ensureProjectPoster(project.id)
+        .then((updated) => {
+          setProjects((current) =>
+            current.map((item) => (item.id === updated.id ? updated : item)),
+          );
+          setActiveProject((current) =>
+            current?.id === updated.id ? updated : current,
+          );
+        })
+        .catch(() => undefined)
+        .finally(() => {
+          posterJobsRef.current.delete(project.id);
+        });
+    }
+  }, [projects]);
+
   const prepareAndOpen = useCallback(
     async (project: Project, shouldForceProxy: boolean) => {
       const token = operationTokenRef.current + 1;
@@ -123,7 +154,11 @@ export default function App() {
       setPreparation(null);
       setPreparationError(null);
       setForceProxy(shouldForceProxy);
-      setScreen("preparing");
+      const preparationTimer = window.setTimeout(() => {
+        if (operationTokenRef.current === token) {
+          setScreen("preparing");
+        }
+      }, 240);
       try {
         const openedProject = shouldForceProxy
           ? project
@@ -133,16 +168,21 @@ export default function App() {
           shouldForceProxy,
         );
         if (operationTokenRef.current !== token) {
+          window.clearTimeout(preparationTimer);
           return;
         }
+        window.clearTimeout(preparationTimer);
         setActiveProject(openedProject);
         setPreparation(result);
         setScreen("player");
         void refreshProjects();
       } catch (error) {
         if (operationTokenRef.current !== token) {
+          window.clearTimeout(preparationTimer);
           return;
         }
+        window.clearTimeout(preparationTimer);
+        setScreen("preparing");
         setPreparationError(commandError(error).message);
       }
     },

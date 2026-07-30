@@ -38,6 +38,7 @@ pub struct MediaSource {
     pub is_available: bool,
     pub source_sha256: Option<String>,
     pub probed_at_ms: Option<i64>,
+    pub poster_path: Option<String>,
     pub created_at_ms: i64,
     pub updated_at_ms: i64,
 }

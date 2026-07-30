@@ -50,6 +50,7 @@ impl From<MediaError> for CommandError {
             MediaError::SourceChanged => "media_source_changed",
             MediaError::MissingVideo => "missing_video_stream",
             MediaError::ProxyFailed(_) => "playback_proxy_failed",
+            MediaError::PosterFailed(_) => "media_poster_failed",
             MediaError::Serialization(_) => "media_probe_serialization_failed",
         };
         Self {
@@ -77,8 +78,15 @@ pub fn create_local_project(
 }
 
 #[tauri::command]
-pub fn list_projects(store: State<'_, ProjectStore>) -> Result<Vec<Project>, CommandError> {
-    store.list_projects().map_err(Into::into)
+pub fn list_projects(
+    app: AppHandle,
+    store: State<'_, ProjectStore>,
+) -> Result<Vec<Project>, CommandError> {
+    let projects = store.list_projects().map_err(CommandError::from)?;
+    for project in &projects {
+        allow_project_poster(&app, project)?;
+    }
+    Ok(projects)
 }
 
 #[tauri::command]
@@ -158,4 +166,35 @@ pub async fn prepare_project_media(
             message: format!("无法授权播放器读取已准备的媒体：{error}"),
         })?;
     Ok(preparation)
+}
+
+#[tauri::command]
+pub async fn ensure_project_poster(
+    app: AppHandle,
+    store: State<'_, ProjectStore>,
+    project_id: String,
+) -> Result<Project, CommandError> {
+    let store = store.inner().clone();
+    let project = tauri::async_runtime::spawn_blocking(move || {
+        media::ensure_project_poster(&store, &project_id).map_err(CommandError::from)
+    })
+    .await
+    .map_err(CommandError::background_task_failed)??;
+    allow_project_poster(&app, &project)?;
+    Ok(project)
+}
+
+fn allow_project_poster(app: &AppHandle, project: &Project) -> Result<(), CommandError> {
+    let Some(poster_path) = project.media_source.poster_path.as_deref() else {
+        return Ok(());
+    };
+    if !std::path::Path::new(poster_path).is_file() {
+        return Ok(());
+    }
+    app.asset_protocol_scope()
+        .allow_file(poster_path)
+        .map_err(|error| CommandError {
+            code: "asset_scope_error",
+            message: format!("无法授权项目库读取视频封面：{error}"),
+        })
 }

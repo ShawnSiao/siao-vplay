@@ -112,6 +112,10 @@ export async function prepareProjectMedia(
   });
 }
 
+export async function ensureProjectPoster(projectId: string): Promise<Project> {
+  return invoke<Project>("ensure_project_poster", { projectId });
+}
+
 export async function updatePlaybackState(
   projectId: string,
   values: {

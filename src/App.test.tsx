@@ -9,6 +9,7 @@ const desktopMocks = vi.hoisted(() => ({
   listProjects: vi.fn(),
   chooseLocalVideo: vi.fn(),
   createLocalProject: vi.fn(),
+  ensureProjectPoster: vi.fn(),
   markProjectOpened: vi.fn(),
   prepareProjectMedia: vi.fn(),
   updatePlaybackState: vi.fn(),
@@ -44,6 +45,7 @@ const project: Project = {
     isAvailable: true,
     sourceSha256: null,
     probedAtMs: null,
+    posterPath: null,
     createdAtMs: 1_785_354_000_000,
     updatedAtMs: 1_785_354_000_000,
   },
@@ -95,6 +97,7 @@ const preparation: MediaPreparation = {
       requiresRuntimeVideoCheck: true,
     },
     ffmpegVersion: "ffmpeg 8.1.1",
+    reusedProbe: false,
   },
   playbackSourceKind: "original",
   playbackPath: project.mediaSource.locator,
@@ -121,6 +124,14 @@ beforeEach(() => {
   desktopMocks.listProjects.mockResolvedValue([project]);
   desktopMocks.chooseLocalVideo.mockResolvedValue(null);
   desktopMocks.createLocalProject.mockResolvedValue(project);
+  desktopMocks.ensureProjectPoster.mockResolvedValue({
+    ...project,
+    mediaSource: {
+      ...project.mediaSource,
+      posterPath:
+        "W:\\SiaoVPlay\\app-data\\media-cache\\project\\poster.jpg",
+    },
+  });
   desktopMocks.markProjectOpened.mockResolvedValue(project);
   desktopMocks.prepareProjectMedia.mockResolvedValue(preparation);
   desktopMocks.updatePlaybackState.mockResolvedValue(project);
@@ -146,6 +157,15 @@ describe("App", () => {
       screen.getByRole("button", { name: "导入本地视频" }),
     ).toBeEnabled();
     expect(screen.getByLabelText("观看进度 23%")).toBeInTheDocument();
+    await waitFor(() =>
+      expect(desktopMocks.ensureProjectPoster).toHaveBeenCalledWith(project.id),
+    );
+    await waitFor(() =>
+      expect(document.querySelector(".poster-image")).toHaveAttribute(
+        "src",
+        expect.stringContaining("poster.jpg"),
+      ),
+    );
   });
 
   it("prepares a project before opening the player", async () => {

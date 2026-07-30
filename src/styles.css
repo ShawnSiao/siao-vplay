@@ -409,9 +409,31 @@ h3 {
   border: 1px solid rgb(255 255 255 / 6%);
   border-radius: 7px;
   content: "";
+  z-index: 2;
+}
+
+.project-poster.poster-has-image::after {
+  position: absolute;
+  z-index: 1;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 46%;
+  background: linear-gradient(transparent, rgb(4 6 9 / 82%));
+  content: "";
+}
+
+.poster-image {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .poster-extension {
+  position: relative;
+  z-index: 3;
   color: var(--brand);
   font-family: "Cascadia Code", Consolas, monospace;
   font-size: 26px;
@@ -425,6 +447,7 @@ h3 {
   bottom: 11px;
   color: var(--text-muted);
   font-size: 10px;
+  z-index: 3;
 }
 
 .poster-status {

@@ -87,7 +87,8 @@ pub fn run() {
             commands::delete_project,
             commands::get_media_runtime_status,
             commands::inspect_project_media,
-            commands::prepare_project_media
+            commands::prepare_project_media,
+            commands::ensure_project_poster
         ])
         .run(tauri::generate_context!())
         .expect("failed to run SiaoVPlay");
