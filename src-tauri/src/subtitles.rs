@@ -54,7 +54,7 @@ pub enum SubtitleError {
     VersionChanged,
     #[error("字幕修正内容无效：{0}")]
     InvalidRevision(String),
-    #[error("当前有翻译任务尚未结束，请先完成或取消翻译任务")]
+    #[error("当前有翻译或理解任务尚未结束，请先完成或取消该任务")]
     ActiveTranslationTask,
     #[error("字幕预检结果无法保存：{0}")]
     Serialization(#[from] serde_json::Error),
@@ -930,6 +930,13 @@ fn ensure_no_active_translation_task(
               AND status IN (
                 'awaiting_external_result', 'queued', 'running', 'validating'
               )
+            UNION ALL
+            SELECT 1
+            FROM explanation_tasks
+            WHERE project_id = ?1
+              AND status IN (
+                'awaiting_external_result', 'queued', 'running', 'validating'
+              )
          )",
         params![project_id],
         |row| row.get::<_, bool>(0),
@@ -999,6 +1006,13 @@ fn persist_revision_version(
         "SELECT EXISTS(
             SELECT 1
             FROM agent_tasks
+            WHERE project_id = ?1
+              AND status IN (
+                'awaiting_external_result', 'queued', 'running', 'validating'
+              )
+            UNION ALL
+            SELECT 1
+            FROM explanation_tasks
             WHERE project_id = ?1
               AND status IN (
                 'awaiting_external_result', 'queued', 'running', 'validating'

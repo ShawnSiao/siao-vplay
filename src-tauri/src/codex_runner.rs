@@ -21,6 +21,7 @@ use uuid::Uuid;
 use crate::{
     store::{ProjectStore, StoreError},
     translation::{self, TranslationApplication, TranslationError, TranslationTask},
+    understanding::{self, ExplanationApplication, ExplanationTask, UnderstandingError},
 };
 
 const TARGET_LANGUAGE: &str = "zh-cn";
@@ -41,6 +42,8 @@ pub enum CodexRunnerError {
     Store(#[from] StoreError),
     #[error(transparent)]
     Translation(#[from] TranslationError),
+    #[error(transparent)]
+    Understanding(#[from] UnderstandingError),
     #[error("Codex 文件操作失败：{0}")]
     FileSystem(#[from] std::io::Error),
     #[error("未找到可用的 Codex CLI")]
@@ -51,9 +54,9 @@ pub enum CodexRunnerError {
     NotAuthenticated,
     #[error("Codex 运行时限必须在 {MIN_TIMEOUT_SECONDS} 到 {MAX_TIMEOUT_SECONDS} 秒之间")]
     InvalidTimeout,
-    #[error("翻译任务当前状态不允许此操作：{0}")]
+    #[error("Codex 任务当前状态不允许此操作：{0}")]
     InvalidTaskState(String),
-    #[error("当前翻译任务已经在本机运行")]
+    #[error("当前任务已经在本机运行")]
     AlreadyRunning,
     #[error("Codex 进程未成功完成")]
     ProcessFailed,
@@ -63,7 +66,7 @@ pub enum CodexRunnerError {
     InvalidOutput(String),
     #[error("Codex 处理超过运行时限")]
     TimedOut,
-    #[error("本机 Codex 翻译任务已取消")]
+    #[error("本机 Codex 任务已取消")]
     Cancelled,
     #[error("Codex 任务数据无法序列化：{0}")]
     Serialization(#[from] serde_json::Error),
@@ -84,6 +87,7 @@ impl CodexRunnerError {
             Self::Store(StoreError::FileSystem(_)) | Self::FileSystem(_) => "filesystem_error",
             Self::Store(_) => "database_error",
             Self::Translation(error) => error.code(),
+            Self::Understanding(error) => error.code(),
             Self::RuntimeUnavailable => "codex_runtime_unavailable",
             Self::RuntimeUnsupported => "codex_runtime_unsupported",
             Self::NotAuthenticated => "codex_not_authenticated",
@@ -256,6 +260,95 @@ pub fn resume_codex_translation_task(
     translation::get_translation_task(store, &task.id).map_err(Into::into)
 }
 
+pub fn start_codex_explanation_task(
+    store: &ProjectStore,
+    input: StartCodexTranslationInput,
+) -> Result<ExplanationTask, CodexRunnerError> {
+    let timeout_seconds = input.timeout_seconds.unwrap_or(DEFAULT_TIMEOUT_SECONDS);
+    validate_timeout(timeout_seconds)?;
+    let runtime = require_ready_codex()?;
+    let task = claim_explanation_for_run(store, &input.task_id, &runtime, false)?;
+    if let Err(error) = spawn_explanation_worker(
+        store.clone(),
+        task.id.clone(),
+        runtime,
+        Duration::from_secs(timeout_seconds),
+    ) {
+        let _ = finish_explanation_with_error(store, &task.id, &error);
+        return Err(error);
+    }
+    understanding::get_explanation_task(store, &task.id).map_err(Into::into)
+}
+
+pub fn resume_codex_explanation_task(
+    store: &ProjectStore,
+    input: StartCodexTranslationInput,
+) -> Result<ExplanationTask, CodexRunnerError> {
+    let timeout_seconds = input.timeout_seconds.unwrap_or(DEFAULT_TIMEOUT_SECONDS);
+    validate_timeout(timeout_seconds)?;
+    let runtime = require_ready_codex()?;
+    let task = claim_explanation_for_run(store, &input.task_id, &runtime, true)?;
+    if let Err(error) = spawn_explanation_worker(
+        store.clone(),
+        task.id.clone(),
+        runtime,
+        Duration::from_secs(timeout_seconds),
+    ) {
+        let _ = finish_explanation_with_error(store, &task.id, &error);
+        return Err(error);
+    }
+    understanding::get_explanation_task(store, &task.id).map_err(Into::into)
+}
+
+pub fn cancel_explanation_task(
+    store: &ProjectStore,
+    task_id: &str,
+) -> Result<ExplanationTask, CodexRunnerError> {
+    let task = understanding::get_explanation_task(store, task_id)?;
+    if !matches!(
+        task.status.as_str(),
+        "awaiting_external_result" | "queued" | "running" | "validating"
+    ) {
+        return Err(UnderstandingError::InvalidTaskState(task.status).into());
+    }
+    let timestamp = now_ms()?;
+    let mut connection = store.connect()?;
+    let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    let immediate = matches!(
+        task.status.as_str(),
+        "awaiting_external_result" | "queued" | "validating"
+    );
+    let changed = if immediate {
+        transaction.execute(
+            "UPDATE explanation_tasks
+             SET status = 'cancelled', stage = 'cancelled',
+                 cancel_requested_at_ms = ?2, completed_at_ms = ?2,
+                 error_code = NULL, error_message = NULL, updated_at_ms = ?2
+             WHERE id = ?1
+               AND status IN ('awaiting_external_result', 'queued', 'validating')",
+            params![task_id, timestamp],
+        )?
+    } else {
+        transaction.execute(
+            "UPDATE explanation_tasks
+             SET stage = 'cancelling', cancel_requested_at_ms = ?2,
+                 updated_at_ms = ?2
+             WHERE id = ?1 AND status = 'running'",
+            params![task_id, timestamp],
+        )?
+    };
+    if changed != 1 {
+        return Err(UnderstandingError::InvalidTaskState(task.status).into());
+    }
+    transaction.commit()?;
+    if let Ok(tasks) = active_tasks().lock()
+        && let Some(cancellation) = tasks.get(task_id)
+    {
+        cancellation.store(true, Ordering::SeqCst);
+    }
+    understanding::get_explanation_task(store, task_id).map_err(Into::into)
+}
+
 pub fn cancel_translation_task(
     store: &ProjectStore,
     task_id: &str,
@@ -357,6 +450,46 @@ pub fn cancel_project_translation_tasks(
     ))
 }
 
+pub fn cancel_project_explanation_tasks(
+    store: &ProjectStore,
+    project_id: &str,
+) -> Result<usize, CodexRunnerError> {
+    let ids = {
+        let connection = store.connect()?;
+        let mut statement = connection.prepare(
+            "SELECT id FROM explanation_tasks
+             WHERE project_id = ?1
+               AND status IN (
+                   'awaiting_external_result', 'queued', 'running', 'validating'
+               )",
+        )?;
+        statement
+            .query_map(params![project_id], |row| row.get::<_, String>(0))?
+            .collect::<Result<Vec<_>, _>>()?
+    };
+    for id in &ids {
+        let _ = cancel_explanation_task(store, id);
+    }
+    for _ in 0..100 {
+        let active = store.connect()?.query_row(
+            "SELECT COUNT(*) FROM explanation_tasks
+             WHERE project_id = ?1
+               AND status IN (
+                   'awaiting_external_result', 'queued', 'running', 'validating'
+               )",
+            params![project_id],
+            |row| row.get::<_, i64>(0),
+        )?;
+        if active == 0 {
+            return Ok(ids.len());
+        }
+        thread::sleep(POLL_INTERVAL);
+    }
+    Err(CodexRunnerError::InvalidTaskState(
+        "取消解释任务超时，项目尚未删除".to_owned(),
+    ))
+}
+
 pub fn recover_translation_tasks(store: &ProjectStore) -> Result<usize, CodexRunnerError> {
     let timestamp = now_ms()?;
     let mut connection = store.connect()?;
@@ -445,6 +578,157 @@ fn spawn_worker(
             Err(error)
         }
     }
+}
+
+fn spawn_explanation_worker(
+    store: ProjectStore,
+    task_id: String,
+    runtime: RuntimeIdentity,
+    timeout: Duration,
+) -> Result<(), CodexRunnerError> {
+    let cancellation = Arc::new(AtomicBool::new(false));
+    {
+        let mut tasks = active_tasks()
+            .lock()
+            .map_err(|_| CodexRunnerError::AlreadyRunning)?;
+        if tasks.contains_key(&task_id) {
+            return Err(CodexRunnerError::AlreadyRunning);
+        }
+        tasks.insert(task_id.clone(), cancellation.clone());
+    }
+    let worker_task_id = task_id.clone();
+    let failure_store = store.clone();
+    let spawn_result = thread::Builder::new()
+        .name(format!("codex-explanation-{task_id}"))
+        .spawn(move || {
+            let result =
+                run_explanation_task(&store, &worker_task_id, &runtime, timeout, &cancellation);
+            if let Err(error) = result {
+                let _ = finish_explanation_with_error(&store, &worker_task_id, &error);
+            }
+            if let Ok(mut tasks) = active_tasks().lock() {
+                tasks.remove(&worker_task_id);
+            }
+        });
+    match spawn_result {
+        Ok(_) => Ok(()),
+        Err(error) => {
+            if let Ok(mut tasks) = active_tasks().lock() {
+                tasks.remove(&task_id);
+            }
+            let error = CodexRunnerError::FileSystem(error);
+            let _ = finish_explanation_with_error(&failure_store, &task_id, &error);
+            Err(error)
+        }
+    }
+}
+
+fn run_explanation_task(
+    store: &ProjectStore,
+    task_id: &str,
+    runtime: &RuntimeIdentity,
+    timeout: Duration,
+    cancellation: &AtomicBool,
+) -> Result<ExplanationApplication, CodexRunnerError> {
+    let task = understanding::get_explanation_task(store, task_id)?;
+    if task.status != "running" || task.handoff_kind != "codex" {
+        return Err(UnderstandingError::InvalidTaskState(task.status).into());
+    }
+    let directory = understanding::task_directory(store, task_id)?;
+    understanding::verify_task_package(store, &task, &directory)?;
+    let prompt = understanding::read_explanation_prompt(store, task_id)?;
+    let schema = understanding::read_explanation_schema(store, task_id)?;
+    ensure_not_cancelled(store, task_id, cancellation)?;
+    let attempt_directory =
+        directory
+            .join("runtime")
+            .join(format!("run-{}-{}", now_ms()?, Uuid::new_v4().simple()));
+    fs::create_dir_all(&attempt_directory)?;
+    let image_directory = attempt_directory.join("input").join("frames");
+    fs::create_dir_all(&image_directory)?;
+    let image_paths = task
+        .frames
+        .iter()
+        .map(|frame| {
+            let source = dunce::canonicalize(&frame.path)?;
+            let destination = image_directory.join(format!("frame-{:04}.jpg", frame.ordinal + 1));
+            fs::copy(source, &destination)?;
+            dunce::canonicalize(destination).map_err(CodexRunnerError::from)
+        })
+        .collect::<Result<Vec<_>, CodexRunnerError>>()?;
+    let (raw, thread_id) = invoke_codex_raw_with_images(
+        store,
+        task_id,
+        runtime,
+        &attempt_directory,
+        prompt,
+        &schema,
+        timeout,
+        cancellation,
+        &image_paths,
+    )
+    .map_err(|error| match error {
+        CodexRunnerError::InvalidOutput(message) => {
+            UnderstandingError::InvalidResult(message).into()
+        }
+        other => other,
+    })?;
+    ensure_not_cancelled(store, task_id, cancellation)?;
+    store.connect()?.execute(
+        "UPDATE explanation_tasks
+         SET progress = 0.85,
+             runner_thread_id = COALESCE(?2, runner_thread_id),
+             updated_at_ms = ?3
+         WHERE id = ?1 AND status = 'running'",
+        params![task_id, thread_id, now_ms()?],
+    )?;
+    understanding::apply_codex_result(store, task_id, &raw).map_err(Into::into)
+}
+
+fn claim_explanation_for_run(
+    store: &ProjectStore,
+    task_id: &str,
+    runtime: &RuntimeIdentity,
+    resume: bool,
+) -> Result<ExplanationTask, CodexRunnerError> {
+    let task = understanding::get_explanation_task(store, task_id)?;
+    if task.handoff_kind != "codex" {
+        return Err(UnderstandingError::InvalidTaskState(task.status).into());
+    }
+    if resume {
+        if !matches!(task.status.as_str(), "failed" | "cancelled" | "interrupted") {
+            return Err(UnderstandingError::InvalidTaskState(task.status).into());
+        }
+    } else if task.status != "queued" {
+        return Err(UnderstandingError::InvalidTaskState(task.status).into());
+    }
+    let directory = understanding::task_directory(store, task_id)?;
+    understanding::verify_task_package(store, &task, &directory)?;
+    let timestamp = now_ms()?;
+    let expected_status = task.status.clone();
+    let mut connection = store.connect()?;
+    let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    let changed = transaction.execute(
+        "UPDATE explanation_tasks
+         SET status = 'running', stage = 'running', progress = 0.1,
+             runner_version = ?3, runner_auth_mode = ?4,
+             runner_thread_id = NULL, cancel_requested_at_ms = NULL,
+             error_code = NULL, error_message = NULL,
+             started_at_ms = ?5, completed_at_ms = NULL, updated_at_ms = ?5
+         WHERE id = ?1 AND status = ?2",
+        params![
+            task_id,
+            expected_status,
+            runtime.version,
+            runtime.auth_mode,
+            timestamp
+        ],
+    )?;
+    if changed != 1 {
+        return Err(UnderstandingError::InvalidTaskState(expected_status).into());
+    }
+    transaction.commit()?;
+    understanding::get_explanation_task(store, task_id).map_err(Into::into)
 }
 
 fn run_task(
@@ -928,11 +1212,62 @@ fn invoke_codex(
     timeout: Duration,
     cancellation: &AtomicBool,
 ) -> Result<(BatchResult, Option<String>), CodexRunnerError> {
+    let (raw, thread_id) = invoke_codex_raw(
+        store,
+        task_id,
+        runtime,
+        directory,
+        prompt,
+        schema,
+        timeout,
+        cancellation,
+    )?;
+    let result = serde_json::from_str::<BatchResult>(raw.trim_start_matches('\u{feff}'))
+        .map_err(|error| CodexRunnerError::InvalidOutput(format!("结果 JSON 无效：{error}")))?;
+    Ok((result, thread_id))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn invoke_codex_raw(
+    store: &ProjectStore,
+    task_id: &str,
+    runtime: &RuntimeIdentity,
+    directory: &Path,
+    prompt: String,
+    schema: &Value,
+    timeout: Duration,
+    cancellation: &AtomicBool,
+) -> Result<(String, Option<String>), CodexRunnerError> {
+    invoke_codex_raw_with_images(
+        store,
+        task_id,
+        runtime,
+        directory,
+        prompt,
+        schema,
+        timeout,
+        cancellation,
+        &[],
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn invoke_codex_raw_with_images(
+    store: &ProjectStore,
+    task_id: &str,
+    runtime: &RuntimeIdentity,
+    directory: &Path,
+    prompt: String,
+    schema: &Value,
+    timeout: Duration,
+    cancellation: &AtomicBool,
+    image_paths: &[PathBuf],
+) -> Result<(String, Option<String>), CodexRunnerError> {
     fs::write(
         directory.join("schema.json"),
         serde_json::to_vec_pretty(schema)?,
     )?;
-    let spec = invocation_spec(&runtime.executable, directory, prompt)?;
+    let spec = invocation_spec_with_images(&runtime.executable, directory, prompt, image_paths)?;
     let events_path = directory.join("events.jsonl");
     let stderr = fs::File::create(directory.join("stderr.log"))?;
     let mut command = codex_command(&runtime.executable);
@@ -996,7 +1331,7 @@ fn invoke_codex(
     }
     if events.saw_tool_activity {
         return Err(CodexRunnerError::InvalidEventStream(
-            "文本翻译任务出现了工具活动".to_owned(),
+            "受控文本任务出现了工具活动".to_owned(),
         ));
     }
     if !events.saw_turn_completed {
@@ -1014,9 +1349,7 @@ fn invoke_codex(
     }
     let raw = fs::read_to_string(result_path)
         .map_err(|_| CodexRunnerError::InvalidOutput("Codex 结果不是 UTF-8".to_owned()))?;
-    let result = serde_json::from_str::<BatchResult>(raw.trim_start_matches('\u{feff}'))
-        .map_err(|error| CodexRunnerError::InvalidOutput(format!("结果 JSON 无效：{error}")))?;
-    Ok((result, events.thread_id))
+    Ok((raw, events.thread_id))
 }
 
 fn validate_batch_result(
@@ -1220,6 +1553,27 @@ fn finish_with_error(
     Ok(())
 }
 
+fn finish_explanation_with_error(
+    store: &ProjectStore,
+    task_id: &str,
+    error: &CodexRunnerError,
+) -> Result<(), CodexRunnerError> {
+    let timestamp = now_ms()?;
+    let status = if matches!(error, CodexRunnerError::Cancelled) {
+        "cancelled"
+    } else {
+        "failed"
+    };
+    store.connect()?.execute(
+        "UPDATE explanation_tasks
+         SET status = ?2, stage = ?2, error_code = ?3, error_message = ?4,
+             completed_at_ms = ?5, updated_at_ms = ?5
+         WHERE id = ?1 AND status IN ('queued', 'running', 'validating')",
+        params![task_id, status, error.code(), error.to_string(), timestamp],
+    )?;
+    Ok(())
+}
+
 fn ensure_not_cancelled(
     store: &ProjectStore,
     task_id: &str,
@@ -1236,18 +1590,22 @@ fn cancellation_requested(store: &ProjectStore, task_id: &str) -> Result<bool, C
         .connect()?
         .query_row(
             "SELECT cancel_requested_at_ms IS NOT NULL
-             FROM agent_tasks WHERE id = ?1",
+             FROM agent_tasks WHERE id = ?1
+             UNION ALL
+             SELECT cancel_requested_at_ms IS NOT NULL
+             FROM explanation_tasks WHERE id = ?1",
             params![task_id],
             |row| row.get(0),
         )
         .optional()?
-        .ok_or_else(|| TranslationError::TaskNotFound(task_id.to_owned()).into())
+        .ok_or_else(|| CodexRunnerError::InvalidTaskState(format!("找不到 Codex 任务 {task_id}")))
 }
 
-fn invocation_spec(
+fn invocation_spec_with_images(
     executable: &Path,
     isolated_directory: &Path,
     stdin: String,
+    image_paths: &[PathBuf],
 ) -> Result<InvocationSpec, CodexRunnerError> {
     let isolated_directory = dunce::canonicalize(isolated_directory)?;
     let environment = isolated_environment(executable, &isolated_directory)?;
@@ -1260,7 +1618,7 @@ fn invocation_spec(
         .filter(|(key, _)| key.as_str() != "CODEX_HOME")
         .map(|(key, value)| (key.clone(), value.clone()))
         .collect::<BTreeMap<_, _>>();
-    let arguments = vec![
+    let mut arguments = vec![
         "-c".to_owned(),
         format!("default_permissions={}", toml_string(PERMISSION_PROFILE)),
         "-c".to_owned(),
@@ -1313,6 +1671,22 @@ fn invocation_spec(
         "never".to_owned(),
         "-".to_owned(),
     ];
+    let mut image_arguments = Vec::with_capacity(image_paths.len() * 2);
+    for path in image_paths {
+        let path = dunce::canonicalize(path)?;
+        if !path.starts_with(&isolated_directory) || !path.is_file() {
+            return Err(CodexRunnerError::InvalidOutput(
+                "Codex 图片输入不在受控隔离目录".to_owned(),
+            ));
+        }
+        image_arguments.push("--image".to_owned());
+        image_arguments.push(path.to_string_lossy().into_owned());
+    }
+    let exec_index = arguments
+        .iter()
+        .position(|argument| argument == "exec")
+        .expect("invocation always includes exec");
+    arguments.splice(exec_index + 1..exec_index + 1, image_arguments);
     Ok(InvocationSpec {
         arguments,
         stdin,
@@ -1755,7 +2129,13 @@ impl ProcessGroup {
 
 #[cfg(test)]
 mod tests {
-    use std::{env, fs, io::Cursor, process::Command, sync::atomic::AtomicBool, time::Duration};
+    use std::{
+        env, fs,
+        io::Cursor,
+        process::Command,
+        sync::atomic::AtomicBool,
+        time::{Duration, UNIX_EPOCH},
+    };
 
     use rusqlite::params;
     use tempfile::TempDir;
@@ -1770,6 +2150,7 @@ mod tests {
             ImportTranslationResultInput, PrepareTranslationTaskInput, import_translation_result,
             prepare_translation_task,
         },
+        understanding::{PrepareExplanationTaskInput, prepare_explanation_task_with},
     };
 
     struct RunnerFixture {
@@ -1915,6 +2296,65 @@ mod tests {
             .expect("translation task should be prepared")
         }
 
+        fn prepare_explanation(&self, handoff_kind: &str) -> ExplanationTask {
+            let project = self
+                .store
+                .get_project(&self.project_id)
+                .expect("project should load");
+            let metadata =
+                fs::metadata(&project.media_source.locator).expect("media metadata should load");
+            let modified_at_ms = metadata.modified().ok().map(|modified| {
+                i64::try_from(
+                    modified
+                        .duration_since(UNIX_EPOCH)
+                        .expect("modified time should be valid")
+                        .as_millis(),
+                )
+                .expect("modified time should fit")
+            });
+            let probe = media::MediaProbe {
+                container_formats: vec!["mp4".to_owned()],
+                duration_ms: Some(5_000),
+                size_bytes: Some(metadata.len()),
+                bit_rate: None,
+                video_streams: vec![media::VideoStream {
+                    index: 0,
+                    codec_name: "h264".to_owned(),
+                    profile: None,
+                    pixel_format: Some("yuv420p".to_owned()),
+                    width: 320,
+                    height: 180,
+                    frame_rate: Some(25.0),
+                    duration_ms: Some(5_000),
+                }],
+                audio_streams: Vec::new(),
+                subtitle_streams: Vec::new(),
+            };
+            self.store
+                .record_media_probe(
+                    &project.id,
+                    &project.media_source.id,
+                    &"a".repeat(64),
+                    &serde_json::to_string(&probe).expect("probe should serialize"),
+                    metadata.len(),
+                    modified_at_ms,
+                )
+                .expect("media baseline should persist");
+            prepare_explanation_task_with(
+                &self.store,
+                PrepareExplanationTaskInput {
+                    project_id: self.project_id.clone(),
+                    handoff_kind: handoff_kind.to_owned(),
+                    playback_cutoff_ms: 2_000,
+                },
+                |_media_path, timestamp_ms, output_path| {
+                    fs::write(output_path, format!("jpeg-at-{timestamp_ms}"))?;
+                    Ok(())
+                },
+            )
+            .expect("explanation task should be prepared")
+        }
+
         fn fake_codex(&self) -> PathBuf {
             let root = self
                 .store
@@ -1994,6 +2434,52 @@ process.stdin.on("end", () => {
             .expect("hanging Codex launcher should be written");
             launcher_path
         }
+
+        fn fake_explanation_codex(&self, task: &ExplanationTask) -> PathBuf {
+            let root = self
+                .store
+                .data_directory()
+                .parent()
+                .expect("fixture data directory should have a parent");
+            let script_path = root.join("fake-explanation-codex.js");
+            let result = serde_json::to_string(&json!({
+                "protocolVersion": task.protocol_version,
+                "taskId": task.id,
+                "sourceVersionId": task.source_version_id,
+                "playbackCutoffMs": task.playback_cutoff_ms,
+                "confirmedFacts": ["两个人约定在车站前见面。"],
+                "possibleInterpretations": ["结合当前语气，这个约定对说话者可能很重要。"],
+                "withheldReason": "不展开播放位置之后的内容。"
+            }))
+            .expect("result should serialize");
+            fs::write(
+                &script_path,
+                format!(
+                    r#"const fs = require("node:fs");
+const path = require("node:path");
+const args = process.argv.slice(2);
+const resultIndex = args.indexOf("--output-last-message");
+if (resultIndex < 0) process.exit(7);
+process.stdin.resume();
+process.stdin.on("end", () => {{
+  fs.writeFileSync(path.resolve(args[resultIndex + 1]), {result:?}, "utf8");
+  process.stdout.write(
+    '{{"type":"thread.started","thread_id":"explanation-thread"}}\n' +
+    '{{"type":"turn.completed"}}\n'
+  );
+}});
+"#
+                ),
+            )
+            .expect("fake explanation Codex should be written");
+            let launcher_path = root.join("fake-explanation-codex.cmd");
+            fs::write(
+                &launcher_path,
+                format!("@echo off\r\nnode \"{}\" %*\r\n", script_path.display()),
+            )
+            .expect("fake explanation Codex launcher should be written");
+            launcher_path
+        }
     }
 
     fn runtime(executable: PathBuf) -> RuntimeIdentity {
@@ -2023,10 +2509,11 @@ process.stdin.on("end", () => {
         let temporary = tempfile::tempdir().expect("temporary directory should be created");
         let isolated = temporary.path().join("isolated");
         fs::create_dir_all(&isolated).expect("isolated directory should be created");
-        let spec = invocation_spec(
+        let spec = invocation_spec_with_images(
             Path::new("D:/tools/codex.exe"),
             &isolated,
             "fixture prompt".to_owned(),
+            &[],
         )
         .expect("invocation should be built");
         let arguments = spec.arguments.join("\n");
@@ -2057,6 +2544,45 @@ process.stdin.on("end", () => {
         assert!(!arguments.to_ascii_lowercase().contains("claude"));
         assert!(!arguments.contains("\"CODEX_HOME\""));
         assert_eq!(spec.stdin, "fixture prompt");
+    }
+
+    #[test]
+    fn attaches_only_images_inside_the_isolated_directory() {
+        let temporary = tempfile::tempdir().expect("temporary directory should be created");
+        let isolated = temporary.path().join("isolated");
+        fs::create_dir_all(&isolated).expect("isolated directory should be created");
+        let image = isolated.join("frame.jpg");
+        fs::write(&image, b"jpeg").expect("image should be written");
+
+        let spec = invocation_spec_with_images(
+            Path::new("D:/tools/codex.exe"),
+            &isolated,
+            "inspect the frame".to_owned(),
+            std::slice::from_ref(&image),
+        )
+        .expect("controlled image should be accepted");
+        let image_index = spec
+            .arguments
+            .iter()
+            .position(|argument| argument == "--image")
+            .expect("image flag should be present");
+        assert_eq!(
+            PathBuf::from(&spec.arguments[image_index + 1]),
+            dunce::canonicalize(&image).expect("image should canonicalize")
+        );
+
+        let outside = temporary.path().join("outside.jpg");
+        fs::write(&outside, b"outside").expect("outside image should be written");
+        assert!(matches!(
+            invocation_spec_with_images(
+                Path::new("D:/tools/codex.exe"),
+                &isolated,
+                "inspect the frame".to_owned(),
+                &[outside],
+            ),
+            Err(CodexRunnerError::InvalidOutput(message))
+                if message.contains("受控隔离目录")
+        ));
     }
 
     #[test]
@@ -2121,6 +2647,20 @@ process.stdin.on("end", () => {
         assert_eq!(cancelled.status, "cancelled");
         assert_eq!(cancelled.stage, "cancelled");
         let next = fixture.prepare("manual");
+        assert_eq!(next.status, "awaiting_external_result");
+    }
+
+    #[test]
+    fn manual_explanations_can_be_cancelled_without_starting_a_runner() {
+        let fixture = RunnerFixture::new(2);
+        let task = fixture.prepare_explanation("manual");
+
+        let cancelled =
+            cancel_explanation_task(&fixture.store, &task.id).expect("task should cancel");
+
+        assert_eq!(cancelled.status, "cancelled");
+        assert_eq!(cancelled.stage, "cancelled");
+        let next = fixture.prepare_explanation("manual");
         assert_eq!(next.status, "awaiting_external_result");
     }
 
@@ -2222,6 +2762,67 @@ process.stdin.on("end", () => {
                 .expect("events should read")
                 .contains("turn.completed")
         );
+    }
+
+    #[test]
+    fn fake_codex_creates_a_versioned_no_spoiler_explanation() {
+        let fixture = RunnerFixture::new(2);
+        let task = fixture.prepare_explanation("codex");
+        let identity = runtime(fixture.fake_explanation_codex(&task));
+        claim_explanation_for_run(&fixture.store, &task.id, &identity, false)
+            .expect("explanation should enter running");
+
+        let application = run_explanation_task(
+            &fixture.store,
+            &task.id,
+            &identity,
+            Duration::from_secs(10),
+            &AtomicBool::new(false),
+        )
+        .expect("fake Codex should explain the authorized scene");
+
+        assert_eq!(application.task.status, "completed");
+        assert_eq!(application.explanation.playback_cutoff_ms, 2_000);
+        assert_eq!(application.explanation.confirmed_facts.len(), 1);
+        assert_eq!(application.explanation.possible_interpretations.len(), 1);
+        assert_eq!(
+            application.task.output_explanation_id.as_deref(),
+            Some(application.explanation.id.as_str())
+        );
+        let original_current = fixture
+            .store
+            .connect()
+            .expect("database should open")
+            .query_row(
+                "SELECT current_version_id FROM subtitle_tracks
+                 WHERE project_id = ?1 AND role = 'original'",
+                params![fixture.project_id],
+                |row| row.get::<_, Option<String>>(0),
+            )
+            .expect("original version should load");
+        assert_eq!(
+            original_current.as_deref(),
+            Some(fixture.source_version_id.as_str())
+        );
+        let runtime_directory = understanding::task_directory(&fixture.store, &task.id)
+            .expect("task directory should exist")
+            .join("runtime");
+        let run_directory = runtime_directory
+            .read_dir()
+            .expect("runtime directory should list")
+            .next()
+            .expect("run directory should exist")
+            .expect("run directory entry should read")
+            .path();
+        assert_eq!(
+            run_directory
+                .join("input/frames")
+                .read_dir()
+                .expect("controlled frames should list")
+                .count(),
+            task.frames.len()
+        );
+        assert!(run_directory.join("events.jsonl").is_file());
     }
 
     #[test]

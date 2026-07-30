@@ -26,7 +26,10 @@ use crate::{
         self, ImportTranslationResultInput, PrepareTranslationTaskInput, TranslationApplication,
         TranslationError, TranslationTask, TranslationTaskInput,
     },
-    understanding::{self, ExplanationTask, PrepareExplanationTaskInput, UnderstandingError},
+    understanding::{
+        self, Explanation, ExplanationApplication, ExplanationTask, ImportExplanationResultInput,
+        PrepareExplanationTaskInput, UnderstandingError,
+    },
     youtube_media::{
         self, CancelYouTubeImportInput, ImportYouTubeUrlInput, InspectYouTubeUrlInput,
         YouTubeMediaError, YouTubeMediaPreview,
@@ -409,6 +412,7 @@ pub fn delete_project(
 ) -> Result<DeleteProjectResult, CommandError> {
     transcription::cancel_project_transcriptions(store.inner(), &project_id)?;
     codex_runner::cancel_project_translation_tasks(store.inner(), &project_id)?;
+    codex_runner::cancel_project_explanation_tasks(store.inner(), &project_id)?;
     store.delete_project(&project_id).map_err(Into::into)
 }
 
@@ -741,6 +745,77 @@ pub fn read_explanation_prompt(
     task_id: String,
 ) -> Result<String, CommandError> {
     understanding::read_explanation_prompt(store.inner(), &task_id).map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn open_explanation_materials(
+    store: State<'_, ProjectStore>,
+    task_id: String,
+) -> Result<bool, CommandError> {
+    understanding::open_explanation_materials(store.inner(), &task_id).map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn get_explanation(
+    store: State<'_, ProjectStore>,
+    explanation_id: String,
+) -> Result<Explanation, CommandError> {
+    understanding::get_explanation(store.inner(), &explanation_id).map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn list_explanations(
+    store: State<'_, ProjectStore>,
+    project_id: String,
+) -> Result<Vec<Explanation>, CommandError> {
+    understanding::list_explanations(store.inner(), &project_id).map_err(Into::into)
+}
+
+#[tauri::command]
+pub async fn import_explanation_result(
+    store: State<'_, ProjectStore>,
+    input: ImportExplanationResultInput,
+) -> Result<ExplanationApplication, CommandError> {
+    let store = store.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        understanding::import_explanation_result(&store, input).map_err(CommandError::from)
+    })
+    .await
+    .map_err(CommandError::background_task_failed)?
+}
+
+#[tauri::command]
+pub async fn start_codex_explanation_task(
+    store: State<'_, ProjectStore>,
+    input: StartCodexTranslationInput,
+) -> Result<ExplanationTask, CommandError> {
+    let store = store.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        codex_runner::start_codex_explanation_task(&store, input).map_err(CommandError::from)
+    })
+    .await
+    .map_err(CommandError::background_task_failed)?
+}
+
+#[tauri::command]
+pub fn cancel_explanation_task(
+    store: State<'_, ProjectStore>,
+    task_id: String,
+) -> Result<ExplanationTask, CommandError> {
+    codex_runner::cancel_explanation_task(store.inner(), &task_id).map_err(Into::into)
+}
+
+#[tauri::command]
+pub async fn resume_codex_explanation_task(
+    store: State<'_, ProjectStore>,
+    input: StartCodexTranslationInput,
+) -> Result<ExplanationTask, CommandError> {
+    let store = store.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        codex_runner::resume_codex_explanation_task(&store, input).map_err(CommandError::from)
+    })
+    .await
+    .map_err(CommandError::background_task_failed)?
 }
 
 fn allow_project_poster(app: &AppHandle, project: &Project) -> Result<(), CommandError> {

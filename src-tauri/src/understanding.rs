@@ -40,6 +40,8 @@ pub enum UnderstandingError {
     Serialization(#[from] serde_json::Error),
     #[error("找不到解释任务：{0}")]
     TaskNotFound(String),
+    #[error("找不到场景解释：{0}")]
+    ExplanationNotFound(String),
     #[error("不支持的解释交接方式：{0}")]
     InvalidHandoff(String),
     #[error("项目还没有可用于解释的原文字幕")]
@@ -50,6 +52,8 @@ pub enum UnderstandingError {
     MissingContext,
     #[error("这个项目已有正在进行的 Agent 任务")]
     ActiveTaskExists,
+    #[error("解释任务当前状态不允许此操作：{0}")]
+    InvalidTaskState(String),
     #[error("项目在准备解释期间发生变化，请重新请求")]
     ProjectChanged,
     #[error("媒体在准备解释期间发生变化，请重新打开项目")]
@@ -58,6 +62,8 @@ pub enum UnderstandingError {
     FrameExtractionFailed(String),
     #[error("解释任务材料校验失败：{0}")]
     TaskIntegrity(String),
+    #[error("解释结果无效：{0}")]
+    InvalidResult(String),
     #[error("解释任务文件超过大小上限")]
     FileTooLarge,
     #[error("解释任务文件不是 UTF-8 文本")]
@@ -76,15 +82,18 @@ impl UnderstandingError {
             Self::Media(MediaError::RuntimeUnavailable(_)) => "media_runtime_unavailable",
             Self::Media(_) => "media_error",
             Self::TaskNotFound(_) => "explanation_task_not_found",
+            Self::ExplanationNotFound(_) => "explanation_not_found",
             Self::InvalidHandoff(_) => "explanation_handoff_invalid",
             Self::MissingOriginalSubtitle => "original_subtitle_missing",
             Self::InvalidCutoff(_) => "playback_cutoff_invalid",
             Self::MissingContext => "explanation_context_missing",
             Self::ActiveTaskExists => "agent_task_active",
+            Self::InvalidTaskState(_) => "explanation_task_state_invalid",
             Self::ProjectChanged => "project_changed",
             Self::MediaChanged => "media_changed",
             Self::FrameExtractionFailed(_) => "keyframe_extraction_failed",
             Self::TaskIntegrity(_) => "explanation_task_integrity",
+            Self::InvalidResult(_) => "explanation_result_invalid",
             Self::FileTooLarge => "explanation_file_too_large",
             Self::UnsupportedEncoding => "explanation_file_encoding_invalid",
             Self::Serialization(_) => "explanation_serialization_failed",
@@ -104,6 +113,13 @@ pub struct PrepareExplanationTaskInput {
     pub project_id: String,
     pub handoff_kind: String,
     pub playback_cutoff_ms: i64,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportExplanationResultInput {
+    pub task_id: String,
+    pub result_path: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -142,6 +158,41 @@ pub struct ExplanationTask {
     pub started_at_ms: Option<i64>,
     pub completed_at_ms: Option<i64>,
     pub frames: Vec<ExplanationFrame>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Explanation {
+    pub id: String,
+    pub project_id: String,
+    pub task_id: String,
+    pub source_version_id: String,
+    pub translation_version_id: Option<String>,
+    pub playback_cutoff_ms: i64,
+    pub scene_start_ms: i64,
+    pub confirmed_facts: Vec<String>,
+    pub possible_interpretations: Vec<String>,
+    pub withheld_reason: Option<String>,
+    pub created_at_ms: i64,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExplanationApplication {
+    pub task: ExplanationTask,
+    pub explanation: Explanation,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+struct ExplanationResult {
+    protocol_version: String,
+    task_id: String,
+    source_version_id: String,
+    playback_cutoff_ms: i64,
+    confirmed_facts: Vec<String>,
+    possible_interpretations: Vec<String>,
+    withheld_reason: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -188,7 +239,7 @@ pub fn prepare_explanation_task(
     })
 }
 
-fn prepare_explanation_task_with<F>(
+pub(crate) fn prepare_explanation_task_with<F>(
     store: &ProjectStore,
     input: PrepareExplanationTaskInput,
     extract_frame: F,
@@ -613,19 +664,450 @@ pub fn read_explanation_prompt(
     read_small_utf8(&directory.join("prompt.md"))
 }
 
-pub(crate) fn recover_explanation_tasks(store: &ProjectStore) -> Result<usize, UnderstandingError> {
+pub(crate) fn read_explanation_schema(
+    store: &ProjectStore,
+    task_id: &str,
+) -> Result<Value, UnderstandingError> {
+    let task = get_explanation_task(store, task_id)?;
+    let directory = task_directory(store, task_id)?;
+    verify_task_package(store, &task, &directory)?;
+    Ok(serde_json::from_str(&read_small_utf8(
+        &directory.join("result.schema.json"),
+    )?)?)
+}
+
+pub fn open_explanation_materials(
+    store: &ProjectStore,
+    task_id: &str,
+) -> Result<bool, UnderstandingError> {
+    let task = get_explanation_task(store, task_id)?;
+    let directory = task_directory(store, task_id)?;
+    verify_task_package(store, &task, &directory)?;
+    let frames = dunce::canonicalize(directory.join("input").join("frames"))?;
+    if !frames.is_dir() {
+        return Err(UnderstandingError::TaskIntegrity(
+            "受控关键帧目录不存在".to_owned(),
+        ));
+    }
+    #[cfg(windows)]
+    {
+        Command::new("explorer.exe").arg(frames).spawn()?;
+        Ok(true)
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = frames;
+        Err(UnderstandingError::TaskIntegrity(
+            "当前平台不支持打开关键帧目录".to_owned(),
+        ))
+    }
+}
+
+pub fn get_explanation(
+    store: &ProjectStore,
+    explanation_id: &str,
+) -> Result<Explanation, UnderstandingError> {
+    validate_task_id(explanation_id)
+        .map_err(|_| UnderstandingError::ExplanationNotFound(explanation_id.to_owned()))?;
+    store
+        .connect()?
+        .query_row(
+            "SELECT
+                id, project_id, task_id, source_version_id,
+                translation_version_id, playback_cutoff_ms, scene_start_ms,
+                confirmed_facts_json, possible_interpretations_json,
+                withheld_reason, created_at_ms
+             FROM explanations
+             WHERE id = ?1",
+            params![explanation_id],
+            |row| {
+                let confirmed_facts_json = row.get::<_, String>(7)?;
+                let possible_interpretations_json = row.get::<_, String>(8)?;
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, String>(3)?,
+                    row.get::<_, Option<String>>(4)?,
+                    row.get::<_, i64>(5)?,
+                    row.get::<_, i64>(6)?,
+                    confirmed_facts_json,
+                    possible_interpretations_json,
+                    row.get::<_, Option<String>>(9)?,
+                    row.get::<_, i64>(10)?,
+                ))
+            },
+        )
+        .optional()?
+        .ok_or_else(|| UnderstandingError::ExplanationNotFound(explanation_id.to_owned()))
+        .and_then(|row| {
+            Ok(Explanation {
+                id: row.0,
+                project_id: row.1,
+                task_id: row.2,
+                source_version_id: row.3,
+                translation_version_id: row.4,
+                playback_cutoff_ms: row.5,
+                scene_start_ms: row.6,
+                confirmed_facts: serde_json::from_str(&row.7)?,
+                possible_interpretations: serde_json::from_str(&row.8)?,
+                withheld_reason: row.9,
+                created_at_ms: row.10,
+            })
+        })
+}
+
+pub fn list_explanations(
+    store: &ProjectStore,
+    project_id: &str,
+) -> Result<Vec<Explanation>, UnderstandingError> {
+    store.get_project(project_id)?;
+    let connection = store.connect()?;
+    let ids = connection
+        .prepare(
+            "SELECT id FROM explanations
+             WHERE project_id = ?1
+             ORDER BY playback_cutoff_ms DESC, created_at_ms DESC, id DESC",
+        )?
+        .query_map(params![project_id], |row| row.get::<_, String>(0))?
+        .collect::<Result<Vec<_>, _>>()?;
+    ids.into_iter()
+        .map(|explanation_id| get_explanation(store, &explanation_id))
+        .collect()
+}
+
+pub fn import_explanation_result(
+    store: &ProjectStore,
+    input: ImportExplanationResultInput,
+) -> Result<ExplanationApplication, UnderstandingError> {
+    let task = get_explanation_task(store, &input.task_id)?;
+    if task.handoff_kind != "manual" || task.status != "awaiting_external_result" {
+        return Err(UnderstandingError::InvalidTaskState(task.status));
+    }
+    let directory = task_directory(store, &task.id)?;
+    verify_task_package(store, &task, &directory)?;
+    let result_path = canonical_result_path(&input.result_path)?;
+    let raw = read_small_utf8(&result_path)?;
+
+    set_task_validating(store, &task.id, "awaiting_external_result")?;
+    match validate_and_apply_result(store, &task.id, &raw) {
+        Ok(application) => Ok(application),
+        Err(error) => {
+            let _ = restore_manual_task_after_error(store, &task.id, &error);
+            Err(error)
+        }
+    }
+}
+
+pub(crate) fn apply_codex_result(
+    store: &ProjectStore,
+    task_id: &str,
+    raw: &str,
+) -> Result<ExplanationApplication, UnderstandingError> {
+    set_task_validating(store, task_id, "running")?;
+    validate_and_apply_result(store, task_id, raw)
+}
+
+fn validate_and_apply_result(
+    store: &ProjectStore,
+    task_id: &str,
+    raw: &str,
+) -> Result<ExplanationApplication, UnderstandingError> {
+    let task = get_explanation_task(store, task_id)?;
+    if task.status != "validating" {
+        return Err(UnderstandingError::InvalidTaskState(task.status));
+    }
+    verify_task_package(store, &task, &task_directory(store, task_id)?)?;
+    let result = validate_result(&task, raw)?;
+    persist_explanation_result(store, &task, raw, result)
+}
+
+fn validate_result(
+    task: &ExplanationTask,
+    raw: &str,
+) -> Result<ExplanationResult, UnderstandingError> {
+    let result = serde_json::from_str::<ExplanationResult>(raw.trim_start_matches('\u{feff}'))
+        .map_err(|error| UnderstandingError::InvalidResult(format!("结果 JSON 无效：{error}")))?;
+    if result.protocol_version != task.protocol_version
+        || result.task_id != task.id
+        || result.source_version_id != task.source_version_id
+        || result.playback_cutoff_ms != task.playback_cutoff_ms
+    {
+        return Err(UnderstandingError::InvalidResult(
+            "结果与任务、字幕版本或播放截止时间不一致".to_owned(),
+        ));
+    }
+    let confirmed_facts =
+        validate_explanation_items("确认事实", result.confirmed_facts, 1, 8, 600)?;
+    let possible_interpretations =
+        validate_explanation_items("可能解读", result.possible_interpretations, 1, 8, 600)?;
+    let withheld_reason = result
+        .withheld_reason
+        .map(|value| validate_explanation_text("未展开说明", value, 300))
+        .transpose()?
+        .filter(|value| !value.is_empty());
+    Ok(ExplanationResult {
+        protocol_version: result.protocol_version,
+        task_id: result.task_id,
+        source_version_id: result.source_version_id,
+        playback_cutoff_ms: result.playback_cutoff_ms,
+        confirmed_facts,
+        possible_interpretations,
+        withheld_reason,
+    })
+}
+
+fn validate_explanation_items(
+    label: &str,
+    items: Vec<String>,
+    minimum: usize,
+    maximum: usize,
+    maximum_characters: usize,
+) -> Result<Vec<String>, UnderstandingError> {
+    if !(minimum..=maximum).contains(&items.len()) {
+        return Err(UnderstandingError::InvalidResult(format!(
+            "{label}必须包含 {minimum} 到 {maximum} 项"
+        )));
+    }
+    let mut seen = BTreeSet::new();
+    items
+        .into_iter()
+        .map(|item| {
+            let item = validate_explanation_text(label, item, maximum_characters)?;
+            if !seen.insert(item.clone()) {
+                return Err(UnderstandingError::InvalidResult(format!(
+                    "{label}包含重复内容"
+                )));
+            }
+            Ok(item)
+        })
+        .collect()
+}
+
+fn validate_explanation_text(
+    label: &str,
+    value: String,
+    maximum_characters: usize,
+) -> Result<String, UnderstandingError> {
+    let value = value.trim().to_owned();
+    if value.is_empty() {
+        return Err(UnderstandingError::InvalidResult(format!(
+            "{label}不能为空"
+        )));
+    }
+    if value.chars().count() > maximum_characters {
+        return Err(UnderstandingError::InvalidResult(format!(
+            "{label}超过 {maximum_characters} 个字符"
+        )));
+    }
+    if value
+        .chars()
+        .any(|character| character.is_control() && !matches!(character, '\n' | '\r' | '\t'))
+    {
+        return Err(UnderstandingError::InvalidResult(format!(
+            "{label}包含不可见控制字符"
+        )));
+    }
+    Ok(value)
+}
+
+fn persist_explanation_result(
+    store: &ProjectStore,
+    task: &ExplanationTask,
+    raw: &str,
+    result: ExplanationResult,
+) -> Result<ExplanationApplication, UnderstandingError> {
+    let output_directory = task_directory(store, &task.id)?.join("output");
+    fs::create_dir_all(&output_directory)?;
+    let output_path = output_directory.join("result.json");
+    let temporary_output = output_directory.join(format!("result-{}.part", Uuid::new_v4()));
+    fs::write(&temporary_output, raw.as_bytes())?;
+    if output_path.exists() {
+        fs::remove_file(&output_path)?;
+    }
+    fs::rename(&temporary_output, &output_path)?;
+
+    let result_sha256 = hash_bytes(raw.as_bytes());
+    let validation = json!({
+        "status": "accepted",
+        "confirmedFactCount": result.confirmed_facts.len(),
+        "possibleInterpretationCount": result.possible_interpretations.len(),
+        "withheld": result.withheld_reason.is_some()
+    });
+    let validation_json = serde_json::to_string(&validation)?;
+    let explanation_id = Uuid::new_v4().to_string();
+    let timestamp = now_ms()?;
+    let persistence = (|| -> Result<(), UnderstandingError> {
+        let mut connection = store.connect()?;
+        let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let current = transaction
+            .query_row(
+                "SELECT
+                    p.revision, m.source_sha256, task.expected_media_sha256,
+                    original.current_version_id,
+                    (
+                        SELECT current_version_id
+                        FROM subtitle_tracks
+                        WHERE project_id = p.id
+                          AND role = 'translation'
+                          AND language_code = 'zh-cn'
+                    ),
+                    task.status
+                 FROM explanation_tasks task
+                 JOIN projects p ON p.id = task.project_id
+                 JOIN media_sources m
+                   ON m.project_id = p.id AND m.is_primary = 1
+                 JOIN subtitle_tracks original
+                   ON original.project_id = p.id AND original.role = 'original'
+                 WHERE task.id = ?1",
+                params![task.id],
+                |row| {
+                    Ok((
+                        row.get::<_, i64>(0)?,
+                        row.get::<_, Option<String>>(1)?,
+                        row.get::<_, String>(2)?,
+                        row.get::<_, Option<String>>(3)?,
+                        row.get::<_, Option<String>>(4)?,
+                        row.get::<_, String>(5)?,
+                    ))
+                },
+            )
+            .optional()?
+            .ok_or_else(|| UnderstandingError::TaskNotFound(task.id.clone()))?;
+        if current.0 != task.expected_project_revision
+            || current.3.as_deref() != Some(task.source_version_id.as_str())
+            || current.4 != task.translation_version_id
+        {
+            return Err(UnderstandingError::ProjectChanged);
+        }
+        if current
+            .1
+            .as_deref()
+            .is_none_or(|value| !value.eq_ignore_ascii_case(&current.2))
+        {
+            return Err(UnderstandingError::MediaChanged);
+        }
+        if current.5 != "validating" {
+            return Err(UnderstandingError::InvalidTaskState(current.5));
+        }
+        transaction.execute(
+            "INSERT INTO explanations (
+                id, project_id, task_id, source_version_id,
+                translation_version_id, playback_cutoff_ms, scene_start_ms,
+                confirmed_facts_json, possible_interpretations_json,
+                withheld_reason, created_at_ms
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+            params![
+                explanation_id,
+                task.project_id,
+                task.id,
+                task.source_version_id,
+                task.translation_version_id,
+                task.playback_cutoff_ms,
+                task.scene_start_ms,
+                serde_json::to_string(&result.confirmed_facts)?,
+                serde_json::to_string(&result.possible_interpretations)?,
+                result.withheld_reason,
+                timestamp
+            ],
+        )?;
+        let changed = transaction.execute(
+            "UPDATE explanation_tasks
+             SET status = 'completed', stage = 'completed', progress = 1.0,
+                 result_sha256 = ?2, result_validation_json = ?3,
+                 output_explanation_id = ?4,
+                 error_code = NULL, error_message = NULL,
+                 completed_at_ms = ?5, updated_at_ms = ?5
+             WHERE id = ?1 AND status = 'validating'",
+            params![
+                task.id,
+                result_sha256,
+                validation_json,
+                explanation_id,
+                timestamp
+            ],
+        )?;
+        if changed != 1 {
+            return Err(UnderstandingError::InvalidTaskState(task.status.clone()));
+        }
+        transaction.commit()?;
+        Ok(())
+    })();
+    if let Err(error) = persistence {
+        let _ = fs::remove_file(&output_path);
+        return Err(error);
+    }
+    Ok(ExplanationApplication {
+        task: get_explanation_task(store, &task.id)?,
+        explanation: get_explanation(store, &explanation_id)?,
+    })
+}
+
+fn set_task_validating(
+    store: &ProjectStore,
+    task_id: &str,
+    expected_status: &str,
+) -> Result<(), UnderstandingError> {
     let timestamp = now_ms()?;
     let connection = store.connect()?;
     let changed = connection.execute(
+        "UPDATE explanation_tasks
+         SET status = 'validating', stage = 'validating', progress = 0.9,
+             error_code = NULL, error_message = NULL, updated_at_ms = ?3
+         WHERE id = ?1 AND status = ?2",
+        params![task_id, expected_status, timestamp],
+    )?;
+    if changed != 1 {
+        return Err(UnderstandingError::InvalidTaskState(
+            get_explanation_task(store, task_id)?.status,
+        ));
+    }
+    Ok(())
+}
+
+fn restore_manual_task_after_error(
+    store: &ProjectStore,
+    task_id: &str,
+    error: &UnderstandingError,
+) -> Result<(), UnderstandingError> {
+    let timestamp = now_ms()?;
+    store.connect()?.execute(
+        "UPDATE explanation_tasks
+         SET status = 'awaiting_external_result',
+             stage = 'awaiting_external_result', progress = 0.0,
+             error_code = ?2, error_message = ?3, updated_at_ms = ?4
+         WHERE id = ?1 AND status = 'validating'",
+        params![task_id, error.code(), error.to_string(), timestamp],
+    )?;
+    Ok(())
+}
+
+pub(crate) fn recover_explanation_tasks(store: &ProjectStore) -> Result<usize, UnderstandingError> {
+    let timestamp = now_ms()?;
+    let mut connection = store.connect()?;
+    let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    let codex_changed = transaction.execute(
         "UPDATE explanation_tasks
          SET status = 'interrupted', stage = 'interrupted',
              error_code = 'app_restarted',
              error_message = '应用退出前解释任务尚未完成，可以重新开始',
              completed_at_ms = ?1, updated_at_ms = ?1
-         WHERE status IN ('running', 'validating')",
+         WHERE handoff_kind = 'codex'
+           AND status IN ('queued', 'running', 'validating')",
         params![timestamp],
     )?;
-    Ok(changed)
+    let manual_changed = transaction.execute(
+        "UPDATE explanation_tasks
+         SET status = 'awaiting_external_result',
+             stage = 'awaiting_external_result', progress = 0.0,
+             error_code = 'app_restarted',
+             error_message = '结果导入被应用退出中断，请重新选择结果文件',
+             completed_at_ms = NULL, updated_at_ms = ?1
+         WHERE handoff_kind = 'manual' AND status = 'validating'",
+        params![timestamp],
+    )?;
+    transaction.commit()?;
+    Ok(codex_changed + manual_changed)
 }
 
 pub(crate) fn task_directory(
@@ -1087,6 +1569,21 @@ fn read_small_utf8(path: &Path) -> Result<String, UnderstandingError> {
     String::from_utf8(fs::read(path)?).map_err(|_| UnderstandingError::UnsupportedEncoding)
 }
 
+fn canonical_result_path(input: &str) -> Result<PathBuf, UnderstandingError> {
+    if input.trim().is_empty() {
+        return Err(UnderstandingError::InvalidResult(
+            "没有选择解释结果文件".to_owned(),
+        ));
+    }
+    let path = dunce::canonicalize(input)?;
+    if !path.is_file() {
+        return Err(UnderstandingError::InvalidResult(
+            "解释结果路径不是可读取文件".to_owned(),
+        ));
+    }
+    Ok(path)
+}
+
 fn hash_file(path: &Path) -> Result<String, UnderstandingError> {
     Ok(hash_bytes(&fs::read(path)?))
 }
@@ -1255,6 +1752,25 @@ mod tests {
             )
             .expect("explanation task should prepare")
         }
+
+        fn result_path(&self, task: &ExplanationTask, cutoff_ms: i64) -> PathBuf {
+            let path = self._temporary.path().join("result.json");
+            fs::write(
+                &path,
+                serde_json::to_vec_pretty(&json!({
+                    "protocolVersion": task.protocol_version,
+                    "taskId": task.id,
+                    "sourceVersionId": task.source_version_id,
+                    "playbackCutoffMs": cutoff_ms,
+                    "confirmedFacts": ["人物明确说会在这里等待。"],
+                    "possibleInterpretations": ["结合当前语气，人物可能在掩饰不安。"],
+                    "withheldReason": "后续发展未展开，以避免剧透。"
+                }))
+                .expect("result should serialize"),
+            )
+            .expect("result should be written");
+            path
+        }
     }
 
     #[test]
@@ -1297,6 +1813,71 @@ mod tests {
         let error = read_explanation_prompt(&fixture.store, &task.id)
             .expect_err("tampered prompt should be rejected");
         assert!(matches!(error, UnderstandingError::TaskIntegrity(_)));
+    }
+
+    #[test]
+    fn imports_a_manual_result_as_a_separate_explanation() {
+        let fixture = Fixture::new();
+        let task = fixture.prepare();
+        let result_path = fixture.result_path(&task, task.playback_cutoff_ms);
+
+        let application = import_explanation_result(
+            &fixture.store,
+            ImportExplanationResultInput {
+                task_id: task.id.clone(),
+                result_path: result_path.to_string_lossy().into_owned(),
+            },
+        )
+        .expect("manual result should apply");
+
+        assert_eq!(application.task.status, "completed");
+        assert_eq!(
+            application.task.output_explanation_id.as_deref(),
+            Some(application.explanation.id.as_str())
+        );
+        assert_eq!(application.explanation.confirmed_facts.len(), 1);
+        assert_eq!(application.explanation.possible_interpretations.len(), 1);
+        assert_eq!(
+            list_explanations(&fixture.store, &fixture.project_id)
+                .expect("explanations should list")
+                .len(),
+            1
+        );
+        assert!(
+            task_directory(&fixture.store, &task.id)
+                .expect("task directory should resolve")
+                .join("output/result.json")
+                .is_file()
+        );
+    }
+
+    #[test]
+    fn rejects_a_result_for_another_cutoff_and_restores_manual_waiting() {
+        let fixture = Fixture::new();
+        let task = fixture.prepare();
+        let result_path = fixture.result_path(&task, task.playback_cutoff_ms + 1);
+
+        let error = import_explanation_result(
+            &fixture.store,
+            ImportExplanationResultInput {
+                task_id: task.id.clone(),
+                result_path: result_path.to_string_lossy().into_owned(),
+            },
+        )
+        .expect_err("mismatched cutoff should be rejected");
+
+        assert!(matches!(error, UnderstandingError::InvalidResult(_)));
+        let restored = get_explanation_task(&fixture.store, &task.id).expect("task should reload");
+        assert_eq!(restored.status, "awaiting_external_result");
+        assert_eq!(
+            restored.error_code.as_deref(),
+            Some("explanation_result_invalid")
+        );
+        assert!(
+            list_explanations(&fixture.store, &fixture.project_id)
+                .expect("explanations should list")
+                .is_empty()
+        );
     }
 
     #[test]
@@ -1397,7 +1978,7 @@ mod tests {
             .expect("database should open")
             .execute(
                 "UPDATE explanation_tasks
-                 SET status = 'running', stage = 'running'
+                 SET handoff_kind = 'codex', status = 'running', stage = 'running'
                  WHERE id = ?1",
                 params![task.id],
             )
@@ -1409,6 +1990,31 @@ mod tests {
         );
         let recovered = get_explanation_task(&fixture.store, &task.id).expect("task should reload");
         assert_eq!(recovered.status, "interrupted");
+        assert_eq!(recovered.error_code.as_deref(), Some("app_restarted"));
+    }
+
+    #[test]
+    fn recovers_a_manual_validation_as_waiting_for_reimport() {
+        let fixture = Fixture::new();
+        let task = fixture.prepare();
+        fixture
+            .store
+            .connect()
+            .expect("database should open")
+            .execute(
+                "UPDATE explanation_tasks
+                 SET status = 'validating', stage = 'validating'
+                 WHERE id = ?1",
+                params![task.id],
+            )
+            .expect("task should be marked validating");
+
+        assert_eq!(
+            recover_explanation_tasks(&fixture.store).expect("recovery should run"),
+            1
+        );
+        let recovered = get_explanation_task(&fixture.store, &task.id).expect("task should reload");
+        assert_eq!(recovered.status, "awaiting_external_result");
         assert_eq!(recovered.error_code.as_deref(), Some("app_restarted"));
     }
 

@@ -130,7 +130,14 @@ pub fn run() {
             commands::prepare_explanation_task,
             commands::get_explanation_task,
             commands::list_explanation_tasks,
-            commands::read_explanation_prompt
+            commands::read_explanation_prompt,
+            commands::open_explanation_materials,
+            commands::get_explanation,
+            commands::list_explanations,
+            commands::import_explanation_result,
+            commands::start_codex_explanation_task,
+            commands::cancel_explanation_task,
+            commands::resume_codex_explanation_task
         ])
         .run(tauri::generate_context!())
         .expect("failed to run SiaoVPlay");
