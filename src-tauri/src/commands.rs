@@ -17,6 +17,10 @@ use crate::{
         InspectEmbeddedSubtitleInput, InspectSubtitleFileInput, SubtitleError,
         SubtitleImportPreview, SubtitleVersion,
     },
+    transcription::{
+        self, StartTranscriptionInput, TranscriptionError, TranscriptionJob, TranscriptionJobInput,
+        TranscriptionRuntimeStatus,
+    },
     youtube_media::{
         self, CancelYouTubeImportInput, ImportYouTubeUrlInput, InspectYouTubeUrlInput,
         YouTubeMediaError, YouTubeMediaPreview,
@@ -197,6 +201,47 @@ impl From<YouTubeMediaError> for CommandError {
     }
 }
 
+impl From<TranscriptionError> for CommandError {
+    fn from(error: TranscriptionError) -> Self {
+        let code = match &error {
+            TranscriptionError::Store(StoreError::ProjectNotFound(_)) => "project_not_found",
+            TranscriptionError::Store(StoreError::Validation(_)) => "validation_error",
+            TranscriptionError::Store(StoreError::UnsupportedSchema { .. }) => "unsupported_schema",
+            TranscriptionError::Store(StoreError::FileSystem(_))
+            | TranscriptionError::FileSystem(_) => "filesystem_error",
+            TranscriptionError::Store(_) => "database_error",
+            TranscriptionError::Media(MediaError::RuntimeUnavailable(_)) => {
+                "media_runtime_unavailable"
+            }
+            TranscriptionError::Media(_) => "media_inspection_failed",
+            TranscriptionError::Subtitle(_) => "subtitle_persistence_failed",
+            TranscriptionError::RuntimeUnavailable(_) => "transcription_runtime_unavailable",
+            TranscriptionError::RuntimeIntegrity(_) => "transcription_runtime_invalid",
+            TranscriptionError::ModelUnavailable(_) => "transcription_model_unavailable",
+            TranscriptionError::ModelIntegrity(_) => "transcription_model_invalid",
+            TranscriptionError::InvalidLanguage(_) => "transcription_language_invalid",
+            TranscriptionError::InvalidModel(_) => "transcription_model_invalid",
+            TranscriptionError::MissingAudio => "missing_audio_stream",
+            TranscriptionError::ReplaceConfirmationRequired => {
+                "subtitle_replace_confirmation_required"
+            }
+            TranscriptionError::ActiveJobExists => "transcription_already_running",
+            TranscriptionError::JobNotFound(_) => "transcription_job_not_found",
+            TranscriptionError::InvalidJobState(_) => "transcription_job_state_invalid",
+            TranscriptionError::SourceChanged => "project_changed",
+            TranscriptionError::AudioExtractionFailed(_) => "audio_extraction_failed",
+            TranscriptionError::TranscriptionFailed(_) => "transcription_failed",
+            TranscriptionError::InvalidOutput(_) => "transcription_output_invalid",
+            TranscriptionError::Cancelled => "transcription_cancelled",
+            TranscriptionError::Serialization(_) => "transcription_serialization_failed",
+        };
+        Self {
+            code,
+            message: error.to_string(),
+        }
+    }
+}
+
 impl CommandError {
     fn background_task_failed(message: impl ToString) -> Self {
         Self {
@@ -323,6 +368,7 @@ pub fn delete_project(
     store: State<'_, ProjectStore>,
     project_id: String,
 ) -> Result<DeleteProjectResult, CommandError> {
+    transcription::cancel_project_transcriptions(store.inner(), &project_id)?;
     store.delete_project(&project_id).map_err(Into::into)
 }
 
@@ -436,6 +482,68 @@ pub async fn import_embedded_subtitle(
     let store = store.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
         subtitles::import_embedded_subtitle(&store, input).map_err(CommandError::from)
+    })
+    .await
+    .map_err(CommandError::background_task_failed)?
+}
+
+#[tauri::command]
+pub async fn get_transcription_runtime_status() -> Result<TranscriptionRuntimeStatus, CommandError>
+{
+    tauri::async_runtime::spawn_blocking(transcription::transcription_runtime_status)
+        .await
+        .map_err(CommandError::background_task_failed)
+}
+
+#[tauri::command]
+pub async fn start_transcription(
+    store: State<'_, ProjectStore>,
+    input: StartTranscriptionInput,
+) -> Result<TranscriptionJob, CommandError> {
+    let store = store.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let job = transcription::start_transcription(&store, input)?;
+        transcription::spawn_transcription_job(store, job.id.clone())?;
+        Ok(job)
+    })
+    .await
+    .map_err(CommandError::background_task_failed)?
+}
+
+#[tauri::command]
+pub fn get_transcription_job(
+    store: State<'_, ProjectStore>,
+    input: TranscriptionJobInput,
+) -> Result<TranscriptionJob, CommandError> {
+    transcription::get_transcription_job(store.inner(), &input.job_id).map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn list_transcription_jobs(
+    store: State<'_, ProjectStore>,
+    project_id: String,
+) -> Result<Vec<TranscriptionJob>, CommandError> {
+    transcription::list_transcription_jobs(store.inner(), &project_id).map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn cancel_transcription_job(
+    store: State<'_, ProjectStore>,
+    input: TranscriptionJobInput,
+) -> Result<TranscriptionJob, CommandError> {
+    transcription::cancel_transcription_job(store.inner(), &input.job_id).map_err(Into::into)
+}
+
+#[tauri::command]
+pub async fn resume_transcription_job(
+    store: State<'_, ProjectStore>,
+    input: TranscriptionJobInput,
+) -> Result<TranscriptionJob, CommandError> {
+    let store = store.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let job = transcription::resume_transcription_job(&store, &input.job_id)?;
+        transcription::spawn_transcription_job(store, job.id.clone())?;
+        Ok(job)
     })
     .await
     .map_err(CommandError::background_task_failed)?

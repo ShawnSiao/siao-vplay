@@ -218,6 +218,7 @@ const subtitleVersion: SubtitleVersion = {
     {
       id: "5a460d9a-97f6-4482-af1d-e7dbb7a6bc56",
       ...subtitlePreview.cues[0],
+      words: [],
     },
   ],
 };

@@ -13,6 +13,7 @@ user-media/
 /src-tauri/icons/64x64.png
 /src-tauri/icons/icon.png
 /src-tauri/gen/
+/src-tauri/target/
 
 # Local-only product and planning materials
 /AGENTS.md

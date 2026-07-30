@@ -232,8 +232,17 @@ export type EmbeddedSubtitlePreview = SubtitleImportPreview & {
   embeddedLanguage: string | null;
 };
 
+export type SubtitleWord = {
+  ordinal: number;
+  startMs: number;
+  endMs: number;
+  text: string;
+  confidence: number | null;
+};
+
 export type SubtitleSegment = SubtitleCue & {
   id: string;
+  words: SubtitleWord[];
 };
 
 export type SubtitleVersion = {
@@ -256,4 +265,51 @@ export type SubtitleVersion = {
   createdAtMs: number;
   isCurrent: boolean;
   segments: SubtitleSegment[];
+};
+
+export type TranscriptionRuntimeOption = {
+  backend: "vulkan" | "cpu";
+  available: boolean;
+  version: string | null;
+  errorMessage: string | null;
+};
+
+export type TranscriptionModelStatus = {
+  modelKind: "small" | "base";
+  available: boolean;
+  errorMessage: string | null;
+};
+
+export type TranscriptionRuntimeStatus = {
+  available: boolean;
+  preferredBackend: "vulkan" | "cpu" | null;
+  runtimes: TranscriptionRuntimeOption[];
+  models: TranscriptionModelStatus[];
+};
+
+export type TranscriptionJob = {
+  id: string;
+  projectId: string;
+  status:
+    | "queued"
+    | "extracting"
+    | "transcribing"
+    | "validating"
+    | "completed"
+    | "failed"
+    | "cancelled"
+    | "interrupted";
+  stage: string;
+  progress: number;
+  languageCode: "en" | "th" | "ja" | "ko";
+  modelKind: "small" | "base";
+  runtimeBackend: "vulkan" | "cpu";
+  runtimeVersion: string;
+  subtitleVersionId: string | null;
+  errorCode: string | null;
+  errorMessage: string | null;
+  createdAtMs: number;
+  updatedAtMs: number;
+  startedAtMs: number | null;
+  completedAtMs: number | null;
 };

@@ -14,7 +14,7 @@ use crate::domain::{
     UpdatePlaybackStateInput,
 };
 
-const CURRENT_SCHEMA_VERSION: i64 = 6;
+const CURRENT_SCHEMA_VERSION: i64 = 7;
 
 #[derive(Clone, Debug)]
 pub(crate) struct RemoteImportProvenance {
@@ -783,6 +783,16 @@ impl ProjectStore {
                 params![now_ms()?],
             )?;
             transaction.commit()?;
+            current_version = 6;
+        }
+        if current_version < 7 {
+            let transaction = connection.transaction()?;
+            Self::apply_migration_7(&transaction)?;
+            transaction.execute(
+                "INSERT INTO schema_migrations (version, applied_at_ms) VALUES (7, ?1)",
+                params![now_ms()?],
+            )?;
+            transaction.commit()?;
         }
         Ok(())
     }
@@ -960,6 +970,72 @@ impl ProjectStore {
                 importer_sha256 TEXT NOT NULL CHECK (length(importer_sha256) = 64),
                 imported_at_ms INTEGER NOT NULL
              );",
+        )?;
+        Ok(())
+    }
+
+    fn apply_migration_7(transaction: &Transaction<'_>) -> Result<(), StoreError> {
+        transaction.execute_batch(
+            "CREATE TABLE subtitle_words (
+                id TEXT PRIMARY KEY,
+                segment_id TEXT NOT NULL
+                    REFERENCES subtitle_segments(id) ON DELETE CASCADE,
+                ordinal INTEGER NOT NULL CHECK (ordinal >= 0),
+                start_ms INTEGER NOT NULL CHECK (start_ms >= 0),
+                end_ms INTEGER NOT NULL CHECK (end_ms > start_ms),
+                text TEXT NOT NULL CHECK (length(trim(text)) > 0),
+                confidence REAL
+                    CHECK (confidence IS NULL OR (confidence >= 0.0 AND confidence <= 1.0)),
+                UNIQUE(segment_id, ordinal)
+             );
+
+             CREATE INDEX subtitle_words_segment_timeline
+             ON subtitle_words(segment_id, start_ms, end_ms, ordinal);
+
+             CREATE TABLE transcription_jobs (
+                id TEXT PRIMARY KEY,
+                project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+                source_media_id TEXT NOT NULL REFERENCES media_sources(id) ON DELETE CASCADE,
+                status TEXT NOT NULL CHECK (
+                    status IN (
+                        'queued', 'extracting', 'transcribing', 'validating',
+                        'completed', 'failed', 'cancelled', 'interrupted'
+                    )
+                ),
+                stage TEXT NOT NULL,
+                progress REAL NOT NULL CHECK (progress >= 0.0 AND progress <= 1.0),
+                language_code TEXT NOT NULL CHECK (language_code IN ('en', 'th', 'ja', 'ko')),
+                model_kind TEXT NOT NULL CHECK (model_kind IN ('small', 'base')),
+                model_path TEXT NOT NULL,
+                model_sha256 TEXT NOT NULL CHECK (length(model_sha256) = 64),
+                runtime_path TEXT NOT NULL,
+                runtime_backend TEXT NOT NULL CHECK (runtime_backend IN ('vulkan', 'cpu')),
+                runtime_version TEXT NOT NULL,
+                runtime_sha256 TEXT NOT NULL CHECK (length(runtime_sha256) = 64),
+                runtime_metadata_sha256 TEXT NOT NULL CHECK (length(runtime_metadata_sha256) = 64),
+                parameters_json TEXT NOT NULL,
+                expected_project_revision INTEGER NOT NULL CHECK (expected_project_revision >= 1),
+                expected_media_sha256 TEXT NOT NULL CHECK (length(expected_media_sha256) = 64),
+                media_duration_ms INTEGER NOT NULL CHECK (media_duration_ms > 0),
+                confirm_replace_original INTEGER NOT NULL
+                    CHECK (confirm_replace_original IN (0, 1)),
+                subtitle_version_id TEXT
+                    REFERENCES subtitle_versions(id) ON DELETE SET NULL,
+                cancel_requested_at_ms INTEGER,
+                error_code TEXT,
+                error_message TEXT,
+                created_at_ms INTEGER NOT NULL,
+                updated_at_ms INTEGER NOT NULL,
+                started_at_ms INTEGER,
+                completed_at_ms INTEGER
+             );
+
+             CREATE INDEX transcription_jobs_project_created
+             ON transcription_jobs(project_id, created_at_ms DESC);
+
+             CREATE UNIQUE INDEX one_active_transcription_per_project
+             ON transcription_jobs(project_id)
+             WHERE status IN ('queued', 'extracting', 'transcribing', 'validating');",
         )?;
         Ok(())
     }

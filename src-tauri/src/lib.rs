@@ -4,6 +4,7 @@ mod media;
 mod remote_media;
 mod store;
 mod subtitles;
+mod transcription;
 mod youtube_media;
 
 use std::path::{Path, PathBuf};
@@ -75,6 +76,7 @@ pub fn run() {
             let database_path = data_directory.join("projects").join("siaovplay.db");
             let store = ProjectStore::open(database_path)?;
             store.recover_running_media_artifacts()?;
+            transcription::recover_transcription_jobs(&store)?;
             app.manage(store);
             app.manage(StartupMediaPath(resolve_startup_media_path()));
             Ok(())
@@ -102,7 +104,13 @@ pub fn run() {
             commands::import_subtitle_file,
             commands::list_subtitle_versions,
             commands::inspect_embedded_subtitle,
-            commands::import_embedded_subtitle
+            commands::import_embedded_subtitle,
+            commands::get_transcription_runtime_status,
+            commands::start_transcription,
+            commands::get_transcription_job,
+            commands::list_transcription_jobs,
+            commands::cancel_transcription_job,
+            commands::resume_transcription_job
         ])
         .run(tauri::generate_context!())
         .expect("failed to run SiaoVPlay");

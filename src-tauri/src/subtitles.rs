@@ -211,6 +211,16 @@ pub struct ImportEmbeddedSubtitleInput {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct SubtitleWord {
+    pub ordinal: usize,
+    pub start_ms: i64,
+    pub end_ms: i64,
+    pub text: String,
+    pub confidence: Option<f64>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SubtitleSegment {
     pub id: String,
     pub ordinal: usize,
@@ -218,6 +228,7 @@ pub struct SubtitleSegment {
     pub end_ms: i64,
     pub text: String,
     pub confidence: Option<f64>,
+    pub words: Vec<SubtitleWord>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -244,6 +255,7 @@ pub struct SubtitleVersion {
 enum SubtitleSourceKind {
     ImportedFile,
     Embedded,
+    Transcription,
 }
 
 impl SubtitleSourceKind {
@@ -251,8 +263,49 @@ impl SubtitleSourceKind {
         match self {
             Self::ImportedFile => "imported_file",
             Self::Embedded => "embedded",
+            Self::Transcription => "transcription",
         }
     }
+}
+
+#[derive(Clone, Copy)]
+enum SubtitleVersionStatus {
+    Draft,
+    Ready,
+}
+
+impl SubtitleVersionStatus {
+    fn as_database_value(self) -> &'static str {
+        match self {
+            Self::Draft => "draft",
+            Self::Ready => "ready",
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct GeneratedSubtitleWord {
+    pub start_ms: i64,
+    pub end_ms: i64,
+    pub text: String,
+    pub confidence: Option<f64>,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct GeneratedSubtitleCue {
+    pub cue: SubtitleCue,
+    pub words: Vec<GeneratedSubtitleWord>,
+}
+
+pub(crate) struct PersistTranscriptionInput {
+    pub project_id: String,
+    pub source_label: String,
+    pub source_sha256: String,
+    pub language_code: String,
+    pub expected_project_revision: i64,
+    pub expected_media_sha256: String,
+    pub media_duration_ms: Option<i64>,
+    pub cues: Vec<GeneratedSubtitleCue>,
 }
 
 pub fn inspect_subtitle_file(
@@ -325,6 +378,8 @@ pub fn import_subtitle_file(
         &input.project_id,
         preview,
         SubtitleSourceKind::ImportedFile,
+        SubtitleVersionStatus::Ready,
+        None,
     )
 }
 
@@ -429,6 +484,62 @@ pub fn import_embedded_subtitle(
         &input.project_id,
         preview.subtitle,
         SubtitleSourceKind::Embedded,
+        SubtitleVersionStatus::Ready,
+        None,
+    )
+}
+
+pub(crate) fn inspect_generated_cues(
+    cues: &[GeneratedSubtitleCue],
+    media_duration_ms: Option<i64>,
+) -> SubtitlePreflightReport {
+    let cues = cues
+        .iter()
+        .map(|generated| generated.cue.clone())
+        .collect::<Vec<_>>();
+    inspect_cues(&cues, media_duration_ms)
+}
+
+pub(crate) fn persist_transcription(
+    store: &ProjectStore,
+    input: PersistTranscriptionInput,
+) -> Result<SubtitleVersion, SubtitleError> {
+    if input.cues.is_empty() {
+        return Err(SubtitleError::Parse(
+            "转写结果没有可保存的字幕段".to_owned(),
+        ));
+    }
+    let preflight = inspect_generated_cues(&input.cues, input.media_duration_ms);
+    if preflight.error_count > 0 {
+        return Err(SubtitleError::PreflightBlocked(preflight.error_count));
+    }
+    let cues = input
+        .cues
+        .iter()
+        .map(|generated| generated.cue.clone())
+        .collect();
+    let words = input
+        .cues
+        .into_iter()
+        .map(|generated| generated.words)
+        .collect();
+    persist_import(
+        store,
+        &input.project_id,
+        SubtitleImportPreview {
+            format: SubtitleFileFormat::Vtt,
+            source_label: input.source_label,
+            source_sha256: input.source_sha256,
+            language_code: input.language_code,
+            expected_project_revision: input.expected_project_revision,
+            expected_media_sha256: input.expected_media_sha256,
+            cues,
+            preflight,
+            can_import: true,
+        },
+        SubtitleSourceKind::Transcription,
+        SubtitleVersionStatus::Draft,
+        Some(words),
     )
 }
 
@@ -501,7 +612,15 @@ fn persist_import(
     project_id: &str,
     preview: SubtitleImportPreview,
     source_kind: SubtitleSourceKind,
+    status: SubtitleVersionStatus,
+    words_by_segment: Option<Vec<Vec<GeneratedSubtitleWord>>>,
 ) -> Result<SubtitleVersion, SubtitleError> {
+    if words_by_segment
+        .as_ref()
+        .is_some_and(|words| words.len() != preview.cues.len())
+    {
+        return Err(StoreError::Validation("字幕段与词级时间戳数量不一致".to_owned()).into());
+    }
     let timestamp = now_ms()?;
     let track_id = Uuid::new_v4().to_string();
     let version_id = Uuid::new_v4().to_string();
@@ -570,14 +689,15 @@ fn persist_import(
             source_label, source_sha256, media_sha256, language_code,
             project_revision, preflight_json, created_at_ms
          ) VALUES (
-            ?1, ?2, ?3, ?4, 'ready', ?5,
-            ?6, ?7, ?8, ?9, ?10, ?11, ?12
+            ?1, ?2, ?3, ?4, ?5, ?6,
+            ?7, ?8, ?9, ?10, ?11, ?12, ?13
          )",
         params![
             version_id,
             track_id,
             project_id,
             version_number,
+            status.as_database_value(),
             source_kind.as_database_value(),
             preview.source_label,
             preview.source_sha256,
@@ -588,13 +708,14 @@ fn persist_import(
             timestamp
         ],
     )?;
-    for cue in &preview.cues {
+    for (index, cue) in preview.cues.iter().enumerate() {
+        let segment_id = Uuid::new_v4().to_string();
         transaction.execute(
             "INSERT INTO subtitle_segments (
                 id, version_id, ordinal, start_ms, end_ms, text, confidence
              ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
             params![
-                Uuid::new_v4().to_string(),
+                segment_id,
                 version_id,
                 i64::try_from(cue.ordinal).map_err(|_| {
                     StoreError::Validation("字幕段序号超出支持范围".to_owned())
@@ -605,6 +726,29 @@ fn persist_import(
                 cue.confidence
             ],
         )?;
+        if let Some(words) = words_by_segment
+            .as_ref()
+            .and_then(|segments| segments.get(index))
+        {
+            for (word_index, word) in words.iter().enumerate() {
+                transaction.execute(
+                    "INSERT INTO subtitle_words (
+                        id, segment_id, ordinal, start_ms, end_ms, text, confidence
+                     ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                    params![
+                        Uuid::new_v4().to_string(),
+                        segment_id,
+                        i64::try_from(word_index + 1).map_err(|_| {
+                            StoreError::Validation("字幕词序号超出支持范围".to_owned())
+                        })?,
+                        word.start_ms,
+                        word.end_ms,
+                        word.text,
+                        word.confidence,
+                    ],
+                )?;
+            }
+        }
     }
     transaction.execute(
         "UPDATE subtitle_tracks
@@ -644,7 +788,7 @@ fn load_segments(
          WHERE version_id = ?1
          ORDER BY ordinal ASC",
     )?;
-    statement
+    let mut segments = statement
         .query_map(params![version_id], |row| {
             let ordinal = row.get::<_, i64>(1)?;
             let ordinal = usize::try_from(ordinal).map_err(|error| {
@@ -661,6 +805,44 @@ fn load_segments(
                 end_ms: row.get(3)?,
                 text: row.get(4)?,
                 confidence: row.get(5)?,
+                words: Vec::new(),
+            })
+        })?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(StoreError::from)
+        .map_err(SubtitleError::from)?;
+    for segment in &mut segments {
+        segment.words = load_words(connection, &segment.id)?;
+    }
+    Ok(segments)
+}
+
+fn load_words(
+    connection: &rusqlite::Connection,
+    segment_id: &str,
+) -> Result<Vec<SubtitleWord>, SubtitleError> {
+    let mut statement = connection.prepare(
+        "SELECT ordinal, start_ms, end_ms, text, confidence
+         FROM subtitle_words
+         WHERE segment_id = ?1
+         ORDER BY ordinal ASC",
+    )?;
+    statement
+        .query_map(params![segment_id], |row| {
+            let ordinal = row.get::<_, i64>(0)?;
+            let ordinal = usize::try_from(ordinal).map_err(|error| {
+                rusqlite::Error::FromSqlConversionFailure(
+                    0,
+                    rusqlite::types::Type::Integer,
+                    Box::new(error),
+                )
+            })?;
+            Ok(SubtitleWord {
+                ordinal,
+                start_ms: row.get(1)?,
+                end_ms: row.get(2)?,
+                text: row.get(3)?,
+                confidence: row.get(4)?,
             })
         })?
         .collect::<Result<Vec<_>, _>>()
@@ -1214,6 +1396,8 @@ mod tests {
             &project_id,
             preview,
             SubtitleSourceKind::ImportedFile,
+            SubtitleVersionStatus::Ready,
+            None,
         )
         .expect("first import should work");
         assert_eq!(first.version_number, 1);
@@ -1239,6 +1423,8 @@ mod tests {
             &project_id,
             preview,
             SubtitleSourceKind::ImportedFile,
+            SubtitleVersionStatus::Ready,
+            None,
         )
         .expect("second import should work");
         assert_eq!(second.version_number, 2);
@@ -1250,6 +1436,66 @@ mod tests {
         assert_eq!(versions[0].segments[0].text, "Revised");
         assert_eq!(versions[1].segments[0].text, "First");
         assert!(!versions[1].is_current);
+    }
+
+    #[test]
+    fn stores_transcription_as_draft_with_word_timestamps() {
+        let (_temp, store, project_id) = create_store_with_media();
+        let media_sha256 = "c".repeat(64);
+        let project = store.get_project(&project_id).expect("project should load");
+        store
+            .record_media_probe(
+                &project_id,
+                &project.media_source.id,
+                &media_sha256,
+                r#"{"containerFormats":["mov"],"durationMs":5000,"sizeBytes":5,"bitRate":null,"videoStreams":[],"audioStreams":[],"subtitleStreams":[]}"#,
+                5,
+                Some(1),
+            )
+            .expect("media probe should be recorded");
+
+        let version = persist_transcription(
+            &store,
+            PersistTranscriptionInput {
+                project_id,
+                source_label: "本地转写 · small · cpu".to_owned(),
+                source_sha256: "d".repeat(64),
+                language_code: "ja".to_owned(),
+                expected_project_revision: 1,
+                expected_media_sha256: media_sha256,
+                media_duration_ms: Some(5_000),
+                cues: vec![GeneratedSubtitleCue {
+                    cue: SubtitleCue {
+                        ordinal: 1,
+                        start_ms: 100,
+                        end_ms: 1_500,
+                        text: "こんにちは".to_owned(),
+                        confidence: Some(0.9),
+                    },
+                    words: vec![
+                        GeneratedSubtitleWord {
+                            start_ms: 100,
+                            end_ms: 700,
+                            text: "こん".to_owned(),
+                            confidence: Some(0.8),
+                        },
+                        GeneratedSubtitleWord {
+                            start_ms: 700,
+                            end_ms: 1_400,
+                            text: "にちは".to_owned(),
+                            confidence: Some(0.9),
+                        },
+                    ],
+                }],
+            },
+        )
+        .expect("transcription should persist");
+
+        assert_eq!(version.status, "draft");
+        assert_eq!(version.source_kind, "transcription");
+        assert_eq!(version.segments[0].words.len(), 2);
+        assert_eq!(version.segments[0].words[0].ordinal, 1);
+        assert_eq!(version.segments[0].words[1].text, "にちは");
     }
 
     #[test]

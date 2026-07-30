@@ -12,6 +12,8 @@ import type {
   RemoteMediaPreview,
   SubtitleImportPreview,
   SubtitleVersion,
+  TranscriptionJob,
+  TranscriptionRuntimeStatus,
   YouTubeMediaPreview,
 } from "../types";
 
@@ -298,6 +300,66 @@ export async function importEmbeddedSubtitle(
       expectedMediaSha256: preview.expectedMediaSha256,
       expectedProjectRevision: preview.expectedProjectRevision,
     },
+  });
+}
+
+export async function getTranscriptionRuntimeStatus(): Promise<TranscriptionRuntimeStatus> {
+  if (!isDesktopApp) {
+    return {
+      available: false,
+      preferredBackend: null,
+      runtimes: [],
+      models: [],
+    };
+  }
+  return invoke<TranscriptionRuntimeStatus>(
+    "get_transcription_runtime_status",
+  );
+}
+
+export async function startTranscription(
+  projectId: string,
+  languageCode: "en" | "th" | "ja" | "ko",
+  modelKind: "small" | "base" = "small",
+  confirmReplaceOriginal = false,
+): Promise<TranscriptionJob> {
+  return invoke<TranscriptionJob>("start_transcription", {
+    input: {
+      projectId,
+      languageCode,
+      modelKind,
+      confirmReplaceOriginal,
+    },
+  });
+}
+
+export async function getTranscriptionJob(
+  jobId: string,
+): Promise<TranscriptionJob> {
+  return invoke<TranscriptionJob>("get_transcription_job", {
+    input: { jobId },
+  });
+}
+
+export async function listTranscriptionJobs(
+  projectId: string,
+): Promise<TranscriptionJob[]> {
+  return invoke<TranscriptionJob[]>("list_transcription_jobs", { projectId });
+}
+
+export async function cancelTranscriptionJob(
+  jobId: string,
+): Promise<TranscriptionJob> {
+  return invoke<TranscriptionJob>("cancel_transcription_job", {
+    input: { jobId },
+  });
+}
+
+export async function resumeTranscriptionJob(
+  jobId: string,
+): Promise<TranscriptionJob> {
+  return invoke<TranscriptionJob>("resume_transcription_job", {
+    input: { jobId },
   });
 }
 
