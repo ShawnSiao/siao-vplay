@@ -6,6 +6,7 @@ import { PlayerScreen } from "./components/PlayerScreen";
 import { PreparationScreen } from "./components/PreparationScreen";
 import { RemoteUrlDialog } from "./components/RemoteUrlDialog";
 import { SubtitleImportDialog } from "./components/SubtitleImportDialog";
+import { TranslationDialog } from "./components/TranslationDialog";
 import {
   chooseLocalVideo,
   commandError,
@@ -28,6 +29,7 @@ import type {
   MediaRuntimeStatus,
   Project,
   SubtitleVersion,
+  TranslationTask,
 } from "./types";
 
 type Screen = "library" | "preparing" | "player";
@@ -54,6 +56,7 @@ export default function App() {
     [],
   );
   const [subtitleDialogOpen, setSubtitleDialogOpen] = useState(false);
+  const [translationDialogOpen, setTranslationDialogOpen] = useState(false);
   const [remoteUrlDialogOpen, setRemoteUrlDialogOpen] = useState(false);
   const [deleteCandidate, setDeleteCandidate] = useState<Project | null>(null);
   const [busyMessage, setBusyMessage] = useState<string | null>(null);
@@ -217,6 +220,7 @@ export default function App() {
     setForceProxy(false);
     setSubtitleVersions([]);
     setSubtitleDialogOpen(false);
+    setTranslationDialogOpen(false);
     setRemoteUrlDialogOpen(false);
     void refreshProjects();
   }, [refreshProjects]);
@@ -363,6 +367,37 @@ export default function App() {
     [activeProject],
   );
 
+  const mergeSubtitleVersion = useCallback((version: SubtitleVersion) => {
+    setSubtitleVersions((current) => [
+      version,
+      ...current
+        .filter((item) => item.id !== version.id)
+        .map((item) =>
+          item.trackId === version.trackId
+            ? { ...item, isCurrent: false }
+            : item,
+        ),
+    ]);
+  }, []);
+
+  const handleTranslationCompleted = useCallback(
+    async (task: TranslationTask, version?: SubtitleVersion) => {
+      if (version) {
+        mergeSubtitleVersion(version);
+      } else {
+        const versions = await listSubtitleVersions(task.projectId);
+        setSubtitleVersions(versions);
+      }
+      setToast(
+        task.validation?.warningCount
+          ? `中文字幕草稿已生成，另有 ${task.validation.warningCount} 项一致性提示。`
+          : `已生成 ${task.segmentCount} 条简体中文字幕草稿，可以开始抽查。`,
+      );
+      void refreshProjects();
+    },
+    [mergeSubtitleVersion, refreshProjects],
+  );
+
   return (
     <div className="app-shell">
       {screen === "library" ? (
@@ -401,8 +436,15 @@ export default function App() {
               (version) => version.role === "original" && version.isCurrent,
             ) ?? null
           }
+          currentTranslation={
+            subtitleVersions.find(
+              (version) =>
+                version.role === "translation" && version.isCurrent,
+            ) ?? null
+          }
           onBack={returnToLibrary}
           onManageSubtitles={() => setSubtitleDialogOpen(true)}
+          onManageTranslation={() => setTranslationDialogOpen(true)}
           onNeedProxy={() => void prepareAndOpen(activeProject, true)}
           onPersist={persistPlayback}
           onError={(message) => {
@@ -424,12 +466,7 @@ export default function App() {
           }
           onClose={() => setSubtitleDialogOpen(false)}
           onImported={(version) => {
-            setSubtitleVersions((current) => [
-              version,
-              ...current
-                .filter((item) => item.id !== version.id)
-                .map((item) => ({ ...item, isCurrent: false })),
-            ]);
+            mergeSubtitleVersion(version);
             setToast(
               version.sourceKind === "transcription"
                 ? `已生成 ${version.segments.length} 条原文字幕草稿，可以开始抽查。`
@@ -437,6 +474,29 @@ export default function App() {
             );
             void refreshProjects();
           }}
+        />
+      ) : null}
+
+      {translationDialogOpen && activeProject ? (
+        <TranslationDialog
+          projectId={activeProject.id}
+          sourceVersion={
+            subtitleVersions.find(
+              (version) => version.role === "original" && version.isCurrent,
+            ) ?? null
+          }
+          translationVersion={
+            subtitleVersions.find(
+              (version) =>
+                version.role === "translation" && version.isCurrent,
+            ) ?? null
+          }
+          onClose={() => setTranslationDialogOpen(false)}
+          onPrepareOriginal={() => {
+            setTranslationDialogOpen(false);
+            setSubtitleDialogOpen(true);
+          }}
+          onTaskCompleted={handleTranslationCompleted}
         />
       ) : null}
 

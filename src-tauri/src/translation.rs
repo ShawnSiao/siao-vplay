@@ -127,6 +127,7 @@ pub struct TranslationTask {
     pub segment_count: usize,
     pub expected_project_revision: i64,
     pub output_version_id: Option<String>,
+    pub validation: Option<TranslationValidation>,
     pub error_code: Option<String>,
     pub error_message: Option<String>,
     pub created_at_ms: i64,
@@ -135,7 +136,7 @@ pub struct TranslationTask {
     pub completed_at_ms: Option<i64>,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TranslationValidation {
     pub status: String,
@@ -389,7 +390,7 @@ pub fn get_translation_task(
                 source_version_id, source_language_code, target_language_code,
                 segment_count, output_version_id, error_code, error_message,
                 created_at_ms, updated_at_ms, started_at_ms, completed_at_ms,
-                expected_project_revision
+                expected_project_revision, result_validation_json
              FROM agent_tasks
              WHERE id = ?1",
             params![task_id],
@@ -410,6 +411,18 @@ pub fn get_translation_task(
                         Box::new(error),
                     )
                 })?;
+                let validation = row
+                    .get::<_, Option<String>>(22)?
+                    .map(|value| {
+                        serde_json::from_str::<TranslationValidation>(&value).map_err(|error| {
+                            rusqlite::Error::FromSqlConversionFailure(
+                                22,
+                                rusqlite::types::Type::Text,
+                                Box::new(error),
+                            )
+                        })
+                    })
+                    .transpose()?;
                 Ok(TranslationTask {
                     id: row.get(0)?,
                     project_id: row.get(1)?,
@@ -427,6 +440,7 @@ pub fn get_translation_task(
                     segment_count,
                     expected_project_revision: row.get(21)?,
                     output_version_id: row.get(14)?,
+                    validation,
                     error_code: row.get(15)?,
                     error_message: row.get(16)?,
                     created_at_ms: row.get(17)?,
@@ -1735,6 +1749,10 @@ mod tests {
         assert_eq!(
             application.task.output_version_id,
             Some(application.subtitle_version.id.clone())
+        );
+        assert_eq!(
+            application.task.validation.as_ref(),
+            Some(&application.validation)
         );
         assert_eq!(application.subtitle_version.role, "translation");
         assert_eq!(application.subtitle_version.status, "draft");

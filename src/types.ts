@@ -343,6 +343,7 @@ export type TranslationTask = {
   segmentCount: number;
   expectedProjectRevision: number;
   outputVersionId: string | null;
+  validation: TranslationValidation | null;
   errorCode: string | null;
   errorMessage: string | null;
   createdAtMs: number;

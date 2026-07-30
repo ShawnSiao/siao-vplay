@@ -2165,6 +2165,10 @@ process.stdin.on("end", () => {
         .expect("fake Codex should complete");
 
         assert_eq!(application.task.status, "completed");
+        assert_eq!(
+            application.task.validation.as_ref(),
+            Some(&application.validation)
+        );
         assert_eq!(application.subtitle_version.role, "translation");
         assert_eq!(application.subtitle_version.status, "draft");
         assert_eq!(application.subtitle_version.language_code, TARGET_LANGUAGE);
