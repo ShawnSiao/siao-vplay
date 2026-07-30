@@ -39,8 +39,8 @@ pub enum SubtitleError {
     InvalidLanguage(String),
     #[error("字幕预检未通过，包含 {0} 项错误")]
     PreflightBlocked(usize),
-    #[error("字幕文件在确认后发生变化，请重新预检")]
-    FileChanged,
+    #[error("字幕来源在确认后发生变化，请重新预检")]
+    SubtitleSourceChanged,
     #[error("项目在字幕预检后发生变化，请重新预检")]
     ProjectChanged,
     #[error("媒体在字幕预检后发生变化，请重新预检")]
@@ -182,6 +182,35 @@ pub struct ImportSubtitleFileInput {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct EmbeddedSubtitlePreview {
+    pub stream_index: i64,
+    pub codec_name: String,
+    pub embedded_language: Option<String>,
+    #[serde(flatten)]
+    pub subtitle: SubtitleImportPreview,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InspectEmbeddedSubtitleInput {
+    pub project_id: String,
+    pub stream_index: i64,
+    pub language_code: String,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportEmbeddedSubtitleInput {
+    pub project_id: String,
+    pub stream_index: i64,
+    pub language_code: String,
+    pub expected_source_sha256: String,
+    pub expected_media_sha256: String,
+    pub expected_project_revision: i64,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SubtitleSegment {
     pub id: String,
     pub ordinal: usize,
@@ -209,6 +238,21 @@ pub struct SubtitleVersion {
     pub created_at_ms: i64,
     pub is_current: bool,
     pub segments: Vec<SubtitleSegment>,
+}
+
+#[derive(Clone, Copy)]
+enum SubtitleSourceKind {
+    ImportedFile,
+    Embedded,
+}
+
+impl SubtitleSourceKind {
+    fn as_database_value(self) -> &'static str {
+        match self {
+            Self::ImportedFile => "imported_file",
+            Self::Embedded => "embedded",
+        }
+    }
 }
 
 pub fn inspect_subtitle_file(
@@ -260,7 +304,7 @@ pub fn import_subtitle_file(
         .source_sha256
         .eq_ignore_ascii_case(&input.expected_source_sha256)
     {
-        return Err(SubtitleError::FileChanged);
+        return Err(SubtitleError::SubtitleSourceChanged);
     }
     if preview.expected_project_revision != input.expected_project_revision {
         return Err(SubtitleError::ProjectChanged);
@@ -276,7 +320,116 @@ pub fn import_subtitle_file(
             preview.preflight.error_count,
         ));
     }
-    persist_import(store, &input.project_id, preview)
+    persist_import(
+        store,
+        &input.project_id,
+        preview,
+        SubtitleSourceKind::ImportedFile,
+    )
+}
+
+pub fn inspect_embedded_subtitle(
+    store: &ProjectStore,
+    input: &InspectEmbeddedSubtitleInput,
+) -> Result<EmbeddedSubtitlePreview, SubtitleError> {
+    let language_code = normalize_language_code(&input.language_code)?;
+    let project_before = store.get_project(&input.project_id)?;
+    let cache_root = store
+        .data_directory()
+        .join("subtitle-cache")
+        .join(&input.project_id);
+    fs::create_dir_all(&cache_root)?;
+    let temporary_path = cache_root.join(format!(
+        "embedded-{}-{}.preview.vtt",
+        input.stream_index,
+        Uuid::new_v4()
+    ));
+    let extraction = media::extract_embedded_subtitle_to_vtt(
+        store,
+        &input.project_id,
+        input.stream_index,
+        None,
+        &temporary_path,
+    );
+    let (inspection, stream) = match extraction {
+        Ok(value) => value,
+        Err(error) => {
+            let _ = remove_controlled_cache_file(&temporary_path, &cache_root);
+            return Err(error.into());
+        }
+    };
+    let parsed = read_and_parse(&temporary_path);
+    let cleanup = remove_controlled_cache_file(&temporary_path, &cache_root);
+    let parsed = parsed?;
+    cleanup?;
+    let project = store.get_project(&input.project_id)?;
+    if project.revision != project_before.revision {
+        return Err(SubtitleError::ProjectChanged);
+    }
+    let preflight = inspect_cues(&parsed.cues, inspection.probe.duration_ms);
+    let source_label = embedded_source_label(
+        input.stream_index,
+        stream.language.as_deref(),
+        &stream.codec_name,
+    );
+    Ok(EmbeddedSubtitlePreview {
+        stream_index: input.stream_index,
+        codec_name: stream.codec_name,
+        embedded_language: stream.language,
+        subtitle: SubtitleImportPreview {
+            format: parsed.format,
+            source_label,
+            source_sha256: parsed.source_sha256,
+            language_code,
+            expected_project_revision: project.revision,
+            expected_media_sha256: inspection.source_sha256,
+            can_import: preflight.error_count == 0,
+            cues: parsed.cues,
+            preflight,
+        },
+    })
+}
+
+pub fn import_embedded_subtitle(
+    store: &ProjectStore,
+    input: ImportEmbeddedSubtitleInput,
+) -> Result<SubtitleVersion, SubtitleError> {
+    let preview = inspect_embedded_subtitle(
+        store,
+        &InspectEmbeddedSubtitleInput {
+            project_id: input.project_id.clone(),
+            stream_index: input.stream_index,
+            language_code: input.language_code,
+        },
+    )?;
+    if !preview
+        .subtitle
+        .source_sha256
+        .eq_ignore_ascii_case(&input.expected_source_sha256)
+    {
+        return Err(SubtitleError::SubtitleSourceChanged);
+    }
+    if preview.subtitle.expected_project_revision != input.expected_project_revision {
+        return Err(SubtitleError::ProjectChanged);
+    }
+    if !preview
+        .subtitle
+        .expected_media_sha256
+        .eq_ignore_ascii_case(&input.expected_media_sha256)
+    {
+        return Err(SubtitleError::MediaChanged);
+    }
+    if !preview.subtitle.can_import {
+        return Err(SubtitleError::PreflightBlocked(
+            preview.subtitle.preflight.error_count,
+        ));
+    }
+    persist_import(
+        store,
+        &input.project_id,
+        preview.subtitle,
+        SubtitleSourceKind::Embedded,
+    )
 }
 
 pub fn list_subtitle_versions(
@@ -347,6 +500,7 @@ fn persist_import(
     store: &ProjectStore,
     project_id: &str,
     preview: SubtitleImportPreview,
+    source_kind: SubtitleSourceKind,
 ) -> Result<SubtitleVersion, SubtitleError> {
     let timestamp = now_ms()?;
     let track_id = Uuid::new_v4().to_string();
@@ -416,14 +570,15 @@ fn persist_import(
             source_label, source_sha256, media_sha256, language_code,
             project_revision, preflight_json, created_at_ms
          ) VALUES (
-            ?1, ?2, ?3, ?4, 'ready', 'imported_file',
-            ?5, ?6, ?7, ?8, ?9, ?10, ?11
+            ?1, ?2, ?3, ?4, 'ready', ?5,
+            ?6, ?7, ?8, ?9, ?10, ?11, ?12
          )",
         params![
             version_id,
             track_id,
             project_id,
             version_number,
+            source_kind.as_database_value(),
             preview.source_label,
             preview.source_sha256,
             preview.expected_media_sha256,
@@ -879,6 +1034,32 @@ fn canonical_subtitle_path(value: &str) -> Result<PathBuf, SubtitleError> {
     dunce::canonicalize(path).map_err(Into::into)
 }
 
+fn embedded_source_label(
+    stream_index: i64,
+    embedded_language: Option<&str>,
+    codec_name: &str,
+) -> String {
+    let language = embedded_language
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(|value| format!(" · {}", value.to_ascii_uppercase()))
+        .unwrap_or_default();
+    format!(
+        "内嵌字幕轨 {stream_index}{language} · {}",
+        codec_name.to_ascii_uppercase()
+    )
+}
+
+fn remove_controlled_cache_file(path: &Path, controlled_root: &Path) -> Result<(), SubtitleError> {
+    if path.parent() != Some(controlled_root) {
+        return Err(StoreError::Validation("拒绝清理不在项目字幕缓存中的文件".to_owned()).into());
+    }
+    if path.is_file() {
+        fs::remove_file(path)?;
+    }
+    Ok(())
+}
+
 fn normalize_language_code(value: &str) -> Result<String, SubtitleError> {
     let normalized = value.trim().replace('_', "-").to_ascii_lowercase();
     let valid = (2..=35).contains(&normalized.len())
@@ -906,9 +1087,9 @@ fn now_ms() -> Result<i64, StoreError> {
 
 #[cfg(test)]
 mod tests {
-    use std::fs;
+    use std::{fs, process::Command};
 
-    use crate::domain::CreateLocalProjectInput;
+    use crate::{domain::CreateLocalProjectInput, media};
 
     use super::*;
 
@@ -1028,7 +1209,13 @@ mod tests {
             can_import: true,
             cues: parsed.cues,
         };
-        let first = persist_import(&store, &project_id, preview).expect("first import should work");
+        let first = persist_import(
+            &store,
+            &project_id,
+            preview,
+            SubtitleSourceKind::ImportedFile,
+        )
+        .expect("first import should work");
         assert_eq!(first.version_number, 1);
         assert_eq!(first.project_revision, 2);
         assert_eq!(first.segments.len(), 2);
@@ -1047,8 +1234,13 @@ mod tests {
             can_import: true,
             cues: parsed.cues,
         };
-        let second =
-            persist_import(&store, &project_id, preview).expect("second import should work");
+        let second = persist_import(
+            &store,
+            &project_id,
+            preview,
+            SubtitleSourceKind::ImportedFile,
+        )
+        .expect("second import should work");
         assert_eq!(second.version_number, 2);
         assert!(second.is_current);
 
@@ -1128,7 +1320,7 @@ mod tests {
             },
         )
         .expect_err("changed subtitle must be rejected");
-        assert!(matches!(error, SubtitleError::FileChanged));
+        assert!(matches!(error, SubtitleError::SubtitleSourceChanged));
 
         fs::write(&subtitle_path, "WEBVTT\n\n00:00.000 --> 00:01.200\n")
             .expect("invalid subtitle should be written");
@@ -1160,6 +1352,112 @@ mod tests {
                 .expect("versions should list")
                 .len(),
             1
+        );
+    }
+
+    #[test]
+    #[ignore = "requires SIAOVPLAY_MEDIA_FIXTURE_DIR and the local FFmpeg runtime"]
+    fn real_media_embedded_subtitle_is_extracted_preflighted_and_imported() {
+        let fixture_dir = std::env::var_os("SIAOVPLAY_MEDIA_FIXTURE_DIR")
+            .map(PathBuf::from)
+            .expect("SIAOVPLAY_MEDIA_FIXTURE_DIR must be set");
+        let source_media = fixture_dir.join("h264-aac.mp4");
+        let temp = tempfile::tempdir().expect("temporary directory should be created");
+        let source_subtitle = temp.path().join("embedded.srt");
+        fs::write(
+            &source_subtitle,
+            "1\n00:00:00,000 --> 00:00:01,200\n待っていたの？\n\n2\n00:00:01,400 --> 00:00:02,600\n雨が止むと思って。",
+        )
+        .expect("subtitle should be written");
+        let embedded_media = temp.path().join("embedded-subtitle.mkv");
+        let runtime = media::media_runtime_status();
+        let ffmpeg_path = runtime
+            .ffmpeg_path
+            .expect("FFmpeg must be available for the real-media test");
+        let output = Command::new(ffmpeg_path)
+            .args(["-y", "-hide_banner", "-nostdin", "-v", "error", "-i"])
+            .arg(&source_media)
+            .arg("-i")
+            .arg(&source_subtitle)
+            .args([
+                "-map",
+                "0:v:0",
+                "-map",
+                "0:a:0?",
+                "-map",
+                "1:0",
+                "-c",
+                "copy",
+                "-metadata:s:s:0",
+                "language=jpn",
+            ])
+            .arg(&embedded_media)
+            .output()
+            .expect("FFmpeg should start");
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+
+        let store = ProjectStore::open(temp.path().join("projects").join("siaovplay.db"))
+            .expect("store should open");
+        let project = store
+            .create_local_project(CreateLocalProjectInput {
+                media_path: embedded_media.to_string_lossy().into_owned(),
+                title: Some("embedded subtitle integration".to_owned()),
+            })
+            .expect("project should be created");
+        let inspection =
+            media::inspect_project_media(&store, &project.id).expect("media should inspect");
+        let stream = inspection
+            .probe
+            .subtitle_streams
+            .first()
+            .expect("embedded subtitle stream should be listed");
+        assert_eq!(stream.kind, media::EmbeddedSubtitleKind::Text);
+        assert_eq!(stream.language.as_deref(), Some("jpn"));
+
+        let preview = inspect_embedded_subtitle(
+            &store,
+            &InspectEmbeddedSubtitleInput {
+                project_id: project.id.clone(),
+                stream_index: stream.index,
+                language_code: "ja".to_owned(),
+            },
+        )
+        .expect("embedded subtitle should preview");
+        assert!(preview.subtitle.can_import);
+        assert_eq!(preview.subtitle.preflight.segment_count, 2);
+        assert_eq!(preview.embedded_language.as_deref(), Some("jpn"));
+
+        let imported = import_embedded_subtitle(
+            &store,
+            ImportEmbeddedSubtitleInput {
+                project_id: project.id.clone(),
+                stream_index: stream.index,
+                language_code: "ja".to_owned(),
+                expected_source_sha256: preview.subtitle.source_sha256,
+                expected_media_sha256: preview.subtitle.expected_media_sha256,
+                expected_project_revision: preview.subtitle.expected_project_revision,
+            },
+        )
+        .expect("embedded subtitle should import");
+        assert_eq!(imported.source_kind, "embedded");
+        assert_eq!(imported.segments.len(), 2);
+        assert_eq!(imported.segments[0].text, "待っていたの？");
+
+        let cache_root = store
+            .data_directory()
+            .join("subtitle-cache")
+            .join(&project.id);
+        let cached_files = fs::read_dir(cache_root)
+            .expect("subtitle cache should exist")
+            .collect::<Result<Vec<_>, _>>()
+            .expect("subtitle cache should list");
+        assert!(
+            cached_files.is_empty(),
+            "temporary extraction files must be removed"
         );
     }
 }

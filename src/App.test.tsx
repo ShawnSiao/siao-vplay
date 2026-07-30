@@ -1,13 +1,20 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { MediaPreparation, Project } from "./types";
+import type {
+  EmbeddedSubtitlePreview,
+  MediaPreparation,
+  Project,
+  SubtitleImportPreview,
+  SubtitleVersion,
+} from "./types";
 
 const desktopMocks = vi.hoisted(() => ({
   getAppStatus: vi.fn(),
   getMediaRuntimeStatus: vi.fn(),
   listProjects: vi.fn(),
   chooseLocalVideo: vi.fn(),
+  chooseSubtitleFile: vi.fn(),
   createLocalProject: vi.fn(),
   ensureProjectPoster: vi.fn(),
   markProjectOpened: vi.fn(),
@@ -15,6 +22,11 @@ const desktopMocks = vi.hoisted(() => ({
   updatePlaybackState: vi.fn(),
   relinkProjectMedia: vi.fn(),
   deleteProject: vi.fn(),
+  inspectSubtitleFile: vi.fn(),
+  importSubtitleFile: vi.fn(),
+  inspectEmbeddedSubtitle: vi.fn(),
+  importEmbeddedSubtitle: vi.fn(),
+  listSubtitleVersions: vi.fn(),
 }));
 
 vi.mock("./lib/desktop", () => ({
@@ -105,6 +117,68 @@ const preparation: MediaPreparation = {
   reusedProxy: false,
 };
 
+const subtitlePreview: SubtitleImportPreview = {
+  format: "srt",
+  sourceLabel: "rain-platform.ja.srt",
+  sourceSha256: "b".repeat(64),
+  languageCode: "ja",
+  expectedProjectRevision: 1,
+  expectedMediaSha256: "a".repeat(64),
+  cues: [
+    {
+      ordinal: 0,
+      startMs: 0,
+      endMs: 1_500,
+      text: "待っていたの？",
+      confidence: null,
+    },
+  ],
+  preflight: {
+    status: "ready",
+    segmentCount: 1,
+    errorCount: 0,
+    warningCount: 0,
+    firstStartMs: 0,
+    lastEndMs: 1_500,
+    mediaDurationMs: 180_000,
+    coverageRatio: 0.0083,
+    issues: [],
+  },
+  canImport: true,
+};
+
+const embeddedSubtitlePreview: EmbeddedSubtitlePreview = {
+  ...subtitlePreview,
+  format: "vtt",
+  sourceLabel: "内嵌字幕轨 2 · JPN · SUBRIP",
+  streamIndex: 2,
+  codecName: "subrip",
+  embeddedLanguage: "jpn",
+};
+
+const subtitleVersion: SubtitleVersion = {
+  id: "e83a710a-5fe3-46ec-a523-8296b71d75f1",
+  trackId: "b502722c-a906-4810-a861-4d9af8e9f24c",
+  projectId: project.id,
+  versionNumber: 1,
+  status: "ready",
+  sourceKind: "imported_file",
+  sourceLabel: subtitlePreview.sourceLabel,
+  sourceSha256: subtitlePreview.sourceSha256,
+  mediaSha256: subtitlePreview.expectedMediaSha256,
+  languageCode: "ja",
+  projectRevision: 2,
+  preflight: subtitlePreview.preflight,
+  createdAtMs: 1_785_354_100_000,
+  isCurrent: true,
+  segments: [
+    {
+      id: "5a460d9a-97f6-4482-af1d-e7dbb7a6bc56",
+      ...subtitlePreview.cues[0],
+    },
+  ],
+};
+
 beforeEach(() => {
   vi.clearAllMocks();
   desktopMocks.getAppStatus.mockResolvedValue({
@@ -123,6 +197,7 @@ beforeEach(() => {
   });
   desktopMocks.listProjects.mockResolvedValue([project]);
   desktopMocks.chooseLocalVideo.mockResolvedValue(null);
+  desktopMocks.chooseSubtitleFile.mockResolvedValue(null);
   desktopMocks.createLocalProject.mockResolvedValue(project);
   desktopMocks.ensureProjectPoster.mockResolvedValue({
     ...project,
@@ -140,6 +215,17 @@ beforeEach(() => {
     deleted: true,
     sourceMediaDeleted: false,
   });
+  desktopMocks.inspectSubtitleFile.mockResolvedValue(subtitlePreview);
+  desktopMocks.importSubtitleFile.mockResolvedValue(subtitleVersion);
+  desktopMocks.inspectEmbeddedSubtitle.mockResolvedValue(
+    embeddedSubtitlePreview,
+  );
+  desktopMocks.importEmbeddedSubtitle.mockResolvedValue({
+    ...subtitleVersion,
+    sourceKind: "embedded",
+    sourceLabel: embeddedSubtitlePreview.sourceLabel,
+  });
+  desktopMocks.listSubtitleVersions.mockResolvedValue([]);
 });
 
 describe("App", () => {
@@ -230,6 +316,99 @@ describe("App", () => {
     );
     expect(
       await screen.findByText("项目已删除，源视频保持不变。"),
+    ).toBeInTheDocument();
+  });
+
+  it("preflights and imports a local original subtitle", async () => {
+    desktopMocks.chooseSubtitleFile.mockResolvedValue(
+      "W:\\media\\rain-platform.ja.srt",
+    );
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "继续观看" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "添加字幕" }),
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /选择字幕文件/ }),
+    );
+    await waitFor(() =>
+      expect(desktopMocks.chooseSubtitleFile).toHaveBeenCalled(),
+    );
+    fireEvent.change(screen.getByLabelText("原文语言"), {
+      target: { value: "ja" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "检查字幕" }));
+
+    await waitFor(() =>
+      expect(desktopMocks.inspectSubtitleFile).toHaveBeenCalledWith(
+        project.id,
+        "W:\\media\\rain-platform.ja.srt",
+        "ja",
+      ),
+    );
+    expect(await screen.findByText("时间轴和媒体范围检查通过，可以导入。"))
+      .toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: "导入原文字幕" }),
+    );
+
+    await waitFor(() =>
+      expect(desktopMocks.importSubtitleFile).toHaveBeenCalled(),
+    );
+    expect(
+      await screen.findByText("已导入 1 条原文字幕，保存为版本 1。"),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "原文字幕 · 1" }))
+      .toBeInTheDocument();
+  });
+
+  it("uses a supported embedded text subtitle track", async () => {
+    desktopMocks.prepareProjectMedia.mockResolvedValue({
+      ...preparation,
+      inspection: {
+        ...preparation.inspection,
+        probe: {
+          ...preparation.inspection.probe,
+          subtitleStreams: [
+            {
+              index: 2,
+              codecName: "subrip",
+              language: "jpn",
+              kind: "text",
+            },
+            {
+              index: 3,
+              codecName: "hdmv_pgs_subtitle",
+              language: "eng",
+              kind: "image",
+            },
+          ],
+        },
+      },
+    });
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "继续观看" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "添加字幕" }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: /内嵌字幕轨 2/ }),
+    );
+    expect(
+      screen.getByText("检测到 1 条图片或未知格式字幕轨，MVP 暂不支持提取。"),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "检查字幕" }));
+
+    await waitFor(() =>
+      expect(desktopMocks.inspectEmbeddedSubtitle).toHaveBeenCalledWith(
+        project.id,
+        2,
+        "ja",
+      ),
+    );
+    expect(
+      await screen.findByText("内嵌字幕轨 2 · JPN · SUBRIP"),
     ).toBeInTheDocument();
   });
 });

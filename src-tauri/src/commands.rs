@@ -9,7 +9,8 @@ use crate::{
     media::{self, MediaError, MediaInspection, MediaPreparation, MediaRuntimeStatus},
     store::{ProjectStore, StoreError},
     subtitles::{
-        self, ImportSubtitleFileInput, InspectSubtitleFileInput, SubtitleError,
+        self, EmbeddedSubtitlePreview, ImportEmbeddedSubtitleInput, ImportSubtitleFileInput,
+        InspectEmbeddedSubtitleInput, InspectSubtitleFileInput, SubtitleError,
         SubtitleImportPreview, SubtitleVersion,
     },
 };
@@ -55,6 +56,9 @@ impl From<MediaError> for CommandError {
             MediaError::MissingVideo => "missing_video_stream",
             MediaError::ProxyFailed(_) => "playback_proxy_failed",
             MediaError::PosterFailed(_) => "media_poster_failed",
+            MediaError::SubtitleStreamNotFound(_) => "embedded_subtitle_not_found",
+            MediaError::UnsupportedSubtitleCodec(_) => "embedded_subtitle_unsupported",
+            MediaError::SubtitleExtractionFailed(_) => "embedded_subtitle_extraction_failed",
             MediaError::Serialization(_) => "media_probe_serialization_failed",
         };
         Self {
@@ -78,13 +82,22 @@ impl From<SubtitleError> for CommandError {
                 | StoreError::InvalidMediaSourceKind(_)
                 | StoreError::InvalidMediaArtifactStatus(_),
             ) => "database_error",
+            SubtitleError::Media(MediaError::SubtitleStreamNotFound(_)) => {
+                "embedded_subtitle_not_found"
+            }
+            SubtitleError::Media(MediaError::UnsupportedSubtitleCodec(_)) => {
+                "embedded_subtitle_unsupported"
+            }
+            SubtitleError::Media(MediaError::SubtitleExtractionFailed(_)) => {
+                "embedded_subtitle_extraction_failed"
+            }
             SubtitleError::Media(_) => "media_inspection_failed",
             SubtitleError::UnsupportedFormat => "subtitle_format_unsupported",
             SubtitleError::UnsupportedEncoding => "subtitle_encoding_unsupported",
             SubtitleError::Parse(_) => "subtitle_parse_failed",
             SubtitleError::InvalidLanguage(_) => "subtitle_language_invalid",
             SubtitleError::PreflightBlocked(_) => "subtitle_preflight_blocked",
-            SubtitleError::FileChanged => "subtitle_file_changed",
+            SubtitleError::SubtitleSourceChanged => "subtitle_source_changed",
             SubtitleError::ProjectChanged => "project_changed",
             SubtitleError::MediaChanged => "media_changed",
             SubtitleError::Serialization(_) => "subtitle_serialization_failed",
@@ -252,6 +265,32 @@ pub fn list_subtitle_versions(
     project_id: String,
 ) -> Result<Vec<SubtitleVersion>, CommandError> {
     subtitles::list_subtitle_versions(store.inner(), &project_id).map_err(Into::into)
+}
+
+#[tauri::command]
+pub async fn inspect_embedded_subtitle(
+    store: State<'_, ProjectStore>,
+    input: InspectEmbeddedSubtitleInput,
+) -> Result<EmbeddedSubtitlePreview, CommandError> {
+    let store = store.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        subtitles::inspect_embedded_subtitle(&store, &input).map_err(CommandError::from)
+    })
+    .await
+    .map_err(CommandError::background_task_failed)?
+}
+
+#[tauri::command]
+pub async fn import_embedded_subtitle(
+    store: State<'_, ProjectStore>,
+    input: ImportEmbeddedSubtitleInput,
+) -> Result<SubtitleVersion, CommandError> {
+    let store = store.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        subtitles::import_embedded_subtitle(&store, input).map_err(CommandError::from)
+    })
+    .await
+    .map_err(CommandError::background_task_failed)?
 }
 
 fn allow_project_poster(app: &AppHandle, project: &Project) -> Result<(), CommandError> {

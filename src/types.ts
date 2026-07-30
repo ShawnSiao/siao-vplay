@@ -85,6 +85,7 @@ export type SubtitleStream = {
   index: number;
   codecName: string;
   language: string | null;
+  kind: "text" | "image" | "unknown";
 };
 
 export type MediaProbe = {
@@ -197,6 +198,12 @@ export type SubtitleImportPreview = {
   cues: SubtitleCue[];
   preflight: SubtitlePreflightReport;
   canImport: boolean;
+};
+
+export type EmbeddedSubtitlePreview = SubtitleImportPreview & {
+  streamIndex: number;
+  codecName: string;
+  embeddedLanguage: string | null;
 };
 
 export type SubtitleSegment = SubtitleCue & {

@@ -5,6 +5,7 @@ import type {
   AppStatus,
   DeleteProjectResult,
   DesktopCommandError,
+  EmbeddedSubtitlePreview,
   MediaPreparation,
   MediaRuntimeStatus,
   Project,
@@ -89,6 +90,24 @@ export async function chooseLocalVideo(): Promise<string | null> {
           "mts",
           "m2ts",
         ],
+      },
+    ],
+  });
+  return typeof selected === "string" ? selected : null;
+}
+
+export async function chooseSubtitleFile(): Promise<string | null> {
+  if (!isDesktopApp) {
+    return null;
+  }
+  const selected = await open({
+    multiple: false,
+    directory: false,
+    title: "选择原文字幕",
+    filters: [
+      {
+        name: "字幕文件",
+        extensions: ["srt", "vtt"],
       },
     ],
   });
@@ -184,6 +203,39 @@ export async function listSubtitleVersions(
   projectId: string,
 ): Promise<SubtitleVersion[]> {
   return invoke<SubtitleVersion[]>("list_subtitle_versions", { projectId });
+}
+
+export async function inspectEmbeddedSubtitle(
+  projectId: string,
+  streamIndex: number,
+  languageCode: string,
+): Promise<EmbeddedSubtitlePreview> {
+  return invoke<EmbeddedSubtitlePreview>("inspect_embedded_subtitle", {
+    input: { projectId, streamIndex, languageCode },
+  });
+}
+
+export async function importEmbeddedSubtitle(
+  projectId: string,
+  streamIndex: number,
+  languageCode: string,
+  preview: Pick<
+    EmbeddedSubtitlePreview,
+    | "sourceSha256"
+    | "expectedMediaSha256"
+    | "expectedProjectRevision"
+  >,
+): Promise<SubtitleVersion> {
+  return invoke<SubtitleVersion>("import_embedded_subtitle", {
+    input: {
+      projectId,
+      streamIndex,
+      languageCode,
+      expectedSourceSha256: preview.sourceSha256,
+      expectedMediaSha256: preview.expectedMediaSha256,
+      expectedProjectRevision: preview.expectedProjectRevision,
+    },
+  });
 }
 
 export function playbackUrl(path: string): string {

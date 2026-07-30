@@ -92,7 +92,9 @@ pub fn run() {
             commands::ensure_project_poster,
             commands::inspect_subtitle_file,
             commands::import_subtitle_file,
-            commands::list_subtitle_versions
+            commands::list_subtitle_versions,
+            commands::inspect_embedded_subtitle,
+            commands::import_embedded_subtitle
         ])
         .run(tauri::generate_context!())
         .expect("failed to run SiaoVPlay");

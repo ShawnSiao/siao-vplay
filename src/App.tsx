@@ -4,6 +4,7 @@ import { Dialog } from "./components/Dialog";
 import { LibraryScreen } from "./components/LibraryScreen";
 import { PlayerScreen } from "./components/PlayerScreen";
 import { PreparationScreen } from "./components/PreparationScreen";
+import { SubtitleImportDialog } from "./components/SubtitleImportDialog";
 import {
   chooseLocalVideo,
   commandError,
@@ -14,6 +15,7 @@ import {
   getMediaRuntimeStatus,
   isDesktopApp,
   listProjects,
+  listSubtitleVersions,
   markProjectOpened,
   prepareProjectMedia,
   relinkProjectMedia,
@@ -24,6 +26,7 @@ import type {
   MediaPreparation,
   MediaRuntimeStatus,
   Project,
+  SubtitleVersion,
 } from "./types";
 
 type Screen = "library" | "preparing" | "player";
@@ -46,6 +49,10 @@ export default function App() {
     null,
   );
   const [forceProxy, setForceProxy] = useState(false);
+  const [subtitleVersions, setSubtitleVersions] = useState<SubtitleVersion[]>(
+    [],
+  );
+  const [subtitleDialogOpen, setSubtitleDialogOpen] = useState(false);
   const [deleteCandidate, setDeleteCandidate] = useState<Project | null>(null);
   const [busyMessage, setBusyMessage] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -175,6 +182,17 @@ export default function App() {
         setActiveProject(openedProject);
         setPreparation(result);
         setScreen("player");
+        void listSubtitleVersions(openedProject.id)
+          .then((versions) => {
+            if (operationTokenRef.current === token) {
+              setSubtitleVersions(versions);
+            }
+          })
+          .catch((error: unknown) => {
+            if (operationTokenRef.current === token) {
+              setToast(commandError(error).message);
+            }
+          });
         void refreshProjects();
       } catch (error) {
         if (operationTokenRef.current !== token) {
@@ -195,6 +213,8 @@ export default function App() {
     setPreparation(null);
     setPreparationError(null);
     setForceProxy(false);
+    setSubtitleVersions([]);
+    setSubtitleDialogOpen(false);
     void refreshProjects();
   }, [refreshProjects]);
 
@@ -361,13 +381,40 @@ export default function App() {
           key={preparation.playbackPath}
           project={activeProject}
           preparation={preparation}
+          currentSubtitle={
+            subtitleVersions.find((version) => version.isCurrent) ?? null
+          }
           onBack={returnToLibrary}
+          onManageSubtitles={() => setSubtitleDialogOpen(true)}
           onNeedProxy={() => void prepareAndOpen(activeProject, true)}
           onPersist={persistPlayback}
           onError={(message) => {
             setPreparationError(message);
             setForceProxy(true);
             setScreen("preparing");
+          }}
+        />
+      ) : null}
+
+      {subtitleDialogOpen && activeProject && preparation ? (
+        <SubtitleImportDialog
+          projectId={activeProject.id}
+          streams={preparation.inspection.probe.subtitleStreams}
+          currentVersion={
+            subtitleVersions.find((version) => version.isCurrent) ?? null
+          }
+          onClose={() => setSubtitleDialogOpen(false)}
+          onImported={(version) => {
+            setSubtitleVersions((current) => [
+              version,
+              ...current
+                .filter((item) => item.id !== version.id)
+                .map((item) => ({ ...item, isCurrent: false })),
+            ]);
+            setToast(
+              `已导入 ${version.segments.length} 条原文字幕，保存为版本 ${version.versionNumber}。`,
+            );
+            void refreshProjects();
           }}
         />
       ) : null}

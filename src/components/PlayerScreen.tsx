@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { formatDuration, formatFileSize } from "../lib/format";
 import { playbackUrl } from "../lib/desktop";
-import type { MediaPreparation, Project } from "../types";
+import type { MediaPreparation, Project, SubtitleVersion } from "../types";
 
 type PlaybackValues = {
   positionMs: number;
@@ -14,7 +14,9 @@ type PlaybackValues = {
 type PlayerScreenProps = {
   project: Project;
   preparation: MediaPreparation;
+  currentSubtitle: SubtitleVersion | null;
   onBack: () => void;
+  onManageSubtitles: () => void;
   onNeedProxy: (reason: string) => void;
   onPersist: (values: PlaybackValues) => Promise<void>;
   onError: (message: string) => void;
@@ -23,7 +25,9 @@ type PlayerScreenProps = {
 export function PlayerScreen({
   project,
   preparation,
+  currentSubtitle,
   onBack,
+  onManageSubtitles,
   onNeedProxy,
   onPersist,
   onError,
@@ -305,6 +309,15 @@ export function PlayerScreen({
           <span title="将在后续阶段接入">学习</span>
         </div>
         <div className="player-toolbar-end">
+          <button
+            className="button quiet small"
+            type="button"
+            onClick={onManageSubtitles}
+          >
+            {currentSubtitle
+              ? `原文字幕 · ${currentSubtitle.segments.length}`
+              : "添加字幕"}
+          </button>
           <span className={`status-pill ${videoReady ? "ready" : "warning"}`}>
             {videoReady ? "画面已确认" : "正在确认画面"}
           </span>

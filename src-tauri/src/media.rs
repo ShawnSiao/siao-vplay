@@ -39,6 +39,12 @@ pub enum MediaError {
     ProxyFailed(String),
     #[error("视频封面生成失败：{0}")]
     PosterFailed(String),
+    #[error("找不到媒体内嵌字幕轨：{0}")]
+    SubtitleStreamNotFound(i64),
+    #[error("暂不支持提取 {0} 内嵌字幕；当前只支持文本字幕")]
+    UnsupportedSubtitleCodec(String),
+    #[error("内嵌字幕提取失败：{0}")]
+    SubtitleExtractionFailed(String),
     #[error("媒体探测结果无法序列化：{0}")]
     Serialization(#[from] serde_json::Error),
 }
@@ -89,6 +95,17 @@ pub struct SubtitleStream {
     pub index: i64,
     pub codec_name: String,
     pub language: Option<String>,
+    #[serde(default)]
+    pub kind: EmbeddedSubtitleKind,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum EmbeddedSubtitleKind {
+    Text,
+    Image,
+    #[default]
+    Unknown,
 }
 
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
@@ -320,6 +337,78 @@ pub fn ensure_project_poster(
         .map_err(Into::into)
 }
 
+pub(crate) fn extract_embedded_subtitle_to_vtt(
+    store: &ProjectStore,
+    project_id: &str,
+    stream_index: i64,
+    expected_media_sha256: Option<&str>,
+    output_path: &Path,
+) -> Result<(MediaInspection, SubtitleStream), MediaError> {
+    let runtime = MediaRuntime::resolve()?;
+    let inspection = inspect_with_runtime(store, project_id, &runtime)?;
+    if expected_media_sha256
+        .is_some_and(|expected| !expected.eq_ignore_ascii_case(&inspection.source_sha256))
+    {
+        return Err(MediaError::SourceChanged);
+    }
+    let stream = inspection
+        .probe
+        .subtitle_streams
+        .iter()
+        .find(|stream| stream.index == stream_index)
+        .cloned()
+        .ok_or(MediaError::SubtitleStreamNotFound(stream_index))?;
+    if stream.kind != EmbeddedSubtitleKind::Text {
+        return Err(MediaError::UnsupportedSubtitleCodec(
+            stream.codec_name.clone(),
+        ));
+    }
+    let project = store.get_project(project_id)?;
+    let source_path = PathBuf::from(&project.media_source.locator);
+    let before = FileIdentity::read(&source_path)?;
+    if let Some(parent) = output_path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    if output_path.is_file() {
+        fs::remove_file(output_path)?;
+    }
+    let output = hidden_command(&runtime.ffmpeg_path)
+        .args(["-y", "-hide_banner", "-nostdin", "-v", "error", "-i"])
+        .arg(&source_path)
+        .args([
+            "-map",
+            &format!("0:{stream_index}"),
+            "-c:s",
+            "webvtt",
+            "-f",
+            "webvtt",
+        ])
+        .arg(output_path)
+        .output()
+        .map_err(|error| MediaError::SubtitleExtractionFailed(error.to_string()))?;
+    if !output.status.success() {
+        let _ = fs::remove_file(output_path);
+        return Err(MediaError::SubtitleExtractionFailed(command_error_message(
+            &output,
+        )));
+    }
+    let after = FileIdentity::read(&source_path)?;
+    if before != after {
+        let _ = fs::remove_file(output_path);
+        return Err(MediaError::SourceChanged);
+    }
+    if !fs::metadata(output_path)
+        .map(|metadata| metadata.is_file() && metadata.len() > 6)
+        .unwrap_or(false)
+    {
+        let _ = fs::remove_file(output_path);
+        return Err(MediaError::SubtitleExtractionFailed(
+            "FFmpeg 没有生成可读取的 WebVTT 字幕".to_owned(),
+        ));
+    }
+    Ok((inspection, stream))
+}
+
 fn inspect_with_runtime(
     store: &ProjectStore,
     project_id: &str,
@@ -335,8 +424,9 @@ fn inspect_with_runtime(
     let before = FileIdentity::read(&source_path)?;
     if let Some(cached) = store.cached_media_probe(project_id, &project.media_source.id)?
         && before.matches_cache(cached.source_size_bytes, cached.source_modified_at_ms)
-        && let Ok(probe) = serde_json::from_str::<MediaProbe>(&cached.probe_json)
+        && let Ok(mut probe) = serde_json::from_str::<MediaProbe>(&cached.probe_json)
     {
+        normalize_subtitle_stream_kinds(&mut probe);
         return Ok(MediaInspection {
             project_id: project_id.to_owned(),
             media_source_id: project.media_source.id,
@@ -705,6 +795,7 @@ fn parse_probe_output(value: &[u8]) -> Result<MediaProbe, MediaError> {
             }),
             Some("subtitle") => subtitle_streams.push(SubtitleStream {
                 index,
+                kind: embedded_subtitle_kind(&codec_name),
                 codec_name,
                 language: stream.tags.and_then(|tags| tags.language),
             }),
@@ -747,6 +838,24 @@ fn parse_probe_output(value: &[u8]) -> Result<MediaProbe, MediaError> {
         audio_streams,
         subtitle_streams,
     })
+}
+
+fn embedded_subtitle_kind(codec_name: &str) -> EmbeddedSubtitleKind {
+    match codec_name {
+        "ass" | "ssa" | "mov_text" | "subrip" | "srt" | "text" | "webvtt" => {
+            EmbeddedSubtitleKind::Text
+        }
+        "dvb_subtitle" | "dvd_subtitle" | "hdmv_pgs_subtitle" | "pgssub" | "xsub" => {
+            EmbeddedSubtitleKind::Image
+        }
+        _ => EmbeddedSubtitleKind::Unknown,
+    }
+}
+
+fn normalize_subtitle_stream_kinds(probe: &mut MediaProbe) {
+    for stream in &mut probe.subtitle_streams {
+        stream.kind = embedded_subtitle_kind(&stream.codec_name);
+    }
 }
 
 fn parse_duration_ms(value: Option<&str>) -> Option<i64> {
@@ -1036,8 +1145,65 @@ mod tests {
         assert_eq!(parsed.video_streams[0].frame_rate, Some(30.0));
         assert_eq!(parsed.audio_streams[0].sample_rate_hz, Some(48_000));
         assert_eq!(parsed.subtitle_streams[0].language.as_deref(), Some("jpn"));
+        assert_eq!(parsed.subtitle_streams[0].kind, EmbeddedSubtitleKind::Text);
         assert_eq!(parsed.duration_ms, Some(3_000));
         assert_eq!(parsed.size_bytes, Some(285_820));
+    }
+
+    #[test]
+    fn classifies_text_and_image_subtitle_codecs() {
+        for codec in ["subrip", "ass", "ssa", "mov_text", "webvtt"] {
+            assert_eq!(
+                embedded_subtitle_kind(codec),
+                EmbeddedSubtitleKind::Text,
+                "{codec}"
+            );
+        }
+        for codec in ["hdmv_pgs_subtitle", "dvd_subtitle", "dvb_subtitle"] {
+            assert_eq!(
+                embedded_subtitle_kind(codec),
+                EmbeddedSubtitleKind::Image,
+                "{codec}"
+            );
+        }
+        assert_eq!(
+            embedded_subtitle_kind("mystery"),
+            EmbeddedSubtitleKind::Unknown
+        );
+    }
+
+    #[test]
+    fn restores_subtitle_kinds_in_legacy_cached_probe_json() {
+        let mut cached_probe = serde_json::from_str::<MediaProbe>(
+            r#"{
+                "containerFormats":["matroska"],
+                "durationMs":3000,
+                "sizeBytes":1000,
+                "bitRate":null,
+                "videoStreams":[],
+                "audioStreams":[],
+                "subtitleStreams":[
+                    {"index":2,"codecName":"subrip","language":"jpn"},
+                    {"index":3,"codecName":"hdmv_pgs_subtitle","language":"eng"}
+                ]
+            }"#,
+        )
+        .expect("legacy probe should deserialize");
+        assert_eq!(
+            cached_probe.subtitle_streams[0].kind,
+            EmbeddedSubtitleKind::Unknown
+        );
+
+        normalize_subtitle_stream_kinds(&mut cached_probe);
+
+        assert_eq!(
+            cached_probe.subtitle_streams[0].kind,
+            EmbeddedSubtitleKind::Text
+        );
+        assert_eq!(
+            cached_probe.subtitle_streams[1].kind,
+            EmbeddedSubtitleKind::Image
+        );
     }
 
     #[test]
