@@ -15,6 +15,7 @@ SiaoVPlay 是一款 Windows 本地优先的跨语言智能播放器。它面向�
 - Tauri 2、React、TypeScript 和 Rust 桌面工程。
 - 独立 SQLite 项目库与播放位置恢复。
 - 本地视频探测和 H.264/AAC 兼容播放版本。
+- 从应用相邻目录自动发现 FFmpeg，不要求预先设置环境变量。
 - Windows 文件选择、`Ctrl+O` 和媒体路径启动。
 - 原片与兼容版本播放、项目重新定位和安全删除。
 

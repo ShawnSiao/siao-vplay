@@ -730,20 +730,65 @@ fn resolve_runtime_tool(
     }
     let runtime_root = env::var_os("SIAOVPLAY_RUNTIME_DIR")
         .filter(|value| !value.is_empty())
-        .map(PathBuf::from)
-        .ok_or_else(|| {
-            MediaError::RuntimeUnavailable(format!(
-                "未设置 {environment_variable} 或 SIAOVPLAY_RUNTIME_DIR"
-            ))
-        })?;
-    let path = runtime_root.join("ffmpeg").join("bin").join(file_name);
-    if path.is_file() {
-        Ok(path)
-    } else {
-        Err(MediaError::RuntimeUnavailable(format!(
-            "找不到 W 盘媒体运行时：{}",
-            path.display()
-        )))
+        .map(PathBuf::from);
+    let executable_path = env::current_exe().ok();
+    let candidates = runtime_tool_candidates(
+        file_name,
+        runtime_root.as_deref(),
+        executable_path.as_deref(),
+    );
+    if let Some(path) = candidates.iter().find(|path| path.is_file()) {
+        return Ok(path.clone());
+    }
+    let checked_paths = candidates
+        .iter()
+        .take(12)
+        .map(|path| path.display().to_string())
+        .collect::<Vec<_>>()
+        .join("；");
+    Err(MediaError::RuntimeUnavailable(format!(
+        "找不到 {file_name}。可以设置 {environment_variable}，或将 FFmpeg 放在应用相邻的 runtimes、runtime、resources 或 ffmpeg 目录。已检查：{checked_paths}"
+    )))
+}
+
+fn runtime_tool_candidates(
+    file_name: &str,
+    runtime_root: Option<&Path>,
+    executable_path: Option<&Path>,
+) -> Vec<PathBuf> {
+    let mut candidates = Vec::new();
+    if let Some(runtime_root) = runtime_root {
+        push_unique(
+            &mut candidates,
+            runtime_root.join("ffmpeg").join("bin").join(file_name),
+        );
+        push_unique(&mut candidates, runtime_root.join("bin").join(file_name));
+    }
+    if let Some(executable_directory) = executable_path.and_then(Path::parent) {
+        for ancestor in executable_directory
+            .ancestors()
+            .take(5)
+            .take_while(|ancestor| ancestor.parent().is_some())
+        {
+            for relative_directory in [
+                Path::new("runtimes").join("ffmpeg").join("bin"),
+                Path::new("runtime").join("ffmpeg").join("bin"),
+                Path::new("resources").join("ffmpeg").join("bin"),
+                Path::new("ffmpeg").join("bin"),
+            ] {
+                push_unique(
+                    &mut candidates,
+                    ancestor.join(relative_directory).join(file_name),
+                );
+            }
+        }
+    }
+    candidates
+}
+
+fn push_unique(candidates: &mut Vec<PathBuf>, path: PathBuf) {
+    if !candidates.contains(&path) {
+        candidates.push(path);
     }
 }
 
@@ -928,6 +973,16 @@ mod tests {
             playback_gate(&audio_only).decision,
             PlaybackDecision::Unsupported
         );
+    }
+
+    #[test]
+    fn discovers_runtime_candidates_from_the_executable_ancestors() {
+        let executable = Path::new("W:/SiaoVPlay/build/cargo-target/debug/siao-vplay.exe");
+        let candidates = runtime_tool_candidates("ffmpeg.exe", None, Some(executable));
+
+        assert!(candidates.contains(&PathBuf::from(
+            "W:/SiaoVPlay/runtimes/ffmpeg/bin/ffmpeg.exe"
+        )));
     }
 
     #[test]
