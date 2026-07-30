@@ -29,6 +29,7 @@ type PlayerScreenProps = {
   onManageSubtitles: () => void;
   onManageTranslation: () => void;
   onReviseSubtitles: () => void;
+  onDeliverSubtitles: () => void;
   onNeedProxy: (reason: string) => void;
   onPersist: (values: PlaybackValues) => Promise<void>;
   onError: (message: string) => void;
@@ -43,6 +44,7 @@ export function PlayerScreen({
   onManageSubtitles,
   onManageTranslation,
   onReviseSubtitles,
+  onDeliverSubtitles,
   onNeedProxy,
   onPersist,
   onError,
@@ -406,6 +408,15 @@ export function PlayerScreen({
             onClick={onReviseSubtitles}
           >
             修正字幕
+          </button>
+          <button
+            aria-label="导出字幕与视频"
+            className="button quiet small"
+            type="button"
+            disabled={!currentSubtitle && !currentTranslation}
+            onClick={onDeliverSubtitles}
+          >
+            导出
           </button>
           <span className={`status-pill ${videoReady ? "ready" : "warning"}`}>
             {videoReady ? "画面已确认" : "正在确认画面"}

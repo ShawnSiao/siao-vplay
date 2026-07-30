@@ -20,6 +20,11 @@ import type {
   Project,
   RemoteMediaPreview,
   SubtitleGlobalReplacement,
+  SubtitleBurnJob,
+  SubtitleBurnMode,
+  SubtitleExport,
+  SubtitleExportFormat,
+  SubtitleExportMode,
   SubtitleImportPreview,
   SubtitleSegmentEdit,
   SubtitleVersion,
@@ -735,6 +740,90 @@ export async function exportLearningCards(
 ): Promise<LearningCardsExport> {
   return invoke<LearningCardsExport>("export_learning_cards", {
     input: { projectId, destinationDirectory },
+  });
+}
+
+export async function chooseSubtitleDeliveryDirectory(): Promise<
+  string | null
+> {
+  if (!isDesktopApp) {
+    return null;
+  }
+  const selected = await open({
+    multiple: false,
+    directory: true,
+    title: "选择字幕或烧录视频保存位置",
+  });
+  return typeof selected === "string" ? selected : null;
+}
+
+export async function exportSubtitles(
+  projectId: string,
+  mode: SubtitleExportMode,
+  format: SubtitleExportFormat,
+  sourceVersionId: string | null,
+  translationVersionId: string | null,
+  destinationDirectory: string,
+): Promise<SubtitleExport> {
+  return invoke<SubtitleExport>("export_subtitles", {
+    input: {
+      projectId,
+      mode,
+      format,
+      sourceVersionId,
+      translationVersionId,
+      destinationDirectory,
+      confirmVersionSelection: true,
+    },
+  });
+}
+
+export async function startSubtitleBurn(
+  projectId: string,
+  mode: SubtitleBurnMode,
+  sourceVersionId: string | null,
+  translationVersionId: string,
+  destinationDirectory: string,
+): Promise<SubtitleBurnJob> {
+  return invoke<SubtitleBurnJob>("start_subtitle_burn", {
+    input: {
+      projectId,
+      mode,
+      sourceVersionId,
+      translationVersionId,
+      destinationDirectory,
+      confirmVersionSelection: true,
+    },
+  });
+}
+
+export async function getSubtitleBurnJob(
+  jobId: string,
+): Promise<SubtitleBurnJob> {
+  return invoke<SubtitleBurnJob>("get_subtitle_burn_job", {
+    input: { jobId },
+  });
+}
+
+export async function listSubtitleBurnJobs(
+  projectId: string,
+): Promise<SubtitleBurnJob[]> {
+  return invoke<SubtitleBurnJob[]>("list_subtitle_burn_jobs", { projectId });
+}
+
+export async function cancelSubtitleBurnJob(
+  jobId: string,
+): Promise<SubtitleBurnJob> {
+  return invoke<SubtitleBurnJob>("cancel_subtitle_burn_job", {
+    input: { jobId },
+  });
+}
+
+export async function resumeSubtitleBurnJob(
+  jobId: string,
+): Promise<SubtitleBurnJob> {
+  return invoke<SubtitleBurnJob>("resume_subtitle_burn_job", {
+    input: { jobId },
   });
 }
 

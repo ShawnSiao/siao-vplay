@@ -11,6 +11,8 @@ import type {
   MediaPreparation,
   Project,
   RemoteMediaPreview,
+  SubtitleBurnJob,
+  SubtitleExport,
   SubtitleImportPreview,
   SubtitleVersion,
   TranscriptionJob,
@@ -90,6 +92,13 @@ const desktopMocks = vi.hoisted(() => ({
   listLearningCards: vi.fn(),
   deleteLearningCard: vi.fn(),
   exportLearningCards: vi.fn(),
+  chooseSubtitleDeliveryDirectory: vi.fn(),
+  exportSubtitles: vi.fn(),
+  startSubtitleBurn: vi.fn(),
+  getSubtitleBurnJob: vi.fn(),
+  listSubtitleBurnJobs: vi.fn(),
+  cancelSubtitleBurnJob: vi.fn(),
+  resumeSubtitleBurnJob: vi.fn(),
 }));
 
 vi.mock("./lib/desktop", () => ({
@@ -504,6 +513,40 @@ const learningCard: LearningCard = {
   updatedAtMs: 1_785_354_360_000,
 };
 
+const subtitleExport: SubtitleExport = {
+  filePath: "W:\\exports\\雨站台.bilingual.vtt",
+  manifestPath: "W:\\exports\\雨站台.bilingual.vtt.siaovplay.json",
+  fileSha256: "f".repeat(64),
+  mode: "bilingual",
+  format: "vtt",
+  cueCount: 1,
+  sourceVersionId: subtitleVersion.id,
+  translationVersionId: translatedVersion.id,
+  mediaSha256: "a".repeat(64),
+  exportedAtMs: 1_785_354_370_000,
+};
+
+const burnJob: SubtitleBurnJob = {
+  id: "8c6bb86e-fe50-41fa-a2a3-0bcd956dfdc6",
+  projectId: project.id,
+  status: "queued",
+  stage: "queued",
+  progress: 0,
+  mode: "translation",
+  sourceVersionId: null,
+  translationVersionId: translatedVersion.id,
+  outputPath: null,
+  manifestPath: null,
+  outputSha256: null,
+  runtimeVersion: "ffmpeg 8.1.1",
+  errorCode: null,
+  errorMessage: null,
+  createdAtMs: 1_785_354_380_000,
+  updatedAtMs: 1_785_354_380_000,
+  startedAtMs: null,
+  completedAtMs: null,
+};
+
 beforeEach(() => {
   vi.clearAllMocks();
   desktopMocks.getAppStatus.mockResolvedValue({
@@ -766,6 +809,20 @@ beforeEach(() => {
       "W:\\exports\\SiaoVPlay-learning-rain-platform\\learning-cards.md",
     cardCount: 1,
   });
+  desktopMocks.chooseSubtitleDeliveryDirectory.mockResolvedValue(null);
+  desktopMocks.exportSubtitles.mockResolvedValue(subtitleExport);
+  desktopMocks.startSubtitleBurn.mockResolvedValue(burnJob);
+  desktopMocks.getSubtitleBurnJob.mockResolvedValue(burnJob);
+  desktopMocks.listSubtitleBurnJobs.mockResolvedValue([]);
+  desktopMocks.cancelSubtitleBurnJob.mockResolvedValue({
+    ...burnJob,
+    status: "cancelled",
+    stage: "cancelled",
+    errorCode: "subtitle_burn_cancelled",
+    errorMessage: "字幕烧录已取消",
+    completedAtMs: 1_785_354_381_000,
+  });
+  desktopMocks.resumeSubtitleBurnJob.mockResolvedValue(burnJob);
   Object.defineProperty(navigator, "clipboard", {
     configurable: true,
     value: {
@@ -857,6 +914,149 @@ describe("App", () => {
         expect.objectContaining({ subtitleMode: "bilingual" }),
       ),
     );
+  });
+
+  it("exports an explicitly confirmed bilingual WebVTT subtitle", async () => {
+    desktopMocks.listSubtitleVersions.mockResolvedValue([
+      subtitleVersion,
+      translatedVersion,
+    ]);
+    desktopMocks.chooseSubtitleDeliveryDirectory.mockResolvedValue(
+      "W:\\exports",
+    );
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "继续观看" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "导出字幕与视频" }),
+    );
+
+    expect(screen.getByRole("button", { name: "关闭" })).toHaveFocus();
+    fireEvent.click(screen.getByRole("button", { name: "双语" }));
+    fireEvent.change(screen.getByRole("combobox", { name: "字幕文件格式" }), {
+      target: { value: "vtt" },
+    });
+    fireEvent.click(
+      screen.getByRole("checkbox", {
+        name: /确认使用以上字幕版本/,
+      }),
+    );
+    const exportButton = screen.getByRole("button", {
+      name: "选择位置并导出",
+    });
+    await waitFor(() => expect(exportButton).toBeEnabled());
+    fireEvent.click(exportButton);
+
+    await waitFor(() =>
+      expect(
+        desktopMocks.chooseSubtitleDeliveryDirectory,
+      ).toHaveBeenCalledTimes(1),
+    );
+    await waitFor(() =>
+      expect(desktopMocks.exportSubtitles).toHaveBeenCalledWith(
+        project.id,
+        "bilingual",
+        "vtt",
+        subtitleVersion.id,
+        translatedVersion.id,
+        "W:\\exports",
+      ),
+    );
+    expect(
+      await screen.findByRole("heading", { name: "字幕已导出" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(subtitleExport.filePath)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "关闭" })).toHaveFocus();
+  });
+
+  it("starts and cancels a background subtitle burn job", async () => {
+    desktopMocks.listSubtitleVersions.mockResolvedValue([
+      subtitleVersion,
+      translatedVersion,
+    ]);
+    desktopMocks.chooseSubtitleDeliveryDirectory.mockResolvedValue(
+      "W:\\exports",
+    );
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "继续观看" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "导出字幕与视频" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /烧录视频/ }));
+    fireEvent.click(
+      screen.getByRole("checkbox", {
+        name: /确认使用以上字幕版本/,
+      }),
+    );
+    const burnButton = screen.getByRole("button", {
+      name: "选择位置并开始烧录",
+    });
+    await waitFor(() => expect(burnButton).toBeEnabled());
+    fireEvent.click(burnButton);
+
+    await waitFor(() =>
+      expect(
+        desktopMocks.chooseSubtitleDeliveryDirectory,
+      ).toHaveBeenCalledTimes(1),
+    );
+    await waitFor(() =>
+      expect(desktopMocks.startSubtitleBurn).toHaveBeenCalledWith(
+        project.id,
+        "translation",
+        null,
+        translatedVersion.id,
+        "W:\\exports",
+      ),
+    );
+    expect(
+      await screen.findByRole("heading", { name: "等待开始" }),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "取消烧录" }));
+    await waitFor(() =>
+      expect(desktopMocks.cancelSubtitleBurnJob).toHaveBeenCalledWith(
+        burnJob.id,
+      ),
+    );
+    expect(
+      await screen.findByRole("heading", { name: "任务已取消" }),
+    ).toBeInTheDocument();
+  });
+
+  it("restores an interrupted burn job and retries it from the dialog", async () => {
+    const interruptedJob: SubtitleBurnJob = {
+      ...burnJob,
+      status: "interrupted",
+      stage: "interrupted",
+      errorCode: "subtitle_burn_interrupted",
+      errorMessage: "应用上次关闭时烧录仍在进行。",
+    };
+    desktopMocks.listSubtitleVersions.mockResolvedValue([
+      subtitleVersion,
+      translatedVersion,
+    ]);
+    desktopMocks.listSubtitleBurnJobs.mockResolvedValue([interruptedJob]);
+    desktopMocks.resumeSubtitleBurnJob.mockResolvedValue(burnJob);
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "继续观看" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "导出字幕与视频" }),
+    );
+    fireEvent.click(await screen.findByRole("button", { name: /最近一次烧录/ }));
+    expect(
+      await screen.findByRole("heading", { name: "上次任务已中断" }),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "重新开始" }));
+
+    await waitFor(() =>
+      expect(desktopMocks.resumeSubtitleBurnJob).toHaveBeenCalledWith(
+        interruptedJob.id,
+      ),
+    );
+    expect(
+      await screen.findByRole("heading", { name: "等待开始" }),
+    ).toBeInTheDocument();
   });
 
   it("keeps watching quiet until the user opens understanding and confirms the Codex scope", async () => {

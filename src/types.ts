@@ -546,3 +546,50 @@ export type LearningCardsExport = {
   markdownPath: string;
   cardCount: number;
 };
+
+export type SubtitleExportMode = "original" | "translation" | "bilingual";
+
+export type SubtitleExportFormat = "srt" | "vtt";
+
+export type SubtitleExport = {
+  filePath: string;
+  manifestPath: string;
+  fileSha256: string;
+  mode: SubtitleExportMode;
+  format: SubtitleExportFormat;
+  cueCount: number;
+  sourceVersionId: string | null;
+  translationVersionId: string | null;
+  mediaSha256: string;
+  exportedAtMs: number;
+};
+
+export type SubtitleBurnMode = "translation" | "bilingual";
+
+export type SubtitleBurnJob = {
+  id: string;
+  projectId: string;
+  status:
+    | "queued"
+    | "running"
+    | "validating"
+    | "completed"
+    | "failed"
+    | "cancelled"
+    | "interrupted";
+  stage: string;
+  progress: number;
+  mode: SubtitleBurnMode;
+  sourceVersionId: string | null;
+  translationVersionId: string;
+  outputPath: string | null;
+  manifestPath: string | null;
+  outputSha256: string | null;
+  runtimeVersion: string;
+  errorCode: string | null;
+  errorMessage: string | null;
+  createdAtMs: number;
+  updatedAtMs: number;
+  startedAtMs: number | null;
+  completedAtMs: number | null;
+};

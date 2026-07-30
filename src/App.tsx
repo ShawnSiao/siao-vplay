@@ -6,6 +6,7 @@ import { PlayerScreen } from "./components/PlayerScreen";
 import { PreparationScreen } from "./components/PreparationScreen";
 import { RemoteUrlDialog } from "./components/RemoteUrlDialog";
 import { SubtitleImportDialog } from "./components/SubtitleImportDialog";
+import { SubtitleDeliveryDialog } from "./components/SubtitleDeliveryDialog";
 import { SubtitleRevisionDialog } from "./components/SubtitleRevisionDialog";
 import { TranslationDialog } from "./components/TranslationDialog";
 import {
@@ -63,6 +64,7 @@ export default function App() {
     string[] | undefined
   >(undefined);
   const [revisionDialogOpen, setRevisionDialogOpen] = useState(false);
+  const [deliveryDialogOpen, setDeliveryDialogOpen] = useState(false);
   const [remoteUrlDialogOpen, setRemoteUrlDialogOpen] = useState(false);
   const [deleteCandidate, setDeleteCandidate] = useState<Project | null>(null);
   const [busyMessage, setBusyMessage] = useState<string | null>(null);
@@ -481,6 +483,7 @@ export default function App() {
             setTranslationDialogOpen(true);
           }}
           onReviseSubtitles={() => setRevisionDialogOpen(true)}
+          onDeliverSubtitles={() => setDeliveryDialogOpen(true)}
           onNeedProxy={() => void prepareAndOpen(activeProject, true)}
           onPersist={persistPlayback}
           onError={(message) => {
@@ -550,6 +553,25 @@ export default function App() {
             setTranslationSegmentIds(segmentIds);
             setTranslationDialogOpen(true);
           }}
+        />
+      ) : null}
+
+      {deliveryDialogOpen && activeProject ? (
+        <SubtitleDeliveryDialog
+          project={activeProject}
+          versions={subtitleVersions}
+          currentSubtitle={
+            subtitleVersions.find(
+              (version) => version.role === "original" && version.isCurrent,
+            ) ?? null
+          }
+          currentTranslation={
+            subtitleVersions.find(
+              (version) =>
+                version.role === "translation" && version.isCurrent,
+            ) ?? null
+          }
+          onClose={() => setDeliveryDialogOpen(false)}
         />
       ) : null}
 
