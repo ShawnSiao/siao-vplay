@@ -490,6 +490,18 @@ pub fn read_learning_prompt(store: &ProjectStore, task_id: &str) -> Result<Strin
     read_small_utf8(&directory.join("prompt.md"))
 }
 
+pub(crate) fn read_learning_schema(
+    store: &ProjectStore,
+    task_id: &str,
+) -> Result<Value, LearningError> {
+    let task = get_learning_task(store, task_id)?;
+    let directory = task_directory(store, task_id)?;
+    verify_task_package(store, &task, &directory)?;
+    Ok(serde_json::from_str(&read_small_utf8(
+        &directory.join("result.schema.json"),
+    )?)?)
+}
+
 pub fn get_dictionary_entry(
     store: &ProjectStore,
     entry_id: &str,
@@ -571,6 +583,15 @@ pub fn import_learning_result(
             Err(error)
         }
     }
+}
+
+pub(crate) fn apply_codex_result(
+    store: &ProjectStore,
+    task_id: &str,
+    raw: &str,
+) -> Result<LearningApplication, LearningError> {
+    set_task_validating(store, task_id, "running")?;
+    validate_and_apply_result(store, task_id, raw)
 }
 
 fn validate_and_apply_result(
@@ -1625,6 +1646,25 @@ mod tests {
                 .status,
             "awaiting_external_result"
         );
+    }
+
+    #[test]
+    fn deleting_a_project_removes_only_controlled_learning_materials() {
+        let fixture = Fixture::new();
+        let task = fixture.prepare();
+        let directory =
+            task_directory(&fixture.store, &task.id).expect("task directory should resolve");
+        assert!(directory.is_dir());
+        assert!(fixture.media_path.is_file());
+
+        let deleted = fixture
+            .store
+            .delete_project(&fixture.project_id)
+            .expect("project should delete");
+
+        assert!(deleted.deleted);
+        assert!(!directory.exists());
+        assert!(fixture.media_path.is_file());
     }
 
     fn directory_result_path(store: &ProjectStore, task_id: &str) -> PathBuf {

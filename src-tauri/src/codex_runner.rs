@@ -19,6 +19,7 @@ use thiserror::Error;
 use uuid::Uuid;
 
 use crate::{
+    learning::{self, LearningApplication, LearningError, LearningTask},
     store::{ProjectStore, StoreError},
     translation::{self, TranslationApplication, TranslationError, TranslationTask},
     understanding::{self, ExplanationApplication, ExplanationTask, UnderstandingError},
@@ -44,6 +45,8 @@ pub enum CodexRunnerError {
     Translation(#[from] TranslationError),
     #[error(transparent)]
     Understanding(#[from] UnderstandingError),
+    #[error(transparent)]
+    Learning(#[from] LearningError),
     #[error("Codex 文件操作失败：{0}")]
     FileSystem(#[from] std::io::Error),
     #[error("未找到可用的 Codex CLI")]
@@ -88,6 +91,7 @@ impl CodexRunnerError {
             Self::Store(_) => "database_error",
             Self::Translation(error) => error.code(),
             Self::Understanding(error) => error.code(),
+            Self::Learning(error) => error.code(),
             Self::RuntimeUnavailable => "codex_runtime_unavailable",
             Self::RuntimeUnsupported => "codex_runtime_unsupported",
             Self::NotAuthenticated => "codex_not_authenticated",
@@ -300,6 +304,95 @@ pub fn resume_codex_explanation_task(
     understanding::get_explanation_task(store, &task.id).map_err(Into::into)
 }
 
+pub fn start_codex_learning_task(
+    store: &ProjectStore,
+    input: StartCodexTranslationInput,
+) -> Result<LearningTask, CodexRunnerError> {
+    let timeout_seconds = input.timeout_seconds.unwrap_or(DEFAULT_TIMEOUT_SECONDS);
+    validate_timeout(timeout_seconds)?;
+    let runtime = require_ready_codex()?;
+    let task = claim_learning_for_run(store, &input.task_id, &runtime, false)?;
+    if let Err(error) = spawn_learning_worker(
+        store.clone(),
+        task.id.clone(),
+        runtime,
+        Duration::from_secs(timeout_seconds),
+    ) {
+        let _ = finish_learning_with_error(store, &task.id, &error);
+        return Err(error);
+    }
+    learning::get_learning_task(store, &task.id).map_err(Into::into)
+}
+
+pub fn resume_codex_learning_task(
+    store: &ProjectStore,
+    input: StartCodexTranslationInput,
+) -> Result<LearningTask, CodexRunnerError> {
+    let timeout_seconds = input.timeout_seconds.unwrap_or(DEFAULT_TIMEOUT_SECONDS);
+    validate_timeout(timeout_seconds)?;
+    let runtime = require_ready_codex()?;
+    let task = claim_learning_for_run(store, &input.task_id, &runtime, true)?;
+    if let Err(error) = spawn_learning_worker(
+        store.clone(),
+        task.id.clone(),
+        runtime,
+        Duration::from_secs(timeout_seconds),
+    ) {
+        let _ = finish_learning_with_error(store, &task.id, &error);
+        return Err(error);
+    }
+    learning::get_learning_task(store, &task.id).map_err(Into::into)
+}
+
+pub fn cancel_learning_task(
+    store: &ProjectStore,
+    task_id: &str,
+) -> Result<LearningTask, CodexRunnerError> {
+    let task = learning::get_learning_task(store, task_id)?;
+    if !matches!(
+        task.status.as_str(),
+        "awaiting_external_result" | "queued" | "running" | "validating"
+    ) {
+        return Err(LearningError::InvalidTaskState(task.status).into());
+    }
+    let timestamp = now_ms()?;
+    let mut connection = store.connect()?;
+    let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    let immediate = matches!(
+        task.status.as_str(),
+        "awaiting_external_result" | "queued" | "validating"
+    );
+    let changed = if immediate {
+        transaction.execute(
+            "UPDATE learning_tasks
+             SET status = 'cancelled', stage = 'cancelled',
+                 cancel_requested_at_ms = ?2, completed_at_ms = ?2,
+                 error_code = NULL, error_message = NULL, updated_at_ms = ?2
+             WHERE id = ?1
+               AND status IN ('awaiting_external_result', 'queued', 'validating')",
+            params![task_id, timestamp],
+        )?
+    } else {
+        transaction.execute(
+            "UPDATE learning_tasks
+             SET stage = 'cancelling', cancel_requested_at_ms = ?2,
+                 updated_at_ms = ?2
+             WHERE id = ?1 AND status = 'running'",
+            params![task_id, timestamp],
+        )?
+    };
+    if changed != 1 {
+        return Err(LearningError::InvalidTaskState(task.status).into());
+    }
+    transaction.commit()?;
+    if let Ok(tasks) = active_tasks().lock()
+        && let Some(cancellation) = tasks.get(task_id)
+    {
+        cancellation.store(true, Ordering::SeqCst);
+    }
+    learning::get_learning_task(store, task_id).map_err(Into::into)
+}
+
 pub fn cancel_explanation_task(
     store: &ProjectStore,
     task_id: &str,
@@ -490,6 +583,46 @@ pub fn cancel_project_explanation_tasks(
     ))
 }
 
+pub fn cancel_project_learning_tasks(
+    store: &ProjectStore,
+    project_id: &str,
+) -> Result<usize, CodexRunnerError> {
+    let ids = {
+        let connection = store.connect()?;
+        let mut statement = connection.prepare(
+            "SELECT id FROM learning_tasks
+             WHERE project_id = ?1
+               AND status IN (
+                   'awaiting_external_result', 'queued', 'running', 'validating'
+               )",
+        )?;
+        statement
+            .query_map(params![project_id], |row| row.get::<_, String>(0))?
+            .collect::<Result<Vec<_>, _>>()?
+    };
+    for id in &ids {
+        let _ = cancel_learning_task(store, id);
+    }
+    for _ in 0..100 {
+        let active = store.connect()?.query_row(
+            "SELECT COUNT(*) FROM learning_tasks
+             WHERE project_id = ?1
+               AND status IN (
+                   'awaiting_external_result', 'queued', 'running', 'validating'
+               )",
+            params![project_id],
+            |row| row.get::<_, i64>(0),
+        )?;
+        if active == 0 {
+            return Ok(ids.len());
+        }
+        thread::sleep(POLL_INTERVAL);
+    }
+    Err(CodexRunnerError::InvalidTaskState(
+        "取消词义查询超时，项目尚未删除".to_owned(),
+    ))
+}
+
 pub fn recover_translation_tasks(store: &ProjectStore) -> Result<usize, CodexRunnerError> {
     let timestamp = now_ms()?;
     let mut connection = store.connect()?;
@@ -623,6 +756,49 @@ fn spawn_explanation_worker(
     }
 }
 
+fn spawn_learning_worker(
+    store: ProjectStore,
+    task_id: String,
+    runtime: RuntimeIdentity,
+    timeout: Duration,
+) -> Result<(), CodexRunnerError> {
+    let cancellation = Arc::new(AtomicBool::new(false));
+    {
+        let mut tasks = active_tasks()
+            .lock()
+            .map_err(|_| CodexRunnerError::AlreadyRunning)?;
+        if tasks.contains_key(&task_id) {
+            return Err(CodexRunnerError::AlreadyRunning);
+        }
+        tasks.insert(task_id.clone(), cancellation.clone());
+    }
+    let worker_task_id = task_id.clone();
+    let failure_store = store.clone();
+    let spawn_result = thread::Builder::new()
+        .name(format!("codex-learning-{task_id}"))
+        .spawn(move || {
+            let result =
+                run_learning_task(&store, &worker_task_id, &runtime, timeout, &cancellation);
+            if let Err(error) = result {
+                let _ = finish_learning_with_error(&store, &worker_task_id, &error);
+            }
+            if let Ok(mut tasks) = active_tasks().lock() {
+                tasks.remove(&worker_task_id);
+            }
+        });
+    match spawn_result {
+        Ok(_) => Ok(()),
+        Err(error) => {
+            if let Ok(mut tasks) = active_tasks().lock() {
+                tasks.remove(&task_id);
+            }
+            let error = CodexRunnerError::FileSystem(error);
+            let _ = finish_learning_with_error(&failure_store, &task_id, &error);
+            Err(error)
+        }
+    }
+}
+
 fn run_explanation_task(
     store: &ProjectStore,
     task_id: &str,
@@ -685,6 +861,53 @@ fn run_explanation_task(
     understanding::apply_codex_result(store, task_id, &raw).map_err(Into::into)
 }
 
+fn run_learning_task(
+    store: &ProjectStore,
+    task_id: &str,
+    runtime: &RuntimeIdentity,
+    timeout: Duration,
+    cancellation: &AtomicBool,
+) -> Result<LearningApplication, CodexRunnerError> {
+    let task = learning::get_learning_task(store, task_id)?;
+    if task.status != "running" || task.handoff_kind != "codex" {
+        return Err(LearningError::InvalidTaskState(task.status).into());
+    }
+    let directory = learning::task_directory(store, task_id)?;
+    learning::verify_task_package(store, &task, &directory)?;
+    let prompt = learning::read_learning_prompt(store, task_id)?;
+    let schema = learning::read_learning_schema(store, task_id)?;
+    ensure_not_cancelled(store, task_id, cancellation)?;
+    let attempt_directory =
+        directory
+            .join("runtime")
+            .join(format!("run-{}-{}", now_ms()?, Uuid::new_v4().simple()));
+    fs::create_dir_all(&attempt_directory)?;
+    let (raw, thread_id) = invoke_codex_raw(
+        store,
+        task_id,
+        runtime,
+        &attempt_directory,
+        prompt,
+        &schema,
+        timeout,
+        cancellation,
+    )
+    .map_err(|error| match error {
+        CodexRunnerError::InvalidOutput(message) => LearningError::InvalidResult(message).into(),
+        other => other,
+    })?;
+    ensure_not_cancelled(store, task_id, cancellation)?;
+    store.connect()?.execute(
+        "UPDATE learning_tasks
+         SET progress = 0.85,
+             runner_thread_id = COALESCE(?2, runner_thread_id),
+             updated_at_ms = ?3
+         WHERE id = ?1 AND status = 'running'",
+        params![task_id, thread_id, now_ms()?],
+    )?;
+    learning::apply_codex_result(store, task_id, &raw).map_err(Into::into)
+}
+
 fn claim_explanation_for_run(
     store: &ProjectStore,
     task_id: &str,
@@ -729,6 +952,52 @@ fn claim_explanation_for_run(
     }
     transaction.commit()?;
     understanding::get_explanation_task(store, task_id).map_err(Into::into)
+}
+
+fn claim_learning_for_run(
+    store: &ProjectStore,
+    task_id: &str,
+    runtime: &RuntimeIdentity,
+    resume: bool,
+) -> Result<LearningTask, CodexRunnerError> {
+    let task = learning::get_learning_task(store, task_id)?;
+    if task.handoff_kind != "codex" {
+        return Err(LearningError::InvalidTaskState(task.status).into());
+    }
+    if resume {
+        if !matches!(task.status.as_str(), "failed" | "cancelled" | "interrupted") {
+            return Err(LearningError::InvalidTaskState(task.status).into());
+        }
+    } else if task.status != "queued" {
+        return Err(LearningError::InvalidTaskState(task.status).into());
+    }
+    let directory = learning::task_directory(store, task_id)?;
+    learning::verify_task_package(store, &task, &directory)?;
+    let timestamp = now_ms()?;
+    let expected_status = task.status.clone();
+    let mut connection = store.connect()?;
+    let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    let changed = transaction.execute(
+        "UPDATE learning_tasks
+         SET status = 'running', stage = 'running', progress = 0.1,
+             runner_version = ?3, runner_auth_mode = ?4,
+             runner_thread_id = NULL, cancel_requested_at_ms = NULL,
+             error_code = NULL, error_message = NULL,
+             started_at_ms = ?5, completed_at_ms = NULL, updated_at_ms = ?5
+         WHERE id = ?1 AND status = ?2",
+        params![
+            task_id,
+            expected_status,
+            runtime.version,
+            runtime.auth_mode,
+            timestamp
+        ],
+    )?;
+    if changed != 1 {
+        return Err(LearningError::InvalidTaskState(expected_status).into());
+    }
+    transaction.commit()?;
+    learning::get_learning_task(store, task_id).map_err(Into::into)
 }
 
 fn run_task(
@@ -1574,6 +1843,27 @@ fn finish_explanation_with_error(
     Ok(())
 }
 
+fn finish_learning_with_error(
+    store: &ProjectStore,
+    task_id: &str,
+    error: &CodexRunnerError,
+) -> Result<(), CodexRunnerError> {
+    let timestamp = now_ms()?;
+    let status = if matches!(error, CodexRunnerError::Cancelled) {
+        "cancelled"
+    } else {
+        "failed"
+    };
+    store.connect()?.execute(
+        "UPDATE learning_tasks
+         SET status = ?2, stage = ?2, error_code = ?3, error_message = ?4,
+             completed_at_ms = ?5, updated_at_ms = ?5
+         WHERE id = ?1 AND status IN ('queued', 'running', 'validating')",
+        params![task_id, status, error.code(), error.to_string(), timestamp],
+    )?;
+    Ok(())
+}
+
 fn ensure_not_cancelled(
     store: &ProjectStore,
     task_id: &str,
@@ -1593,7 +1883,10 @@ fn cancellation_requested(store: &ProjectStore, task_id: &str) -> Result<bool, C
              FROM agent_tasks WHERE id = ?1
              UNION ALL
              SELECT cancel_requested_at_ms IS NOT NULL
-             FROM explanation_tasks WHERE id = ?1",
+             FROM explanation_tasks WHERE id = ?1
+             UNION ALL
+             SELECT cancel_requested_at_ms IS NOT NULL
+             FROM learning_tasks WHERE id = ?1",
             params![task_id],
             |row| row.get(0),
         )
@@ -2143,6 +2436,7 @@ mod tests {
     use super::*;
     use crate::{
         domain::CreateLocalProjectInput,
+        learning::{PrepareLearningTaskInput, prepare_learning_task},
         media,
         subtitles::{self, SubtitleCue},
         transcription::{self, StartTranscriptionInput},
@@ -2355,6 +2649,21 @@ mod tests {
             .expect("explanation task should be prepared")
         }
 
+        fn prepare_learning(&self, handoff_kind: &str) -> LearningTask {
+            prepare_learning_task(
+                &self.store,
+                PrepareLearningTaskInput {
+                    project_id: self.project_id.clone(),
+                    handoff_kind: handoff_kind.to_owned(),
+                    source_segment_id: self.segment_ids[0].clone(),
+                    selected_text: "駅前".to_owned(),
+                    selection_kind: "word".to_owned(),
+                    playback_position_ms: 500,
+                },
+            )
+            .expect("learning task should be prepared")
+        }
+
         fn fake_codex(&self) -> PathBuf {
             let root = self
                 .store
@@ -2478,6 +2787,55 @@ process.stdin.on("end", () => {{
                 format!("@echo off\r\nnode \"{}\" %*\r\n", script_path.display()),
             )
             .expect("fake explanation Codex launcher should be written");
+            launcher_path
+        }
+
+        fn fake_learning_codex(&self, task: &LearningTask) -> PathBuf {
+            let root = self
+                .store
+                .data_directory()
+                .parent()
+                .expect("fixture data directory should have a parent");
+            let script_path = root.join("fake-learning-codex.js");
+            let result = serde_json::to_string(&json!({
+                "protocolVersion": task.protocol_version,
+                "taskId": task.id,
+                "sourceVersionId": task.source_version_id,
+                "sourceSegmentId": task.source_segment_id,
+                "selectedText": task.selected_text,
+                "selectionKind": task.selection_kind,
+                "pronunciation": "えきまえ",
+                "partOfSpeech": "名词",
+                "contextualMeaning": "车站前；当前台词约定在这里见面。",
+                "usageNote": "由「駅」和「前」组成。"
+            }))
+            .expect("result should serialize");
+            fs::write(
+                &script_path,
+                format!(
+                    r#"const fs = require("node:fs");
+const path = require("node:path");
+const args = process.argv.slice(2);
+const resultIndex = args.indexOf("--output-last-message");
+if (resultIndex < 0) process.exit(7);
+process.stdin.resume();
+process.stdin.on("end", () => {{
+  fs.writeFileSync(path.resolve(args[resultIndex + 1]), {result:?}, "utf8");
+  process.stdout.write(
+    '{{"type":"thread.started","thread_id":"learning-thread"}}\n' +
+    '{{"type":"turn.completed"}}\n'
+  );
+}});
+"#
+                ),
+            )
+            .expect("fake learning Codex should be written");
+            let launcher_path = root.join("fake-learning-codex.cmd");
+            fs::write(
+                &launcher_path,
+                format!("@echo off\r\nnode \"{}\" %*\r\n", script_path.display()),
+            )
+            .expect("fake learning Codex launcher should be written");
             launcher_path
         }
     }
@@ -2665,6 +3023,20 @@ process.stdin.on("end", () => {{
     }
 
     #[test]
+    fn manual_learning_queries_can_be_cancelled_without_starting_a_runner() {
+        let fixture = RunnerFixture::new(2);
+        let task = fixture.prepare_learning("manual");
+
+        let cancelled =
+            cancel_learning_task(&fixture.store, &task.id).expect("learning task should cancel");
+
+        assert_eq!(cancelled.status, "cancelled");
+        assert_eq!(cancelled.stage, "cancelled");
+        let next = fixture.prepare_learning("manual");
+        assert_eq!(next.status, "awaiting_external_result");
+    }
+
+    #[test]
     fn startup_recovery_interrupts_codex_and_preserves_manual_waiting_tasks() {
         let fixture = RunnerFixture::new(2);
         let codex_task = fixture.prepare("codex");
@@ -2823,6 +3195,45 @@ process.stdin.on("end", () => {{
             task.frames.len()
         );
         assert!(run_directory.join("events.jsonl").is_file());
+    }
+
+    #[test]
+    fn fake_codex_creates_a_validated_contextual_dictionary_entry() {
+        let fixture = RunnerFixture::new(2);
+        let task = fixture.prepare_learning("codex");
+        let identity = runtime(fixture.fake_learning_codex(&task));
+        claim_learning_for_run(&fixture.store, &task.id, &identity, false)
+            .expect("learning task should enter running");
+
+        let application = run_learning_task(
+            &fixture.store,
+            &task.id,
+            &identity,
+            Duration::from_secs(10),
+            &AtomicBool::new(false),
+        )
+        .expect("fake Codex should explain the selected text");
+
+        assert_eq!(application.task.status, "completed");
+        assert_eq!(application.dictionary_entry.selected_text, "駅前");
+        assert_eq!(application.dictionary_entry.pronunciation, "えきまえ");
+        assert_eq!(
+            application.task.output_dictionary_entry_id.as_deref(),
+            Some(application.dictionary_entry.id.as_str())
+        );
+        assert!(
+            learning::task_directory(&fixture.store, &task.id)
+                .expect("task directory should exist")
+                .join("runtime")
+                .read_dir()
+                .expect("runtime directory should list")
+                .next()
+                .expect("run directory should exist")
+                .expect("run directory entry should read")
+                .path()
+                .join("events.jsonl")
+                .is_file()
+        );
     }
 
     #[test]

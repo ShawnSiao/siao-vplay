@@ -426,6 +426,7 @@ pub fn delete_project(
     transcription::cancel_project_transcriptions(store.inner(), &project_id)?;
     codex_runner::cancel_project_translation_tasks(store.inner(), &project_id)?;
     codex_runner::cancel_project_explanation_tasks(store.inner(), &project_id)?;
+    codex_runner::cancel_project_learning_tasks(store.inner(), &project_id)?;
     store.delete_project(&project_id).map_err(Into::into)
 }
 
@@ -892,6 +893,40 @@ pub async fn import_learning_result(
     let store = store.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
         learning::import_learning_result(&store, input).map_err(CommandError::from)
+    })
+    .await
+    .map_err(CommandError::background_task_failed)?
+}
+
+#[tauri::command]
+pub async fn start_codex_learning_task(
+    store: State<'_, ProjectStore>,
+    input: StartCodexTranslationInput,
+) -> Result<LearningTask, CommandError> {
+    let store = store.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        codex_runner::start_codex_learning_task(&store, input).map_err(CommandError::from)
+    })
+    .await
+    .map_err(CommandError::background_task_failed)?
+}
+
+#[tauri::command]
+pub fn cancel_learning_task(
+    store: State<'_, ProjectStore>,
+    task_id: String,
+) -> Result<LearningTask, CommandError> {
+    codex_runner::cancel_learning_task(store.inner(), &task_id).map_err(Into::into)
+}
+
+#[tauri::command]
+pub async fn resume_codex_learning_task(
+    store: State<'_, ProjectStore>,
+    input: StartCodexTranslationInput,
+) -> Result<LearningTask, CommandError> {
+    let store = store.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        codex_runner::resume_codex_learning_task(&store, input).map_err(CommandError::from)
     })
     .await
     .map_err(CommandError::background_task_failed)?
