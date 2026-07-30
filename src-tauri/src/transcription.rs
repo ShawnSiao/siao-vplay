@@ -986,7 +986,7 @@ fn verify_job_assets(job: &StoredJob) -> Result<(RuntimeBundle, ModelBundle), Tr
     Ok((runtime, model))
 }
 
-fn run_job(
+pub(crate) fn run_job(
     store: &ProjectStore,
     job_id: &str,
     cancellation: &AtomicBool,

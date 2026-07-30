@@ -1755,7 +1755,7 @@ impl ProcessGroup {
 
 #[cfg(test)]
 mod tests {
-    use std::{fs, io::Cursor, sync::atomic::AtomicBool, time::Duration};
+    use std::{env, fs, io::Cursor, process::Command, sync::atomic::AtomicBool, time::Duration};
 
     use rusqlite::params;
     use tempfile::TempDir;
@@ -1763,8 +1763,13 @@ mod tests {
     use super::*;
     use crate::{
         domain::CreateLocalProjectInput,
+        media,
         subtitles::{self, SubtitleCue},
-        translation::{PrepareTranslationTaskInput, prepare_translation_task},
+        transcription::{self, StartTranscriptionInput},
+        translation::{
+            ImportTranslationResultInput, PrepareTranslationTaskInput, import_translation_result,
+            prepare_translation_task,
+        },
     };
 
     struct RunnerFixture {
@@ -2380,6 +2385,271 @@ process.stdin.on("end", () => {
             "{}",
             serde_json::to_string(&application.subtitle_version.segments)
                 .expect("validation result should serialize")
+        );
+    }
+
+    #[derive(serde::Deserialize)]
+    struct RealTranscriptionFixture {
+        language: String,
+        audio_path: String,
+    }
+
+    fn mux_real_fixture(ffmpeg: &Path, audio_path: &str, media_path: &Path) {
+        let mut command = Command::new(ffmpeg);
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            command.creation_flags(0x0800_0000);
+        }
+        let status = command
+            .args([
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-nostdin",
+                "-y",
+                "-f",
+                "lavfi",
+                "-i",
+                "color=c=black:s=320x180:r=25",
+                "-i",
+            ])
+            .arg(audio_path)
+            .args(["-shortest", "-c:v", "mpeg4", "-q:v", "5", "-c:a", "aac"])
+            .arg(media_path)
+            .status()
+            .expect("real fixture mux should launch");
+        assert!(status.success(), "real fixture mux should succeed");
+    }
+
+    fn run_manual_prompt_handoff(
+        store: &ProjectStore,
+        task: &TranslationTask,
+        runtime: &RuntimeIdentity,
+        result_path: &Path,
+    ) -> TranslationApplication {
+        let task_directory =
+            translation::task_directory(store, &task.id).expect("task directory should exist");
+        let prompt = translation::read_translation_prompt(store, &task.id)
+            .expect("manual prompt should be readable");
+        let schema = serde_json::from_slice::<Value>(
+            &fs::read(task_directory.join("result.schema.json"))
+                .expect("manual result schema should be readable"),
+        )
+        .expect("manual result schema should parse");
+        let attempt_directory = task_directory.join("manual-agent-validation");
+        fs::create_dir_all(&attempt_directory)
+            .expect("manual validation directory should be created");
+        let (result, _) = invoke_codex(
+            store,
+            &task.id,
+            runtime,
+            &attempt_directory,
+            prompt,
+            &schema,
+            Duration::from_secs(300),
+            &AtomicBool::new(false),
+        )
+        .expect("external Agent should complete the copied manual prompt");
+        validate_batch_result(task, &task.authorized_segment_ids, &result)
+            .expect("manual Agent result should cover only the authorized segments");
+        fs::write(
+            result_path,
+            serde_json::to_vec_pretty(&result).expect("manual result should serialize"),
+        )
+        .expect("manual result file should be written");
+        import_translation_result(
+            store,
+            ImportTranslationResultInput {
+                task_id: task.id.clone(),
+                result_path: result_path.to_string_lossy().into_owned(),
+            },
+        )
+        .expect("manual result should import as a Chinese subtitle version")
+    }
+
+    fn assert_real_chinese_translation(
+        language: &str,
+        source: &subtitles::SubtitleVersion,
+        application: &TranslationApplication,
+    ) {
+        let translated = &application.subtitle_version;
+        assert_eq!(application.task.status, "completed", "{language}");
+        assert_eq!(translated.language_code, TARGET_LANGUAGE, "{language}");
+        assert_eq!(translated.role, "translation", "{language}");
+        assert_eq!(
+            translated.segments.len(),
+            source.segments.len(),
+            "{language}"
+        );
+        assert!(
+            translated.segments.iter().any(|segment| segment
+                .text
+                .chars()
+                .any(|character| { ('\u{4e00}'..='\u{9fff}').contains(&character) })),
+            "{language} translation should contain Chinese text"
+        );
+        assert!(
+            source.segments.iter().zip(&translated.segments).all(
+                |(source_segment, translated_segment)| {
+                    translated_segment.source_segment_id.as_deref()
+                        == Some(source_segment.id.as_str())
+                        && !translated_segment.text.trim().is_empty()
+                        && translated_segment.text.trim() != source_segment.text.trim()
+                }
+            ),
+            "{language} translation should preserve segment lineage and replace source text"
+        );
+    }
+
+    #[test]
+    #[ignore = "requires real four-language fixtures, pinned W: runtimes, and authenticated Codex"]
+    fn real_four_language_transcriptions_translate_through_both_handoffs() {
+        assert_eq!(
+            env::var("SIAOVPLAY_RUN_REAL_CODEX").as_deref(),
+            Ok("1"),
+            "set SIAOVPLAY_RUN_REAL_CODEX=1 for the explicit real Agent check"
+        );
+        let manifest_path = env::var_os("SIAOVPLAY_TRANSCRIPTION_FIXTURE_MANIFEST")
+            .map(PathBuf::from)
+            .expect("SIAOVPLAY_TRANSCRIPTION_FIXTURE_MANIFEST must be set");
+        let fixtures: Vec<RealTranscriptionFixture> =
+            serde_json::from_slice(&fs::read(manifest_path).expect("fixture manifest should load"))
+                .expect("fixture manifest should parse");
+        let evidence_root = env::var_os("SIAOVPLAY_PHASE3E_EVIDENCE_DIR")
+            .map(PathBuf::from)
+            .expect("SIAOVPLAY_PHASE3E_EVIDENCE_DIR must be set");
+        fs::create_dir_all(&evidence_root).expect("evidence directory should be created");
+        let temporary = tempfile::Builder::new()
+            .prefix("real-four-language-")
+            .tempdir_in(&evidence_root)
+            .expect("W: validation directory should support temporary files");
+        let store = ProjectStore::open(
+            temporary
+                .path()
+                .join("data")
+                .join("projects")
+                .join("siaovplay.db"),
+        )
+        .expect("validation store should open");
+        let ffmpeg = media::ffmpeg_path().expect("FFmpeg runtime should resolve");
+        let runtime = require_ready_codex().expect("real Codex should be ready");
+        let routes = [
+            ("en", "codex"),
+            ("th", "manual"),
+            ("ja", "codex"),
+            ("ko", "manual"),
+        ];
+        let mut summaries = Vec::new();
+
+        for (language, handoff_kind) in routes {
+            let fixture = fixtures
+                .iter()
+                .find(|fixture| fixture.language == language)
+                .expect("each MVP language needs a fixture");
+            let media_path = temporary.path().join(format!("{language}.mp4"));
+            mux_real_fixture(&ffmpeg, &fixture.audio_path, &media_path);
+            let project = store
+                .create_local_project(CreateLocalProjectInput {
+                    media_path: media_path.to_string_lossy().into_owned(),
+                    title: Some(format!("{language} real translation validation")),
+                })
+                .expect("real media project should be created");
+            let transcription_job = transcription::start_transcription(
+                &store,
+                StartTranscriptionInput {
+                    project_id: project.id.clone(),
+                    language_code: language.to_owned(),
+                    model_kind: "small".to_owned(),
+                    confirm_replace_original: false,
+                },
+            )
+            .expect("real transcription job should be created");
+            transcription::run_job(&store, &transcription_job.id, &AtomicBool::new(false))
+                .expect("real transcription should complete");
+            let source = subtitles::list_subtitle_versions(&store, &project.id)
+                .expect("real source subtitle should be readable")
+                .into_iter()
+                .find(|version| version.role == "original")
+                .expect("real transcription should create an original subtitle");
+            assert!(!source.segments.is_empty(), "{language}");
+
+            let task = prepare_translation_task(
+                &store,
+                PrepareTranslationTaskInput {
+                    project_id: project.id.clone(),
+                    handoff_kind: handoff_kind.to_owned(),
+                    segment_ids: None,
+                },
+            )
+            .expect("translation task should be prepared");
+            let task_directory = translation::task_directory(&store, &task.id)
+                .expect("translation task directory should exist");
+            let exposed_task_text = [
+                fs::read_to_string(task_directory.join("task.json"))
+                    .expect("task manifest should be readable"),
+                fs::read_to_string(task_directory.join("prompt.md"))
+                    .expect("task prompt should be readable"),
+            ]
+            .join("\n");
+            for private_path in [
+                fixture.audio_path.as_str(),
+                media_path
+                    .to_str()
+                    .expect("temporary validation media path should be UTF-8"),
+            ] {
+                assert!(
+                    !exposed_task_text.contains(private_path),
+                    "{language} task package must not expose a local media path"
+                );
+            }
+            let application = if handoff_kind == "codex" {
+                claim_task_for_run(&store, &task.id, &runtime, false)
+                    .expect("Codex task should enter running");
+                run_task(
+                    &store,
+                    &task.id,
+                    &runtime,
+                    Duration::from_secs(300),
+                    &AtomicBool::new(false),
+                )
+                .expect("Codex handoff should create a Chinese subtitle")
+            } else {
+                run_manual_prompt_handoff(
+                    &store,
+                    &task,
+                    &runtime,
+                    &temporary
+                        .path()
+                        .join(format!("{language}-manual-result.json")),
+                )
+            };
+            assert_real_chinese_translation(language, &source, &application);
+            summaries.push(serde_json::json!({
+                "language": language,
+                "handoffKind": handoff_kind,
+                "sourceSegmentCount": source.segments.len(),
+                "translationSegmentCount": application.subtitle_version.segments.len(),
+                "sourceSample": source.segments.first().map(|segment| &segment.text),
+                "translationSample": application.subtitle_version.segments.first().map(|segment| &segment.text),
+                "taskStatus": application.task.status,
+                "translationLanguageCode": application.subtitle_version.language_code
+            }));
+        }
+
+        let evidence = serde_json::json!({
+            "validation": "phase-3e-real-four-language-translation",
+            "routes": summaries
+        });
+        let evidence_path = evidence_root.join("real-four-language-translation.json");
+        fs::write(
+            &evidence_path,
+            serde_json::to_vec_pretty(&evidence).expect("evidence should serialize"),
+        )
+        .expect("validation evidence should be written");
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&evidence).expect("evidence should serialize")
         );
     }
 }
