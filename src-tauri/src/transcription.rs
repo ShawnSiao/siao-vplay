@@ -324,12 +324,6 @@ fn hidden_command(program: &Path) -> Command {
     command
 }
 
-fn runtime_root() -> Option<PathBuf> {
-    env::var_os("SIAOVPLAY_RUNTIME_DIR")
-        .filter(|value| !value.is_empty())
-        .map(PathBuf::from)
-}
-
 fn runtime_directory(backend: &str) -> Result<PathBuf, TranscriptionError> {
     let override_name = if backend == "vulkan" {
         "SIAOVPLAY_WHISPER_VULKAN_DIR"
@@ -342,16 +336,74 @@ fn runtime_directory(backend: &str) -> Result<PathBuf, TranscriptionError> {
     {
         return Ok(path);
     }
-    let root = runtime_root().ok_or_else(|| {
-        TranscriptionError::RuntimeUnavailable(
-            "未设置 SIAOVPLAY_RUNTIME_DIR，且没有指定 Whisper 运行时目录".to_owned(),
-        )
-    })?;
-    Ok(root.join(if backend == "vulkan" {
+    let runtime_root = env::var_os("SIAOVPLAY_RUNTIME_DIR")
+        .filter(|value| !value.is_empty())
+        .map(PathBuf::from);
+    let executable_path = env::current_exe().ok();
+    resolve_runtime_directory(backend, runtime_root.as_deref(), executable_path.as_deref())
+}
+
+fn resolve_runtime_directory(
+    backend: &str,
+    runtime_root: Option<&Path>,
+    executable_path: Option<&Path>,
+) -> Result<PathBuf, TranscriptionError> {
+    let directory_name = if backend == "vulkan" {
         "whisper-vulkan"
     } else {
         "whisper"
-    }))
+    };
+    let candidates = runtime_directory_candidates(directory_name, runtime_root, executable_path);
+    candidates
+        .iter()
+        .find(|path| path.is_dir())
+        .cloned()
+        .ok_or_else(|| {
+            let checked = candidates
+                .iter()
+                .take(16)
+                .map(|path| path.display().to_string())
+                .collect::<Vec<_>>()
+                .join("；");
+            TranscriptionError::RuntimeUnavailable(format!(
+                "找不到 Whisper {backend} 运行时。可以设置 {override_name} 或 SIAOVPLAY_RUNTIME_DIR，或将运行时放在应用相邻的 runtimes、runtime 或 resources 目录。已检查：{checked}",
+                override_name = if backend == "vulkan" {
+                    "SIAOVPLAY_WHISPER_VULKAN_DIR"
+                } else {
+                    "SIAOVPLAY_WHISPER_CPU_DIR"
+                }
+            ))
+        })
+}
+
+fn runtime_directory_candidates(
+    directory_name: &str,
+    runtime_root: Option<&Path>,
+    executable_path: Option<&Path>,
+) -> Vec<PathBuf> {
+    let mut candidates = Vec::new();
+    if let Some(runtime_root) = runtime_root {
+        push_unique(&mut candidates, runtime_root.join(directory_name));
+    }
+    if let Some(executable_directory) = executable_path.and_then(Path::parent) {
+        for ancestor in executable_directory
+            .ancestors()
+            .take(5)
+            .take_while(|ancestor| ancestor.parent().is_some())
+        {
+            for relative_directory in [
+                Path::new("runtimes").join(directory_name),
+                Path::new("runtime").join(directory_name),
+                Path::new("resources").join("runtimes").join(directory_name),
+                Path::new("resources").join("runtime").join(directory_name),
+                Path::new("resources").join(directory_name),
+                PathBuf::from(directory_name),
+            ] {
+                push_unique(&mut candidates, ancestor.join(relative_directory));
+            }
+        }
+    }
+    candidates
 }
 
 fn verify_runtime(backend: &'static str) -> Result<RuntimeBundle, TranscriptionError> {
@@ -456,17 +508,79 @@ fn model_path(kind: TranscriptionModelKind) -> Result<PathBuf, TranscriptionErro
     {
         return Ok(path);
     }
-    let root = env::var_os("SIAOVPLAY_MODEL_DIR")
+    let model_root = env::var_os("SIAOVPLAY_MODEL_DIR")
         .filter(|value| !value.is_empty())
-        .map(PathBuf::from)
+        .map(PathBuf::from);
+    let executable_path = env::current_exe().ok();
+    resolve_model_path(kind, model_root.as_deref(), executable_path.as_deref())
+}
+
+fn resolve_model_path(
+    kind: TranscriptionModelKind,
+    model_root: Option<&Path>,
+    executable_path: Option<&Path>,
+) -> Result<PathBuf, TranscriptionError> {
+    let file_name = format!("ggml-{}.bin", kind.as_str());
+    let candidates = model_candidates(&file_name, model_root, executable_path);
+    candidates
+        .iter()
+        .find(|path| path.is_file())
+        .cloned()
         .ok_or_else(|| {
+            let checked = candidates
+                .iter()
+                .take(16)
+                .map(|path| path.display().to_string())
+                .collect::<Vec<_>>()
+                .join("；");
             TranscriptionError::ModelUnavailable(
-                "未设置 SIAOVPLAY_MODEL_DIR，且没有指定 Whisper 模型文件".to_owned(),
+                format!(
+                    "找不到 Whisper {} 模型。可以设置 SIAOVPLAY_MODEL_DIR 或对应的模型文件环境变量，或将模型放在应用相邻的 models 目录。已检查：{checked}",
+                    kind.as_str()
+                ),
             )
-        })?;
-    Ok(root
-        .join("whisper")
-        .join(format!("ggml-{}.bin", kind.as_str())))
+        })
+}
+
+fn model_candidates(
+    file_name: &str,
+    model_root: Option<&Path>,
+    executable_path: Option<&Path>,
+) -> Vec<PathBuf> {
+    let mut candidates = Vec::new();
+    if let Some(model_root) = model_root {
+        push_unique(&mut candidates, model_root.join("whisper").join(file_name));
+        push_unique(&mut candidates, model_root.join(file_name));
+    }
+    if let Some(executable_directory) = executable_path.and_then(Path::parent) {
+        for ancestor in executable_directory
+            .ancestors()
+            .take(5)
+            .take_while(|ancestor| ancestor.parent().is_some())
+        {
+            for relative_file in [
+                Path::new("models").join("whisper").join(file_name),
+                Path::new("resources")
+                    .join("models")
+                    .join("whisper")
+                    .join(file_name),
+                Path::new("resources")
+                    .join("whisper-models")
+                    .join(file_name),
+                Path::new("whisper-models").join(file_name),
+                Path::new("resources").join("whisper").join(file_name),
+            ] {
+                push_unique(&mut candidates, ancestor.join(relative_file));
+            }
+        }
+    }
+    candidates
+}
+
+fn push_unique(candidates: &mut Vec<PathBuf>, path: PathBuf) {
+    if !candidates.contains(&path) {
+        candidates.push(path);
+    }
 }
 
 fn verify_model(kind: TranscriptionModelKind) -> Result<ModelBundle, TranscriptionError> {
@@ -1632,6 +1746,77 @@ mod tests {
             })
             .expect("project should be created");
         (temp, store, project.id)
+    }
+
+    #[test]
+    fn bundled_runtime_is_discovered_from_executable_ancestors() {
+        let temp = tempfile::tempdir().expect("temp directory should work");
+        let executable = temp.path().join("app").join("bin").join("SiaoVPlay.exe");
+        let bundled_runtime = temp
+            .path()
+            .join("app")
+            .join("resources")
+            .join("runtimes")
+            .join("whisper");
+        fs::create_dir_all(&bundled_runtime).expect("runtime fixture should be created");
+
+        let resolved = resolve_runtime_directory("cpu", None, Some(&executable))
+            .expect("bundled runtime should be discovered");
+
+        assert_eq!(resolved, bundled_runtime);
+    }
+
+    #[test]
+    fn bundled_model_is_discovered_from_executable_ancestors() {
+        let temp = tempfile::tempdir().expect("temp directory should work");
+        let executable = temp.path().join("app").join("bin").join("SiaoVPlay.exe");
+        let bundled_model = temp
+            .path()
+            .join("app")
+            .join("models")
+            .join("whisper")
+            .join("ggml-small.bin");
+        fs::create_dir_all(
+            bundled_model
+                .parent()
+                .expect("model fixture should have a parent"),
+        )
+        .expect("model directory should be created");
+        fs::write(&bundled_model, b"model").expect("model fixture should be written");
+
+        let resolved = resolve_model_path(TranscriptionModelKind::Small, None, Some(&executable))
+            .expect("bundled model should be discovered");
+
+        assert_eq!(resolved, bundled_model);
+    }
+
+    #[test]
+    fn configured_roots_take_precedence_over_bundled_candidates() {
+        let temp = tempfile::tempdir().expect("temp directory should work");
+        let executable = temp.path().join("app").join("SiaoVPlay.exe");
+        let runtime_root = temp.path().join("configured-runtimes");
+        let runtime = runtime_root.join("whisper-vulkan");
+        fs::create_dir_all(&runtime).expect("runtime fixture should be created");
+        let model_root = temp.path().join("configured-models");
+        let model = model_root.join("whisper").join("ggml-base.bin");
+        fs::create_dir_all(model.parent().expect("model fixture should have a parent"))
+            .expect("model directory should be created");
+        fs::write(&model, b"model").expect("model fixture should be written");
+
+        assert_eq!(
+            resolve_runtime_directory("vulkan", Some(&runtime_root), Some(&executable))
+                .expect("configured runtime should be discovered"),
+            runtime
+        );
+        assert_eq!(
+            resolve_model_path(
+                TranscriptionModelKind::Base,
+                Some(&model_root),
+                Some(&executable)
+            )
+            .expect("configured model should be discovered"),
+            model
+        );
     }
 
     #[test]
