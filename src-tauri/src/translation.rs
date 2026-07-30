@@ -517,6 +517,15 @@ fn validate_and_apply_result(
     persist_translation_result(store, &task, &source, raw, delivery_kind, validated)
 }
 
+pub(crate) fn apply_codex_result(
+    store: &ProjectStore,
+    task_id: &str,
+    raw: &str,
+) -> Result<TranslationApplication, TranslationError> {
+    set_task_validating(store, task_id, "running")?;
+    validate_and_apply_result(store, task_id, raw, "codex")
+}
+
 fn validate_result(
     task: &TranslationTask,
     source: &SourceSubtitle,
@@ -1332,7 +1341,10 @@ fn canonical_result_path(input: &str) -> Result<PathBuf, TranslationError> {
     Ok(dunce::canonicalize(path)?)
 }
 
-fn task_directory(store: &ProjectStore, task_id: &str) -> Result<PathBuf, TranslationError> {
+pub(crate) fn task_directory(
+    store: &ProjectStore,
+    task_id: &str,
+) -> Result<PathBuf, TranslationError> {
     validate_task_id(task_id)?;
     let path = store.data_directory().join("agent-tasks").join(task_id);
     if !path.is_dir() {
@@ -1341,7 +1353,7 @@ fn task_directory(store: &ProjectStore, task_id: &str) -> Result<PathBuf, Transl
     Ok(path)
 }
 
-fn verify_task_package(
+pub(crate) fn verify_task_package(
     store: &ProjectStore,
     task_id: &str,
     directory: &Path,

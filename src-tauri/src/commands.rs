@@ -2,6 +2,7 @@ use serde::Serialize;
 use tauri::{AppHandle, Manager, State};
 
 use crate::{
+    codex_runner::{self, CodexRunnerError, CodexRuntimeStatus, StartCodexTranslationInput},
     domain::{
         CreateLocalProjectInput, DeleteProjectResult, PrepareProjectMediaInput, Project,
         RelinkProjectMediaInput, UpdatePlaybackStateInput,
@@ -255,6 +256,15 @@ impl From<TranslationError> for CommandError {
     }
 }
 
+impl From<CodexRunnerError> for CommandError {
+    fn from(error: CodexRunnerError) -> Self {
+        Self {
+            code: error.code(),
+            message: error.to_string(),
+        }
+    }
+}
+
 impl CommandError {
     fn background_task_failed(message: impl ToString) -> Self {
         Self {
@@ -382,6 +392,7 @@ pub fn delete_project(
     project_id: String,
 ) -> Result<DeleteProjectResult, CommandError> {
     transcription::cancel_project_transcriptions(store.inner(), &project_id)?;
+    codex_runner::cancel_project_translation_tasks(store.inner(), &project_id)?;
     store.delete_project(&project_id).map_err(Into::into)
 }
 
@@ -607,6 +618,47 @@ pub async fn import_translation_result(
     let store = store.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
         translation::import_translation_result(&store, input).map_err(CommandError::from)
+    })
+    .await
+    .map_err(CommandError::background_task_failed)?
+}
+
+#[tauri::command]
+pub async fn get_codex_runtime_status() -> Result<CodexRuntimeStatus, CommandError> {
+    tauri::async_runtime::spawn_blocking(codex_runner::get_codex_runtime_status)
+        .await
+        .map_err(CommandError::background_task_failed)
+}
+
+#[tauri::command]
+pub async fn start_codex_translation_task(
+    store: State<'_, ProjectStore>,
+    input: StartCodexTranslationInput,
+) -> Result<TranslationTask, CommandError> {
+    let store = store.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        codex_runner::start_codex_translation_task(&store, input).map_err(CommandError::from)
+    })
+    .await
+    .map_err(CommandError::background_task_failed)?
+}
+
+#[tauri::command]
+pub fn cancel_translation_task(
+    store: State<'_, ProjectStore>,
+    input: TranslationTaskInput,
+) -> Result<TranslationTask, CommandError> {
+    codex_runner::cancel_translation_task(store.inner(), &input.task_id).map_err(Into::into)
+}
+
+#[tauri::command]
+pub async fn resume_codex_translation_task(
+    store: State<'_, ProjectStore>,
+    input: StartCodexTranslationInput,
+) -> Result<TranslationTask, CommandError> {
+    let store = store.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        codex_runner::resume_codex_translation_task(&store, input).map_err(CommandError::from)
     })
     .await
     .map_err(CommandError::background_task_failed)?

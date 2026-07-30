@@ -14,6 +14,7 @@ import type {
   SubtitleVersion,
   TranscriptionJob,
   TranscriptionRuntimeStatus,
+  CodexRuntimeStatus,
   TranslationApplication,
   TranslationTask,
   YouTubeMediaPreview,
@@ -418,6 +419,36 @@ export async function importTranslationResult(
 ): Promise<TranslationApplication> {
   return invoke<TranslationApplication>("import_translation_result", {
     input: { taskId, resultPath },
+  });
+}
+
+export async function getCodexRuntimeStatus(): Promise<CodexRuntimeStatus> {
+  return invoke<CodexRuntimeStatus>("get_codex_runtime_status");
+}
+
+export async function startCodexTranslationTask(
+  taskId: string,
+  timeoutSeconds?: number,
+): Promise<TranslationTask> {
+  return invoke<TranslationTask>("start_codex_translation_task", {
+    input: { taskId, timeoutSeconds },
+  });
+}
+
+export async function cancelTranslationTask(
+  taskId: string,
+): Promise<TranslationTask> {
+  return invoke<TranslationTask>("cancel_translation_task", {
+    input: { taskId },
+  });
+}
+
+export async function resumeCodexTranslationTask(
+  taskId: string,
+  timeoutSeconds?: number,
+): Promise<TranslationTask> {
+  return invoke<TranslationTask>("resume_codex_translation_task", {
+    input: { taskId, timeoutSeconds },
   });
 }
 

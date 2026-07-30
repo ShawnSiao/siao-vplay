@@ -363,3 +363,14 @@ export type TranslationApplication = {
   subtitleVersion: SubtitleVersion;
   validation: TranslationValidation;
 };
+
+export type CodexRuntimeStatus = {
+  available: boolean;
+  authenticated: boolean;
+  supported: boolean;
+  version: string | null;
+  authMode: "chatgpt" | "api_key" | null;
+  minimumVersion: string;
+  errorCode: string | null;
+  errorMessage: string | null;
+};
