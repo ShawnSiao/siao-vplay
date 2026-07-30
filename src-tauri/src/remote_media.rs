@@ -1307,8 +1307,21 @@ mod tests {
     fn real_https_hls_vod_can_be_mirrored_remuxed_and_probed() {
         let url = std::env::var("SIAOVPLAY_TEST_HLS_URL")
             .expect("set SIAOVPLAY_TEST_HLS_URL to an authorized HLS VOD URL");
+        let validation_directory =
+            std::env::var_os("SIAOVPLAY_LONG_MEDIA_VALIDATION_DIR").map(PathBuf::from);
+        if let Some(directory) = validation_directory.as_ref() {
+            assert!(
+                !directory.exists(),
+                "SIAOVPLAY_LONG_MEDIA_VALIDATION_DIR must not already exist: {}",
+                directory.display()
+            );
+        }
         let temporary = tempfile::tempdir().unwrap();
-        let store = ProjectStore::open(temporary.path().join("projects").join("test.db")).unwrap();
+        let data_directory = validation_directory
+            .as_deref()
+            .unwrap_or_else(|| temporary.path());
+        let database_path = data_directory.join("projects").join("test.db");
+        let store = ProjectStore::open(&database_path).unwrap();
         let preview =
             inspect_remote_media_url(InspectRemoteMediaUrlInput { url: url.clone() }).unwrap();
         assert_eq!(preview.media_kind, RemoteMediaKind::Hls);
@@ -1316,7 +1329,7 @@ mod tests {
         let project = import_remote_media_url(
             &store,
             ImportRemoteMediaUrlInput {
-                url,
+                url: url.clone(),
                 expected_preview_token: preview.preview_token,
                 operation_id: Uuid::new_v4().to_string(),
                 title: None,
@@ -1331,5 +1344,52 @@ mod tests {
                 .and_then(|value| value.to_str()),
             Some("mkv")
         );
+
+        let inspection = media::inspect_project_media(&store, &project.id).unwrap();
+        let duration_ms = inspection
+            .probe
+            .duration_ms
+            .expect("the long-form HLS fixture should expose a duration");
+        assert!(
+            duration_ms >= 9 * 60 * 1_000,
+            "expected at least nine minutes of media, got {duration_ms} ms"
+        );
+        let resumed_position_ms = 8 * 60 * 1_000;
+        store
+            .update_playback_state(crate::domain::UpdatePlaybackStateInput {
+                project_id: project.id.clone(),
+                position_ms: resumed_position_ms,
+                duration_ms: Some(duration_ms),
+                volume: 0.65,
+                playback_rate: 1.0,
+                subtitle_mode: crate::domain::SubtitleDisplayMode::Bilingual,
+            })
+            .unwrap();
+
+        drop(store);
+        let reopened_store = ProjectStore::open(&database_path).unwrap();
+        let restored = reopened_store.get_project(&project.id).unwrap();
+        assert_eq!(
+            restored.media_source.origin_url.as_deref(),
+            Some(url.as_str())
+        );
+        assert_eq!(restored.media_source.locator, project.media_source.locator);
+        assert_eq!(restored.playback_state.position_ms, resumed_position_ms);
+        assert_eq!(
+            restored.playback_state.subtitle_mode,
+            crate::domain::SubtitleDisplayMode::Bilingual
+        );
+        assert!(Path::new(&restored.media_source.locator).is_file());
+
+        if let Some(directory) = validation_directory {
+            println!(
+                "persistent long-media evidence: directory={}, project_id={}, media={}, duration_ms={}, sha256={}",
+                directory.display(),
+                project.id,
+                restored.media_source.locator,
+                duration_ms,
+                inspection.source_sha256
+            );
+        }
     }
 }
