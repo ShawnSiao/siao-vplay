@@ -21,6 +21,10 @@ use crate::{
         self, StartTranscriptionInput, TranscriptionError, TranscriptionJob, TranscriptionJobInput,
         TranscriptionRuntimeStatus,
     },
+    translation::{
+        self, ImportTranslationResultInput, PrepareTranslationTaskInput, TranslationApplication,
+        TranslationError, TranslationTask, TranslationTaskInput,
+    },
     youtube_media::{
         self, CancelYouTubeImportInput, ImportYouTubeUrlInput, InspectYouTubeUrlInput,
         YouTubeMediaError, YouTubeMediaPreview,
@@ -237,6 +241,15 @@ impl From<TranscriptionError> for CommandError {
         };
         Self {
             code,
+            message: error.to_string(),
+        }
+    }
+}
+
+impl From<TranslationError> for CommandError {
+    fn from(error: TranslationError) -> Self {
+        Self {
+            code: error.code(),
             message: error.to_string(),
         }
     }
@@ -544,6 +557,56 @@ pub async fn resume_transcription_job(
         let job = transcription::resume_transcription_job(&store, &input.job_id)?;
         transcription::spawn_transcription_job(store, job.id.clone())?;
         Ok(job)
+    })
+    .await
+    .map_err(CommandError::background_task_failed)?
+}
+
+#[tauri::command]
+pub async fn prepare_translation_task(
+    store: State<'_, ProjectStore>,
+    input: PrepareTranslationTaskInput,
+) -> Result<TranslationTask, CommandError> {
+    let store = store.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        translation::prepare_translation_task(&store, input).map_err(CommandError::from)
+    })
+    .await
+    .map_err(CommandError::background_task_failed)?
+}
+
+#[tauri::command]
+pub fn get_translation_task(
+    store: State<'_, ProjectStore>,
+    input: TranslationTaskInput,
+) -> Result<TranslationTask, CommandError> {
+    translation::get_translation_task(store.inner(), &input.task_id).map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn list_translation_tasks(
+    store: State<'_, ProjectStore>,
+    project_id: String,
+) -> Result<Vec<TranslationTask>, CommandError> {
+    translation::list_translation_tasks(store.inner(), &project_id).map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn read_translation_prompt(
+    store: State<'_, ProjectStore>,
+    input: TranslationTaskInput,
+) -> Result<String, CommandError> {
+    translation::read_translation_prompt(store.inner(), &input.task_id).map_err(Into::into)
+}
+
+#[tauri::command]
+pub async fn import_translation_result(
+    store: State<'_, ProjectStore>,
+    input: ImportTranslationResultInput,
+) -> Result<TranslationApplication, CommandError> {
+    let store = store.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        translation::import_translation_result(&store, input).map_err(CommandError::from)
     })
     .await
     .map_err(CommandError::background_task_failed)?

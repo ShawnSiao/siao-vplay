@@ -242,6 +242,7 @@ export type SubtitleWord = {
 
 export type SubtitleSegment = SubtitleCue & {
   id: string;
+  sourceSegmentId: string | null;
   words: SubtitleWord[];
 };
 
@@ -249,6 +250,7 @@ export type SubtitleVersion = {
   id: string;
   trackId: string;
   projectId: string;
+  role: "original" | "translation";
   versionNumber: number;
   status: "draft" | "ready" | "rejected";
   sourceKind:
@@ -261,6 +263,8 @@ export type SubtitleVersion = {
   mediaSha256: string;
   languageCode: string;
   projectRevision: number;
+  parentVersionId: string | null;
+  sourceTaskId: string | null;
   preflight: SubtitlePreflightReport;
   createdAtMs: number;
   isCurrent: boolean;
@@ -312,4 +316,50 @@ export type TranscriptionJob = {
   updatedAtMs: number;
   startedAtMs: number | null;
   completedAtMs: number | null;
+};
+
+export type TranslationTask = {
+  id: string;
+  projectId: string;
+  taskType: "subtitle_translation";
+  handoffKind: "manual" | "codex";
+  protocolVersion: string;
+  status:
+    | "awaiting_external_result"
+    | "queued"
+    | "running"
+    | "validating"
+    | "completed"
+    | "failed"
+    | "cancelled"
+    | "interrupted";
+  stage: string;
+  progress: number;
+  receiverLabel: string;
+  materialScope: string[];
+  sourceVersionId: string;
+  sourceLanguageCode: string;
+  targetLanguageCode: "zh-cn";
+  segmentCount: number;
+  expectedProjectRevision: number;
+  outputVersionId: string | null;
+  errorCode: string | null;
+  errorMessage: string | null;
+  createdAtMs: number;
+  updatedAtMs: number;
+  startedAtMs: number | null;
+  completedAtMs: number | null;
+};
+
+export type TranslationValidation = {
+  status: "accepted" | "accepted_with_warnings";
+  translationCount: number;
+  warningCount: number;
+  warnings: string[];
+};
+
+export type TranslationApplication = {
+  task: TranslationTask;
+  subtitleVersion: SubtitleVersion;
+  validation: TranslationValidation;
 };

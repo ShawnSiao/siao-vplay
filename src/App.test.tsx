@@ -210,6 +210,7 @@ const subtitleVersion: SubtitleVersion = {
   id: "e83a710a-5fe3-46ec-a523-8296b71d75f1",
   trackId: "b502722c-a906-4810-a861-4d9af8e9f24c",
   projectId: project.id,
+  role: "original",
   versionNumber: 1,
   status: "ready",
   sourceKind: "imported_file",
@@ -218,12 +219,15 @@ const subtitleVersion: SubtitleVersion = {
   mediaSha256: subtitlePreview.expectedMediaSha256,
   languageCode: "ja",
   projectRevision: 2,
+  parentVersionId: null,
+  sourceTaskId: null,
   preflight: subtitlePreview.preflight,
   createdAtMs: 1_785_354_100_000,
   isCurrent: true,
   segments: [
     {
       id: "5a460d9a-97f6-4482-af1d-e7dbb7a6bc56",
+      sourceSegmentId: null,
       ...subtitlePreview.cues[0],
       words: [],
     },

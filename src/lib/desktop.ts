@@ -14,6 +14,8 @@ import type {
   SubtitleVersion,
   TranscriptionJob,
   TranscriptionRuntimeStatus,
+  TranslationApplication,
+  TranslationTask,
   YouTubeMediaPreview,
 } from "../types";
 
@@ -360,6 +362,62 @@ export async function resumeTranscriptionJob(
 ): Promise<TranscriptionJob> {
   return invoke<TranscriptionJob>("resume_transcription_job", {
     input: { jobId },
+  });
+}
+
+export async function chooseTranslationResultFile(): Promise<string | null> {
+  if (!isDesktopApp) {
+    return null;
+  }
+  const selected = await open({
+    multiple: false,
+    directory: false,
+    title: "选择 Agent 返回的翻译结果",
+    filters: [
+      {
+        name: "JSON 结果",
+        extensions: ["json"],
+      },
+    ],
+  });
+  return typeof selected === "string" ? selected : null;
+}
+
+export async function prepareTranslationTask(
+  projectId: string,
+  handoffKind: "manual" | "codex",
+): Promise<TranslationTask> {
+  return invoke<TranslationTask>("prepare_translation_task", {
+    input: { projectId, handoffKind },
+  });
+}
+
+export async function getTranslationTask(
+  taskId: string,
+): Promise<TranslationTask> {
+  return invoke<TranslationTask>("get_translation_task", {
+    input: { taskId },
+  });
+}
+
+export async function listTranslationTasks(
+  projectId: string,
+): Promise<TranslationTask[]> {
+  return invoke<TranslationTask[]>("list_translation_tasks", { projectId });
+}
+
+export async function readTranslationPrompt(taskId: string): Promise<string> {
+  return invoke<string>("read_translation_prompt", {
+    input: { taskId },
+  });
+}
+
+export async function importTranslationResult(
+  taskId: string,
+  resultPath: string,
+): Promise<TranslationApplication> {
+  return invoke<TranslationApplication>("import_translation_result", {
+    input: { taskId, resultPath },
   });
 }
 

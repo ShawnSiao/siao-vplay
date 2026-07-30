@@ -397,7 +397,9 @@ export default function App() {
           project={activeProject}
           preparation={preparation}
           currentSubtitle={
-            subtitleVersions.find((version) => version.isCurrent) ?? null
+            subtitleVersions.find(
+              (version) => version.role === "original" && version.isCurrent,
+            ) ?? null
           }
           onBack={returnToLibrary}
           onManageSubtitles={() => setSubtitleDialogOpen(true)}
@@ -416,7 +418,9 @@ export default function App() {
           projectId={activeProject.id}
           streams={preparation.inspection.probe.subtitleStreams}
           currentVersion={
-            subtitleVersions.find((version) => version.isCurrent) ?? null
+            subtitleVersions.find(
+              (version) => version.role === "original" && version.isCurrent,
+            ) ?? null
           }
           onClose={() => setSubtitleDialogOpen(false)}
           onImported={(version) => {

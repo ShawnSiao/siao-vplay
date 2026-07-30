@@ -5,6 +5,7 @@ mod remote_media;
 mod store;
 mod subtitles;
 mod transcription;
+mod translation;
 mod youtube_media;
 
 use std::path::{Path, PathBuf};
@@ -110,7 +111,12 @@ pub fn run() {
             commands::get_transcription_job,
             commands::list_transcription_jobs,
             commands::cancel_transcription_job,
-            commands::resume_transcription_job
+            commands::resume_transcription_job,
+            commands::prepare_translation_task,
+            commands::get_translation_task,
+            commands::list_translation_tasks,
+            commands::read_translation_prompt,
+            commands::import_translation_result
         ])
         .run(tauri::generate_context!())
         .expect("failed to run SiaoVPlay");

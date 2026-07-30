@@ -223,6 +223,7 @@ pub struct SubtitleWord {
 #[serde(rename_all = "camelCase")]
 pub struct SubtitleSegment {
     pub id: String,
+    pub source_segment_id: Option<String>,
     pub ordinal: usize,
     pub start_ms: i64,
     pub end_ms: i64,
@@ -237,6 +238,7 @@ pub struct SubtitleVersion {
     pub id: String,
     pub track_id: String,
     pub project_id: String,
+    pub role: String,
     pub version_number: i64,
     pub status: String,
     pub source_kind: String,
@@ -245,6 +247,8 @@ pub struct SubtitleVersion {
     pub media_sha256: String,
     pub language_code: String,
     pub project_revision: i64,
+    pub parent_version_id: Option<String>,
+    pub source_task_id: Option<String>,
     pub preflight: SubtitlePreflightReport,
     pub created_at_ms: i64,
     pub is_current: bool,
@@ -551,10 +555,10 @@ pub fn list_subtitle_versions(
     let connection = store.connect()?;
     let mut statement = connection.prepare(
         "SELECT
-            v.id, v.track_id, v.project_id, v.version_number, v.status,
+            v.id, v.track_id, v.project_id, t.role, v.version_number, v.status,
             v.source_kind, v.source_label, v.source_sha256, v.media_sha256,
             v.language_code, v.project_revision, v.preflight_json,
-            v.created_at_ms,
+            v.parent_version_id, v.source_task_id, v.created_at_ms,
             CASE WHEN t.current_version_id = v.id THEN 1 ELSE 0 END
          FROM subtitle_versions v
          JOIN subtitle_tracks t ON t.id = v.track_id
@@ -567,40 +571,46 @@ pub fn list_subtitle_versions(
                 row.get::<_, String>(0)?,
                 row.get::<_, String>(1)?,
                 row.get::<_, String>(2)?,
-                row.get::<_, i64>(3)?,
-                row.get::<_, String>(4)?,
+                row.get::<_, String>(3)?,
+                row.get::<_, i64>(4)?,
                 row.get::<_, String>(5)?,
                 row.get::<_, String>(6)?,
                 row.get::<_, String>(7)?,
                 row.get::<_, String>(8)?,
                 row.get::<_, String>(9)?,
-                row.get::<_, i64>(10)?,
-                row.get::<_, String>(11)?,
-                row.get::<_, i64>(12)?,
-                row.get::<_, bool>(13)?,
+                row.get::<_, String>(10)?,
+                row.get::<_, i64>(11)?,
+                row.get::<_, String>(12)?,
+                row.get::<_, Option<String>>(13)?,
+                row.get::<_, Option<String>>(14)?,
+                row.get::<_, i64>(15)?,
+                row.get::<_, bool>(16)?,
             ))
         })?
         .collect::<Result<Vec<_>, _>>()?;
 
     rows.into_iter()
         .map(|row| {
-            let preflight = serde_json::from_str(&row.11)?;
+            let preflight = serde_json::from_str(&row.12)?;
             let segments = load_segments(&connection, &row.0)?;
             Ok(SubtitleVersion {
                 id: row.0,
                 track_id: row.1,
                 project_id: row.2,
-                version_number: row.3,
-                status: row.4,
-                source_kind: row.5,
-                source_label: row.6,
-                source_sha256: row.7,
-                media_sha256: row.8,
-                language_code: row.9,
-                project_revision: row.10,
+                role: row.3,
+                version_number: row.4,
+                status: row.5,
+                source_kind: row.6,
+                source_label: row.7,
+                source_sha256: row.8,
+                media_sha256: row.9,
+                language_code: row.10,
+                project_revision: row.11,
+                parent_version_id: row.13,
+                source_task_id: row.14,
                 preflight,
-                created_at_ms: row.12,
-                is_current: row.13,
+                created_at_ms: row.15,
+                is_current: row.16,
                 segments,
             })
         })
@@ -783,28 +793,29 @@ fn load_segments(
     version_id: &str,
 ) -> Result<Vec<SubtitleSegment>, SubtitleError> {
     let mut statement = connection.prepare(
-        "SELECT id, ordinal, start_ms, end_ms, text, confidence
+        "SELECT id, source_segment_id, ordinal, start_ms, end_ms, text, confidence
          FROM subtitle_segments
          WHERE version_id = ?1
          ORDER BY ordinal ASC",
     )?;
     let mut segments = statement
         .query_map(params![version_id], |row| {
-            let ordinal = row.get::<_, i64>(1)?;
+            let ordinal = row.get::<_, i64>(2)?;
             let ordinal = usize::try_from(ordinal).map_err(|error| {
                 rusqlite::Error::FromSqlConversionFailure(
-                    1,
+                    2,
                     rusqlite::types::Type::Integer,
                     Box::new(error),
                 )
             })?;
             Ok(SubtitleSegment {
                 id: row.get(0)?,
+                source_segment_id: row.get(1)?,
                 ordinal,
-                start_ms: row.get(2)?,
-                end_ms: row.get(3)?,
-                text: row.get(4)?,
-                confidence: row.get(5)?,
+                start_ms: row.get(3)?,
+                end_ms: row.get(4)?,
+                text: row.get(5)?,
+                confidence: row.get(6)?,
                 words: Vec::new(),
             })
         })?
@@ -1030,7 +1041,10 @@ fn parse_component(value: &str) -> Result<i64, SubtitleError> {
         .map_err(|_| SubtitleError::Parse(format!("时间码数字超出支持范围：{value}")))
 }
 
-fn inspect_cues(cues: &[SubtitleCue], media_duration_ms: Option<i64>) -> SubtitlePreflightReport {
+pub(crate) fn inspect_cues(
+    cues: &[SubtitleCue],
+    media_duration_ms: Option<i64>,
+) -> SubtitlePreflightReport {
     let mut issues = Vec::new();
     for cue in cues {
         let valid_timing = cue.start_ms >= 0 && cue.end_ms > cue.start_ms;

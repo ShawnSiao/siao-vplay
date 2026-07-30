@@ -14,7 +14,7 @@ use crate::domain::{
     UpdatePlaybackStateInput,
 };
 
-const CURRENT_SCHEMA_VERSION: i64 = 7;
+const CURRENT_SCHEMA_VERSION: i64 = 8;
 
 #[derive(Clone, Debug)]
 pub(crate) struct RemoteImportProvenance {
@@ -652,6 +652,10 @@ impl ProjectStore {
             Err(error) => return Err(error),
         };
         let connection = self.connect()?;
+        let agent_task_ids = connection
+            .prepare("SELECT id FROM agent_tasks WHERE project_id = ?1")?
+            .query_map(params![project_id], |row| row.get::<_, String>(0))?
+            .collect::<Result<Vec<_>, _>>()?;
         let changed =
             connection.execute("DELETE FROM projects WHERE id = ?1", params![project_id])?;
         let cached_media_deleted = if changed > 0 {
@@ -664,6 +668,9 @@ impl ProjectStore {
         } else {
             false
         };
+        if changed > 0 {
+            self.remove_agent_task_materials(&agent_task_ids);
+        }
 
         Ok(DeleteProjectResult {
             project_id: project_id.to_owned(),
@@ -688,6 +695,15 @@ impl ProjectStore {
             return false;
         }
         fs::remove_dir_all(parent).is_ok()
+    }
+
+    fn remove_agent_task_materials(&self, task_ids: &[String]) {
+        let task_root = self.data_directory().join("agent-tasks");
+        for task_id in task_ids {
+            if Uuid::parse_str(task_id).is_ok() {
+                let _ = fs::remove_dir_all(task_root.join(task_id));
+            }
+        }
     }
 
     fn get_media_artifact(&self, artifact_id: &str) -> Result<MediaArtifact, StoreError> {
@@ -790,6 +806,16 @@ impl ProjectStore {
             Self::apply_migration_7(&transaction)?;
             transaction.execute(
                 "INSERT INTO schema_migrations (version, applied_at_ms) VALUES (7, ?1)",
+                params![now_ms()?],
+            )?;
+            transaction.commit()?;
+            current_version = 7;
+        }
+        if current_version < 8 {
+            let transaction = connection.transaction()?;
+            Self::apply_migration_8(&transaction)?;
+            transaction.execute(
+                "INSERT INTO schema_migrations (version, applied_at_ms) VALUES (8, ?1)",
                 params![now_ms()?],
             )?;
             transaction.commit()?;
@@ -1036,6 +1062,121 @@ impl ProjectStore {
              CREATE UNIQUE INDEX one_active_transcription_per_project
              ON transcription_jobs(project_id)
              WHERE status IN ('queued', 'extracting', 'transcribing', 'validating');",
+        )?;
+        Ok(())
+    }
+
+    fn apply_migration_8(transaction: &Transaction<'_>) -> Result<(), StoreError> {
+        transaction.execute_batch(
+            "CREATE TABLE agent_tasks (
+                id TEXT PRIMARY KEY,
+                project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+                task_type TEXT NOT NULL CHECK (task_type IN ('subtitle_translation')),
+                handoff_kind TEXT NOT NULL CHECK (handoff_kind IN ('manual', 'codex')),
+                protocol_version TEXT NOT NULL,
+                status TEXT NOT NULL CHECK (
+                    status IN (
+                        'awaiting_external_result', 'queued', 'running', 'validating',
+                        'completed', 'failed', 'cancelled', 'interrupted'
+                    )
+                ),
+                stage TEXT NOT NULL,
+                progress REAL NOT NULL CHECK (progress >= 0.0 AND progress <= 1.0),
+                receiver_label TEXT NOT NULL,
+                material_scope_json TEXT NOT NULL,
+                source_version_id TEXT NOT NULL
+                    REFERENCES subtitle_versions(id) ON DELETE CASCADE,
+                source_language_code TEXT NOT NULL
+                    CHECK (length(source_language_code) BETWEEN 2 AND 35),
+                target_language_code TEXT NOT NULL
+                    CHECK (target_language_code = 'zh-cn'),
+                authorized_segment_ids_json TEXT NOT NULL,
+                segment_count INTEGER NOT NULL CHECK (segment_count > 0),
+                expected_project_revision INTEGER NOT NULL
+                    CHECK (expected_project_revision >= 1),
+                expected_media_sha256 TEXT NOT NULL
+                    CHECK (length(expected_media_sha256) = 64),
+                material_manifest_sha256 TEXT NOT NULL
+                    CHECK (length(material_manifest_sha256) = 64),
+                result_sha256 TEXT
+                    CHECK (result_sha256 IS NULL OR length(result_sha256) = 64),
+                result_validation_json TEXT,
+                output_version_id TEXT
+                    REFERENCES subtitle_versions(id) ON DELETE SET NULL,
+                runner_version TEXT,
+                runner_auth_mode TEXT,
+                runner_thread_id TEXT,
+                cancel_requested_at_ms INTEGER,
+                error_code TEXT,
+                error_message TEXT,
+                created_at_ms INTEGER NOT NULL,
+                updated_at_ms INTEGER NOT NULL,
+                started_at_ms INTEGER,
+                completed_at_ms INTEGER
+             );
+
+             CREATE INDEX agent_tasks_project_created
+             ON agent_tasks(project_id, created_at_ms DESC);
+
+             CREATE UNIQUE INDEX one_active_translation_task_per_project
+             ON agent_tasks(project_id)
+             WHERE status IN (
+                'awaiting_external_result', 'queued', 'running', 'validating'
+             );
+
+             CREATE TABLE agent_task_batches (
+                id TEXT PRIMARY KEY,
+                task_id TEXT NOT NULL REFERENCES agent_tasks(id) ON DELETE CASCADE,
+                ordinal INTEGER NOT NULL CHECK (ordinal >= 0),
+                status TEXT NOT NULL CHECK (
+                    status IN (
+                        'prepared', 'queued', 'running', 'completed',
+                        'failed', 'cancelled'
+                    )
+                ),
+                segment_ids_json TEXT NOT NULL,
+                result_json TEXT,
+                error_code TEXT,
+                error_message TEXT,
+                created_at_ms INTEGER NOT NULL,
+                updated_at_ms INTEGER NOT NULL,
+                started_at_ms INTEGER,
+                completed_at_ms INTEGER,
+                UNIQUE(task_id, ordinal)
+             );
+
+             CREATE INDEX agent_task_batches_task
+             ON agent_task_batches(task_id, ordinal);
+
+             CREATE TABLE agent_results (
+                id TEXT PRIMARY KEY,
+                task_id TEXT NOT NULL REFERENCES agent_tasks(id) ON DELETE CASCADE,
+                delivery_kind TEXT NOT NULL CHECK (delivery_kind IN ('manual', 'codex')),
+                result_sha256 TEXT NOT NULL CHECK (length(result_sha256) = 64),
+                raw_json TEXT NOT NULL,
+                validation_json TEXT NOT NULL,
+                status TEXT NOT NULL CHECK (status IN ('accepted', 'rejected')),
+                created_at_ms INTEGER NOT NULL
+             );
+
+             CREATE INDEX agent_results_task_created
+             ON agent_results(task_id, created_at_ms DESC);
+
+             ALTER TABLE subtitle_versions
+             ADD COLUMN parent_version_id TEXT
+                 REFERENCES subtitle_versions(id) ON DELETE SET NULL;
+
+             ALTER TABLE subtitle_versions
+             ADD COLUMN source_task_id TEXT
+                 REFERENCES agent_tasks(id) ON DELETE SET NULL;
+
+             ALTER TABLE subtitle_segments
+             ADD COLUMN source_segment_id TEXT
+                 REFERENCES subtitle_segments(id) ON DELETE SET NULL;
+
+             CREATE INDEX subtitle_segments_source
+             ON subtitle_segments(source_segment_id)
+             WHERE source_segment_id IS NOT NULL;",
         )?;
         Ok(())
     }
