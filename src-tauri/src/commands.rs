@@ -26,6 +26,7 @@ use crate::{
         self, ImportTranslationResultInput, PrepareTranslationTaskInput, TranslationApplication,
         TranslationError, TranslationTask, TranslationTaskInput,
     },
+    understanding::{self, ExplanationTask, PrepareExplanationTaskInput, UnderstandingError},
     youtube_media::{
         self, CancelYouTubeImportInput, ImportYouTubeUrlInput, InspectYouTubeUrlInput,
         YouTubeMediaError, YouTubeMediaPreview,
@@ -264,6 +265,15 @@ impl From<TranslationError> for CommandError {
 
 impl From<CodexRunnerError> for CommandError {
     fn from(error: CodexRunnerError) -> Self {
+        Self {
+            code: error.code(),
+            message: error.to_string(),
+        }
+    }
+}
+
+impl From<UnderstandingError> for CommandError {
+    fn from(error: UnderstandingError) -> Self {
         Self {
             code: error.code(),
             message: error.to_string(),
@@ -694,6 +704,43 @@ pub async fn resume_codex_translation_task(
     })
     .await
     .map_err(CommandError::background_task_failed)?
+}
+
+#[tauri::command]
+pub async fn prepare_explanation_task(
+    store: State<'_, ProjectStore>,
+    input: PrepareExplanationTaskInput,
+) -> Result<ExplanationTask, CommandError> {
+    let store = store.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        understanding::prepare_explanation_task(&store, input).map_err(CommandError::from)
+    })
+    .await
+    .map_err(CommandError::background_task_failed)?
+}
+
+#[tauri::command]
+pub fn get_explanation_task(
+    store: State<'_, ProjectStore>,
+    task_id: String,
+) -> Result<ExplanationTask, CommandError> {
+    understanding::get_explanation_task(store.inner(), &task_id).map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn list_explanation_tasks(
+    store: State<'_, ProjectStore>,
+    project_id: String,
+) -> Result<Vec<ExplanationTask>, CommandError> {
+    understanding::list_explanation_tasks(store.inner(), &project_id).map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn read_explanation_prompt(
+    store: State<'_, ProjectStore>,
+    task_id: String,
+) -> Result<String, CommandError> {
+    understanding::read_explanation_prompt(store.inner(), &task_id).map_err(Into::into)
 }
 
 fn allow_project_poster(app: &AppHandle, project: &Project) -> Result<(), CommandError> {

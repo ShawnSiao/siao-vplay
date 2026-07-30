@@ -7,6 +7,7 @@ mod store;
 mod subtitles;
 mod transcription;
 mod translation;
+mod understanding;
 mod youtube_media;
 
 use std::path::{Path, PathBuf};
@@ -80,6 +81,7 @@ pub fn run() {
             store.recover_running_media_artifacts()?;
             transcription::recover_transcription_jobs(&store)?;
             codex_runner::recover_translation_tasks(&store)?;
+            understanding::recover_explanation_tasks(&store)?;
             app.manage(store);
             app.manage(StartupMediaPath(resolve_startup_media_path()));
             Ok(())
@@ -124,7 +126,11 @@ pub fn run() {
             commands::get_codex_runtime_status,
             commands::start_codex_translation_task,
             commands::cancel_translation_task,
-            commands::resume_codex_translation_task
+            commands::resume_codex_translation_task,
+            commands::prepare_explanation_task,
+            commands::get_explanation_task,
+            commands::list_explanation_tasks,
+            commands::read_explanation_prompt
         ])
         .run(tauri::generate_context!())
         .expect("failed to run SiaoVPlay");

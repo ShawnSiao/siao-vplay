@@ -5,7 +5,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use rusqlite::{OptionalExtension, params};
+use rusqlite::{OptionalExtension, TransactionBehavior, params};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
@@ -272,6 +272,12 @@ pub fn prepare_translation_task(
               AND status IN (
                 'awaiting_external_result', 'queued', 'running', 'validating'
               )
+            UNION ALL
+            SELECT 1 FROM explanation_tasks
+            WHERE project_id = ?1
+              AND status IN (
+                'awaiting_external_result', 'queued', 'running', 'validating'
+              )
          )",
         params![project.id],
         |row| row.get::<_, bool>(0),
@@ -364,7 +370,7 @@ pub fn prepare_translation_task(
     let timestamp = now_ms()?;
     let insertion = (|| -> Result<(), TranslationError> {
         let mut connection = store.connect()?;
-        let transaction = connection.transaction()?;
+        let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
         let current_state = transaction
             .query_row(
                 "SELECT
@@ -406,6 +412,26 @@ pub fn prepare_translation_task(
             .is_none_or(|value| !value.eq_ignore_ascii_case(current_media_sha256))
         {
             return Err(TranslationError::MediaChanged);
+        }
+        let active_exists = transaction.query_row(
+            "SELECT EXISTS(
+                SELECT 1 FROM agent_tasks
+                WHERE project_id = ?1
+                  AND status IN (
+                    'awaiting_external_result', 'queued', 'running', 'validating'
+                  )
+                UNION ALL
+                SELECT 1 FROM explanation_tasks
+                WHERE project_id = ?1
+                  AND status IN (
+                    'awaiting_external_result', 'queued', 'running', 'validating'
+                  )
+             )",
+            params![project.id],
+            |row| row.get::<_, bool>(0),
+        )?;
+        if active_exists {
+            return Err(TranslationError::ActiveTaskExists);
         }
         transaction.execute(
             "INSERT INTO agent_tasks (
