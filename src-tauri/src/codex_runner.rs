@@ -3400,6 +3400,53 @@ process.stdin.on("end", () => {{
         );
     }
 
+    #[test]
+    #[ignore = "requires an authenticated Codex CLI and an explicit real-Agent validation run"]
+    fn real_codex_explains_a_japanese_learning_selection() {
+        assert_eq!(
+            env::var("SIAOVPLAY_RUN_REAL_CODEX").as_deref(),
+            Ok("1"),
+            "set SIAOVPLAY_RUN_REAL_CODEX=1 for the explicit real Codex check"
+        );
+        let fixture = RunnerFixture::new(2);
+        let task = fixture.prepare_learning("codex");
+        let identity = require_ready_codex().expect("real Codex should be ready");
+        claim_learning_for_run(&fixture.store, &task.id, &identity, false)
+            .expect("learning task should enter running");
+
+        let application = run_learning_task(
+            &fixture.store,
+            &task.id,
+            &identity,
+            Duration::from_secs(180),
+            &AtomicBool::new(false),
+        )
+        .expect("real Codex should explain the selected Japanese text");
+
+        assert_eq!(application.task.status, "completed");
+        assert_eq!(application.dictionary_entry.selected_text, "駅前");
+        assert!(!application.dictionary_entry.pronunciation.trim().is_empty());
+        assert!(
+            !application
+                .dictionary_entry
+                .part_of_speech
+                .trim()
+                .is_empty()
+        );
+        assert!(
+            !application
+                .dictionary_entry
+                .contextual_meaning
+                .trim()
+                .is_empty()
+        );
+        println!(
+            "{}",
+            serde_json::to_string(&application.dictionary_entry)
+                .expect("dictionary entry should serialize")
+        );
+    }
+
     #[derive(serde::Deserialize)]
     struct RealTranscriptionFixture {
         language: String,
