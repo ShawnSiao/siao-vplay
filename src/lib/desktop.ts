@@ -218,6 +218,7 @@ export async function updatePlaybackState(
     durationMs: number | null;
     volume: number;
     playbackRate: number;
+    subtitleMode: "original" | "translation" | "bilingual";
   },
 ): Promise<Project> {
   return invoke<Project>("update_playback_state", {

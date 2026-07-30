@@ -777,6 +777,35 @@ h3 {
   background: var(--bg-control);
 }
 
+.caption-mode {
+  display: flex;
+  gap: 3px;
+  padding: 3px;
+  border-radius: 8px;
+  background: var(--bg-control);
+}
+
+.caption-mode button {
+  min-height: 29px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 6px;
+  color: var(--text-muted);
+  background: transparent;
+  font-size: 11px;
+  font-weight: 680;
+}
+
+.caption-mode button:hover:not(:disabled),
+.caption-mode button.active {
+  color: var(--text-primary);
+  background: rgb(255 255 255 / 9%);
+}
+
+.caption-mode button:disabled {
+  opacity: 0.34;
+}
+
 .player-mode span {
   min-width: 54px;
   padding: 7px 10px;
@@ -849,6 +878,39 @@ h3 {
   background: rgb(8 10 12 / 68%);
   font-size: 10px;
   backdrop-filter: blur(8px);
+}
+
+.caption-stack {
+  position: absolute;
+  z-index: 4;
+  right: 9%;
+  bottom: 118px;
+  left: 9%;
+  display: grid;
+  justify-items: center;
+  gap: 7px;
+  pointer-events: none;
+  text-align: center;
+}
+
+.caption-line {
+  width: fit-content;
+  max-width: min(880px, 90%);
+  margin: 0;
+  padding: 3px 9px;
+  color: #fff;
+  background: rgb(0 0 0 / 42%);
+  font-size: clamp(20px, 2vw, 28px);
+  font-weight: 680;
+  line-height: 1.48;
+  text-shadow: 0 2px 5px #000, 0 0 14px #000;
+  text-wrap: balance;
+}
+
+.caption-line.original {
+  color: rgb(255 255 255 / 90%);
+  font-size: clamp(15px, 1.4vw, 20px);
+  font-weight: 560;
 }
 
 .player-controls {

@@ -96,6 +96,7 @@ const project: Project = {
     durationMs: 180_000,
     volume: 0.8,
     playbackRate: 1,
+    subtitleMode: "translation",
     updatedAtMs: 1_785_354_000_000,
   },
 };
@@ -544,6 +545,57 @@ describe("App", () => {
       false,
     );
     expect(screen.getByText(/H264\s*\/ AAC/)).toBeInTheDocument();
+  });
+
+  it("shows original, Chinese, and bilingual subtitles and persists the choice", async () => {
+    const captionProject: Project = {
+      ...project,
+      playbackState: {
+        ...project.playbackState,
+        positionMs: 500,
+      },
+    };
+    desktopMocks.listProjects.mockResolvedValue([captionProject]);
+    desktopMocks.markProjectOpened.mockResolvedValue(captionProject);
+    desktopMocks.listSubtitleVersions.mockResolvedValue([
+      subtitleVersion,
+      translatedVersion,
+    ]);
+    desktopMocks.updatePlaybackState.mockImplementation(
+      async (
+        _projectId: string,
+        values: Project["playbackState"],
+      ) => ({
+        ...captionProject,
+        playbackState: {
+          ...values,
+          updatedAtMs: 1_785_354_400_000,
+        },
+      }),
+    );
+
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "继续观看" }));
+
+    expect(await screen.findByText("明天在车站前见吧。")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "显示原文字幕" }));
+    expect(await screen.findByText("待っていたの？")).toBeInTheDocument();
+    await waitFor(() =>
+      expect(desktopMocks.updatePlaybackState).toHaveBeenLastCalledWith(
+        project.id,
+        expect.objectContaining({ subtitleMode: "original" }),
+      ),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "显示双语字幕" }));
+    expect(screen.getByText("待っていたの？")).toBeInTheDocument();
+    expect(screen.getByText("明天在车站前见吧。")).toBeInTheDocument();
+    await waitFor(() =>
+      expect(desktopMocks.updatePlaybackState).toHaveBeenLastCalledWith(
+        project.id,
+        expect.objectContaining({ subtitleMode: "bilingual" }),
+      ),
+    );
   });
 
   it("opens the local import dialog with Ctrl+O", async () => {

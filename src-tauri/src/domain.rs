@@ -51,7 +51,35 @@ pub struct PlaybackState {
     pub duration_ms: Option<i64>,
     pub volume: f64,
     pub playback_rate: f64,
+    pub subtitle_mode: SubtitleDisplayMode,
     pub updated_at_ms: i64,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SubtitleDisplayMode {
+    Original,
+    Translation,
+    Bilingual,
+}
+
+impl SubtitleDisplayMode {
+    pub(crate) fn as_database_value(self) -> &'static str {
+        match self {
+            Self::Original => "original",
+            Self::Translation => "translation",
+            Self::Bilingual => "bilingual",
+        }
+    }
+
+    pub(crate) fn from_database_value(value: &str) -> Option<Self> {
+        match value {
+            "original" => Some(Self::Original),
+            "translation" => Some(Self::Translation),
+            "bilingual" => Some(Self::Bilingual),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -90,6 +118,7 @@ pub struct UpdatePlaybackStateInput {
     pub duration_ms: Option<i64>,
     pub volume: f64,
     pub playback_rate: f64,
+    pub subtitle_mode: SubtitleDisplayMode,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]

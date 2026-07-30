@@ -360,6 +360,7 @@ export default function App() {
       durationMs: number | null;
       volume: number;
       playbackRate: number;
+      subtitleMode: "original" | "translation" | "bilingual";
     }) => {
       if (!activeProject) {
         return;

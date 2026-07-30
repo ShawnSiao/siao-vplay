@@ -27,8 +27,14 @@ export type PlaybackState = {
   durationMs: number | null;
   volume: number;
   playbackRate: number;
+  subtitleMode: SubtitleDisplayMode;
   updatedAtMs: number;
 };
+
+export type SubtitleDisplayMode =
+  | "original"
+  | "translation"
+  | "bilingual";
 
 export type Project = {
   id: string;

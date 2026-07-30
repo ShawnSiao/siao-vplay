@@ -11,10 +11,10 @@ use uuid::Uuid;
 use crate::domain::{
     CreateLocalProjectInput, DeleteProjectResult, MediaArtifact, MediaArtifactStatus, MediaSource,
     MediaSourceKind, PlaybackState, Project, ProjectStatus, RelinkProjectMediaInput,
-    UpdatePlaybackStateInput,
+    SubtitleDisplayMode, UpdatePlaybackStateInput,
 };
 
-const CURRENT_SCHEMA_VERSION: i64 = 9;
+const CURRENT_SCHEMA_VERSION: i64 = 10;
 
 #[derive(Clone, Debug)]
 pub(crate) struct RemoteImportProvenance {
@@ -47,6 +47,8 @@ pub enum StoreError {
     InvalidMediaSourceKind(String),
     #[error("数据库中的媒体产物状态无效：{0}")]
     InvalidMediaArtifactStatus(String),
+    #[error("数据库中的字幕显示模式无效：{0}")]
+    InvalidSubtitleDisplayMode(String),
 }
 
 #[derive(Clone, Debug)]
@@ -124,8 +126,9 @@ impl ProjectStore {
         )?;
         transaction.execute(
             "INSERT INTO playback_states (
-                project_id, position_ms, duration_ms, volume, playback_rate, updated_at_ms
-             ) VALUES (?1, 0, NULL, 1.0, 1.0, ?2)",
+                project_id, position_ms, duration_ms, volume, playback_rate,
+                subtitle_mode, updated_at_ms
+             ) VALUES (?1, 0, NULL, 1.0, 1.0, 'translation', ?2)",
             params![project_id, timestamp],
         )?;
         transaction.commit()?;
@@ -304,7 +307,8 @@ impl ProjectStore {
                  duration_ms = ?3,
                  volume = ?4,
                  playback_rate = ?5,
-                 updated_at_ms = ?6
+                 subtitle_mode = ?6,
+                 updated_at_ms = ?7
              WHERE project_id = ?1",
             params![
                 input.project_id,
@@ -312,6 +316,7 @@ impl ProjectStore {
                 input.duration_ms,
                 input.volume,
                 input.playback_rate,
+                input.subtitle_mode.as_database_value(),
                 timestamp
             ],
         )?;
@@ -829,6 +834,16 @@ impl ProjectStore {
                 params![now_ms()?],
             )?;
             transaction.commit()?;
+            current_version = 9;
+        }
+        if current_version < 10 {
+            let transaction = connection.transaction()?;
+            Self::apply_migration_10(&transaction)?;
+            transaction.execute(
+                "INSERT INTO schema_migrations (version, applied_at_ms) VALUES (10, ?1)",
+                params![now_ms()?],
+            )?;
+            transaction.commit()?;
         }
         Ok(())
     }
@@ -1229,6 +1244,15 @@ impl ProjectStore {
         Ok(())
     }
 
+    fn apply_migration_10(transaction: &Transaction<'_>) -> Result<(), StoreError> {
+        transaction.execute_batch(
+            "ALTER TABLE playback_states
+             ADD COLUMN subtitle_mode TEXT NOT NULL DEFAULT 'translation'
+                 CHECK (subtitle_mode IN ('original', 'translation', 'bilingual'));",
+        )?;
+        Ok(())
+    }
+
     fn load_project(connection: &Connection, project_id: &str) -> Result<Project, StoreError> {
         let row = connection
             .query_row(
@@ -1253,6 +1277,7 @@ impl ProjectStore {
                     s.duration_ms,
                     s.volume,
                     s.playback_rate,
+                    s.subtitle_mode,
                     s.updated_at_ms
                  FROM projects p
                  JOIN media_sources m
@@ -1283,7 +1308,8 @@ impl ProjectStore {
                         row.get::<_, Option<i64>>(17)?,
                         row.get::<_, f64>(18)?,
                         row.get::<_, f64>(19)?,
-                        row.get::<_, i64>(20)?,
+                        row.get::<_, String>(20)?,
+                        row.get::<_, i64>(21)?,
                     ))
                 },
             )
@@ -1300,6 +1326,8 @@ impl ProjectStore {
         } else {
             ProjectStatus::NeedsRelink
         };
+        let subtitle_mode = SubtitleDisplayMode::from_database_value(&row.20)
+            .ok_or_else(|| StoreError::InvalidSubtitleDisplayMode(row.20.clone()))?;
 
         Ok(Project {
             id: row.0,
@@ -1327,7 +1355,8 @@ impl ProjectStore {
                 duration_ms: row.17,
                 volume: row.18,
                 playback_rate: row.19,
-                updated_at_ms: row.20,
+                subtitle_mode,
+                updated_at_ms: row.21,
             },
         })
     }
@@ -1549,6 +1578,7 @@ mod tests {
                 duration_ms: Some(120_000),
                 volume: 0.7,
                 playback_rate: 1.25,
+                subtitle_mode: SubtitleDisplayMode::Bilingual,
             })
             .expect("playback should update");
 
@@ -1561,6 +1591,10 @@ mod tests {
         assert_eq!(restored.playback_state.duration_ms, Some(120_000));
         assert_eq!(restored.playback_state.volume, 0.7);
         assert_eq!(restored.playback_state.playback_rate, 1.25);
+        assert_eq!(
+            restored.playback_state.subtitle_mode,
+            SubtitleDisplayMode::Bilingual
+        );
     }
 
     #[test]
@@ -1749,6 +1783,7 @@ mod tests {
                 duration_ms: None,
                 volume: 1.0,
                 playback_rate: 1.0,
+                subtitle_mode: SubtitleDisplayMode::Translation,
             });
 
         assert!(matches!(result, Err(StoreError::Validation(_))));
@@ -1854,6 +1889,86 @@ mod tests {
             .collect::<Result<Vec<_>, _>>()
             .expect("schema rows should load");
         assert_eq!(subtitle_tables.len(), 3);
+    }
+
+    #[test]
+    fn migrates_a_v9_project_with_the_chinese_subtitle_default() {
+        let temp_dir = tempfile::tempdir().expect("temporary directory should be created");
+        let database_path = temp_dir.path().join("v9.sqlite3");
+        let media_path = temp_dir.path().join("legacy.mp4");
+        fs::write(&media_path, b"legacy-media").expect("legacy media should be written");
+        let project_id = Uuid::new_v4().to_string();
+        let media_id = Uuid::new_v4().to_string();
+        let mut connection = Connection::open(&database_path).expect("database should open");
+        connection
+            .execute_batch(
+                "PRAGMA foreign_keys = ON;
+                 CREATE TABLE schema_migrations (
+                    version INTEGER PRIMARY KEY,
+                    applied_at_ms INTEGER NOT NULL
+                 );",
+            )
+            .expect("migration table should be created");
+        let transaction = connection.transaction().expect("transaction should open");
+        ProjectStore::apply_migration_1(&transaction).expect("v1 should apply");
+        ProjectStore::apply_migration_2(&transaction).expect("v2 should apply");
+        ProjectStore::apply_migration_3(&transaction).expect("v3 should apply");
+        ProjectStore::apply_migration_4(&transaction).expect("v4 should apply");
+        ProjectStore::apply_migration_5(&transaction).expect("v5 should apply");
+        ProjectStore::apply_migration_6(&transaction).expect("v6 should apply");
+        ProjectStore::apply_migration_7(&transaction).expect("v7 should apply");
+        ProjectStore::apply_migration_8(&transaction).expect("v8 should apply");
+        ProjectStore::apply_migration_9(&transaction).expect("v9 should apply");
+        for version in 1..=9 {
+            transaction
+                .execute(
+                    "INSERT INTO schema_migrations (version, applied_at_ms)
+                     VALUES (?1, 0)",
+                    params![version],
+                )
+                .expect("migration should be recorded");
+        }
+        transaction
+            .execute(
+                "INSERT INTO projects (
+                    id, title, revision, created_at_ms, updated_at_ms, last_opened_at_ms
+                 ) VALUES (?1, 'legacy project', 1, 1, 1, 1)",
+                params![project_id],
+            )
+            .expect("legacy project should be inserted");
+        transaction
+            .execute(
+                "INSERT INTO media_sources (
+                    id, project_id, kind, locator, display_name, is_primary,
+                    created_at_ms, updated_at_ms
+                 ) VALUES (?1, ?2, 'local_file', ?3, 'legacy.mp4', 1, 1, 1)",
+                params![media_id, project_id, path_to_string(&media_path)],
+            )
+            .expect("legacy media should be inserted");
+        transaction
+            .execute(
+                "INSERT INTO playback_states (
+                    project_id, position_ms, duration_ms, volume, playback_rate, updated_at_ms
+                 ) VALUES (?1, 500, 1000, 0.8, 1.0, 1)",
+                params![project_id],
+            )
+            .expect("legacy playback state should be inserted");
+        transaction.commit().expect("legacy fixture should commit");
+        drop(connection);
+
+        let store = ProjectStore::open(database_path).expect("v9 store should upgrade");
+        let project = store
+            .get_project(&project_id)
+            .expect("legacy project should remain readable");
+        assert_eq!(project.playback_state.position_ms, 500);
+        assert_eq!(
+            project.playback_state.subtitle_mode,
+            SubtitleDisplayMode::Translation
+        );
+        assert_eq!(
+            store.schema_version().expect("schema version"),
+            CURRENT_SCHEMA_VERSION
+        );
     }
 
     #[test]

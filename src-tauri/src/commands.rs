@@ -48,7 +48,8 @@ impl From<StoreError> for CommandError {
             StoreError::FileSystem(_) => "filesystem_error",
             StoreError::Database(_)
             | StoreError::InvalidMediaSourceKind(_)
-            | StoreError::InvalidMediaArtifactStatus(_) => "database_error",
+            | StoreError::InvalidMediaArtifactStatus(_)
+            | StoreError::InvalidSubtitleDisplayMode(_) => "database_error",
         };
         Self {
             code,
@@ -97,7 +98,8 @@ impl From<SubtitleError> for CommandError {
             SubtitleError::Store(
                 StoreError::Database(_)
                 | StoreError::InvalidMediaSourceKind(_)
-                | StoreError::InvalidMediaArtifactStatus(_),
+                | StoreError::InvalidMediaArtifactStatus(_)
+                | StoreError::InvalidSubtitleDisplayMode(_),
             ) => "database_error",
             SubtitleError::Media(MediaError::SubtitleStreamNotFound(_)) => {
                 "embedded_subtitle_not_found"

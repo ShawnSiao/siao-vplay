@@ -2,13 +2,20 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { formatDuration, formatFileSize } from "../lib/format";
 import { playbackUrl } from "../lib/desktop";
-import type { MediaPreparation, Project, SubtitleVersion } from "../types";
+import type {
+  MediaPreparation,
+  Project,
+  SubtitleDisplayMode,
+  SubtitleSegment,
+  SubtitleVersion,
+} from "../types";
 
 type PlaybackValues = {
   positionMs: number;
   durationMs: number | null;
   volume: number;
   playbackRate: number;
+  subtitleMode: SubtitleDisplayMode;
 };
 
 type PlayerScreenProps = {
@@ -58,6 +65,9 @@ export function PlayerScreen({
   const [playbackRate, setPlaybackRate] = useState(
     project.playbackState.playbackRate,
   );
+  const [subtitleMode, setSubtitleMode] = useState<SubtitleDisplayMode>(
+    project.playbackState.subtitleMode,
+  );
   const [videoReady, setVideoReady] = useState(false);
   const persistFunctionRef = useRef<
     (video: HTMLVideoElement | null) => Promise<void>
@@ -68,7 +78,10 @@ export function PlayerScreen({
   const audioStream = preparation.inspection.probe.audioStreams[0];
 
   const persistCurrentState = useCallback(
-    async (video: HTMLVideoElement | null) => {
+    async (
+      video: HTMLVideoElement | null,
+      nextSubtitleMode = subtitleMode,
+    ) => {
       const nextPosition = video
         ? Math.max(0, Math.round(video.currentTime * 1_000))
         : positionMs;
@@ -81,10 +94,18 @@ export function PlayerScreen({
         durationMs: mediaDuration,
         volume: video?.volume ?? volume,
         playbackRate: video?.playbackRate ?? playbackRate,
+        subtitleMode: nextSubtitleMode,
       });
       lastSavedAtRef.current = Date.now();
     },
-    [durationMs, onPersist, playbackRate, positionMs, volume],
+    [
+      durationMs,
+      onPersist,
+      playbackRate,
+      positionMs,
+      subtitleMode,
+      volume,
+    ],
   );
 
   const requestProxy = useCallback(
@@ -291,6 +312,33 @@ export function PlayerScreen({
     setPlaybackRate(nextRate);
   };
 
+  const changeSubtitleMode = (nextMode: SubtitleDisplayMode) => {
+    setSubtitleMode(nextMode);
+    void persistCurrentState(videoRef.current, nextMode).catch(() => undefined);
+  };
+
+  const activeSegment = (
+    version: SubtitleVersion | null,
+  ): SubtitleSegment | null =>
+    version?.segments.find(
+      (segment) =>
+        positionMs >= segment.startMs && positionMs < segment.endMs,
+    ) ?? null;
+  const activeOriginal = activeSegment(currentSubtitle);
+  const activeTranslation = activeSegment(currentTranslation);
+  const effectiveSubtitleMode: SubtitleDisplayMode =
+    subtitleMode === "bilingual"
+      ? currentSubtitle && currentTranslation
+        ? "bilingual"
+        : currentTranslation
+          ? "translation"
+          : "original"
+      : subtitleMode === "translation" && !currentTranslation && currentSubtitle
+        ? "original"
+        : subtitleMode === "original" && !currentSubtitle && currentTranslation
+          ? "translation"
+          : subtitleMode;
+
   return (
     <div className="player-screen" data-screen-label="本地播放器">
       <header className="player-toolbar">
@@ -398,6 +446,25 @@ export function PlayerScreen({
           {preparation.reusedProxy ? <span>已复用播放版本</span> : null}
         </div>
 
+        {activeOriginal || activeTranslation ? (
+          <div className="caption-stack" aria-live="off">
+            {(effectiveSubtitleMode === "original" ||
+              effectiveSubtitleMode === "bilingual") &&
+            activeOriginal ? (
+              <p className="caption-line original" lang={currentSubtitle?.languageCode}>
+                {activeOriginal.text}
+              </p>
+            ) : null}
+            {(effectiveSubtitleMode === "translation" ||
+              effectiveSubtitleMode === "bilingual") &&
+            activeTranslation ? (
+              <p className="caption-line translation" lang="zh-CN">
+                {activeTranslation.text}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+
         <div className="player-controls">
           <input
             className="seek-control"
@@ -440,6 +507,32 @@ export function PlayerScreen({
               </span>
             </div>
             <div className="playback-options">
+              <div className="caption-mode" aria-label="字幕显示">
+                {(
+                  [
+                    ["translation", "中文", Boolean(currentTranslation)],
+                    ["original", "原文", Boolean(currentSubtitle)],
+                    [
+                      "bilingual",
+                      "双语",
+                      Boolean(currentSubtitle && currentTranslation),
+                    ],
+                  ] as const
+                ).map(([mode, label, available]) => (
+                  <button
+                    aria-label={`显示${label}字幕`}
+                    className={
+                      effectiveSubtitleMode === mode ? "active" : ""
+                    }
+                    disabled={!available}
+                    key={mode}
+                    type="button"
+                    onClick={() => changeSubtitleMode(mode)}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
               <label>
                 <span>音量</span>
                 <input
