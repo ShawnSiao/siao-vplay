@@ -2,6 +2,9 @@ use serde::Serialize;
 use tauri::{AppHandle, Manager, State};
 
 use crate::{
+    burn::{
+        self, StartSubtitleBurnInput, SubtitleBurnError, SubtitleBurnJob, SubtitleBurnJobInput,
+    },
     codex_runner::{self, CodexRunnerError, CodexRuntimeStatus, StartCodexTranslationInput},
     delivery::{self, DeliveryError, ExportSubtitlesInput, SubtitleExport},
     domain::{
@@ -144,6 +147,15 @@ impl From<SubtitleError> for CommandError {
 
 impl From<DeliveryError> for CommandError {
     fn from(error: DeliveryError) -> Self {
+        Self {
+            code: error.code(),
+            message: error.to_string(),
+        }
+    }
+}
+
+impl From<SubtitleBurnError> for CommandError {
+    fn from(error: SubtitleBurnError) -> Self {
         Self {
             code: error.code(),
             message: error.to_string(),
@@ -438,6 +450,7 @@ pub fn delete_project(
     codex_runner::cancel_project_translation_tasks(store.inner(), &project_id)?;
     codex_runner::cancel_project_explanation_tasks(store.inner(), &project_id)?;
     codex_runner::cancel_project_learning_tasks(store.inner(), &project_id)?;
+    burn::cancel_project_subtitle_burn_jobs(store.inner(), &project_id)?;
     store.delete_project(&project_id).map_err(Into::into)
 }
 
@@ -1013,6 +1026,60 @@ pub async fn export_subtitles(
     let store = store.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
         delivery::export_subtitles(&store, input).map_err(CommandError::from)
+    })
+    .await
+    .map_err(CommandError::background_task_failed)?
+}
+
+#[tauri::command]
+pub async fn start_subtitle_burn(
+    store: State<'_, ProjectStore>,
+    input: StartSubtitleBurnInput,
+) -> Result<SubtitleBurnJob, CommandError> {
+    let store = store.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let job = burn::start_subtitle_burn(&store, input)?;
+        burn::spawn_subtitle_burn_job(store, job.id.clone())?;
+        Ok(job)
+    })
+    .await
+    .map_err(CommandError::background_task_failed)?
+}
+
+#[tauri::command]
+pub fn get_subtitle_burn_job(
+    store: State<'_, ProjectStore>,
+    input: SubtitleBurnJobInput,
+) -> Result<SubtitleBurnJob, CommandError> {
+    burn::get_subtitle_burn_job(store.inner(), &input.job_id).map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn list_subtitle_burn_jobs(
+    store: State<'_, ProjectStore>,
+    project_id: String,
+) -> Result<Vec<SubtitleBurnJob>, CommandError> {
+    burn::list_subtitle_burn_jobs(store.inner(), &project_id).map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn cancel_subtitle_burn_job(
+    store: State<'_, ProjectStore>,
+    input: SubtitleBurnJobInput,
+) -> Result<SubtitleBurnJob, CommandError> {
+    burn::cancel_subtitle_burn_job(store.inner(), &input.job_id).map_err(Into::into)
+}
+
+#[tauri::command]
+pub async fn resume_subtitle_burn_job(
+    store: State<'_, ProjectStore>,
+    input: SubtitleBurnJobInput,
+) -> Result<SubtitleBurnJob, CommandError> {
+    let store = store.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let job = burn::resume_subtitle_burn_job(&store, &input.job_id)?;
+        burn::spawn_subtitle_burn_job(store, job.id.clone())?;
+        Ok(job)
     })
     .await
     .map_err(CommandError::background_task_failed)?

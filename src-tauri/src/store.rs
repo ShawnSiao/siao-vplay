@@ -14,7 +14,7 @@ use crate::domain::{
     SubtitleDisplayMode, UpdatePlaybackStateInput,
 };
 
-const CURRENT_SCHEMA_VERSION: i64 = 12;
+const CURRENT_SCHEMA_VERSION: i64 = 13;
 
 #[derive(Clone, Debug)]
 pub(crate) struct RemoteImportProvenance {
@@ -682,6 +682,7 @@ impl ProjectStore {
         if changed > 0 {
             self.remove_agent_task_materials(&agent_task_ids);
             self.remove_learning_card_materials(project_id);
+            self.remove_subtitle_burn_materials(project_id);
         }
 
         Ok(DeleteProjectResult {
@@ -723,6 +724,16 @@ impl ProjectStore {
             let _ = fs::remove_dir_all(
                 self.data_directory()
                     .join("learning-cards")
+                    .join(project_id),
+            );
+        }
+    }
+
+    fn remove_subtitle_burn_materials(&self, project_id: &str) {
+        if Uuid::parse_str(project_id).is_ok() {
+            let _ = fs::remove_dir_all(
+                self.data_directory()
+                    .join("subtitle-burn-jobs")
                     .join(project_id),
             );
         }
@@ -878,6 +889,16 @@ impl ProjectStore {
             Self::apply_migration_12(&transaction)?;
             transaction.execute(
                 "INSERT INTO schema_migrations (version, applied_at_ms) VALUES (12, ?1)",
+                params![now_ms()?],
+            )?;
+            transaction.commit()?;
+            current_version = 12;
+        }
+        if current_version < 13 {
+            let transaction = connection.transaction()?;
+            Self::apply_migration_13(&transaction)?;
+            transaction.execute(
+                "INSERT INTO schema_migrations (version, applied_at_ms) VALUES (13, ?1)",
                 params![now_ms()?],
             )?;
             transaction.commit()?;
@@ -1508,6 +1529,58 @@ impl ProjectStore {
 
              CREATE INDEX learning_cards_project_position
              ON learning_cards(project_id, playback_position_ms ASC, created_at_ms DESC);",
+        )?;
+        Ok(())
+    }
+
+    fn apply_migration_13(transaction: &Transaction<'_>) -> Result<(), StoreError> {
+        transaction.execute_batch(
+            "CREATE TABLE subtitle_burn_jobs (
+                id TEXT PRIMARY KEY,
+                project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+                source_media_id TEXT NOT NULL REFERENCES media_sources(id) ON DELETE CASCADE,
+                status TEXT NOT NULL CHECK (
+                    status IN (
+                        'queued', 'running', 'validating', 'completed',
+                        'failed', 'cancelled', 'interrupted'
+                    )
+                ),
+                stage TEXT NOT NULL,
+                progress REAL NOT NULL CHECK (progress >= 0.0 AND progress <= 1.0),
+                mode TEXT NOT NULL CHECK (mode IN ('translation', 'bilingual')),
+                source_version_id TEXT REFERENCES subtitle_versions(id),
+                translation_version_id TEXT NOT NULL REFERENCES subtitle_versions(id),
+                expected_project_revision INTEGER NOT NULL
+                    CHECK (expected_project_revision >= 1),
+                expected_media_sha256 TEXT NOT NULL
+                    CHECK (length(expected_media_sha256) = 64),
+                media_duration_ms INTEGER NOT NULL CHECK (media_duration_ms > 0),
+                destination_directory TEXT NOT NULL,
+                output_path TEXT NOT NULL,
+                temporary_output_path TEXT NOT NULL,
+                manifest_path TEXT,
+                output_sha256 TEXT
+                    CHECK (output_sha256 IS NULL OR length(output_sha256) = 64),
+                subtitle_path TEXT NOT NULL,
+                subtitle_sha256 TEXT NOT NULL CHECK (length(subtitle_sha256) = 64),
+                runtime_path TEXT NOT NULL,
+                runtime_version TEXT NOT NULL,
+                runtime_sha256 TEXT NOT NULL CHECK (length(runtime_sha256) = 64),
+                cancel_requested_at_ms INTEGER,
+                error_code TEXT,
+                error_message TEXT,
+                created_at_ms INTEGER NOT NULL,
+                updated_at_ms INTEGER NOT NULL,
+                started_at_ms INTEGER,
+                completed_at_ms INTEGER
+             );
+
+             CREATE INDEX subtitle_burn_jobs_project_created
+             ON subtitle_burn_jobs(project_id, created_at_ms DESC);
+
+             CREATE UNIQUE INDEX one_active_subtitle_burn_per_project
+             ON subtitle_burn_jobs(project_id)
+             WHERE status IN ('queued', 'running', 'validating');",
         )?;
         Ok(())
     }

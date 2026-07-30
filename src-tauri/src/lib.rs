@@ -1,3 +1,4 @@
+mod burn;
 mod codex_runner;
 mod commands;
 mod delivery;
@@ -85,6 +86,7 @@ pub fn run() {
             codex_runner::recover_translation_tasks(&store)?;
             understanding::recover_explanation_tasks(&store)?;
             learning::recover_learning_tasks(&store)?;
+            burn::recover_subtitle_burn_jobs(&store)?;
             app.manage(store);
             app.manage(StartupMediaPath(resolve_startup_media_path()));
             Ok(())
@@ -156,7 +158,12 @@ pub fn run() {
             commands::list_learning_cards,
             commands::delete_learning_card,
             commands::export_learning_cards,
-            commands::export_subtitles
+            commands::export_subtitles,
+            commands::start_subtitle_burn,
+            commands::get_subtitle_burn_job,
+            commands::list_subtitle_burn_jobs,
+            commands::cancel_subtitle_burn_job,
+            commands::resume_subtitle_burn_job
         ])
         .run(tauri::generate_context!())
         .expect("failed to run SiaoVPlay");
