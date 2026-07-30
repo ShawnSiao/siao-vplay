@@ -14,7 +14,7 @@ use crate::domain::{
     UpdatePlaybackStateInput,
 };
 
-const CURRENT_SCHEMA_VERSION: i64 = 3;
+const CURRENT_SCHEMA_VERSION: i64 = 4;
 
 #[derive(Clone, Debug)]
 pub(crate) struct CachedMediaProbe {
@@ -541,7 +541,7 @@ impl ProjectStore {
         Self::load_media_artifact(&connection, artifact_id)
     }
 
-    fn connect(&self) -> Result<Connection, StoreError> {
+    pub(crate) fn connect(&self) -> Result<Connection, StoreError> {
         let connection = Connection::open(&self.database_path)?;
         connection.execute_batch(
             "PRAGMA foreign_keys = ON;
@@ -596,6 +596,16 @@ impl ProjectStore {
             Self::apply_migration_3(&transaction)?;
             transaction.execute(
                 "INSERT INTO schema_migrations (version, applied_at_ms) VALUES (3, ?1)",
+                params![now_ms()?],
+            )?;
+            transaction.commit()?;
+            current_version = 3;
+        }
+        if current_version < 4 {
+            let transaction = connection.transaction()?;
+            Self::apply_migration_4(&transaction)?;
+            transaction.execute(
+                "INSERT INTO schema_migrations (version, applied_at_ms) VALUES (4, ?1)",
                 params![now_ms()?],
             )?;
             transaction.commit()?;
@@ -682,6 +692,75 @@ impl ProjectStore {
             "ALTER TABLE media_sources ADD COLUMN source_size_bytes INTEGER;
              ALTER TABLE media_sources ADD COLUMN source_modified_at_ms INTEGER;
              ALTER TABLE media_sources ADD COLUMN poster_path TEXT;",
+        )?;
+        Ok(())
+    }
+
+    fn apply_migration_4(transaction: &Transaction<'_>) -> Result<(), StoreError> {
+        transaction.execute_batch(
+            "CREATE TABLE subtitle_tracks (
+                id TEXT PRIMARY KEY,
+                project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+                role TEXT NOT NULL CHECK (role IN ('original', 'translation')),
+                language_code TEXT NOT NULL,
+                current_version_id TEXT,
+                created_at_ms INTEGER NOT NULL,
+                updated_at_ms INTEGER NOT NULL
+             );
+
+             CREATE UNIQUE INDEX one_original_subtitle_track_per_project
+             ON subtitle_tracks(project_id)
+             WHERE role = 'original';
+
+             CREATE UNIQUE INDEX one_translation_subtitle_track_per_language
+             ON subtitle_tracks(project_id, language_code)
+             WHERE role = 'translation';
+
+             CREATE TABLE subtitle_versions (
+                id TEXT PRIMARY KEY,
+                track_id TEXT NOT NULL REFERENCES subtitle_tracks(id) ON DELETE CASCADE,
+                project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+                version_number INTEGER NOT NULL CHECK (version_number >= 1),
+                status TEXT NOT NULL CHECK (status IN ('draft', 'ready', 'rejected')),
+                source_kind TEXT NOT NULL
+                    CHECK (source_kind IN ('imported_file', 'embedded', 'transcription', 'agent_translation')),
+                source_label TEXT NOT NULL,
+                source_sha256 TEXT NOT NULL CHECK (length(source_sha256) = 64),
+                media_sha256 TEXT NOT NULL CHECK (length(media_sha256) = 64),
+                language_code TEXT NOT NULL CHECK (length(language_code) BETWEEN 2 AND 35),
+                project_revision INTEGER NOT NULL CHECK (project_revision >= 1),
+                preflight_json TEXT NOT NULL,
+                created_at_ms INTEGER NOT NULL,
+                UNIQUE(track_id, version_number)
+             );
+
+             CREATE INDEX subtitle_versions_project_id
+             ON subtitle_versions(project_id, created_at_ms DESC);
+
+             CREATE TABLE subtitle_segments (
+                id TEXT PRIMARY KEY,
+                version_id TEXT NOT NULL REFERENCES subtitle_versions(id) ON DELETE CASCADE,
+                ordinal INTEGER NOT NULL CHECK (ordinal >= 0),
+                start_ms INTEGER NOT NULL CHECK (start_ms >= 0),
+                end_ms INTEGER NOT NULL CHECK (end_ms > start_ms),
+                text TEXT NOT NULL CHECK (length(trim(text)) > 0),
+                confidence REAL CHECK (confidence IS NULL OR (confidence >= 0.0 AND confidence <= 1.0)),
+                UNIQUE(version_id, ordinal)
+             );
+
+             CREATE INDEX subtitle_segments_version_timeline
+             ON subtitle_segments(version_id, start_ms, end_ms, ordinal);
+
+             CREATE TRIGGER subtitle_track_current_version_guard
+             BEFORE UPDATE OF current_version_id ON subtitle_tracks
+             WHEN NEW.current_version_id IS NOT NULL
+               AND NOT EXISTS (
+                   SELECT 1 FROM subtitle_versions
+                   WHERE id = NEW.current_version_id AND track_id = NEW.id
+               )
+             BEGIN
+                 SELECT RAISE(ABORT, 'subtitle current version must belong to track');
+             END;",
         )?;
         Ok(())
     }
@@ -1172,7 +1251,7 @@ mod tests {
     }
 
     #[test]
-    fn migrates_a_v1_database_to_media_artifact_schema() {
+    fn migrates_a_v1_database_to_current_schema() {
         let temp_dir = tempfile::tempdir().expect("temp directory should be created");
         let database_path = temp_dir.path().join("v1.sqlite3");
         let mut connection = Connection::open(&database_path).expect("database should open");
@@ -1213,6 +1292,20 @@ mod tests {
             .expect("schema query should run")
             .is_some();
         assert!(artifact_table_exists);
+        let subtitle_tables = connection
+            .prepare(
+                "SELECT name FROM sqlite_master
+                 WHERE type = 'table' AND name IN (
+                    'subtitle_tracks', 'subtitle_versions', 'subtitle_segments'
+                 )
+                 ORDER BY name",
+            )
+            .expect("schema query should prepare")
+            .query_map([], |row| row.get::<_, String>(0))
+            .expect("schema query should run")
+            .collect::<Result<Vec<_>, _>>()
+            .expect("schema rows should load");
+        assert_eq!(subtitle_tables.len(), 3);
     }
 
     #[test]

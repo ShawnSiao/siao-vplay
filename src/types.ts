@@ -143,3 +143,84 @@ export type DesktopCommandError = {
   code: string;
   message: string;
 };
+
+export type SubtitleFileFormat = "srt" | "vtt";
+
+export type SubtitleCue = {
+  ordinal: number;
+  startMs: number;
+  endMs: number;
+  text: string;
+  confidence: number | null;
+};
+
+export type SubtitleIssueSeverity = "error" | "warning";
+
+export type SubtitleIssueCode =
+  | "empty_text"
+  | "invalid_timing"
+  | "out_of_order"
+  | "out_of_bounds"
+  | "overlap"
+  | "long_gap"
+  | "duration_too_short"
+  | "duration_too_long"
+  | "reading_speed_high";
+
+export type SubtitlePreflightIssue = {
+  code: SubtitleIssueCode;
+  severity: SubtitleIssueSeverity;
+  ordinal: number | null;
+  relatedOrdinal: number | null;
+  message: string;
+};
+
+export type SubtitlePreflightReport = {
+  status: "ready" | "warning" | "blocked";
+  segmentCount: number;
+  errorCount: number;
+  warningCount: number;
+  firstStartMs: number | null;
+  lastEndMs: number | null;
+  mediaDurationMs: number | null;
+  coverageRatio: number | null;
+  issues: SubtitlePreflightIssue[];
+};
+
+export type SubtitleImportPreview = {
+  format: SubtitleFileFormat;
+  sourceLabel: string;
+  sourceSha256: string;
+  languageCode: string;
+  expectedProjectRevision: number;
+  expectedMediaSha256: string;
+  cues: SubtitleCue[];
+  preflight: SubtitlePreflightReport;
+  canImport: boolean;
+};
+
+export type SubtitleSegment = SubtitleCue & {
+  id: string;
+};
+
+export type SubtitleVersion = {
+  id: string;
+  trackId: string;
+  projectId: string;
+  versionNumber: number;
+  status: "draft" | "ready" | "rejected";
+  sourceKind:
+    | "imported_file"
+    | "embedded"
+    | "transcription"
+    | "agent_translation";
+  sourceLabel: string;
+  sourceSha256: string;
+  mediaSha256: string;
+  languageCode: string;
+  projectRevision: number;
+  preflight: SubtitlePreflightReport;
+  createdAtMs: number;
+  isCurrent: boolean;
+  segments: SubtitleSegment[];
+};

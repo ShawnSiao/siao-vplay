@@ -2,6 +2,7 @@ mod commands;
 mod domain;
 mod media;
 mod store;
+mod subtitles;
 
 use std::path::{Path, PathBuf};
 
@@ -88,7 +89,10 @@ pub fn run() {
             commands::get_media_runtime_status,
             commands::inspect_project_media,
             commands::prepare_project_media,
-            commands::ensure_project_poster
+            commands::ensure_project_poster,
+            commands::inspect_subtitle_file,
+            commands::import_subtitle_file,
+            commands::list_subtitle_versions
         ])
         .run(tauri::generate_context!())
         .expect("failed to run SiaoVPlay");

@@ -8,6 +8,8 @@ import type {
   MediaPreparation,
   MediaRuntimeStatus,
   Project,
+  SubtitleImportPreview,
+  SubtitleVersion,
 } from "../types";
 
 export const isDesktopApp = "__TAURI_INTERNALS__" in window;
@@ -143,6 +145,45 @@ export async function deleteProject(
   projectId: string,
 ): Promise<DeleteProjectResult> {
   return invoke<DeleteProjectResult>("delete_project", { projectId });
+}
+
+export async function inspectSubtitleFile(
+  projectId: string,
+  subtitlePath: string,
+  languageCode: string,
+): Promise<SubtitleImportPreview> {
+  return invoke<SubtitleImportPreview>("inspect_subtitle_file", {
+    input: { projectId, subtitlePath, languageCode },
+  });
+}
+
+export async function importSubtitleFile(
+  projectId: string,
+  subtitlePath: string,
+  languageCode: string,
+  preview: Pick<
+    SubtitleImportPreview,
+    | "sourceSha256"
+    | "expectedMediaSha256"
+    | "expectedProjectRevision"
+  >,
+): Promise<SubtitleVersion> {
+  return invoke<SubtitleVersion>("import_subtitle_file", {
+    input: {
+      projectId,
+      subtitlePath,
+      languageCode,
+      expectedSourceSha256: preview.sourceSha256,
+      expectedMediaSha256: preview.expectedMediaSha256,
+      expectedProjectRevision: preview.expectedProjectRevision,
+    },
+  });
+}
+
+export async function listSubtitleVersions(
+  projectId: string,
+): Promise<SubtitleVersion[]> {
+  return invoke<SubtitleVersion[]>("list_subtitle_versions", { projectId });
 }
 
 export function playbackUrl(path: string): string {
