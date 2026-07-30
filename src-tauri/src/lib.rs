@@ -1,6 +1,7 @@
 mod codex_runner;
 mod commands;
 mod domain;
+mod learning;
 mod media;
 mod remote_media;
 mod store;
@@ -82,6 +83,7 @@ pub fn run() {
             transcription::recover_transcription_jobs(&store)?;
             codex_runner::recover_translation_tasks(&store)?;
             understanding::recover_explanation_tasks(&store)?;
+            learning::recover_learning_tasks(&store)?;
             app.manage(store);
             app.manage(StartupMediaPath(resolve_startup_media_path()));
             Ok(())
@@ -137,7 +139,14 @@ pub fn run() {
             commands::import_explanation_result,
             commands::start_codex_explanation_task,
             commands::cancel_explanation_task,
-            commands::resume_codex_explanation_task
+            commands::resume_codex_explanation_task,
+            commands::prepare_learning_task,
+            commands::get_learning_task,
+            commands::list_learning_tasks,
+            commands::read_learning_prompt,
+            commands::get_dictionary_entry,
+            commands::list_dictionary_entries,
+            commands::import_learning_result
         ])
         .run(tauri::generate_context!())
         .expect("failed to run SiaoVPlay");

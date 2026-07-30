@@ -14,7 +14,7 @@ use crate::domain::{
     SubtitleDisplayMode, UpdatePlaybackStateInput,
 };
 
-const CURRENT_SCHEMA_VERSION: i64 = 11;
+const CURRENT_SCHEMA_VERSION: i64 = 12;
 
 #[derive(Clone, Debug)]
 pub(crate) struct RemoteImportProvenance {
@@ -661,7 +661,9 @@ impl ProjectStore {
             .prepare(
                 "SELECT id FROM agent_tasks WHERE project_id = ?1
                  UNION
-                 SELECT id FROM explanation_tasks WHERE project_id = ?1",
+                 SELECT id FROM explanation_tasks WHERE project_id = ?1
+                 UNION
+                 SELECT id FROM learning_tasks WHERE project_id = ?1",
             )?
             .query_map(params![project_id], |row| row.get::<_, String>(0))?
             .collect::<Result<Vec<_>, _>>()?;
@@ -855,6 +857,16 @@ impl ProjectStore {
             Self::apply_migration_11(&transaction)?;
             transaction.execute(
                 "INSERT INTO schema_migrations (version, applied_at_ms) VALUES (11, ?1)",
+                params![now_ms()?],
+            )?;
+            transaction.commit()?;
+            current_version = 11;
+        }
+        if current_version < 12 {
+            let transaction = connection.transaction()?;
+            Self::apply_migration_12(&transaction)?;
+            transaction.execute(
+                "INSERT INTO schema_migrations (version, applied_at_ms) VALUES (12, ?1)",
                 params![now_ms()?],
             )?;
             transaction.commit()?;
@@ -1362,6 +1374,129 @@ impl ProjectStore {
              ALTER TABLE explanation_tasks
              ADD COLUMN output_explanation_id TEXT
                  REFERENCES explanations(id) ON DELETE SET NULL;",
+        )?;
+        Ok(())
+    }
+
+    fn apply_migration_12(transaction: &Transaction<'_>) -> Result<(), StoreError> {
+        transaction.execute_batch(
+            "CREATE TABLE learning_tasks (
+                id TEXT PRIMARY KEY,
+                project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+                handoff_kind TEXT NOT NULL CHECK (handoff_kind IN ('manual', 'codex')),
+                protocol_version TEXT NOT NULL,
+                status TEXT NOT NULL CHECK (
+                    status IN (
+                        'awaiting_external_result', 'queued', 'running', 'validating',
+                        'completed', 'failed', 'cancelled', 'interrupted'
+                    )
+                ),
+                stage TEXT NOT NULL,
+                progress REAL NOT NULL CHECK (progress >= 0.0 AND progress <= 1.0),
+                receiver_label TEXT NOT NULL,
+                material_scope_json TEXT NOT NULL,
+                source_version_id TEXT NOT NULL
+                    REFERENCES subtitle_versions(id) ON DELETE CASCADE,
+                translation_version_id TEXT
+                    REFERENCES subtitle_versions(id) ON DELETE SET NULL,
+                source_segment_id TEXT NOT NULL
+                    REFERENCES subtitle_segments(id) ON DELETE CASCADE,
+                selected_text TEXT NOT NULL,
+                selection_kind TEXT NOT NULL
+                    CHECK (selection_kind IN ('word', 'phrase', 'sentence')),
+                playback_position_ms INTEGER NOT NULL CHECK (playback_position_ms >= 0),
+                expected_project_revision INTEGER NOT NULL
+                    CHECK (expected_project_revision >= 1),
+                expected_media_sha256 TEXT NOT NULL
+                    CHECK (length(expected_media_sha256) = 64),
+                material_manifest_sha256 TEXT NOT NULL
+                    CHECK (length(material_manifest_sha256) = 64),
+                result_sha256 TEXT
+                    CHECK (result_sha256 IS NULL OR length(result_sha256) = 64),
+                result_validation_json TEXT,
+                runner_version TEXT,
+                runner_auth_mode TEXT,
+                runner_thread_id TEXT,
+                cancel_requested_at_ms INTEGER,
+                error_code TEXT,
+                error_message TEXT,
+                created_at_ms INTEGER NOT NULL,
+                updated_at_ms INTEGER NOT NULL,
+                started_at_ms INTEGER,
+                completed_at_ms INTEGER
+             );
+
+             CREATE INDEX learning_tasks_project_created
+             ON learning_tasks(project_id, created_at_ms DESC);
+
+             CREATE UNIQUE INDEX one_active_learning_task_per_project
+             ON learning_tasks(project_id)
+             WHERE status IN (
+                'awaiting_external_result', 'queued', 'running', 'validating'
+             );
+
+             CREATE TABLE dictionary_entries (
+                id TEXT PRIMARY KEY,
+                project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+                task_id TEXT NOT NULL UNIQUE
+                    REFERENCES learning_tasks(id) ON DELETE CASCADE,
+                source_version_id TEXT NOT NULL
+                    REFERENCES subtitle_versions(id) ON DELETE CASCADE,
+                translation_version_id TEXT
+                    REFERENCES subtitle_versions(id) ON DELETE SET NULL,
+                source_segment_id TEXT NOT NULL
+                    REFERENCES subtitle_segments(id) ON DELETE CASCADE,
+                selected_text TEXT NOT NULL,
+                selection_kind TEXT NOT NULL
+                    CHECK (selection_kind IN ('word', 'phrase', 'sentence')),
+                pronunciation TEXT NOT NULL,
+                part_of_speech TEXT NOT NULL,
+                contextual_meaning TEXT NOT NULL,
+                usage_note TEXT,
+                source_sentence TEXT NOT NULL,
+                translated_sentence TEXT,
+                language_code TEXT NOT NULL,
+                playback_position_ms INTEGER NOT NULL CHECK (playback_position_ms >= 0),
+                created_at_ms INTEGER NOT NULL
+             );
+
+             CREATE INDEX dictionary_entries_project_created
+             ON dictionary_entries(project_id, created_at_ms DESC);
+
+             ALTER TABLE learning_tasks
+             ADD COLUMN output_dictionary_entry_id TEXT
+                 REFERENCES dictionary_entries(id) ON DELETE SET NULL;
+
+             CREATE TABLE learning_cards (
+                id TEXT PRIMARY KEY,
+                project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+                dictionary_entry_id TEXT UNIQUE
+                    REFERENCES dictionary_entries(id) ON DELETE SET NULL,
+                source_version_id TEXT NOT NULL
+                    REFERENCES subtitle_versions(id) ON DELETE CASCADE,
+                translation_version_id TEXT
+                    REFERENCES subtitle_versions(id) ON DELETE SET NULL,
+                source_segment_id TEXT NOT NULL
+                    REFERENCES subtitle_segments(id) ON DELETE CASCADE,
+                selected_text TEXT NOT NULL,
+                selection_kind TEXT NOT NULL
+                    CHECK (selection_kind IN ('word', 'phrase', 'sentence')),
+                pronunciation TEXT NOT NULL,
+                part_of_speech TEXT NOT NULL,
+                contextual_meaning TEXT NOT NULL,
+                usage_note TEXT,
+                source_sentence TEXT NOT NULL,
+                translated_sentence TEXT,
+                language_code TEXT NOT NULL,
+                playback_position_ms INTEGER NOT NULL CHECK (playback_position_ms >= 0),
+                screenshot_path TEXT NOT NULL,
+                screenshot_sha256 TEXT NOT NULL CHECK (length(screenshot_sha256) = 64),
+                created_at_ms INTEGER NOT NULL,
+                updated_at_ms INTEGER NOT NULL
+             );
+
+             CREATE INDEX learning_cards_project_position
+             ON learning_cards(project_id, playback_position_ms ASC, created_at_ms DESC);",
         )?;
         Ok(())
     }

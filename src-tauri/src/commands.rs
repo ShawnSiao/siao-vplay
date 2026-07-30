@@ -7,6 +7,10 @@ use crate::{
         CreateLocalProjectInput, DeleteProjectResult, PrepareProjectMediaInput, Project,
         RelinkProjectMediaInput, UpdatePlaybackStateInput,
     },
+    learning::{
+        self, DictionaryEntry, ImportLearningResultInput, LearningApplication, LearningError,
+        LearningTask, PrepareLearningTaskInput,
+    },
     media::{self, MediaError, MediaInspection, MediaPreparation, MediaRuntimeStatus},
     remote_media::{
         self, CancelRemoteMediaImportInput, ImportRemoteMediaUrlInput, InspectRemoteMediaUrlInput,
@@ -277,6 +281,15 @@ impl From<CodexRunnerError> for CommandError {
 
 impl From<UnderstandingError> for CommandError {
     fn from(error: UnderstandingError) -> Self {
+        Self {
+            code: error.code(),
+            message: error.to_string(),
+        }
+    }
+}
+
+impl From<LearningError> for CommandError {
+    fn from(error: LearningError) -> Self {
         Self {
             code: error.code(),
             message: error.to_string(),
@@ -813,6 +826,72 @@ pub async fn resume_codex_explanation_task(
     let store = store.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
         codex_runner::resume_codex_explanation_task(&store, input).map_err(CommandError::from)
+    })
+    .await
+    .map_err(CommandError::background_task_failed)?
+}
+
+#[tauri::command]
+pub async fn prepare_learning_task(
+    store: State<'_, ProjectStore>,
+    input: PrepareLearningTaskInput,
+) -> Result<LearningTask, CommandError> {
+    let store = store.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        learning::prepare_learning_task(&store, input).map_err(CommandError::from)
+    })
+    .await
+    .map_err(CommandError::background_task_failed)?
+}
+
+#[tauri::command]
+pub fn get_learning_task(
+    store: State<'_, ProjectStore>,
+    task_id: String,
+) -> Result<LearningTask, CommandError> {
+    learning::get_learning_task(store.inner(), &task_id).map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn list_learning_tasks(
+    store: State<'_, ProjectStore>,
+    project_id: String,
+) -> Result<Vec<LearningTask>, CommandError> {
+    learning::list_learning_tasks(store.inner(), &project_id).map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn read_learning_prompt(
+    store: State<'_, ProjectStore>,
+    task_id: String,
+) -> Result<String, CommandError> {
+    learning::read_learning_prompt(store.inner(), &task_id).map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn get_dictionary_entry(
+    store: State<'_, ProjectStore>,
+    entry_id: String,
+) -> Result<DictionaryEntry, CommandError> {
+    learning::get_dictionary_entry(store.inner(), &entry_id).map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn list_dictionary_entries(
+    store: State<'_, ProjectStore>,
+    project_id: String,
+) -> Result<Vec<DictionaryEntry>, CommandError> {
+    learning::list_dictionary_entries(store.inner(), &project_id).map_err(Into::into)
+}
+
+#[tauri::command]
+pub async fn import_learning_result(
+    store: State<'_, ProjectStore>,
+    input: ImportLearningResultInput,
+) -> Result<LearningApplication, CommandError> {
+    let store = store.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        learning::import_learning_result(&store, input).map_err(CommandError::from)
     })
     .await
     .map_err(CommandError::background_task_failed)?

@@ -937,6 +937,13 @@ fn ensure_no_active_translation_task(
               AND status IN (
                 'awaiting_external_result', 'queued', 'running', 'validating'
               )
+            UNION ALL
+            SELECT 1
+            FROM learning_tasks
+            WHERE project_id = ?1
+              AND status IN (
+                'awaiting_external_result', 'queued', 'running', 'validating'
+              )
          )",
         params![project_id],
         |row| row.get::<_, bool>(0),
@@ -1013,6 +1020,13 @@ fn persist_revision_version(
             UNION ALL
             SELECT 1
             FROM explanation_tasks
+            WHERE project_id = ?1
+              AND status IN (
+                'awaiting_external_result', 'queued', 'running', 'validating'
+              )
+            UNION ALL
+            SELECT 1
+            FROM learning_tasks
             WHERE project_id = ?1
               AND status IN (
                 'awaiting_external_result', 'queued', 'running', 'validating'
