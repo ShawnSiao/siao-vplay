@@ -9,6 +9,7 @@ import type {
   SubtitleSegment,
   SubtitleVersion,
 } from "../types";
+import { LearningPanel } from "./LearningPanel";
 import { UnderstandingPanel } from "./UnderstandingPanel";
 
 type PlaybackValues = {
@@ -69,7 +70,9 @@ export function PlayerScreen({
     project.playbackState.subtitleMode,
   );
   const [videoReady, setVideoReady] = useState(false);
-  const [panelMode, setPanelMode] = useState<"watch" | "understand">("watch");
+  const [panelMode, setPanelMode] = useState<
+    "watch" | "understand" | "learn"
+  >("watch");
   const persistFunctionRef = useRef<
     (video: HTMLVideoElement | null) => Promise<void>
   >(async () => undefined);
@@ -235,7 +238,7 @@ export function PlayerScreen({
         seekTo(positionMs + 10_000);
       } else if (event.key === "Escape") {
         event.preventDefault();
-        if (panelMode === "understand") {
+        if (panelMode !== "watch") {
           setPanelMode("watch");
         } else {
           onBack();
@@ -368,7 +371,12 @@ export function PlayerScreen({
           >
             理解
           </button>
-          <button type="button" disabled title="将在下一批接入">
+          <button
+            className={panelMode === "learn" ? "active learning-active" : ""}
+            type="button"
+            disabled={!currentSubtitle}
+            onClick={() => setPanelMode("learn")}
+          >
             学习
           </button>
         </div>
@@ -414,7 +422,7 @@ export function PlayerScreen({
 
       <div
         className={`player-workspace ${
-          panelMode === "understand" ? "with-understanding" : ""
+          panelMode !== "watch" ? "with-understanding" : ""
         }`}
       >
         <main className="video-stage">
@@ -589,6 +597,18 @@ export function PlayerScreen({
             sourceVersion={currentSubtitle}
             translationVersion={currentTranslation}
             onClose={() => setPanelMode("watch")}
+          />
+        ) : panelMode === "learn" ? (
+          <LearningPanel
+            key={`${project.id}:${activeOriginal?.id ?? "no-line"}`}
+            projectId={project.id}
+            playbackPositionMs={positionMs}
+            sourceVersion={currentSubtitle}
+            translationVersion={currentTranslation}
+            sourceSegment={activeOriginal}
+            translationSegment={activeTranslation}
+            onClose={() => setPanelMode("watch")}
+            onJump={seekTo}
           />
         ) : null}
       </div>

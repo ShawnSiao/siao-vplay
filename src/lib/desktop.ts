@@ -9,6 +9,12 @@ import type {
   Explanation,
   ExplanationApplication,
   ExplanationTask,
+  DictionaryEntry,
+  LearningApplication,
+  LearningCard,
+  LearningCardsExport,
+  LearningSelectionKind,
+  LearningTask,
   MediaPreparation,
   MediaRuntimeStatus,
   Project,
@@ -585,6 +591,150 @@ export async function resumeCodexExplanationTask(
 ): Promise<ExplanationTask> {
   return invoke<ExplanationTask>("resume_codex_explanation_task", {
     input: { taskId, timeoutSeconds },
+  });
+}
+
+export async function chooseLearningResultFile(): Promise<string | null> {
+  if (!isDesktopApp) {
+    return null;
+  }
+  const selected = await open({
+    multiple: false,
+    directory: false,
+    title: "选择词义查询结果",
+    filters: [
+      {
+        name: "JSON 结果",
+        extensions: ["json"],
+      },
+    ],
+  });
+  return typeof selected === "string" ? selected : null;
+}
+
+export async function chooseLearningExportDirectory(): Promise<string | null> {
+  if (!isDesktopApp) {
+    return null;
+  }
+  const selected = await open({
+    multiple: false,
+    directory: true,
+    title: "选择学习卡片导出位置",
+  });
+  return typeof selected === "string" ? selected : null;
+}
+
+export async function prepareLearningTask(
+  projectId: string,
+  handoffKind: "manual" | "codex",
+  sourceSegmentId: string,
+  selectedText: string,
+  selectionKind: LearningSelectionKind,
+  playbackPositionMs: number,
+): Promise<LearningTask> {
+  return invoke<LearningTask>("prepare_learning_task", {
+    input: {
+      projectId,
+      handoffKind,
+      sourceSegmentId,
+      selectedText,
+      selectionKind,
+      playbackPositionMs,
+    },
+  });
+}
+
+export async function getLearningTask(taskId: string): Promise<LearningTask> {
+  return invoke<LearningTask>("get_learning_task", { taskId });
+}
+
+export async function listLearningTasks(
+  projectId: string,
+): Promise<LearningTask[]> {
+  return invoke<LearningTask[]>("list_learning_tasks", { projectId });
+}
+
+export async function readLearningPrompt(taskId: string): Promise<string> {
+  return invoke<string>("read_learning_prompt", { taskId });
+}
+
+export async function getDictionaryEntry(
+  entryId: string,
+): Promise<DictionaryEntry> {
+  return invoke<DictionaryEntry>("get_dictionary_entry", { entryId });
+}
+
+export async function listDictionaryEntries(
+  projectId: string,
+): Promise<DictionaryEntry[]> {
+  return invoke<DictionaryEntry[]>("list_dictionary_entries", { projectId });
+}
+
+export async function importLearningResult(
+  taskId: string,
+  resultPath: string,
+): Promise<LearningApplication> {
+  return invoke<LearningApplication>("import_learning_result", {
+    input: { taskId, resultPath },
+  });
+}
+
+export async function startCodexLearningTask(
+  taskId: string,
+  timeoutSeconds?: number,
+): Promise<LearningTask> {
+  return invoke<LearningTask>("start_codex_learning_task", {
+    input: { taskId, timeoutSeconds },
+  });
+}
+
+export async function cancelLearningTask(
+  taskId: string,
+): Promise<LearningTask> {
+  return invoke<LearningTask>("cancel_learning_task", { taskId });
+}
+
+export async function resumeCodexLearningTask(
+  taskId: string,
+  timeoutSeconds?: number,
+): Promise<LearningTask> {
+  return invoke<LearningTask>("resume_codex_learning_task", {
+    input: { taskId, timeoutSeconds },
+  });
+}
+
+export async function createLearningCard(
+  projectId: string,
+  dictionaryEntryId: string,
+): Promise<LearningCard> {
+  return invoke<LearningCard>("create_learning_card", {
+    input: { projectId, dictionaryEntryId },
+  });
+}
+
+export async function getLearningCard(cardId: string): Promise<LearningCard> {
+  return invoke<LearningCard>("get_learning_card", { cardId });
+}
+
+export async function listLearningCards(
+  projectId: string,
+): Promise<LearningCard[]> {
+  return invoke<LearningCard[]>("list_learning_cards", { projectId });
+}
+
+export async function deleteLearningCard(
+  projectId: string,
+  cardId: string,
+): Promise<boolean> {
+  return invoke<boolean>("delete_learning_card", { projectId, cardId });
+}
+
+export async function exportLearningCards(
+  projectId: string,
+  destinationDirectory: string,
+): Promise<LearningCardsExport> {
+  return invoke<LearningCardsExport>("export_learning_cards", {
+    input: { projectId, destinationDirectory },
   });
 }
 

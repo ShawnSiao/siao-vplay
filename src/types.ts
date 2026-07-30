@@ -454,3 +454,95 @@ export type ExplanationApplication = {
   task: ExplanationTask;
   explanation: Explanation;
 };
+
+export type LearningSelectionKind = "word" | "phrase" | "sentence";
+
+export type LearningTask = {
+  id: string;
+  projectId: string;
+  handoffKind: "manual" | "codex";
+  protocolVersion: string;
+  status:
+    | "awaiting_external_result"
+    | "queued"
+    | "running"
+    | "validating"
+    | "completed"
+    | "failed"
+    | "cancelled"
+    | "interrupted";
+  stage: string;
+  progress: number;
+  receiverLabel: string;
+  materialScope: string[];
+  sourceVersionId: string;
+  translationVersionId: string | null;
+  sourceSegmentId: string;
+  selectedText: string;
+  selectionKind: LearningSelectionKind;
+  playbackPositionMs: number;
+  expectedProjectRevision: number;
+  outputDictionaryEntryId: string | null;
+  errorCode: string | null;
+  errorMessage: string | null;
+  createdAtMs: number;
+  updatedAtMs: number;
+  startedAtMs: number | null;
+  completedAtMs: number | null;
+};
+
+export type DictionaryEntry = {
+  id: string;
+  projectId: string;
+  taskId: string;
+  sourceVersionId: string;
+  translationVersionId: string | null;
+  sourceSegmentId: string;
+  selectedText: string;
+  selectionKind: LearningSelectionKind;
+  pronunciation: string;
+  partOfSpeech: string;
+  contextualMeaning: string;
+  usageNote: string | null;
+  sourceSentence: string;
+  translatedSentence: string | null;
+  languageCode: string;
+  playbackPositionMs: number;
+  createdAtMs: number;
+};
+
+export type LearningApplication = {
+  task: LearningTask;
+  dictionaryEntry: DictionaryEntry;
+};
+
+export type LearningCard = {
+  id: string;
+  projectId: string;
+  dictionaryEntryId: string | null;
+  sourceVersionId: string;
+  translationVersionId: string | null;
+  sourceSegmentId: string;
+  selectedText: string;
+  selectionKind: LearningSelectionKind;
+  pronunciation: string;
+  partOfSpeech: string;
+  contextualMeaning: string;
+  usageNote: string | null;
+  sourceSentence: string;
+  translatedSentence: string | null;
+  languageCode: string;
+  playbackPositionMs: number;
+  screenshotPath: string;
+  screenshotSha256: string;
+  screenshotAvailable: boolean;
+  createdAtMs: number;
+  updatedAtMs: number;
+};
+
+export type LearningCardsExport = {
+  directory: string;
+  jsonPath: string;
+  markdownPath: string;
+  cardCount: number;
+};

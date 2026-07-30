@@ -2,9 +2,12 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type {
+  DictionaryEntry,
   EmbeddedSubtitlePreview,
   Explanation,
   ExplanationTask,
+  LearningCard,
+  LearningTask,
   MediaPreparation,
   Project,
   RemoteMediaPreview,
@@ -70,6 +73,23 @@ const desktopMocks = vi.hoisted(() => ({
   startCodexExplanationTask: vi.fn(),
   cancelExplanationTask: vi.fn(),
   resumeCodexExplanationTask: vi.fn(),
+  chooseLearningResultFile: vi.fn(),
+  chooseLearningExportDirectory: vi.fn(),
+  prepareLearningTask: vi.fn(),
+  getLearningTask: vi.fn(),
+  listLearningTasks: vi.fn(),
+  readLearningPrompt: vi.fn(),
+  getDictionaryEntry: vi.fn(),
+  listDictionaryEntries: vi.fn(),
+  importLearningResult: vi.fn(),
+  startCodexLearningTask: vi.fn(),
+  cancelLearningTask: vi.fn(),
+  resumeCodexLearningTask: vi.fn(),
+  createLearningCard: vi.fn(),
+  getLearningCard: vi.fn(),
+  listLearningCards: vi.fn(),
+  deleteLearningCard: vi.fn(),
+  exportLearningCards: vi.fn(),
 }));
 
 vi.mock("./lib/desktop", () => ({
@@ -408,6 +428,82 @@ const explanation: Explanation = {
   createdAtMs: 1_785_354_330_000,
 };
 
+const learningTask: LearningTask = {
+  id: "d34346c4-ec23-4f05-aee5-29ec8c8942aa",
+  projectId: project.id,
+  handoffKind: "codex",
+  protocolVersion: "siaovplay-learning-v1",
+  status: "queued",
+  stage: "queued",
+  progress: 0,
+  receiverLabel: "本机 Codex",
+  materialScope: [
+    "所选原文",
+    "当前原文字幕",
+    "对应的简体中文字幕（如有）",
+    "字幕语言、版本标识和播放位置",
+  ],
+  sourceVersionId: subtitleVersion.id,
+  translationVersionId: translatedVersion.id,
+  sourceSegmentId: subtitleVersion.segments[0].id,
+  selectedText: subtitleVersion.segments[0].text,
+  selectionKind: "sentence",
+  playbackPositionMs: 500,
+  expectedProjectRevision: 3,
+  outputDictionaryEntryId: null,
+  errorCode: null,
+  errorMessage: null,
+  createdAtMs: 1_785_354_340_000,
+  updatedAtMs: 1_785_354_340_000,
+  startedAtMs: null,
+  completedAtMs: null,
+};
+
+const dictionaryEntry: DictionaryEntry = {
+  id: "4458e67e-3585-49ef-82c4-cfaec8ab93b2",
+  projectId: project.id,
+  taskId: learningTask.id,
+  sourceVersionId: subtitleVersion.id,
+  translationVersionId: translatedVersion.id,
+  sourceSegmentId: subtitleVersion.segments[0].id,
+  selectedText: subtitleVersion.segments[0].text,
+  selectionKind: "sentence",
+  pronunciation: "matte ita no",
+  partOfSpeech: "疑问句",
+  contextualMeaning: "结合当前台词，询问对方是否一直在等待。",
+  usageNote: "句末的「の」让语气更柔和，也带有确认意味。",
+  sourceSentence: subtitleVersion.segments[0].text,
+  translatedSentence: translatedVersion.segments[0].text,
+  languageCode: "ja",
+  playbackPositionMs: 500,
+  createdAtMs: 1_785_354_350_000,
+};
+
+const learningCard: LearningCard = {
+  id: "74da93a8-8cbe-4573-b2aa-56bd834d58fd",
+  projectId: project.id,
+  dictionaryEntryId: dictionaryEntry.id,
+  sourceVersionId: subtitleVersion.id,
+  translationVersionId: translatedVersion.id,
+  sourceSegmentId: subtitleVersion.segments[0].id,
+  selectedText: dictionaryEntry.selectedText,
+  selectionKind: dictionaryEntry.selectionKind,
+  pronunciation: dictionaryEntry.pronunciation,
+  partOfSpeech: dictionaryEntry.partOfSpeech,
+  contextualMeaning: dictionaryEntry.contextualMeaning,
+  usageNote: dictionaryEntry.usageNote,
+  sourceSentence: dictionaryEntry.sourceSentence,
+  translatedSentence: dictionaryEntry.translatedSentence,
+  languageCode: dictionaryEntry.languageCode,
+  playbackPositionMs: 900,
+  screenshotPath:
+    "W:\\SiaoVPlay\\app-data\\learning-cards\\project\\card\\scene.jpg",
+  screenshotSha256: "e".repeat(64),
+  screenshotAvailable: true,
+  createdAtMs: 1_785_354_360_000,
+  updatedAtMs: 1_785_354_360_000,
+};
+
 beforeEach(() => {
   vi.clearAllMocks();
   desktopMocks.getAppStatus.mockResolvedValue({
@@ -610,6 +706,66 @@ beforeEach(() => {
     progress: 0.1,
     startedAtMs: 1_785_354_323_000,
   });
+  desktopMocks.listLearningTasks.mockResolvedValue([]);
+  desktopMocks.listDictionaryEntries.mockResolvedValue([]);
+  desktopMocks.listLearningCards.mockResolvedValue([]);
+  desktopMocks.prepareLearningTask.mockResolvedValue(learningTask);
+  desktopMocks.startCodexLearningTask.mockResolvedValue({
+    ...learningTask,
+    status: "running",
+    stage: "running",
+    progress: 0.1,
+    startedAtMs: 1_785_354_341_000,
+  });
+  desktopMocks.getLearningTask.mockResolvedValue({
+    ...learningTask,
+    status: "running",
+    stage: "running",
+    progress: 0.4,
+    startedAtMs: 1_785_354_341_000,
+  });
+  desktopMocks.readLearningPrompt.mockResolvedValue(
+    "# SiaoVPlay 语境词义查询任务\n\n只返回 JSON。",
+  );
+  desktopMocks.getDictionaryEntry.mockResolvedValue(dictionaryEntry);
+  desktopMocks.chooseLearningResultFile.mockResolvedValue(null);
+  desktopMocks.chooseLearningExportDirectory.mockResolvedValue(null);
+  desktopMocks.importLearningResult.mockResolvedValue({
+    task: {
+      ...learningTask,
+      handoffKind: "manual",
+      status: "completed",
+      stage: "completed",
+      progress: 1,
+      outputDictionaryEntryId: dictionaryEntry.id,
+      completedAtMs: 1_785_354_350_000,
+    },
+    dictionaryEntry,
+  });
+  desktopMocks.cancelLearningTask.mockResolvedValue({
+    ...learningTask,
+    status: "cancelled",
+    stage: "cancelled",
+    completedAtMs: 1_785_354_342_000,
+  });
+  desktopMocks.resumeCodexLearningTask.mockResolvedValue({
+    ...learningTask,
+    status: "running",
+    stage: "running",
+    progress: 0.1,
+    startedAtMs: 1_785_354_343_000,
+  });
+  desktopMocks.createLearningCard.mockResolvedValue(learningCard);
+  desktopMocks.getLearningCard.mockResolvedValue(learningCard);
+  desktopMocks.deleteLearningCard.mockResolvedValue(true);
+  desktopMocks.exportLearningCards.mockResolvedValue({
+    directory: "W:\\exports\\SiaoVPlay-learning-rain-platform",
+    jsonPath:
+      "W:\\exports\\SiaoVPlay-learning-rain-platform\\learning-cards.json",
+    markdownPath:
+      "W:\\exports\\SiaoVPlay-learning-rain-platform\\learning-cards.md",
+    cardCount: 1,
+  });
   Object.defineProperty(navigator, "clipboard", {
     configurable: true,
     value: {
@@ -792,6 +948,169 @@ describe("App", () => {
     ).toBeInTheDocument();
     expect(
       screen.getByText("结合当前语气，这个约定对人物可能很重要。"),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps learning quiet until the user selects the current subtitle and confirms the Codex scope", async () => {
+    const captionProject: Project = {
+      ...project,
+      playbackState: {
+        ...project.playbackState,
+        positionMs: 500,
+      },
+    };
+    desktopMocks.listProjects.mockResolvedValue([captionProject]);
+    desktopMocks.markProjectOpened.mockResolvedValue(captionProject);
+    desktopMocks.listSubtitleVersions.mockResolvedValue([
+      subtitleVersion,
+      translatedVersion,
+    ]);
+
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "继续观看" }));
+
+    expect(screen.queryByLabelText("语言学习")).not.toBeInTheDocument();
+    fireEvent.click(await screen.findByRole("button", { name: "学习" }));
+
+    expect(await screen.findByLabelText("语言学习")).toBeInTheDocument();
+    expect(screen.getByLabelText("要查询的原文")).toHaveValue("待っていたの？");
+    expect(
+      screen.getByText("不包含视频、音频、本机媒体路径、数据库或凭证。"),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "确认范围并查询" }));
+    await waitFor(() =>
+      expect(desktopMocks.prepareLearningTask).toHaveBeenCalledWith(
+        project.id,
+        "codex",
+        subtitleVersion.segments[0].id,
+        "待っていたの？",
+        "sentence",
+        500,
+      ),
+    );
+    await waitFor(() =>
+      expect(desktopMocks.startCodexLearningTask).toHaveBeenCalledWith(
+        learningTask.id,
+      ),
+    );
+    expect(
+      await screen.findByText("正在查询这句台词里的用法"),
+    ).toBeInTheDocument();
+  });
+
+  it("imports a manual learning result and supports card save, jump, export, and delete", async () => {
+    const captionProject: Project = {
+      ...project,
+      playbackState: {
+        ...project.playbackState,
+        positionMs: 500,
+      },
+    };
+    desktopMocks.listProjects.mockResolvedValue([captionProject]);
+    desktopMocks.markProjectOpened.mockResolvedValue(captionProject);
+    desktopMocks.listSubtitleVersions.mockResolvedValue([
+      subtitleVersion,
+      translatedVersion,
+    ]);
+    desktopMocks.prepareLearningTask.mockResolvedValue({
+      ...learningTask,
+      handoffKind: "manual",
+      status: "awaiting_external_result",
+      stage: "awaiting_external_result",
+      receiverLabel: "自行选择的工具",
+    });
+    desktopMocks.chooseLearningResultFile.mockResolvedValue(
+      "W:\\SiaoVPlay\\handoff\\learning.json",
+    );
+    desktopMocks.chooseLearningExportDirectory.mockResolvedValue("W:\\exports");
+
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "继续观看" }));
+    fireEvent.click(await screen.findByRole("button", { name: "学习" }));
+    fireEvent.click(await screen.findByRole("button", { name: /复制提示词/ }));
+    fireEvent.click(screen.getByRole("button", { name: "确认范围并查询" }));
+
+    expect(
+      await screen.findByText("复制后交给自行选择的工具"),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "复制完整提示词" }));
+    await waitFor(() =>
+      expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
+        expect.stringContaining("语境词义查询任务"),
+      ),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /选择返回的 JSON/ }));
+    expect(await screen.findByText("learning.json")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "检查并显示词义" }));
+
+    expect(
+      await screen.findByText("结合当前台词，询问对方是否一直在等待。"),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "收藏台词和场景" }));
+    expect(
+      await screen.findByAltText("待っていたの？ 的场景截图"),
+    ).toBeInTheDocument();
+    expect(desktopMocks.createLearningCard).toHaveBeenCalledWith(
+      project.id,
+      dictionaryEntry.id,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "跳回" }));
+    expect(screen.getByLabelText("播放进度")).toHaveValue("900");
+
+    fireEvent.click(screen.getByRole("button", { name: "导出" }));
+    await waitFor(() =>
+      expect(desktopMocks.exportLearningCards).toHaveBeenCalledWith(
+        project.id,
+        "W:\\exports",
+      ),
+    );
+    expect(
+      await screen.findByText(/已导出 1 张卡片到/),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "删除" }));
+    await waitFor(() =>
+      expect(desktopMocks.deleteLearningCard).toHaveBeenCalledWith(
+        project.id,
+        learningCard.id,
+      ),
+    );
+    await waitFor(() =>
+      expect(
+        screen.queryByAltText("待っていたの？ 的场景截图"),
+      ).not.toBeInTheDocument(),
+    );
+  });
+
+  it("restores a completed learning result and saved card for the current subtitle", async () => {
+    const captionProject: Project = {
+      ...project,
+      playbackState: {
+        ...project.playbackState,
+        positionMs: 500,
+      },
+    };
+    desktopMocks.listProjects.mockResolvedValue([captionProject]);
+    desktopMocks.markProjectOpened.mockResolvedValue(captionProject);
+    desktopMocks.listSubtitleVersions.mockResolvedValue([
+      subtitleVersion,
+      translatedVersion,
+    ]);
+    desktopMocks.listDictionaryEntries.mockResolvedValue([dictionaryEntry]);
+    desktopMocks.listLearningCards.mockResolvedValue([learningCard]);
+
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "继续观看" }));
+    fireEvent.click(await screen.findByRole("button", { name: "学习" }));
+
+    expect(
+      await screen.findAllByText("结合当前台词，询问对方是否一直在等待。"),
+    ).toHaveLength(2);
+    expect(screen.getByRole("button", { name: "已收藏" })).toBeDisabled();
+    expect(
+      screen.getByAltText("待っていたの？ 的场景截图"),
     ).toBeInTheDocument();
   });
 
