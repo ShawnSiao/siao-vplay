@@ -2449,18 +2449,17 @@ mod tests {
             .expect("SIAOVPLAY_MEDIA_FIXTURE_DIR must be set");
         let media_path = fixture_directory.join("h264-aac.mp4");
         let temporary = tempfile::tempdir().expect("temporary directory should work");
-        let store = ProjectStore::open(
-            temporary
-                .path()
-                .join("data")
-                .join("projects")
-                .join("siaovplay.db"),
-        )
-        .expect("store should open");
+        let persistent_validation_directory =
+            std::env::var_os("SIAOVPLAY_PERSIST_VALIDATION_DIR").map(PathBuf::from);
+        let data_directory = persistent_validation_directory
+            .clone()
+            .unwrap_or_else(|| temporary.path().join("data"));
+        let database_path = data_directory.join("projects").join("siaovplay.db");
+        let store = ProjectStore::open(&database_path).expect("store should open");
         let project = store
             .create_local_project(CreateLocalProjectInput {
                 media_path: media_path.to_string_lossy().into_owned(),
-                title: Some("real learning card".to_owned()),
+                title: Some("Phase 4E 学习卡片恢复".to_owned()),
             })
             .expect("project should create");
         let inspection =
@@ -2538,7 +2537,7 @@ mod tests {
         let card = create_learning_card(
             &store,
             CreateLearningCardInput {
-                project_id: project.id,
+                project_id: project.id.clone(),
                 dictionary_entry_id: entry.id,
             },
         )
@@ -2548,6 +2547,32 @@ mod tests {
         assert!(bytes.starts_with(&[0xff, 0xd8]));
         assert!(card.screenshot_available);
         assert_eq!(hash_bytes(&bytes), card.screenshot_sha256);
+
+        drop(store);
+        let reopened = ProjectStore::open(database_path).expect("store should reopen");
+        assert_eq!(
+            recover_learning_tasks(&reopened).expect("recovery should run"),
+            0
+        );
+        assert_eq!(
+            list_dictionary_entries(&reopened, &project.id)
+                .expect("entries should survive restart")
+                .len(),
+            1
+        );
+        let restored_card =
+            get_learning_card(&reopened, &card.id).expect("card should survive restart");
+        assert!(restored_card.screenshot_available);
+        assert_eq!(restored_card.screenshot_sha256, card.screenshot_sha256);
+        assert_eq!(
+            list_learning_cards(&reopened, &project.id)
+                .expect("cards should survive restart")
+                .len(),
+            1
+        );
+        if persistent_validation_directory.is_some() {
+            println!("persisted_project_id={}", project.id);
+        }
     }
 
     fn directory_result_path(store: &ProjectStore, task_id: &str) -> PathBuf {
