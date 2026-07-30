@@ -240,6 +240,10 @@ pub(crate) fn validate_media_path(media_path: &Path) -> Result<MediaProbe, Media
     Ok(probe)
 }
 
+pub(crate) fn ffmpeg_path() -> Result<PathBuf, MediaError> {
+    Ok(MediaRuntime::resolve()?.ffmpeg_path)
+}
+
 pub(crate) fn remux_local_hls(playlist_path: &Path, destination: &Path) -> Result<(), MediaError> {
     let runtime = MediaRuntime::resolve()?;
     if let Some(parent) = destination.parent() {

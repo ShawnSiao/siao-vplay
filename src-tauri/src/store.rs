@@ -14,7 +14,14 @@ use crate::domain::{
     UpdatePlaybackStateInput,
 };
 
-const CURRENT_SCHEMA_VERSION: i64 = 5;
+const CURRENT_SCHEMA_VERSION: i64 = 6;
+
+#[derive(Clone, Debug)]
+pub(crate) struct RemoteImportProvenance {
+    pub importer: String,
+    pub importer_version: String,
+    pub importer_sha256: String,
+}
 
 #[derive(Clone, Debug)]
 pub(crate) struct CachedMediaProbe {
@@ -133,6 +140,34 @@ impl ProjectStore {
         display_name: &str,
         title: Option<&str>,
     ) -> Result<Project, StoreError> {
+        self.create_remote_project_internal(media_path, origin_url, display_name, title, None)
+    }
+
+    pub(crate) fn create_remote_project_with_provenance(
+        &self,
+        media_path: &Path,
+        origin_url: &str,
+        display_name: &str,
+        title: Option<&str>,
+        provenance: &RemoteImportProvenance,
+    ) -> Result<Project, StoreError> {
+        self.create_remote_project_internal(
+            media_path,
+            origin_url,
+            display_name,
+            title,
+            Some(provenance),
+        )
+    }
+
+    fn create_remote_project_internal(
+        &self,
+        media_path: &Path,
+        origin_url: &str,
+        display_name: &str,
+        title: Option<&str>,
+        provenance: Option<&RemoteImportProvenance>,
+    ) -> Result<Project, StoreError> {
         let media_path = canonical_media_path(
             media_path
                 .to_str()
@@ -185,6 +220,21 @@ impl ProjectStore {
                 timestamp
             ],
         )?;
+        if let Some(provenance) = provenance {
+            validate_sha256(&provenance.importer_sha256)?;
+            transaction.execute(
+                "INSERT INTO media_source_imports (
+                    media_source_id, importer, importer_version, importer_sha256, imported_at_ms
+                 ) VALUES (?1, ?2, ?3, ?4, ?5)",
+                params![
+                    media_source_id,
+                    provenance.importer,
+                    provenance.importer_version,
+                    provenance.importer_sha256,
+                    timestamp
+                ],
+            )?;
+        }
         transaction.execute(
             "INSERT INTO playback_states (
                 project_id, position_ms, duration_ms, volume, playback_rate, updated_at_ms
@@ -723,6 +773,16 @@ impl ProjectStore {
                 params![now_ms()?],
             )?;
             transaction.commit()?;
+            current_version = 5;
+        }
+        if current_version < 6 {
+            let transaction = connection.transaction()?;
+            Self::apply_migration_6(&transaction)?;
+            transaction.execute(
+                "INSERT INTO schema_migrations (version, applied_at_ms) VALUES (6, ?1)",
+                params![now_ms()?],
+            )?;
+            transaction.commit()?;
         }
         Ok(())
     }
@@ -886,6 +946,20 @@ impl ProjectStore {
              CREATE INDEX media_sources_origin_url
              ON media_sources(origin_url)
              WHERE origin_url IS NOT NULL;",
+        )?;
+        Ok(())
+    }
+
+    fn apply_migration_6(transaction: &Transaction<'_>) -> Result<(), StoreError> {
+        transaction.execute_batch(
+            "CREATE TABLE media_source_imports (
+                media_source_id TEXT PRIMARY KEY
+                    REFERENCES media_sources(id) ON DELETE CASCADE,
+                importer TEXT NOT NULL CHECK (length(trim(importer)) > 0),
+                importer_version TEXT NOT NULL CHECK (length(trim(importer_version)) > 0),
+                importer_sha256 TEXT NOT NULL CHECK (length(importer_sha256) = 64),
+                imported_at_ms INTEGER NOT NULL
+             );",
         )?;
         Ok(())
     }
@@ -1347,6 +1421,53 @@ mod tests {
         assert!(result.deleted);
         assert!(result.cached_media_deleted);
         assert!(!cache_directory.exists());
+    }
+
+    #[test]
+    fn remote_project_can_persist_importer_provenance() {
+        let temporary = tempfile::tempdir().expect("temp directory should be created");
+        let store = ProjectStore::open(temporary.path().join("projects").join("siaovplay.sqlite3"))
+            .expect("store should open");
+        let cache_directory = temporary.path().join("remote-media").join("youtube-import");
+        fs::create_dir_all(&cache_directory).expect("cache directory should be created");
+        let cached_media = cache_directory.join("source.mp4");
+        fs::write(&cached_media, b"remote-media-copy").expect("cached media should be written");
+        let sha256 = "3".repeat(64);
+
+        let project = store
+            .create_remote_project_with_provenance(
+                &cached_media,
+                "https://www.youtube.com/watch?v=jNQXAC9IVRw",
+                "Me at the zoo.mp4",
+                Some("Me at the zoo"),
+                &RemoteImportProvenance {
+                    importer: "yt-dlp".to_owned(),
+                    importer_version: "2026.06.09".to_owned(),
+                    importer_sha256: sha256.clone(),
+                },
+            )
+            .expect("remote project should be created");
+        let connection = store.connect().expect("database should open");
+        let provenance = connection
+            .query_row(
+                "SELECT importer, importer_version, importer_sha256, imported_at_ms
+                 FROM media_source_imports WHERE media_source_id=?1",
+                [&project.media_source.id],
+                |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, String>(2)?,
+                        row.get::<_, i64>(3)?,
+                    ))
+                },
+            )
+            .expect("provenance should be stored");
+
+        assert_eq!(provenance.0, "yt-dlp");
+        assert_eq!(provenance.1, "2026.06.09");
+        assert_eq!(provenance.2, sha256);
+        assert!(provenance.3 > 0);
     }
 
     #[test]

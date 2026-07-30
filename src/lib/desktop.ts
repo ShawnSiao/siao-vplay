@@ -12,6 +12,7 @@ import type {
   RemoteMediaPreview,
   SubtitleImportPreview,
   SubtitleVersion,
+  YouTubeMediaPreview,
 } from "../types";
 
 export const isDesktopApp = "__TAURI_INTERNALS__" in window;
@@ -148,6 +149,36 @@ export async function cancelRemoteMediaImport(
   operationId: string,
 ): Promise<boolean> {
   return invoke<boolean>("cancel_remote_media_import", {
+    input: { operationId },
+  });
+}
+
+export async function inspectYouTubeUrl(
+  url: string,
+): Promise<YouTubeMediaPreview> {
+  return invoke<YouTubeMediaPreview>("inspect_youtube_url", {
+    input: { url },
+  });
+}
+
+export async function importYouTubeUrl(
+  url: string,
+  expectedPreviewToken: string,
+  operationId: string,
+): Promise<Project> {
+  return invoke<Project>("import_youtube_url", {
+    input: {
+      url,
+      expectedPreviewToken,
+      operationId,
+    },
+  });
+}
+
+export async function cancelYouTubeImport(
+  operationId: string,
+): Promise<boolean> {
+  return invoke<boolean>("cancel_youtube_import", {
     input: { operationId },
   });
 }

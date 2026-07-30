@@ -483,6 +483,13 @@ fn send_with_redirects(
     SafeHttp::default().send(method, initial_url, range)
 }
 
+pub(crate) fn preflight_public_https_page(input: &str) -> Result<Url, RemoteMediaError> {
+    let original = validate_public_https_url(input)?;
+    let response = send_with_redirects(Method::GET, &original, Some("bytes=0-4095"))?;
+    ensure_success_status(&response.response)?;
+    Ok(response.final_url)
+}
+
 fn pinned_client(url: &Url, addresses: &[SocketAddr]) -> Result<Client, RemoteMediaError> {
     let host = url.host_str().ok_or(RemoteMediaError::InvalidUrl)?;
     Client::builder()
@@ -496,7 +503,7 @@ fn pinned_client(url: &Url, addresses: &[SocketAddr]) -> Result<Client, RemoteMe
         .map_err(|error| RemoteMediaError::Request(error.to_string()))
 }
 
-fn validate_public_https_url(input: &str) -> Result<Url, RemoteMediaError> {
+pub(crate) fn validate_public_https_url(input: &str) -> Result<Url, RemoteMediaError> {
     let url = validate_url_syntax(input)?;
     public_socket_addresses(
         url.host_str().ok_or(RemoteMediaError::InvalidUrl)?,

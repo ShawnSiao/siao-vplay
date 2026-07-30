@@ -154,6 +154,18 @@ export type RemoteMediaPreview = {
   previewToken: string;
 };
 
+export type YouTubeMediaPreview = {
+  originalUrl: string;
+  webpageUrl: string;
+  videoId: string;
+  title: string;
+  durationSeconds: number;
+  fileSizeBytes: number | null;
+  importerVersion: string;
+  importerSha256: string;
+  previewToken: string;
+};
+
 export type DesktopCommandError = {
   code: string;
   message: string;

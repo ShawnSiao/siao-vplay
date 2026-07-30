@@ -4,6 +4,7 @@ mod media;
 mod remote_media;
 mod store;
 mod subtitles;
+mod youtube_media;
 
 use std::path::{Path, PathBuf};
 
@@ -84,6 +85,9 @@ pub fn run() {
             commands::inspect_remote_media_url,
             commands::import_remote_media_url,
             commands::cancel_remote_media_import,
+            commands::inspect_youtube_url,
+            commands::import_youtube_url,
+            commands::cancel_youtube_import,
             commands::list_projects,
             commands::get_project,
             commands::mark_project_opened,

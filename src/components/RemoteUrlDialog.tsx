@@ -2,11 +2,18 @@ import { useState } from "react";
 
 import {
   cancelRemoteMediaImport,
+  cancelYouTubeImport,
   commandError,
   importRemoteMediaUrl,
+  importYouTubeUrl,
   inspectRemoteMediaUrl,
+  inspectYouTubeUrl,
 } from "../lib/desktop";
-import type { Project, RemoteMediaPreview } from "../types";
+import type {
+  Project,
+  RemoteMediaPreview,
+  YouTubeMediaPreview,
+} from "../types";
 import { Dialog } from "./Dialog";
 
 type RemoteUrlDialogProps = {
@@ -14,6 +21,10 @@ type RemoteUrlDialogProps = {
   onClose: () => void;
   onImported: (project: Project) => void;
 };
+
+type UrlImportPreview =
+  | { kind: "remote"; value: RemoteMediaPreview }
+  | { kind: "youtube"; value: YouTubeMediaPreview };
 
 function formatBytes(bytes: number | null): string {
   if (bytes === null) {
@@ -37,13 +48,39 @@ function displayHost(url: string): string {
   }
 }
 
+function isYouTubePageUrl(value: string): boolean {
+  try {
+    const host = new URL(value).hostname.toLowerCase().replace(/\.$/, "");
+    return [
+      "youtube.com",
+      "www.youtube.com",
+      "m.youtube.com",
+      "youtu.be",
+    ].includes(host);
+  } catch {
+    return false;
+  }
+}
+
+function formatDuration(seconds: number): string {
+  const totalSeconds = Math.max(0, Math.round(seconds));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const remainingSeconds = totalSeconds % 60;
+  return hours > 0
+    ? `${hours}:${minutes.toString().padStart(2, "0")}:${remainingSeconds
+        .toString()
+        .padStart(2, "0")}`
+    : `${minutes}:${remainingSeconds.toString().padStart(2, "0")}`;
+}
+
 export function RemoteUrlDialog({
   previewMode,
   onClose,
   onImported,
 }: RemoteUrlDialogProps) {
   const [url, setUrl] = useState("");
-  const [preview, setPreview] = useState<RemoteMediaPreview | null>(null);
+  const [preview, setPreview] = useState<UrlImportPreview | null>(null);
   const [checking, setChecking] = useState(false);
   const [importing, setImporting] = useState(false);
   const [operationId, setOperationId] = useState<string | null>(null);
@@ -57,14 +94,24 @@ export function RemoteUrlDialog({
       return;
     }
     if (previewMode) {
-      setError("浏览器预览只展示界面，请在桌面应用中检查和导入媒体 URL。");
+      setError("浏览器预览只展示界面，请在桌面应用中检查和导入视频 URL。");
       return;
     }
     setChecking(true);
     setPreview(null);
     setError(null);
     try {
-      setPreview(await inspectRemoteMediaUrl(candidate));
+      if (isYouTubePageUrl(candidate)) {
+        setPreview({
+          kind: "youtube",
+          value: await inspectYouTubeUrl(candidate),
+        });
+      } else {
+        setPreview({
+          kind: "remote",
+          value: await inspectRemoteMediaUrl(candidate),
+        });
+      }
     } catch (nextError) {
       setError(commandError(nextError).message);
     } finally {
@@ -82,11 +129,18 @@ export function RemoteUrlDialog({
     setCancelRequested(false);
     setError(null);
     try {
-      const project = await importRemoteMediaUrl(
-        preview.originalUrl,
-        preview.previewToken,
-        nextOperationId,
-      );
+      const project =
+        preview.kind === "youtube"
+          ? await importYouTubeUrl(
+              preview.value.originalUrl,
+              preview.value.previewToken,
+              nextOperationId,
+            )
+          : await importRemoteMediaUrl(
+              preview.value.originalUrl,
+              preview.value.previewToken,
+              nextOperationId,
+            );
       onImported(project);
     } catch (nextError) {
       const failure = commandError(nextError);
@@ -107,7 +161,11 @@ export function RemoteUrlDialog({
     }
     setCancelRequested(true);
     try {
-      await cancelRemoteMediaImport(operationId);
+      if (preview?.kind === "youtube") {
+        await cancelYouTubeImport(operationId);
+      } else {
+        await cancelRemoteMediaImport(operationId);
+      }
     } catch (nextError) {
       setError(commandError(nextError).message);
       setCancelRequested(false);
@@ -140,7 +198,7 @@ export function RemoteUrlDialog({
               disabled={importing}
               onClick={() => void confirmImport()}
             >
-              {importing ? "正在保存本地副本…" : "确认并导入"}
+              {importing ? "正在下载并验证…" : "确认并导入"}
             </button>
           ) : (
             <button
@@ -156,7 +214,7 @@ export function RemoteUrlDialog({
       }
     >
       <p>
-        支持公开 HTTPS 媒体直链和点播 M3U8。不会读取浏览器 Cookie、账号内容或会员资源，也不会访问本机和内网地址。
+        支持公开 HTTPS 媒体直链、点播 M3U8 和 YouTube 公开单视频。不会读取浏览器 Cookie、账号内容或会员资源，也不会访问本机和内网地址。
       </p>
       {previewMode ? (
         <div className="notice remote-url-preview-mode">
@@ -165,13 +223,13 @@ export function RemoteUrlDialog({
         </div>
       ) : null}
       <label className="remote-url-field">
-        <span>媒体 URL</span>
+        <span>视频 URL</span>
         <input
           autoFocus
-          aria-label="媒体 URL"
+          aria-label="视频 URL"
           type="url"
           inputMode="url"
-          placeholder="https://media.example.com/movie.mp4"
+          placeholder="https://www.youtube.com/watch?v=…"
           value={url}
           disabled={checking || importing}
           onChange={(event) => {
@@ -186,7 +244,9 @@ export function RemoteUrlDialog({
             }
           }}
         />
-        <small>只接受 HTTPS；最多 5 次公开地址重定向，单次导入上限 20 GB。</small>
+        <small>
+          只接受 HTTPS 和公开单视频；请仅导入有权处理或已获授权的内容，单次上限 20 GB。
+        </small>
       </label>
 
       {error ? (
@@ -199,27 +259,45 @@ export function RemoteUrlDialog({
       {preview ? (
         <section className="remote-url-preview" aria-label="URL 检查结果">
           <div>
-            <span>媒体</span>
-            <strong>{preview.displayName}</strong>
+            <span>{preview.kind === "youtube" ? "公开视频" : "媒体"}</span>
+            <strong>
+              {preview.kind === "youtube"
+                ? preview.value.title
+                : preview.value.displayName}
+            </strong>
           </div>
           <dl>
             <div>
               <dt>来源</dt>
-              <dd>{displayHost(preview.finalUrl)}</dd>
+              <dd>
+                {displayHost(
+                  preview.kind === "youtube"
+                    ? preview.value.webpageUrl
+                    : preview.value.finalUrl,
+                )}
+              </dd>
             </div>
             <div>
               <dt>类型</dt>
               <dd>
-                {preview.mediaKind === "hls" ? "HLS 点播清单" : "媒体文件"}
+                {preview.kind === "youtube"
+                  ? "公开单视频"
+                  : preview.value.mediaKind === "hls"
+                    ? "HLS 点播清单"
+                    : "媒体文件"}
               </dd>
             </div>
             <div>
-              <dt>大小</dt>
-              <dd>{formatBytes(preview.contentLength)}</dd>
+              <dt>{preview.kind === "youtube" ? "时长" : "大小"}</dt>
+              <dd>
+                {preview.kind === "youtube"
+                  ? formatDuration(preview.value.durationSeconds)
+                  : formatBytes(preview.value.contentLength)}
+              </dd>
             </div>
           </dl>
           <p>
-            确认后会下载受控副本并在本机完成媒体探测；播放器不会直接连接这个远程地址。
+            确认后会下载受控副本并在本机完成媒体探测；不会携带登录状态，也不会直接播放远程地址。
           </p>
         </section>
       ) : null}

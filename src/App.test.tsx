@@ -8,6 +8,7 @@ import type {
   RemoteMediaPreview,
   SubtitleImportPreview,
   SubtitleVersion,
+  YouTubeMediaPreview,
 } from "./types";
 
 const desktopMocks = vi.hoisted(() => ({
@@ -20,6 +21,9 @@ const desktopMocks = vi.hoisted(() => ({
   inspectRemoteMediaUrl: vi.fn(),
   importRemoteMediaUrl: vi.fn(),
   cancelRemoteMediaImport: vi.fn(),
+  inspectYouTubeUrl: vi.fn(),
+  importYouTubeUrl: vi.fn(),
+  cancelYouTubeImport: vi.fn(),
   ensureProjectPoster: vi.fn(),
   markProjectOpened: vi.fn(),
   prepareProjectMedia: vi.fn(),
@@ -144,6 +148,18 @@ const remoteProject: Project = {
   },
 };
 
+const youtubePreview: YouTubeMediaPreview = {
+  originalUrl: "https://www.youtube.com/watch?v=jNQXAC9IVRw",
+  webpageUrl: "https://www.youtube.com/watch?v=jNQXAC9IVRw",
+  videoId: "jNQXAC9IVRw",
+  title: "Me at the zoo",
+  durationSeconds: 19,
+  fileSizeBytes: 533_067,
+  importerVersion: "2026.06.09",
+  importerSha256: "3".repeat(64),
+  previewToken: "d".repeat(64),
+};
+
 const subtitlePreview: SubtitleImportPreview = {
   format: "srt",
   sourceLabel: "rain-platform.ja.srt",
@@ -229,6 +245,9 @@ beforeEach(() => {
   desktopMocks.inspectRemoteMediaUrl.mockResolvedValue(remotePreview);
   desktopMocks.importRemoteMediaUrl.mockResolvedValue(remoteProject);
   desktopMocks.cancelRemoteMediaImport.mockResolvedValue(true);
+  desktopMocks.inspectYouTubeUrl.mockResolvedValue(youtubePreview);
+  desktopMocks.importYouTubeUrl.mockResolvedValue(remoteProject);
+  desktopMocks.cancelYouTubeImport.mockResolvedValue(true);
   desktopMocks.ensureProjectPoster.mockResolvedValue({
     ...project,
     mediaSource: {
@@ -354,7 +373,7 @@ describe("App", () => {
       await screen.findByRole("button", { name: "粘贴视频 URL" }),
     );
 
-    fireEvent.change(screen.getByLabelText("媒体 URL"), {
+    fireEvent.change(screen.getByLabelText("视频 URL"), {
       target: { value: remotePreview.originalUrl },
     });
     fireEvent.click(screen.getByRole("button", { name: "检查 URL" }));
@@ -389,7 +408,7 @@ describe("App", () => {
     fireEvent.click(
       await screen.findByRole("button", { name: "粘贴视频 URL" }),
     );
-    fireEvent.change(screen.getByLabelText("媒体 URL"), {
+    fireEvent.change(screen.getByLabelText("视频 URL"), {
       target: { value: remotePreview.originalUrl },
     });
     fireEvent.click(screen.getByRole("button", { name: "检查 URL" }));
@@ -409,6 +428,35 @@ describe("App", () => {
     expect(
       await screen.findByRole("button", { name: "正在取消…" }),
     ).toBeDisabled();
+  });
+
+  it("requires confirmation before importing a public YouTube single video", async () => {
+    render(<App />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "粘贴视频 URL" }),
+    );
+    fireEvent.change(screen.getByLabelText("视频 URL"), {
+      target: { value: youtubePreview.originalUrl },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "检查 URL" }));
+
+    await waitFor(() =>
+      expect(desktopMocks.inspectYouTubeUrl).toHaveBeenCalledWith(
+        youtubePreview.originalUrl,
+      ),
+    );
+    expect(desktopMocks.importYouTubeUrl).not.toHaveBeenCalled();
+    expect(await screen.findByText("公开单视频")).toBeInTheDocument();
+    expect(screen.getByText("0:19")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "确认并导入" }));
+    await waitFor(() =>
+      expect(desktopMocks.importYouTubeUrl).toHaveBeenCalledWith(
+        youtubePreview.originalUrl,
+        youtubePreview.previewToken,
+        expect.any(String),
+      ),
+    );
   });
 
   it("states that deleting a project keeps the source video", async () => {

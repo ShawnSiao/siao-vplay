@@ -201,7 +201,9 @@ export function LibraryScreen({
             <span className="step-number">01</span>
             <span>
               <strong>选择本地视频或 URL</strong>
-              <small>支持常见本地格式、公开 HTTPS 直链和点播 M3U8。</small>
+              <small>
+                支持常见本地格式、公开 HTTPS 直链、点播 M3U8 和 YouTube 公开单视频。
+              </small>
             </span>
           </div>
           <div>
