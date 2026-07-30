@@ -8,8 +8,9 @@ use crate::{
         RelinkProjectMediaInput, UpdatePlaybackStateInput,
     },
     learning::{
-        self, DictionaryEntry, ImportLearningResultInput, LearningApplication, LearningError,
-        LearningTask, PrepareLearningTaskInput,
+        self, CreateLearningCardInput, DictionaryEntry, ExportLearningCardsInput,
+        ImportLearningResultInput, LearningApplication, LearningCard, LearningCardsExport,
+        LearningError, LearningTask, PrepareLearningTaskInput,
     },
     media::{self, MediaError, MediaInspection, MediaPreparation, MediaRuntimeStatus},
     remote_media::{
@@ -932,6 +933,68 @@ pub async fn resume_codex_learning_task(
     .map_err(CommandError::background_task_failed)?
 }
 
+#[tauri::command]
+pub async fn create_learning_card(
+    app: AppHandle,
+    store: State<'_, ProjectStore>,
+    input: CreateLearningCardInput,
+) -> Result<LearningCard, CommandError> {
+    let store = store.inner().clone();
+    let card = tauri::async_runtime::spawn_blocking(move || {
+        learning::create_learning_card(&store, input).map_err(CommandError::from)
+    })
+    .await
+    .map_err(CommandError::background_task_failed)??;
+    allow_learning_screenshot(&app, &card)?;
+    Ok(card)
+}
+
+#[tauri::command]
+pub fn get_learning_card(
+    app: AppHandle,
+    store: State<'_, ProjectStore>,
+    card_id: String,
+) -> Result<LearningCard, CommandError> {
+    let card = learning::get_learning_card(store.inner(), &card_id)?;
+    allow_learning_screenshot(&app, &card)?;
+    Ok(card)
+}
+
+#[tauri::command]
+pub fn list_learning_cards(
+    app: AppHandle,
+    store: State<'_, ProjectStore>,
+    project_id: String,
+) -> Result<Vec<LearningCard>, CommandError> {
+    let cards = learning::list_learning_cards(store.inner(), &project_id)?;
+    for card in &cards {
+        allow_learning_screenshot(&app, card)?;
+    }
+    Ok(cards)
+}
+
+#[tauri::command]
+pub fn delete_learning_card(
+    store: State<'_, ProjectStore>,
+    project_id: String,
+    card_id: String,
+) -> Result<bool, CommandError> {
+    learning::delete_learning_card(store.inner(), &project_id, &card_id).map_err(Into::into)
+}
+
+#[tauri::command]
+pub async fn export_learning_cards(
+    store: State<'_, ProjectStore>,
+    input: ExportLearningCardsInput,
+) -> Result<LearningCardsExport, CommandError> {
+    let store = store.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        learning::export_learning_cards(&store, input).map_err(CommandError::from)
+    })
+    .await
+    .map_err(CommandError::background_task_failed)?
+}
+
 fn allow_project_poster(app: &AppHandle, project: &Project) -> Result<(), CommandError> {
     let Some(poster_path) = project.media_source.poster_path.as_deref() else {
         return Ok(());
@@ -944,5 +1007,17 @@ fn allow_project_poster(app: &AppHandle, project: &Project) -> Result<(), Comman
         .map_err(|error| CommandError {
             code: "asset_scope_error",
             message: format!("无法授权项目库读取视频封面：{error}"),
+        })
+}
+
+fn allow_learning_screenshot(app: &AppHandle, card: &LearningCard) -> Result<(), CommandError> {
+    if !card.screenshot_available {
+        return Ok(());
+    }
+    app.asset_protocol_scope()
+        .allow_file(&card.screenshot_path)
+        .map_err(|error| CommandError {
+            code: "learning_screenshot_scope_failed",
+            message: format!("场景截图未能加入本地显示范围：{error}"),
         })
 }

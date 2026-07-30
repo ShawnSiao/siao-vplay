@@ -681,6 +681,7 @@ impl ProjectStore {
         };
         if changed > 0 {
             self.remove_agent_task_materials(&agent_task_ids);
+            self.remove_learning_card_materials(project_id);
         }
 
         Ok(DeleteProjectResult {
@@ -714,6 +715,16 @@ impl ProjectStore {
             if Uuid::parse_str(task_id).is_ok() {
                 let _ = fs::remove_dir_all(task_root.join(task_id));
             }
+        }
+    }
+
+    fn remove_learning_card_materials(&self, project_id: &str) {
+        if Uuid::parse_str(project_id).is_ok() {
+            let _ = fs::remove_dir_all(
+                self.data_directory()
+                    .join("learning-cards")
+                    .join(project_id),
+            );
         }
     }
 

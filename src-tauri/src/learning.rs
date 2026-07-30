@@ -1,6 +1,7 @@
 use std::{
     fs,
     path::{Component, Path, PathBuf},
+    process::{Command, Stdio},
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -12,6 +13,7 @@ use thiserror::Error;
 use uuid::Uuid;
 
 use crate::{
+    media,
     store::{ProjectStore, StoreError},
     subtitles::{self, SubtitleError, SubtitleSegment, SubtitleVersion},
 };
@@ -19,6 +21,8 @@ use crate::{
 const PROTOCOL_VERSION: &str = "siaovplay-learning-v1";
 const MAX_PACKAGE_FILE_BYTES: u64 = 2 * 1024 * 1024;
 const MAX_SELECTED_CHARACTERS: usize = 240;
+const MAX_CARD_SCREENSHOT_BYTES: u64 = 8 * 1024 * 1024;
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
 #[derive(Debug, Error)]
 pub enum LearningError {
@@ -34,6 +38,8 @@ pub enum LearningError {
     TaskNotFound(String),
     #[error("找不到词义结果：{0}")]
     EntryNotFound(String),
+    #[error("找不到学习卡片：{0}")]
+    CardNotFound(String),
     #[error("不支持的学习交接方式：{0}")]
     InvalidHandoff(String),
     #[error("项目还没有可用于查询的原文字幕")]
@@ -54,6 +60,10 @@ pub enum LearningError {
     TaskIntegrity(String),
     #[error("词义结果无效：{0}")]
     InvalidResult(String),
+    #[error("场景截图失败：{0}")]
+    ScreenshotFailed(String),
+    #[error("学习卡片导出失败：{0}")]
+    ExportFailed(String),
     #[error("学习任务文件超过大小上限")]
     FileTooLarge,
     #[error("学习任务文件不是 UTF-8 文本")]
@@ -71,6 +81,7 @@ impl LearningError {
             Self::Subtitle(_) => "subtitle_error",
             Self::TaskNotFound(_) => "learning_task_not_found",
             Self::EntryNotFound(_) => "dictionary_entry_not_found",
+            Self::CardNotFound(_) => "learning_card_not_found",
             Self::InvalidHandoff(_) => "learning_handoff_invalid",
             Self::MissingOriginalSubtitle => "original_subtitle_missing",
             Self::SegmentNotFound(_) => "subtitle_segment_not_found",
@@ -81,6 +92,8 @@ impl LearningError {
             Self::MediaChanged => "media_changed",
             Self::TaskIntegrity(_) => "learning_task_integrity",
             Self::InvalidResult(_) => "learning_result_invalid",
+            Self::ScreenshotFailed(_) => "learning_screenshot_failed",
+            Self::ExportFailed(_) => "learning_export_failed",
             Self::FileTooLarge => "learning_file_too_large",
             Self::UnsupportedEncoding => "learning_file_encoding_invalid",
             Self::Serialization(_) => "learning_serialization_failed",
@@ -167,6 +180,83 @@ pub struct DictionaryEntry {
 pub struct LearningApplication {
     pub task: LearningTask,
     pub dictionary_entry: DictionaryEntry,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateLearningCardInput {
+    pub project_id: String,
+    pub dictionary_entry_id: String,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExportLearningCardsInput {
+    pub project_id: String,
+    pub destination_directory: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LearningCard {
+    pub id: String,
+    pub project_id: String,
+    pub dictionary_entry_id: Option<String>,
+    pub source_version_id: String,
+    pub translation_version_id: Option<String>,
+    pub source_segment_id: String,
+    pub selected_text: String,
+    pub selection_kind: String,
+    pub pronunciation: String,
+    pub part_of_speech: String,
+    pub contextual_meaning: String,
+    pub usage_note: Option<String>,
+    pub source_sentence: String,
+    pub translated_sentence: Option<String>,
+    pub language_code: String,
+    pub playback_position_ms: i64,
+    pub screenshot_path: String,
+    pub screenshot_sha256: String,
+    pub screenshot_available: bool,
+    pub created_at_ms: i64,
+    pub updated_at_ms: i64,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LearningCardsExport {
+    pub directory: String,
+    pub json_path: String,
+    pub markdown_path: String,
+    pub card_count: usize,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ExportedLearningCards<'a> {
+    format: &'static str,
+    project_id: &'a str,
+    project_title: &'a str,
+    exported_at_ms: i64,
+    cards: Vec<ExportedLearningCard<'a>>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ExportedLearningCard<'a> {
+    id: &'a str,
+    selected_text: &'a str,
+    selection_kind: &'a str,
+    pronunciation: &'a str,
+    part_of_speech: &'a str,
+    contextual_meaning: &'a str,
+    usage_note: Option<&'a str>,
+    source_sentence: &'a str,
+    translated_sentence: Option<&'a str>,
+    language_code: &'a str,
+    playback_position_ms: i64,
+    screenshot_relative_path: String,
+    created_at_ms: i64,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -563,6 +653,383 @@ pub fn list_dictionary_entries(
         .collect()
 }
 
+pub fn create_learning_card(
+    store: &ProjectStore,
+    input: CreateLearningCardInput,
+) -> Result<LearningCard, LearningError> {
+    let ffmpeg =
+        media::ffmpeg_path().map_err(|error| LearningError::ScreenshotFailed(error.to_string()))?;
+    create_learning_card_with(store, input, |media_path, timestamp_ms, output_path| {
+        extract_scene_screenshot(&ffmpeg, media_path, timestamp_ms, output_path)
+    })
+}
+
+pub(crate) fn create_learning_card_with<F>(
+    store: &ProjectStore,
+    input: CreateLearningCardInput,
+    extract_screenshot: F,
+) -> Result<LearningCard, LearningError>
+where
+    F: Fn(&Path, i64, &Path) -> Result<(), LearningError>,
+{
+    let project = store.get_project(&input.project_id)?;
+    let entry = get_dictionary_entry(store, &input.dictionary_entry_id)?;
+    if entry.project_id != project.id {
+        return Err(LearningError::InvalidResult(
+            "词义结果不属于当前项目".to_owned(),
+        ));
+    }
+    if let Some(existing) = get_learning_card_by_entry(store, &project.id, &entry.id)? {
+        return Ok(existing);
+    }
+    let expected_media_sha256 = store
+        .connect()?
+        .query_row(
+            "SELECT expected_media_sha256
+             FROM learning_tasks
+             WHERE id = ?1 AND project_id = ?2",
+            params![entry.task_id, project.id],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()?
+        .ok_or_else(|| LearningError::TaskNotFound(entry.task_id.clone()))?;
+    let current_media_sha256 = project
+        .media_source
+        .source_sha256
+        .as_deref()
+        .ok_or(LearningError::MediaChanged)?;
+    if !current_media_sha256.eq_ignore_ascii_case(&expected_media_sha256) {
+        return Err(LearningError::MediaChanged);
+    }
+    let media_path = dunce::canonicalize(&project.media_source.locator)
+        .map_err(|_| LearningError::MediaChanged)?;
+    if !media_path.is_file() {
+        return Err(LearningError::MediaChanged);
+    }
+    let current_versions = subtitles::list_subtitle_versions(store, &project.id)?;
+    let source_is_current = current_versions.iter().any(|version| {
+        version.role == "original" && version.is_current && version.id == entry.source_version_id
+    });
+    let translation_is_current = match entry.translation_version_id.as_deref() {
+        Some(version_id) => current_versions.iter().any(|version| {
+            version.role == "translation" && version.is_current && version.id == version_id
+        }),
+        None => !current_versions.iter().any(|version| {
+            version.role == "translation"
+                && version.language_code.eq_ignore_ascii_case("zh-cn")
+                && version.is_current
+        }),
+    };
+    if !source_is_current || !translation_is_current {
+        return Err(LearningError::ProjectChanged);
+    }
+
+    let card_id = Uuid::new_v4().to_string();
+    let project_root = store
+        .data_directory()
+        .join("learning-cards")
+        .join(&project.id);
+    fs::create_dir_all(&project_root)?;
+    let temporary_directory = project_root.join(format!(".{card_id}.part-{}", Uuid::new_v4()));
+    let final_directory = project_root.join(&card_id);
+    fs::create_dir_all(&temporary_directory)?;
+    let temporary_screenshot = temporary_directory.join("scene.jpg");
+    let prepared = (|| -> Result<String, LearningError> {
+        extract_screenshot(
+            &media_path,
+            entry.playback_position_ms,
+            &temporary_screenshot,
+        )?;
+        let metadata = fs::metadata(&temporary_screenshot)?;
+        if metadata.len() == 0 || metadata.len() > MAX_CARD_SCREENSHOT_BYTES {
+            return Err(LearningError::ScreenshotFailed(
+                "没有生成有效的场景截图".to_owned(),
+            ));
+        }
+        let bytes = fs::read(&temporary_screenshot)?;
+        if !bytes.starts_with(&[0xff, 0xd8]) {
+            return Err(LearningError::ScreenshotFailed(
+                "场景截图不是有效的 JPEG 图片".to_owned(),
+            ));
+        }
+        let sha256 = hash_bytes(&bytes);
+        fs::rename(&temporary_directory, &final_directory)?;
+        Ok(sha256)
+    })();
+    let screenshot_sha256 = match prepared {
+        Ok(value) => value,
+        Err(error) => {
+            let _ = fs::remove_dir_all(&temporary_directory);
+            return Err(error);
+        }
+    };
+    let screenshot_path = final_directory
+        .join("scene.jpg")
+        .to_string_lossy()
+        .into_owned();
+    let persistence = (|| -> Result<(), LearningError> {
+        let timestamp = now_ms()?;
+        let mut connection = store.connect()?;
+        let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let expected_project_revision = transaction
+            .query_row(
+                "SELECT expected_project_revision
+                 FROM learning_tasks
+                 WHERE id = ?1 AND project_id = ?2",
+                params![entry.task_id, project.id],
+                |row| row.get::<_, i64>(0),
+            )
+            .optional()?
+            .ok_or_else(|| LearningError::TaskNotFound(entry.task_id.clone()))?;
+        verify_baseline_in_transaction(
+            &transaction,
+            &project.id,
+            expected_project_revision,
+            &expected_media_sha256,
+            &entry.source_version_id,
+            entry.translation_version_id.as_deref(),
+        )?;
+        transaction.execute(
+            "INSERT INTO learning_cards (
+                id, project_id, dictionary_entry_id, source_version_id,
+                translation_version_id, source_segment_id, selected_text,
+                selection_kind, pronunciation, part_of_speech, contextual_meaning,
+                usage_note, source_sentence, translated_sentence, language_code,
+                playback_position_ms, screenshot_path, screenshot_sha256,
+                created_at_ms, updated_at_ms
+             ) VALUES (
+                ?1, ?2, ?3, ?4,
+                ?5, ?6, ?7,
+                ?8, ?9, ?10, ?11,
+                ?12, ?13, ?14, ?15,
+                ?16, ?17, ?18,
+                ?19, ?19
+             )",
+            params![
+                card_id,
+                project.id,
+                entry.id,
+                entry.source_version_id,
+                entry.translation_version_id,
+                entry.source_segment_id,
+                entry.selected_text,
+                entry.selection_kind,
+                entry.pronunciation,
+                entry.part_of_speech,
+                entry.contextual_meaning,
+                entry.usage_note,
+                entry.source_sentence,
+                entry.translated_sentence,
+                entry.language_code,
+                entry.playback_position_ms,
+                screenshot_path,
+                screenshot_sha256,
+                timestamp
+            ],
+        )?;
+        transaction.commit()?;
+        Ok(())
+    })();
+    if let Err(error) = persistence {
+        let _ = fs::remove_dir_all(&final_directory);
+        return Err(error);
+    }
+    get_learning_card(store, &card_id)
+}
+
+pub fn get_learning_card(
+    store: &ProjectStore,
+    card_id: &str,
+) -> Result<LearningCard, LearningError> {
+    validate_uuid(card_id, "学习卡片 ID")?;
+    let connection = store.connect()?;
+    let mut card = connection
+        .query_row(
+            "SELECT
+                id, project_id, dictionary_entry_id, source_version_id,
+                translation_version_id, source_segment_id, selected_text,
+                selection_kind, pronunciation, part_of_speech, contextual_meaning,
+                usage_note, source_sentence, translated_sentence, language_code,
+                playback_position_ms, screenshot_path, screenshot_sha256,
+                created_at_ms, updated_at_ms
+             FROM learning_cards
+             WHERE id = ?1",
+            params![card_id],
+            |row| {
+                Ok(LearningCard {
+                    id: row.get(0)?,
+                    project_id: row.get(1)?,
+                    dictionary_entry_id: row.get(2)?,
+                    source_version_id: row.get(3)?,
+                    translation_version_id: row.get(4)?,
+                    source_segment_id: row.get(5)?,
+                    selected_text: row.get(6)?,
+                    selection_kind: row.get(7)?,
+                    pronunciation: row.get(8)?,
+                    part_of_speech: row.get(9)?,
+                    contextual_meaning: row.get(10)?,
+                    usage_note: row.get(11)?,
+                    source_sentence: row.get(12)?,
+                    translated_sentence: row.get(13)?,
+                    language_code: row.get(14)?,
+                    playback_position_ms: row.get(15)?,
+                    screenshot_path: row.get(16)?,
+                    screenshot_sha256: row.get(17)?,
+                    screenshot_available: false,
+                    created_at_ms: row.get(18)?,
+                    updated_at_ms: row.get(19)?,
+                })
+            },
+        )
+        .optional()?
+        .ok_or_else(|| LearningError::CardNotFound(card_id.to_owned()))?;
+    let screenshot = Path::new(&card.screenshot_path);
+    card.screenshot_available = screenshot.is_file()
+        && hash_file(screenshot)
+            .is_ok_and(|sha256| sha256.eq_ignore_ascii_case(&card.screenshot_sha256));
+    Ok(card)
+}
+
+pub fn list_learning_cards(
+    store: &ProjectStore,
+    project_id: &str,
+) -> Result<Vec<LearningCard>, LearningError> {
+    store.get_project(project_id)?;
+    let connection = store.connect()?;
+    let ids = connection
+        .prepare(
+            "SELECT id FROM learning_cards
+             WHERE project_id = ?1
+             ORDER BY created_at_ms DESC, id DESC",
+        )?
+        .query_map(params![project_id], |row| row.get::<_, String>(0))?
+        .collect::<Result<Vec<_>, _>>()?;
+    ids.into_iter()
+        .map(|card_id| get_learning_card(store, &card_id))
+        .collect()
+}
+
+pub fn delete_learning_card(
+    store: &ProjectStore,
+    project_id: &str,
+    card_id: &str,
+) -> Result<bool, LearningError> {
+    store.get_project(project_id)?;
+    let card = get_learning_card(store, card_id)?;
+    if card.project_id != project_id {
+        return Err(LearningError::CardNotFound(card_id.to_owned()));
+    }
+    let changed = store.connect()?.execute(
+        "DELETE FROM learning_cards WHERE id = ?1 AND project_id = ?2",
+        params![card_id, project_id],
+    )?;
+    if changed == 1 {
+        remove_controlled_card_directory(store, project_id, card_id);
+    }
+    Ok(changed == 1)
+}
+
+pub fn export_learning_cards(
+    store: &ProjectStore,
+    input: ExportLearningCardsInput,
+) -> Result<LearningCardsExport, LearningError> {
+    let project = store.get_project(&input.project_id)?;
+    let cards = list_learning_cards(store, &project.id)?;
+    if cards.is_empty() {
+        return Err(LearningError::ExportFailed(
+            "当前项目还没有可导出的学习卡片".to_owned(),
+        ));
+    }
+    if cards.iter().any(|card| !card.screenshot_available) {
+        return Err(LearningError::ExportFailed(
+            "至少一张卡片的场景截图缺失或已变化".to_owned(),
+        ));
+    }
+    let destination = dunce::canonicalize(input.destination_directory.trim())
+        .map_err(|error| LearningError::ExportFailed(error.to_string()))?;
+    if !destination.is_dir() {
+        return Err(LearningError::ExportFailed(
+            "导出位置不存在或不是文件夹".to_owned(),
+        ));
+    }
+    let timestamp = now_ms()?;
+    let directory_name = format!(
+        "SiaoVPlay-learning-{}-{timestamp}",
+        safe_file_stem(&project.title)
+    );
+    let final_directory = destination.join(&directory_name);
+    if final_directory.exists() {
+        return Err(LearningError::ExportFailed(
+            "导出目录已经存在，请重新导出".to_owned(),
+        ));
+    }
+    let temporary_directory =
+        destination.join(format!(".{directory_name}.part-{}", Uuid::new_v4()));
+    let images_directory = temporary_directory.join("images");
+    fs::create_dir_all(&images_directory)?;
+    let exported = (|| -> Result<(PathBuf, PathBuf), LearningError> {
+        let mut exported_cards = Vec::with_capacity(cards.len());
+        for card in &cards {
+            let relative_path = format!("images/{}.jpg", card.id);
+            let destination_path = temporary_directory.join(&relative_path);
+            fs::copy(&card.screenshot_path, &destination_path)?;
+            if !hash_file(&destination_path)?.eq_ignore_ascii_case(&card.screenshot_sha256) {
+                return Err(LearningError::ExportFailed(format!(
+                    "卡片 {} 的截图复制校验失败",
+                    card.id
+                )));
+            }
+            exported_cards.push(ExportedLearningCard {
+                id: &card.id,
+                selected_text: &card.selected_text,
+                selection_kind: &card.selection_kind,
+                pronunciation: &card.pronunciation,
+                part_of_speech: &card.part_of_speech,
+                contextual_meaning: &card.contextual_meaning,
+                usage_note: card.usage_note.as_deref(),
+                source_sentence: &card.source_sentence,
+                translated_sentence: card.translated_sentence.as_deref(),
+                language_code: &card.language_code,
+                playback_position_ms: card.playback_position_ms,
+                screenshot_relative_path: relative_path,
+                created_at_ms: card.created_at_ms,
+            });
+        }
+        let payload = ExportedLearningCards {
+            format: "siaovplay-learning-cards-v1",
+            project_id: &project.id,
+            project_title: &project.title,
+            exported_at_ms: timestamp,
+            cards: exported_cards,
+        };
+        let json_path = temporary_directory.join("learning-cards.json");
+        fs::write(&json_path, serde_json::to_vec_pretty(&payload)?)?;
+        let markdown_path = temporary_directory.join("learning-cards.md");
+        fs::write(
+            &markdown_path,
+            render_learning_cards_markdown(&project.title, &cards).as_bytes(),
+        )?;
+        fs::rename(&temporary_directory, &final_directory)?;
+        Ok((
+            final_directory.join("learning-cards.json"),
+            final_directory.join("learning-cards.md"),
+        ))
+    })();
+    let (json_path, markdown_path) = match exported {
+        Ok(value) => value,
+        Err(error) => {
+            let _ = fs::remove_dir_all(&temporary_directory);
+            return Err(error);
+        }
+    };
+    Ok(LearningCardsExport {
+        directory: final_directory.to_string_lossy().into_owned(),
+        json_path: json_path.to_string_lossy().into_owned(),
+        markdown_path: markdown_path.to_string_lossy().into_owned(),
+        card_count: cards.len(),
+    })
+}
+
 pub fn import_learning_result(
     store: &ProjectStore,
     input: ImportLearningResultInput,
@@ -910,6 +1377,159 @@ pub(crate) fn verify_task_package(
         }
     }
     Ok(())
+}
+
+fn get_learning_card_by_entry(
+    store: &ProjectStore,
+    project_id: &str,
+    entry_id: &str,
+) -> Result<Option<LearningCard>, LearningError> {
+    let connection = store.connect()?;
+    let card_id = connection
+        .query_row(
+            "SELECT id FROM learning_cards
+             WHERE project_id = ?1 AND dictionary_entry_id = ?2",
+            params![project_id, entry_id],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()?;
+    card_id
+        .map(|card_id| get_learning_card(store, &card_id))
+        .transpose()
+}
+
+fn extract_scene_screenshot(
+    ffmpeg: &Path,
+    media_path: &Path,
+    timestamp_ms: i64,
+    output_path: &Path,
+) -> Result<(), LearningError> {
+    let mut command = hidden_command(ffmpeg);
+    let output = command
+        .args([
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-nostdin",
+            "-y",
+            "-ss",
+        ])
+        .arg(format!("{:.3}", timestamp_ms as f64 / 1_000.0))
+        .arg("-i")
+        .arg(media_path)
+        .args([
+            "-map",
+            "0:v:0",
+            "-frames:v",
+            "1",
+            "-vf",
+            "scale=960:-2:force_original_aspect_ratio=decrease",
+            "-q:v",
+            "3",
+        ])
+        .arg(output_path)
+        .output()
+        .map_err(|error| {
+            LearningError::ScreenshotFailed(format!("无法启动本地 FFmpeg：{error}"))
+        })?;
+    if !output.status.success() {
+        return Err(LearningError::ScreenshotFailed(
+            String::from_utf8_lossy(&output.stderr)
+                .lines()
+                .rev()
+                .find(|line| !line.trim().is_empty())
+                .unwrap_or("FFmpeg 没有生成场景截图")
+                .trim()
+                .to_owned(),
+        ));
+    }
+    Ok(())
+}
+
+fn hidden_command(program: &Path) -> Command {
+    let mut command = Command::new(program);
+    command.stdin(Stdio::null());
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(CREATE_NO_WINDOW);
+    }
+    command
+}
+
+fn remove_controlled_card_directory(store: &ProjectStore, project_id: &str, card_id: &str) {
+    if Uuid::parse_str(project_id).is_err() || Uuid::parse_str(card_id).is_err() {
+        return;
+    }
+    let directory = store
+        .data_directory()
+        .join("learning-cards")
+        .join(project_id)
+        .join(card_id);
+    let _ = fs::remove_dir_all(directory);
+}
+
+fn safe_file_stem(value: &str) -> String {
+    let sanitized = value
+        .chars()
+        .map(|character| {
+            if character.is_alphanumeric() || matches!(character, '-' | '_') {
+                character
+            } else {
+                '-'
+            }
+        })
+        .collect::<String>();
+    let sanitized = sanitized.trim_matches('-');
+    let limited = sanitized.chars().take(60).collect::<String>();
+    if limited.is_empty() {
+        "project".to_owned()
+    } else {
+        limited
+    }
+}
+
+fn render_learning_cards_markdown(project_title: &str, cards: &[LearningCard]) -> String {
+    let mut output = format!("# {}\n\n", escape_markdown(project_title));
+    for (index, card) in cards.iter().enumerate() {
+        output.push_str(&format!(
+            "## {}. {}\n\n",
+            index + 1,
+            escape_markdown(&card.selected_text)
+        ));
+        output.push_str(&format!(
+            "- 读音：{}\n- 词性或句型：{}\n- 时间点：{} ms\n- 原文语言：{}\n\n",
+            escape_markdown(&card.pronunciation),
+            escape_markdown(&card.part_of_speech),
+            card.playback_position_ms,
+            escape_markdown(&card.language_code)
+        ));
+        output.push_str(&format!(
+            "语境释义：{}\n\n原文：{}\n\n",
+            escape_markdown(&card.contextual_meaning),
+            escape_markdown(&card.source_sentence)
+        ));
+        if let Some(translated) = card.translated_sentence.as_deref() {
+            output.push_str(&format!("简体中文：{}\n\n", escape_markdown(translated)));
+        }
+        if let Some(note) = card.usage_note.as_deref() {
+            output.push_str(&format!("用法说明：{}\n\n", escape_markdown(note)));
+        }
+        output.push_str(&format!("![场景截图](images/{}.jpg)\n\n", card.id));
+    }
+    output
+}
+
+fn escape_markdown(value: &str) -> String {
+    value
+        .replace('\\', "\\\\")
+        .replace('`', "\\`")
+        .replace('*', "\\*")
+        .replace('_', "\\_")
+        .replace('[', "\\[")
+        .replace(']', "\\]")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
 }
 
 fn load_task_baseline(
@@ -1323,6 +1943,7 @@ mod tests {
     use super::*;
     use crate::{
         domain::CreateLocalProjectInput,
+        media,
         subtitles::{
             GeneratedSubtitleCue, PersistTranscriptionInput, SubtitleCue, persist_transcription,
         },
@@ -1438,6 +2059,37 @@ mod tests {
             )
             .expect("result should be written");
             path
+        }
+
+        fn dictionary_entry(&self) -> DictionaryEntry {
+            let task = self.prepare();
+            let result_path = self.result_path(&task, &task.selected_text);
+            import_learning_result(
+                &self.store,
+                ImportLearningResultInput {
+                    task_id: task.id,
+                    result_path: result_path.to_string_lossy().into_owned(),
+                },
+            )
+            .expect("learning result should apply")
+            .dictionary_entry
+        }
+
+        fn card(&self) -> LearningCard {
+            let entry = self.dictionary_entry();
+            create_learning_card_with(
+                &self.store,
+                CreateLearningCardInput {
+                    project_id: self.project_id.clone(),
+                    dictionary_entry_id: entry.id,
+                },
+                |_media_path, timestamp_ms, output_path| {
+                    assert_eq!(timestamp_ms, 1_000);
+                    fs::write(output_path, [0xff, 0xd8, 0xff, 0xe0, 1, 2, 3])?;
+                    Ok(())
+                },
+            )
+            .expect("learning card should persist")
         }
     }
 
@@ -1651,10 +2303,27 @@ mod tests {
     #[test]
     fn deleting_a_project_removes_only_controlled_learning_materials() {
         let fixture = Fixture::new();
-        let task = fixture.prepare();
+        let card = fixture.card();
+        let task = get_learning_task(
+            &fixture.store,
+            &get_dictionary_entry(
+                &fixture.store,
+                card.dictionary_entry_id
+                    .as_deref()
+                    .expect("card should reference an entry"),
+            )
+            .expect("entry should load")
+            .task_id,
+        )
+        .expect("task should load");
         let directory =
             task_directory(&fixture.store, &task.id).expect("task directory should resolve");
+        let card_directory = Path::new(&card.screenshot_path)
+            .parent()
+            .expect("card screenshot should have a parent")
+            .to_path_buf();
         assert!(directory.is_dir());
+        assert!(card_directory.is_dir());
         assert!(fixture.media_path.is_file());
 
         let deleted = fixture
@@ -1664,7 +2333,221 @@ mod tests {
 
         assert!(deleted.deleted);
         assert!(!directory.exists());
+        assert!(!card_directory.exists());
         assert!(fixture.media_path.is_file());
+    }
+
+    #[test]
+    fn creates_lists_and_deletes_a_scene_card_idempotently() {
+        let fixture = Fixture::new();
+        let entry = fixture.dictionary_entry();
+        let input = CreateLearningCardInput {
+            project_id: fixture.project_id.clone(),
+            dictionary_entry_id: entry.id.clone(),
+        };
+        let card = create_learning_card_with(
+            &fixture.store,
+            input.clone(),
+            |_media_path, timestamp_ms, output_path| {
+                assert_eq!(timestamp_ms, 1_000);
+                fs::write(output_path, [0xff, 0xd8, 0xff, 0xe0, 4, 5, 6])?;
+                Ok(())
+            },
+        )
+        .expect("card should persist");
+        let reused = create_learning_card_with(
+            &fixture.store,
+            input,
+            |_media_path, _timestamp_ms, _output_path| {
+                panic!("existing card should be reused before extracting another screenshot")
+            },
+        )
+        .expect("existing card should return");
+
+        assert_eq!(reused.id, card.id);
+        assert!(card.screenshot_available);
+        assert_eq!(
+            list_learning_cards(&fixture.store, &fixture.project_id)
+                .expect("cards should list")
+                .len(),
+            1
+        );
+        assert!(
+            delete_learning_card(&fixture.store, &fixture.project_id, &card.id)
+                .expect("card should delete")
+        );
+        assert!(!Path::new(&card.screenshot_path).exists());
+        assert!(
+            list_learning_cards(&fixture.store, &fixture.project_id)
+                .expect("cards should list")
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn exports_markdown_json_and_verified_screenshot_copies() {
+        let fixture = Fixture::new();
+        let card = fixture.card();
+        let destination = fixture.temporary.path().join("exports");
+        fs::create_dir_all(&destination).expect("export destination should exist");
+
+        let exported = export_learning_cards(
+            &fixture.store,
+            ExportLearningCardsInput {
+                project_id: fixture.project_id.clone(),
+                destination_directory: destination.to_string_lossy().into_owned(),
+            },
+        )
+        .expect("cards should export");
+
+        assert_eq!(exported.card_count, 1);
+        assert!(Path::new(&exported.json_path).is_file());
+        assert!(Path::new(&exported.markdown_path).is_file());
+        let json = fs::read_to_string(&exported.json_path).expect("JSON should read");
+        let markdown = fs::read_to_string(&exported.markdown_path).expect("Markdown should read");
+        assert!(json.contains("siaovplay-learning-cards-v1"));
+        assert!(json.contains("images/"));
+        assert!(!json.contains(&fixture.media_path.to_string_lossy().into_owned()));
+        assert!(!json.contains(&card.screenshot_path));
+        assert!(markdown.contains("駅前"));
+        assert!(markdown.contains("![场景截图](images/"));
+        let copied = Path::new(&exported.directory)
+            .join("images")
+            .join(format!("{}.jpg", card.id));
+        assert_eq!(
+            hash_file(&copied).expect("copy should hash"),
+            card.screenshot_sha256
+        );
+    }
+
+    #[test]
+    fn refuses_to_export_a_card_with_a_changed_screenshot() {
+        let fixture = Fixture::new();
+        let card = fixture.card();
+        fs::write(&card.screenshot_path, [0xff, 0xd8, 9, 9, 9]).expect("screenshot should change");
+        let destination = fixture.temporary.path().join("exports");
+        fs::create_dir_all(&destination).expect("export destination should exist");
+
+        let reloaded = get_learning_card(&fixture.store, &card.id).expect("card should reload");
+        assert!(!reloaded.screenshot_available);
+        let error = export_learning_cards(
+            &fixture.store,
+            ExportLearningCardsInput {
+                project_id: fixture.project_id.clone(),
+                destination_directory: destination.to_string_lossy().into_owned(),
+            },
+        )
+        .expect_err("changed screenshot should block export");
+        assert!(matches!(error, LearningError::ExportFailed(_)));
+    }
+
+    #[test]
+    #[ignore = "requires SIAOVPLAY_MEDIA_FIXTURE_DIR and the local FFmpeg runtime"]
+    fn real_media_creates_a_verified_scene_screenshot() {
+        let fixture_directory = std::env::var_os("SIAOVPLAY_MEDIA_FIXTURE_DIR")
+            .map(PathBuf::from)
+            .expect("SIAOVPLAY_MEDIA_FIXTURE_DIR must be set");
+        let media_path = fixture_directory.join("h264-aac.mp4");
+        let temporary = tempfile::tempdir().expect("temporary directory should work");
+        let store = ProjectStore::open(
+            temporary
+                .path()
+                .join("data")
+                .join("projects")
+                .join("siaovplay.db"),
+        )
+        .expect("store should open");
+        let project = store
+            .create_local_project(CreateLocalProjectInput {
+                media_path: media_path.to_string_lossy().into_owned(),
+                title: Some("real learning card".to_owned()),
+            })
+            .expect("project should create");
+        let inspection =
+            media::inspect_project_media(&store, &project.id).expect("media should inspect");
+        let duration_ms = inspection
+            .probe
+            .duration_ms
+            .expect("media duration should exist");
+        let playback_position_ms = (duration_ms / 2).clamp(1, duration_ms);
+        let current = store
+            .get_project(&project.id)
+            .expect("project should reload");
+        let source = persist_transcription(
+            &store,
+            PersistTranscriptionInput {
+                project_id: project.id.clone(),
+                source_label: "real card subtitle".to_owned(),
+                source_sha256: "c".repeat(64),
+                language_code: "en".to_owned(),
+                expected_project_revision: current.revision,
+                expected_media_sha256: inspection.source_sha256,
+                media_duration_ms: Some(duration_ms),
+                cues: vec![GeneratedSubtitleCue {
+                    cue: SubtitleCue {
+                        ordinal: 0,
+                        start_ms: 0,
+                        end_ms: duration_ms,
+                        text: "Meet me at the station.".to_owned(),
+                        confidence: None,
+                    },
+                    words: Vec::new(),
+                }],
+            },
+        )
+        .expect("subtitle should persist");
+        let task = prepare_learning_task(
+            &store,
+            PrepareLearningTaskInput {
+                project_id: project.id.clone(),
+                handoff_kind: "manual".to_owned(),
+                source_segment_id: source.segments[0].id.clone(),
+                selected_text: "station".to_owned(),
+                selection_kind: "word".to_owned(),
+                playback_position_ms,
+            },
+        )
+        .expect("learning task should prepare");
+        let result_path = temporary.path().join("result.json");
+        fs::write(
+            &result_path,
+            serde_json::to_vec(&json!({
+                "protocolVersion": task.protocol_version,
+                "taskId": task.id,
+                "sourceVersionId": task.source_version_id,
+                "sourceSegmentId": task.source_segment_id,
+                "selectedText": task.selected_text,
+                "selectionKind": task.selection_kind,
+                "pronunciation": "/ˈsteɪʃən/",
+                "partOfSpeech": "名词",
+                "contextualMeaning": "车站；当前台词约定在那里见面。",
+                "usageNote": null
+            }))
+            .expect("result should serialize"),
+        )
+        .expect("result should write");
+        let entry = import_learning_result(
+            &store,
+            ImportLearningResultInput {
+                task_id: task.id,
+                result_path: result_path.to_string_lossy().into_owned(),
+            },
+        )
+        .expect("result should apply")
+        .dictionary_entry;
+        let card = create_learning_card(
+            &store,
+            CreateLearningCardInput {
+                project_id: project.id,
+                dictionary_entry_id: entry.id,
+            },
+        )
+        .expect("real card should create");
+
+        let bytes = fs::read(&card.screenshot_path).expect("screenshot should read");
+        assert!(bytes.starts_with(&[0xff, 0xd8]));
+        assert!(card.screenshot_available);
+        assert_eq!(hash_bytes(&bytes), card.screenshot_sha256);
     }
 
     fn directory_result_path(store: &ProjectStore, task_id: &str) -> PathBuf {

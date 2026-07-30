@@ -149,7 +149,12 @@ pub fn run() {
             commands::import_learning_result,
             commands::start_codex_learning_task,
             commands::cancel_learning_task,
-            commands::resume_codex_learning_task
+            commands::resume_codex_learning_task,
+            commands::create_learning_card,
+            commands::get_learning_card,
+            commands::list_learning_cards,
+            commands::delete_learning_card,
+            commands::export_learning_cards
         ])
         .run(tauri::generate_context!())
         .expect("failed to run SiaoVPlay");
