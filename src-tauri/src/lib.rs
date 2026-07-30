@@ -1,6 +1,7 @@
 mod commands;
 mod domain;
 mod media;
+mod remote_media;
 mod store;
 mod subtitles;
 
@@ -80,6 +81,9 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_app_status,
             commands::create_local_project,
+            commands::inspect_remote_media_url,
+            commands::import_remote_media_url,
+            commands::cancel_remote_media_import,
             commands::list_projects,
             commands::get_project,
             commands::mark_project_opened,

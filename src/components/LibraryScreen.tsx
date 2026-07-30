@@ -14,6 +14,7 @@ type LibraryScreenProps = {
   error: string | null;
   previewMode: boolean;
   onImport: () => void;
+  onImportUrl: () => void;
   onOpen: (project: Project) => void;
   onRelink: (project: Project) => void;
   onDelete: (project: Project) => void;
@@ -67,7 +68,11 @@ function ProjectCard({
           </span>
         )}
         <span className="poster-status">
-          {needsRelink ? "媒体文件已移动" : "本地视频"}
+          {needsRelink
+            ? "媒体文件已移动"
+            : project.mediaSource.originUrl
+              ? "URL 视频副本"
+              : "本地视频"}
         </span>
         <span className="poster-duration">
           {formatDuration(project.playbackState.durationMs)}
@@ -128,6 +133,7 @@ export function LibraryScreen({
   error,
   previewMode,
   onImport,
+  onImportUrl,
   onOpen,
   onRelink,
   onDelete,
@@ -167,26 +173,35 @@ export function LibraryScreen({
             <p className="eyebrow">本地优先的跨语言播放器</p>
             <h1>专注观看，需要时再理解。</h1>
             <p className="lead">
-              从本地视频开始建立观影项目。播放位置保存在本机，源文件始终由自己掌控。
+            从本地视频或公开媒体 URL 建立观影项目。播放位置和远程媒体副本保存在本机。
             </p>
           </div>
-          <button
-            aria-keyshortcuts="Control+O"
-            autoFocus={projects.length === 0}
-            className="button primary import-button"
-            type="button"
-            onClick={onImport}
-          >
-            导入本地视频
-          </button>
+          <div className="library-import-actions">
+            <button
+              className="button import-button"
+              type="button"
+              onClick={onImportUrl}
+            >
+              粘贴视频 URL
+            </button>
+            <button
+              aria-keyshortcuts="Control+O"
+              autoFocus={projects.length === 0}
+              className="button primary import-button"
+              type="button"
+              onClick={onImport}
+            >
+              导入本地视频
+            </button>
+          </div>
         </header>
 
-        <section className="import-strip" aria-label="本地导入说明">
+        <section className="import-strip" aria-label="媒体导入说明">
           <div>
             <span className="step-number">01</span>
             <span>
-              <strong>选择本地视频</strong>
-              <small>支持 MP4、MKV、MOV、WebM 等常见格式。</small>
+              <strong>选择本地视频或 URL</strong>
+              <small>支持常见本地格式、公开 HTTPS 直链和点播 M3U8。</small>
             </span>
           </div>
           <div>

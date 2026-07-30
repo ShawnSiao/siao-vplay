@@ -4,6 +4,7 @@ import { Dialog } from "./components/Dialog";
 import { LibraryScreen } from "./components/LibraryScreen";
 import { PlayerScreen } from "./components/PlayerScreen";
 import { PreparationScreen } from "./components/PreparationScreen";
+import { RemoteUrlDialog } from "./components/RemoteUrlDialog";
 import { SubtitleImportDialog } from "./components/SubtitleImportDialog";
 import {
   chooseLocalVideo,
@@ -53,6 +54,7 @@ export default function App() {
     [],
   );
   const [subtitleDialogOpen, setSubtitleDialogOpen] = useState(false);
+  const [remoteUrlDialogOpen, setRemoteUrlDialogOpen] = useState(false);
   const [deleteCandidate, setDeleteCandidate] = useState<Project | null>(null);
   const [busyMessage, setBusyMessage] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -215,6 +217,7 @@ export default function App() {
     setForceProxy(false);
     setSubtitleVersions([]);
     setSubtitleDialogOpen(false);
+    setRemoteUrlDialogOpen(false);
     void refreshProjects();
   }, [refreshProjects]);
 
@@ -259,6 +262,11 @@ export default function App() {
       setLibraryError(commandError(error).message);
     }
   }, [importMediaPath]);
+
+  const openRemoteUrlImport = useCallback(() => {
+    setLibraryError(null);
+    setRemoteUrlDialogOpen(true);
+  }, []);
 
   useEffect(() => {
     const startupMediaPath = appStatus?.startupMediaPath;
@@ -318,7 +326,13 @@ export default function App() {
       setDeleteCandidate(null);
       setBusyMessage(null);
       if (result.deleted && !result.sourceMediaDeleted) {
-        setToast("项目已删除，源视频保持不变。");
+        setToast(
+          project.mediaSource.originUrl
+            ? result.cachedMediaDeleted
+              ? "项目和本地副本已删除，远程来源未被修改。"
+              : "项目已删除，远程来源未被修改。"
+            : "项目已删除，源视频保持不变。",
+        );
       }
       await refreshProjects();
     } catch (error) {
@@ -360,6 +374,7 @@ export default function App() {
           error={libraryError}
           previewMode={!isDesktopApp}
           onImport={() => void importLocalVideo()}
+          onImportUrl={openRemoteUrlImport}
           onOpen={(project) => void prepareAndOpen(project, false)}
           onRelink={(project) => void relinkProject(project)}
           onDelete={setDeleteCandidate}
@@ -419,10 +434,34 @@ export default function App() {
         />
       ) : null}
 
+      {remoteUrlDialogOpen ? (
+        <RemoteUrlDialog
+          previewMode={!isDesktopApp}
+          onClose={() => setRemoteUrlDialogOpen(false)}
+          onImported={(project) => {
+            setRemoteUrlDialogOpen(false);
+            setProjects((current) => [
+              project,
+              ...current.filter((item) => item.id !== project.id),
+            ]);
+            setToast("远程媒体已保存为本地副本。");
+            void prepareAndOpen(project, false);
+          }}
+        />
+      ) : null}
+
       {deleteCandidate ? (
         <Dialog
-          title="删除这个本地项目？"
-          eyebrow="源视频不会被删除"
+          title={
+            deleteCandidate.mediaSource.originUrl
+              ? "删除这个 URL 项目？"
+              : "删除这个本地项目？"
+          }
+          eyebrow={
+            deleteCandidate.mediaSource.originUrl
+              ? "远程来源不会被修改"
+              : "源视频不会被删除"
+          }
           onClose={() => setDeleteCandidate(null)}
           actions={
             <>
@@ -443,12 +482,21 @@ export default function App() {
             </>
           }
         >
-          <p>
-            「{deleteCandidate.title}
-            」会从项目库移除。播放位置和项目记录会被删除，原视频文件不会被修改或删除。
-          </p>
+          {deleteCandidate.mediaSource.originUrl ? (
+            <p>
+              「{deleteCandidate.title}
+              」会从项目库移除，本机保存的受控媒体副本也会删除；远程来源不会被修改。
+            </p>
+          ) : (
+            <p>
+              「{deleteCandidate.title}
+              」会从项目库移除。播放位置和项目记录会被删除，原视频文件不会被修改或删除。
+            </p>
+          )}
           <div className="source-file-note">
-            <span>源文件</span>
+            <span>
+              {deleteCandidate.mediaSource.originUrl ? "本地副本" : "源文件"}
+            </span>
             <strong>{deleteCandidate.mediaSource.displayName}</strong>
           </div>
         </Dialog>

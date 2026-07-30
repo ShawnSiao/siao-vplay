@@ -34,6 +34,7 @@ pub struct MediaSource {
     pub id: String,
     pub kind: MediaSourceKind,
     pub locator: String,
+    pub origin_url: Option<String>,
     pub display_name: String,
     pub is_available: bool,
     pub source_sha256: Option<String>,
@@ -97,6 +98,7 @@ pub struct DeleteProjectResult {
     pub project_id: String,
     pub deleted: bool,
     pub source_media_deleted: bool,
+    pub cached_media_deleted: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]

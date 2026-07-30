@@ -9,6 +9,7 @@ import type {
   MediaPreparation,
   MediaRuntimeStatus,
   Project,
+  RemoteMediaPreview,
   SubtitleImportPreview,
   SubtitleVersion,
 } from "../types";
@@ -117,6 +118,37 @@ export async function chooseSubtitleFile(): Promise<string | null> {
 export async function createLocalProject(mediaPath: string): Promise<Project> {
   return invoke<Project>("create_local_project", {
     input: { mediaPath, title: null },
+  });
+}
+
+export async function inspectRemoteMediaUrl(
+  url: string,
+): Promise<RemoteMediaPreview> {
+  return invoke<RemoteMediaPreview>("inspect_remote_media_url", {
+    input: { url },
+  });
+}
+
+export async function importRemoteMediaUrl(
+  url: string,
+  expectedPreviewToken: string,
+  operationId: string,
+): Promise<Project> {
+  return invoke<Project>("import_remote_media_url", {
+    input: {
+      url,
+      expectedPreviewToken,
+      operationId,
+      title: null,
+    },
+  });
+}
+
+export async function cancelRemoteMediaImport(
+  operationId: string,
+): Promise<boolean> {
+  return invoke<boolean>("cancel_remote_media_import", {
+    input: { operationId },
   });
 }
 

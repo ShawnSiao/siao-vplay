@@ -14,7 +14,7 @@ use crate::domain::{
     UpdatePlaybackStateInput,
 };
 
-const CURRENT_SCHEMA_VERSION: i64 = 4;
+const CURRENT_SCHEMA_VERSION: i64 = 5;
 
 #[derive(Clone, Debug)]
 pub(crate) struct CachedMediaProbe {
@@ -126,6 +126,76 @@ impl ProjectStore {
         self.get_project(&project_id)
     }
 
+    pub fn create_remote_project(
+        &self,
+        media_path: &Path,
+        origin_url: &str,
+        display_name: &str,
+        title: Option<&str>,
+    ) -> Result<Project, StoreError> {
+        let media_path = canonical_media_path(
+            media_path
+                .to_str()
+                .ok_or_else(|| StoreError::Validation("媒体路径不是有效文本".to_owned()))?,
+        )?;
+        let origin_url = origin_url.trim();
+        if origin_url.is_empty() {
+            return Err(StoreError::Validation("媒体来源 URL 不能为空".to_owned()));
+        }
+        let display_name = display_name.trim();
+        if display_name.is_empty() {
+            return Err(StoreError::Validation("媒体显示名称不能为空".to_owned()));
+        }
+        let title = title
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_owned)
+            .unwrap_or_else(|| {
+                Path::new(display_name)
+                    .file_stem()
+                    .and_then(|value| value.to_str())
+                    .filter(|value| !value.trim().is_empty())
+                    .unwrap_or("URL 视频")
+                    .to_owned()
+            });
+        let timestamp = now_ms()?;
+        let project_id = Uuid::new_v4().to_string();
+        let media_source_id = Uuid::new_v4().to_string();
+
+        let mut connection = self.connect()?;
+        let transaction = connection.transaction()?;
+        transaction.execute(
+            "INSERT INTO projects (
+                id, title, revision, created_at_ms, updated_at_ms, last_opened_at_ms
+             ) VALUES (?1, ?2, 1, ?3, ?3, ?3)",
+            params![project_id, title, timestamp],
+        )?;
+        transaction.execute(
+            "INSERT INTO media_sources (
+                id, project_id, kind, locator, origin_url, display_name, is_primary,
+                created_at_ms, updated_at_ms
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, 1, ?7, ?7)",
+            params![
+                media_source_id,
+                project_id,
+                MediaSourceKind::LocalFile.as_database_value(),
+                path_to_string(&media_path),
+                origin_url,
+                display_name,
+                timestamp
+            ],
+        )?;
+        transaction.execute(
+            "INSERT INTO playback_states (
+                project_id, position_ms, duration_ms, volume, playback_rate, updated_at_ms
+             ) VALUES (?1, 0, NULL, 1.0, 1.0, ?2)",
+            params![project_id, timestamp],
+        )?;
+        transaction.commit()?;
+
+        self.get_project(&project_id)
+    }
+
     pub fn list_projects(&self) -> Result<Vec<Project>, StoreError> {
         let connection = self.connect()?;
         let mut statement = connection.prepare(
@@ -222,6 +292,7 @@ impl ProjectStore {
             "UPDATE media_sources
              SET kind = ?2,
                  locator = ?3,
+                 origin_url = NULL,
                  display_name = ?4,
                  source_sha256 = NULL,
                  probe_json = NULL,
@@ -525,15 +596,48 @@ impl ProjectStore {
 
     pub fn delete_project(&self, project_id: &str) -> Result<DeleteProjectResult, StoreError> {
         validate_project_id(project_id)?;
+        let project = match self.get_project(project_id) {
+            Ok(project) => Some(project),
+            Err(StoreError::ProjectNotFound(_)) => None,
+            Err(error) => return Err(error),
+        };
         let connection = self.connect()?;
         let changed =
             connection.execute("DELETE FROM projects WHERE id = ?1", params![project_id])?;
+        let cached_media_deleted = if changed > 0 {
+            project
+                .as_ref()
+                .filter(|project| project.media_source.origin_url.is_some())
+                .is_some_and(|project| {
+                    self.remove_remote_media_cache(&project.media_source.locator)
+                })
+        } else {
+            false
+        };
 
         Ok(DeleteProjectResult {
             project_id: project_id.to_owned(),
             deleted: changed > 0,
             source_media_deleted: false,
+            cached_media_deleted,
         })
+    }
+
+    fn remove_remote_media_cache(&self, locator: &str) -> bool {
+        let cache_root = self.data_directory().join("remote-media");
+        let Ok(cache_root) = dunce::canonicalize(cache_root) else {
+            return false;
+        };
+        let Some(parent) = Path::new(locator).parent() else {
+            return false;
+        };
+        let Ok(parent) = dunce::canonicalize(parent) else {
+            return false;
+        };
+        if parent == cache_root || !parent.starts_with(&cache_root) {
+            return false;
+        }
+        fs::remove_dir_all(parent).is_ok()
     }
 
     fn get_media_artifact(&self, artifact_id: &str) -> Result<MediaArtifact, StoreError> {
@@ -606,6 +710,16 @@ impl ProjectStore {
             Self::apply_migration_4(&transaction)?;
             transaction.execute(
                 "INSERT INTO schema_migrations (version, applied_at_ms) VALUES (4, ?1)",
+                params![now_ms()?],
+            )?;
+            transaction.commit()?;
+            current_version = 4;
+        }
+        if current_version < 5 {
+            let transaction = connection.transaction()?;
+            Self::apply_migration_5(&transaction)?;
+            transaction.execute(
+                "INSERT INTO schema_migrations (version, applied_at_ms) VALUES (5, ?1)",
                 params![now_ms()?],
             )?;
             transaction.commit()?;
@@ -765,6 +879,17 @@ impl ProjectStore {
         Ok(())
     }
 
+    fn apply_migration_5(transaction: &Transaction<'_>) -> Result<(), StoreError> {
+        transaction.execute_batch(
+            "ALTER TABLE media_sources ADD COLUMN origin_url TEXT;
+
+             CREATE INDEX media_sources_origin_url
+             ON media_sources(origin_url)
+             WHERE origin_url IS NOT NULL;",
+        )?;
+        Ok(())
+    }
+
     fn load_project(connection: &Connection, project_id: &str) -> Result<Project, StoreError> {
         let row = connection
             .query_row(
@@ -778,6 +903,7 @@ impl ProjectStore {
                     m.id,
                     m.kind,
                     m.locator,
+                    m.origin_url,
                     m.display_name,
                     m.source_sha256,
                     m.probed_at_ms,
@@ -807,17 +933,18 @@ impl ProjectStore {
                         row.get::<_, String>(6)?,
                         row.get::<_, String>(7)?,
                         row.get::<_, String>(8)?,
-                        row.get::<_, String>(9)?,
-                        row.get::<_, Option<String>>(10)?,
-                        row.get::<_, Option<i64>>(11)?,
-                        row.get::<_, Option<String>>(12)?,
-                        row.get::<_, i64>(13)?,
+                        row.get::<_, Option<String>>(9)?,
+                        row.get::<_, String>(10)?,
+                        row.get::<_, Option<String>>(11)?,
+                        row.get::<_, Option<i64>>(12)?,
+                        row.get::<_, Option<String>>(13)?,
                         row.get::<_, i64>(14)?,
                         row.get::<_, i64>(15)?,
-                        row.get::<_, Option<i64>>(16)?,
-                        row.get::<_, f64>(17)?,
+                        row.get::<_, i64>(16)?,
+                        row.get::<_, Option<i64>>(17)?,
                         row.get::<_, f64>(18)?,
-                        row.get::<_, i64>(19)?,
+                        row.get::<_, f64>(19)?,
+                        row.get::<_, i64>(20)?,
                     ))
                 },
             )
@@ -847,20 +974,21 @@ impl ProjectStore {
                 id: row.6,
                 kind: source_kind,
                 locator: row.8,
-                display_name: row.9,
+                origin_url: row.9,
+                display_name: row.10,
                 is_available,
-                source_sha256: row.10,
-                probed_at_ms: row.11,
-                poster_path: row.12,
-                created_at_ms: row.13,
-                updated_at_ms: row.14,
+                source_sha256: row.11,
+                probed_at_ms: row.12,
+                poster_path: row.13,
+                created_at_ms: row.14,
+                updated_at_ms: row.15,
             },
             playback_state: PlaybackState {
-                position_ms: row.15,
-                duration_ms: row.16,
-                volume: row.17,
-                playback_rate: row.18,
-                updated_at_ms: row.19,
+                position_ms: row.16,
+                duration_ms: row.17,
+                volume: row.18,
+                playback_rate: row.19,
+                updated_at_ms: row.20,
             },
         })
     }
@@ -1185,6 +1313,40 @@ mod tests {
             fixture.store.get_project(&project.id),
             Err(StoreError::ProjectNotFound(_))
         ));
+    }
+
+    #[test]
+    fn remote_project_persists_origin_and_only_deletes_controlled_cache() {
+        let temporary = tempfile::tempdir().expect("temp directory should be created");
+        let store = ProjectStore::open(temporary.path().join("projects").join("siaovplay.sqlite3"))
+            .expect("store should open");
+        let cache_directory = temporary
+            .path()
+            .join("remote-media")
+            .join("authorized-import");
+        fs::create_dir_all(&cache_directory).expect("cache directory should be created");
+        let cached_media = cache_directory.join("source.mp4");
+        fs::write(&cached_media, b"remote-media-copy").expect("cached media should be written");
+
+        let project = store
+            .create_remote_project(
+                &cached_media,
+                "https://media.example.com/episode.mp4",
+                "episode.mp4",
+                None,
+            )
+            .expect("remote project should be created");
+
+        assert_eq!(
+            project.media_source.origin_url.as_deref(),
+            Some("https://media.example.com/episode.mp4")
+        );
+        let result = store
+            .delete_project(&project.id)
+            .expect("remote project should delete");
+        assert!(result.deleted);
+        assert!(result.cached_media_deleted);
+        assert!(!cache_directory.exists());
     }
 
     #[test]

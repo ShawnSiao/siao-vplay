@@ -12,6 +12,7 @@ export type MediaSource = {
   id: string;
   kind: "local_file";
   locator: string;
+  originUrl: string | null;
   displayName: string;
   isAvailable: boolean;
   sourceSha256: string | null;
@@ -138,6 +139,19 @@ export type DeleteProjectResult = {
   projectId: string;
   deleted: boolean;
   sourceMediaDeleted: false;
+  cachedMediaDeleted: boolean;
+};
+
+export type RemoteMediaKind = "direct_file" | "hls";
+
+export type RemoteMediaPreview = {
+  originalUrl: string;
+  finalUrl: string;
+  displayName: string;
+  mediaKind: RemoteMediaKind;
+  contentType: string | null;
+  contentLength: number | null;
+  previewToken: string;
 };
 
 export type DesktopCommandError = {

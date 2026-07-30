@@ -5,6 +5,7 @@ import type {
   EmbeddedSubtitlePreview,
   MediaPreparation,
   Project,
+  RemoteMediaPreview,
   SubtitleImportPreview,
   SubtitleVersion,
 } from "./types";
@@ -16,6 +17,9 @@ const desktopMocks = vi.hoisted(() => ({
   chooseLocalVideo: vi.fn(),
   chooseSubtitleFile: vi.fn(),
   createLocalProject: vi.fn(),
+  inspectRemoteMediaUrl: vi.fn(),
+  importRemoteMediaUrl: vi.fn(),
+  cancelRemoteMediaImport: vi.fn(),
   ensureProjectPoster: vi.fn(),
   markProjectOpened: vi.fn(),
   prepareProjectMedia: vi.fn(),
@@ -53,6 +57,7 @@ const project: Project = {
     id: "5f5ef2ef-53a4-4ae3-8bc6-c366c3286396",
     kind: "local_file",
     locator: "W:\\media\\rain-platform.mp4",
+    originUrl: null,
     displayName: "rain-platform.mp4",
     isAvailable: true,
     sourceSha256: null,
@@ -115,6 +120,28 @@ const preparation: MediaPreparation = {
   playbackPath: project.mediaSource.locator,
   proxyArtifact: null,
   reusedProxy: false,
+};
+
+const remotePreview: RemoteMediaPreview = {
+  originalUrl: "https://media.example.com/rain-platform.mp4",
+  finalUrl: "https://cdn.example.com/rain-platform.mp4",
+  displayName: "rain-platform.mp4",
+  mediaKind: "direct_file",
+  contentType: "video/mp4",
+  contentLength: 12_500_000,
+  previewToken: "c".repeat(64),
+};
+
+const remoteProject: Project = {
+  ...project,
+  id: "171f95a8-938c-4d0c-887b-e4c626f27c70",
+  mediaSource: {
+    ...project.mediaSource,
+    id: "29645135-bcb4-4f56-b4c7-3ec1bf59cd28",
+    locator:
+      "W:\\SiaoVPlay\\app-data\\remote-media\\import-1\\source.mp4",
+    originUrl: remotePreview.originalUrl,
+  },
 };
 
 const subtitlePreview: SubtitleImportPreview = {
@@ -199,6 +226,9 @@ beforeEach(() => {
   desktopMocks.chooseLocalVideo.mockResolvedValue(null);
   desktopMocks.chooseSubtitleFile.mockResolvedValue(null);
   desktopMocks.createLocalProject.mockResolvedValue(project);
+  desktopMocks.inspectRemoteMediaUrl.mockResolvedValue(remotePreview);
+  desktopMocks.importRemoteMediaUrl.mockResolvedValue(remoteProject);
+  desktopMocks.cancelRemoteMediaImport.mockResolvedValue(true);
   desktopMocks.ensureProjectPoster.mockResolvedValue({
     ...project,
     mediaSource: {
@@ -207,13 +237,30 @@ beforeEach(() => {
         "W:\\SiaoVPlay\\app-data\\media-cache\\project\\poster.jpg",
     },
   });
-  desktopMocks.markProjectOpened.mockResolvedValue(project);
-  desktopMocks.prepareProjectMedia.mockResolvedValue(preparation);
+  desktopMocks.markProjectOpened.mockImplementation(async (projectId) =>
+    projectId === remoteProject.id ? remoteProject : project,
+  );
+  desktopMocks.prepareProjectMedia.mockImplementation(async (projectId) => ({
+    ...preparation,
+    inspection: {
+      ...preparation.inspection,
+      projectId,
+      mediaSourceId:
+        projectId === remoteProject.id
+          ? remoteProject.mediaSource.id
+          : project.mediaSource.id,
+    },
+    playbackPath:
+      projectId === remoteProject.id
+        ? remoteProject.mediaSource.locator
+        : preparation.playbackPath,
+  }));
   desktopMocks.updatePlaybackState.mockResolvedValue(project);
   desktopMocks.deleteProject.mockResolvedValue({
     projectId: project.id,
     deleted: true,
     sourceMediaDeleted: false,
+    cachedMediaDeleted: false,
   });
   desktopMocks.inspectSubtitleFile.mockResolvedValue(subtitlePreview);
   desktopMocks.importSubtitleFile.mockResolvedValue(subtitleVersion);
@@ -299,6 +346,69 @@ describe("App", () => {
       project.id,
       false,
     );
+  });
+
+  it("preflights and imports a public HTTPS media URL", async () => {
+    render(<App />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "粘贴视频 URL" }),
+    );
+
+    fireEvent.change(screen.getByLabelText("媒体 URL"), {
+      target: { value: remotePreview.originalUrl },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "检查 URL" }));
+
+    await waitFor(() =>
+      expect(desktopMocks.inspectRemoteMediaUrl).toHaveBeenCalledWith(
+        remotePreview.originalUrl,
+      ),
+    );
+    expect(await screen.findByText("媒体文件")).toBeInTheDocument();
+    expect(screen.getByText("cdn.example.com")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "确认并导入" }));
+
+    await waitFor(() =>
+      expect(desktopMocks.importRemoteMediaUrl).toHaveBeenCalledWith(
+        remotePreview.originalUrl,
+        remotePreview.previewToken,
+        expect.any(String),
+      ),
+    );
+    await waitFor(() =>
+      expect(desktopMocks.prepareProjectMedia).toHaveBeenCalledWith(
+        remoteProject.id,
+        false,
+      ),
+    );
+  });
+
+  it("cancels an active remote media download", async () => {
+    desktopMocks.importRemoteMediaUrl.mockReturnValue(new Promise(() => {}));
+    render(<App />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "粘贴视频 URL" }),
+    );
+    fireEvent.change(screen.getByLabelText("媒体 URL"), {
+      target: { value: remotePreview.originalUrl },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "检查 URL" }));
+    await screen.findByText("媒体文件");
+    fireEvent.click(screen.getByRole("button", { name: "确认并导入" }));
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "取消导入" }),
+    );
+    const operationId =
+      desktopMocks.importRemoteMediaUrl.mock.calls[0][2];
+    await waitFor(() =>
+      expect(desktopMocks.cancelRemoteMediaImport).toHaveBeenCalledWith(
+        operationId,
+      ),
+    );
+    expect(
+      await screen.findByRole("button", { name: "正在取消…" }),
+    ).toBeDisabled();
   });
 
   it("states that deleting a project keeps the source video", async () => {

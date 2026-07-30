@@ -7,6 +7,10 @@ use crate::{
         RelinkProjectMediaInput, UpdatePlaybackStateInput,
     },
     media::{self, MediaError, MediaInspection, MediaPreparation, MediaRuntimeStatus},
+    remote_media::{
+        self, CancelRemoteMediaImportInput, ImportRemoteMediaUrlInput, InspectRemoteMediaUrlInput,
+        RemoteMediaError, RemoteMediaPreview,
+    },
     store::{ProjectStore, StoreError},
     subtitles::{
         self, EmbeddedSubtitlePreview, ImportEmbeddedSubtitleInput, ImportSubtitleFileInput,
@@ -109,6 +113,42 @@ impl From<SubtitleError> for CommandError {
     }
 }
 
+impl From<RemoteMediaError> for CommandError {
+    fn from(error: RemoteMediaError) -> Self {
+        let code = match &error {
+            RemoteMediaError::InvalidUrl => "remote_url_invalid",
+            RemoteMediaError::HttpsRequired => "remote_https_required",
+            RemoteMediaError::CredentialsNotAllowed => "remote_credentials_not_allowed",
+            RemoteMediaError::PrivateNetwork => "remote_private_network",
+            RemoteMediaError::Dns(_) => "remote_dns_failed",
+            RemoteMediaError::InvalidRedirect(_) | RemoteMediaError::RedirectLimit => {
+                "remote_redirect_invalid"
+            }
+            RemoteMediaError::Request(_) => "remote_request_failed",
+            RemoteMediaError::UnsupportedContent(_) => "remote_content_unsupported",
+            RemoteMediaError::SizeLimit => "remote_size_limit",
+            RemoteMediaError::PreviewChanged => "remote_preview_changed",
+            RemoteMediaError::Cancelled => "remote_import_cancelled",
+            RemoteMediaError::Hls(_) => "remote_hls_failed",
+            RemoteMediaError::FileSystem(_) => "filesystem_error",
+            RemoteMediaError::Media(MediaError::RuntimeUnavailable(_)) => {
+                "media_runtime_unavailable"
+            }
+            RemoteMediaError::Media(MediaError::MissingVideo) => "missing_video_stream",
+            RemoteMediaError::Media(_) => "media_inspection_failed",
+            RemoteMediaError::Store(StoreError::ProjectNotFound(_)) => "project_not_found",
+            RemoteMediaError::Store(StoreError::Validation(_)) => "validation_error",
+            RemoteMediaError::Store(StoreError::UnsupportedSchema { .. }) => "unsupported_schema",
+            RemoteMediaError::Store(StoreError::FileSystem(_)) => "filesystem_error",
+            RemoteMediaError::Store(_) => "database_error",
+        };
+        Self {
+            code,
+            message: error.to_string(),
+        }
+    }
+}
+
 impl CommandError {
     fn background_task_failed(message: impl ToString) -> Self {
         Self {
@@ -124,6 +164,37 @@ pub fn create_local_project(
     input: CreateLocalProjectInput,
 ) -> Result<Project, CommandError> {
     store.create_local_project(input).map_err(Into::into)
+}
+
+#[tauri::command]
+pub async fn inspect_remote_media_url(
+    input: InspectRemoteMediaUrlInput,
+) -> Result<RemoteMediaPreview, CommandError> {
+    tauri::async_runtime::spawn_blocking(move || {
+        remote_media::inspect_remote_media_url(input).map_err(CommandError::from)
+    })
+    .await
+    .map_err(CommandError::background_task_failed)?
+}
+
+#[tauri::command]
+pub async fn import_remote_media_url(
+    store: State<'_, ProjectStore>,
+    input: ImportRemoteMediaUrlInput,
+) -> Result<Project, CommandError> {
+    let store = store.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        remote_media::import_remote_media_url(&store, input).map_err(CommandError::from)
+    })
+    .await
+    .map_err(CommandError::background_task_failed)?
+}
+
+#[tauri::command]
+pub fn cancel_remote_media_import(
+    input: CancelRemoteMediaImportInput,
+) -> Result<bool, CommandError> {
+    remote_media::cancel_remote_media_import(input).map_err(Into::into)
 }
 
 #[tauri::command]

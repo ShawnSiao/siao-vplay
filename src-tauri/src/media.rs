@@ -231,6 +231,49 @@ pub fn media_runtime_status() -> MediaRuntimeStatus {
     MediaRuntime::status()
 }
 
+pub(crate) fn validate_media_path(media_path: &Path) -> Result<MediaProbe, MediaError> {
+    let runtime = MediaRuntime::resolve()?;
+    let probe = runtime.probe(media_path)?;
+    if probe.video_streams.is_empty() {
+        return Err(MediaError::MissingVideo);
+    }
+    Ok(probe)
+}
+
+pub(crate) fn remux_local_hls(playlist_path: &Path, destination: &Path) -> Result<(), MediaError> {
+    let runtime = MediaRuntime::resolve()?;
+    if let Some(parent) = destination.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    let output = hidden_command(&runtime.ffmpeg_path)
+        .args([
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-protocol_whitelist",
+            "file,crypto,data",
+            "-allowed_extensions",
+            "ALL",
+            "-i",
+        ])
+        .arg(playlist_path)
+        .args([
+            "-map", "0:v:0", "-map", "0:a?", "-map", "0:s?", "-dn", "-c", "copy",
+        ])
+        .arg(destination)
+        .output()
+        .map_err(|error| MediaError::ProxyFailed(format!("无法启动本地 HLS 封装：{error}")))?;
+    if !output.status.success() {
+        let _ = fs::remove_file(destination);
+        return Err(MediaError::ProxyFailed(format!(
+            "本地 HLS 封装失败：{}",
+            command_error_message(&output)
+        )));
+    }
+    Ok(())
+}
+
 pub fn inspect_project_media(
     store: &ProjectStore,
     project_id: &str,
