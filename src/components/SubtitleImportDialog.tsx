@@ -15,6 +15,7 @@ import type {
   SubtitleVersion,
 } from "../types";
 import { Dialog } from "./Dialog";
+import { TranscriptionPanel } from "./TranscriptionPanel";
 
 type SubtitleSelection =
   | {
@@ -79,6 +80,7 @@ export function SubtitleImportDialog({
   onClose,
   onImported,
 }: SubtitleImportDialogProps) {
+  const [workflow, setWorkflow] = useState<"import" | "transcribe">("import");
   const [selection, setSelection] = useState<SubtitleSelection | null>(null);
   const [language, setLanguage] = useState("");
   const [otherLanguage, setOtherLanguage] = useState("");
@@ -195,51 +197,87 @@ export function SubtitleImportDialog({
 
   return (
     <Dialog
-      title="添加原文字幕"
-      eyebrow="字幕保存在本地项目中"
-      onClose={busy ? () => undefined : onClose}
+      title="准备原文字幕"
+      eyebrow="导入已有字幕，或从视频原声生成"
+      onClose={workflow === "import" && busy ? () => undefined : onClose}
       actions={
-        <>
-          <button
-            className="button quiet"
-            type="button"
-            disabled={busy}
-            onClick={onClose}
-          >
-            取消
+        workflow === "transcribe" ? (
+          <button className="button quiet" type="button" onClick={onClose}>
+            关闭
           </button>
-          {preview ? (
-            <>
-              <button
-                className="button"
-                type="button"
-                disabled={busy}
-                onClick={resetPreview}
-              >
-                重新检查
-              </button>
+        ) : (
+          <>
+            <button
+              className="button quiet"
+              type="button"
+              disabled={busy}
+              onClick={onClose}
+            >
+              取消
+            </button>
+            {preview ? (
+              <>
+                <button
+                  className="button"
+                  type="button"
+                  disabled={busy}
+                  onClick={resetPreview}
+                >
+                  重新检查
+                </button>
+                <button
+                  className="button primary"
+                  type="button"
+                  disabled={busy || !preview.canImport}
+                  onClick={() => void confirmImport()}
+                >
+                  {operation === "import" ? "正在导入…" : "导入原文字幕"}
+                </button>
+              </>
+            ) : (
               <button
                 className="button primary"
                 type="button"
-                disabled={busy || !preview.canImport}
-                onClick={() => void confirmImport()}
+                disabled={busy || !selection || !resolvedLanguage}
+                onClick={() => void inspectSelection()}
               >
-                {operation === "import" ? "正在导入…" : "导入原文字幕"}
+                {operation === "inspect" ? "正在检查…" : "检查字幕"}
               </button>
-            </>
-          ) : (
-            <button
-              className="button primary"
-              type="button"
-              disabled={busy || !selection || !resolvedLanguage}
-              onClick={() => void inspectSelection()}
-            >
-              {operation === "inspect" ? "正在检查…" : "检查字幕"}
-            </button>
-          )}
-        </>
+            )}
+          </>
+        )
       }
     >
+      <div
+        className="subtitle-workflow-switch"
+        role="tablist"
+        aria-label="字幕准备方式"
+      >
+        <button
+          className={workflow === "import" ? "active" : ""}
+          type="button"
+          role="tab"
+          aria-selected={workflow === "import"}
+          disabled={busy}
+          onClick={() => setWorkflow("import")}
+        >
+          导入字幕
+        </button>
+        <button
+          className={workflow === "transcribe" ? "active" : ""}
+          type="button"
+          role="tab"
+          aria-selected={workflow === "transcribe"}
+          disabled={busy}
+          onClick={() => {
+            setWorkflow("transcribe");
+            resetPreview();
+          }}
+        >
+          从视频生成
+        </button>
+      </div>
+
       {currentVersion ? (
         <div className="subtitle-current-note">
           <span>当前原文字幕</span>
@@ -247,168 +285,190 @@ export function SubtitleImportDialog({
           <small>
             {currentVersion.languageCode.toUpperCase()} ·{" "}
             {currentVersion.segments.length} 条 · 版本{" "}
-            {currentVersion.versionNumber}
+            {currentVersion.versionNumber} ·{" "}
+            {currentVersion.status === "draft" ? "草稿" : "已检查"}
           </small>
+          {workflow === "transcribe" ? (
+            <div className="subtitle-current-samples">
+              {currentVersion.segments.slice(0, 3).map((segment) => (
+                <p key={segment.id}>{segment.text}</p>
+              ))}
+            </div>
+          ) : null}
         </div>
-      ) : (
+      ) : workflow === "import" ? (
         <p className="dialog-copy">
           可以导入 UTF-8 SRT、WebVTT，或读取视频中的文本字幕轨。确认导入前会检查时间轴和媒体范围。
         </p>
-      )}
+      ) : null}
 
-      {!preview ? (
+      {workflow === "import" ? (
         <>
-          <section className="subtitle-dialog-section">
-            <h3>字幕来源</h3>
-            <div className="subtitle-source-list">
-              <button
-                className={`subtitle-source-option ${
-                  selection?.kind === "file" ? "selected" : ""
-                }`}
-                type="button"
-                disabled={busy}
-                onClick={() => void chooseFile()}
-              >
-                <span>
-                  <strong>选择字幕文件</strong>
-                  <small>UTF-8 SRT 或 WebVTT</small>
-                </span>
-                <em>
-                  {selection?.kind === "file" ? selection.label : "选择…"}
-                </em>
-              </button>
+          {!preview ? (
+            <>
+              <section className="subtitle-dialog-section">
+                <h3>字幕来源</h3>
+                <div className="subtitle-source-list">
+                  <button
+                    className={`subtitle-source-option ${
+                      selection?.kind === "file" ? "selected" : ""
+                    }`}
+                    type="button"
+                    disabled={busy}
+                    onClick={() => void chooseFile()}
+                  >
+                    <span>
+                      <strong>选择字幕文件</strong>
+                      <small>UTF-8 SRT 或 WebVTT</small>
+                    </span>
+                    <em>
+                      {selection?.kind === "file" ? selection.label : "选择…"}
+                    </em>
+                  </button>
 
-              {textStreams.map((stream) => (
-                <button
-                  className={`subtitle-source-option ${
-                    selection?.kind === "embedded" &&
-                    selection.stream.index === stream.index
-                      ? "selected"
-                      : ""
-                  }`}
-                  key={stream.index}
-                  type="button"
-                  disabled={busy}
-                  onClick={() => chooseEmbedded(stream)}
-                >
-                  <span>
-                    <strong>内嵌字幕轨 {stream.index}</strong>
+                  {textStreams.map((stream) => (
+                    <button
+                      className={`subtitle-source-option ${
+                        selection?.kind === "embedded" &&
+                        selection.stream.index === stream.index
+                          ? "selected"
+                          : ""
+                      }`}
+                      key={stream.index}
+                      type="button"
+                      disabled={busy}
+                      onClick={() => chooseEmbedded(stream)}
+                    >
+                      <span>
+                        <strong>内嵌字幕轨 {stream.index}</strong>
+                        <small>
+                          {stream.language?.toUpperCase() ?? "语言未知"} ·{" "}
+                          {stream.codecName.toUpperCase()}
+                        </small>
+                      </span>
+                      <em>使用</em>
+                    </button>
+                  ))}
+                </div>
+                {streams.length === 0 ? (
+                  <p className="subtitle-empty-note">
+                    这段视频没有检测到内嵌字幕，可以选择本地字幕文件。
+                  </p>
+                ) : null}
+                {unavailableStreams.length > 0 ? (
+                  <p className="subtitle-empty-note">
+                    检测到 {unavailableStreams.length} 条图片或未知格式字幕轨，MVP
+                    暂不支持提取。
+                  </p>
+                ) : null}
+              </section>
+
+              <section className="subtitle-dialog-section">
+                <label className="subtitle-language-field">
+                  <span>原文语言</span>
+                  <select
+                    value={language}
+                    disabled={busy}
+                    onChange={(event) => {
+                      setLanguage(event.target.value);
+                      setPreview(null);
+                      setError(null);
+                    }}
+                  >
+                    <option value="">选择语言</option>
+                    {languageOptions.map(([value, label]) => (
+                      <option key={value} value={value}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {language === "other" ? (
+                  <label className="subtitle-language-field">
+                    <span>语言代码</span>
+                    <input
+                      value={otherLanguage}
+                      placeholder="例如 fr、es、de"
+                      disabled={busy}
+                      onChange={(event) => {
+                        setOtherLanguage(event.target.value);
+                        setPreview(null);
+                        setError(null);
+                      }}
+                    />
                     <small>
-                      {stream.language?.toUpperCase() ?? "语言未知"} ·{" "}
-                      {stream.codecName.toUpperCase()}
+                      其他语言可以导入原文字幕并在后续翻译为简体中文。
                     </small>
-                  </span>
-                  <em>使用</em>
-                </button>
-              ))}
-            </div>
-            {streams.length === 0 ? (
-              <p className="subtitle-empty-note">
-                这段视频没有检测到内嵌字幕，可以选择本地字幕文件。
-              </p>
-            ) : null}
-            {unavailableStreams.length > 0 ? (
-              <p className="subtitle-empty-note">
-                检测到 {unavailableStreams.length} 条图片或未知格式字幕轨，MVP
-                暂不支持提取。
-              </p>
-            ) : null}
-          </section>
-
-          <section className="subtitle-dialog-section">
-            <label className="subtitle-language-field">
-              <span>原文语言</span>
-              <select
-                value={language}
-                disabled={busy}
-                onChange={(event) => {
-                  setLanguage(event.target.value);
-                  setPreview(null);
-                  setError(null);
-                }}
-              >
-                <option value="">选择语言</option>
-                {languageOptions.map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
+                  </label>
+                ) : null}
+              </section>
+            </>
+          ) : (
+            <section className="subtitle-preview" aria-live="polite">
+              <div className="subtitle-preview-head">
+                <div>
+                  <span>预检结果</span>
+                  <strong>{preview.sourceLabel}</strong>
+                </div>
+                <span className={`status-pill ${status?.className}`}>
+                  {status?.label}
+                </span>
+              </div>
+              <div className="subtitle-preview-stats">
+                <div>
+                  <small>字幕段</small>
+                  <strong>{preview.preflight.segmentCount}</strong>
+                </div>
+                <div>
+                  <small>错误</small>
+                  <strong>{preview.preflight.errorCount}</strong>
+                </div>
+                <div>
+                  <small>提示</small>
+                  <strong>{preview.preflight.warningCount}</strong>
+                </div>
+              </div>
+              {preview.preflight.issues.length > 0 ? (
+                <ul className="subtitle-issue-list">
+                  {preview.preflight.issues.slice(0, 6).map((issue, index) => (
+                    <li
+                      className={issue.severity}
+                      key={`${issue.code}-${issue.ordinal ?? "track"}-${index}`}
+                    >
+                      <strong>
+                        {issue.severity === "error" ? "错误" : "提示"}
+                      </strong>
+                      <span>{issue.message}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="subtitle-ready-note">
+                  时间轴和媒体范围检查通过，可以导入。
+                </p>
+              )}
+              <div className="subtitle-samples">
+                {preview.cues.slice(0, 3).map((cue) => (
+                  <p key={cue.ordinal}>{cue.text}</p>
                 ))}
-              </select>
-            </label>
-            {language === "other" ? (
-              <label className="subtitle-language-field">
-                <span>语言代码</span>
-                <input
-                  value={otherLanguage}
-                  placeholder="例如 fr、es、de"
-                  disabled={busy}
-                  onChange={(event) => {
-                    setOtherLanguage(event.target.value);
-                    setPreview(null);
-                    setError(null);
-                  }}
-                />
-                <small>其他语言可以导入原文字幕并在后续翻译为简体中文。</small>
-              </label>
-            ) : null}
-          </section>
+              </div>
+            </section>
+          )}
+
+          {error ? (
+            <div className="notice danger subtitle-error" role="alert">
+              <strong>字幕处理失败</strong>
+              <p>{error}</p>
+            </div>
+          ) : null}
         </>
       ) : (
-        <section className="subtitle-preview" aria-live="polite">
-          <div className="subtitle-preview-head">
-            <div>
-              <span>预检结果</span>
-              <strong>{preview.sourceLabel}</strong>
-            </div>
-            <span className={`status-pill ${status?.className}`}>
-              {status?.label}
-            </span>
-          </div>
-          <div className="subtitle-preview-stats">
-            <div>
-              <small>字幕段</small>
-              <strong>{preview.preflight.segmentCount}</strong>
-            </div>
-            <div>
-              <small>错误</small>
-              <strong>{preview.preflight.errorCount}</strong>
-            </div>
-            <div>
-              <small>提示</small>
-              <strong>{preview.preflight.warningCount}</strong>
-            </div>
-          </div>
-          {preview.preflight.issues.length > 0 ? (
-            <ul className="subtitle-issue-list">
-              {preview.preflight.issues.slice(0, 6).map((issue, index) => (
-                <li
-                  className={issue.severity}
-                  key={`${issue.code}-${issue.ordinal ?? "track"}-${index}`}
-                >
-                  <strong>{issue.severity === "error" ? "错误" : "提示"}</strong>
-                  <span>{issue.message}</span>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="subtitle-ready-note">
-              时间轴和媒体范围检查通过，可以导入。
-            </p>
-          )}
-          <div className="subtitle-samples">
-            {preview.cues.slice(0, 3).map((cue) => (
-              <p key={cue.ordinal}>{cue.text}</p>
-            ))}
-          </div>
-        </section>
+        <TranscriptionPanel
+          projectId={projectId}
+          currentVersion={currentVersion}
+          onVersionReady={onImported}
+        />
       )}
-
-      {error ? (
-        <div className="notice danger subtitle-error" role="alert">
-          <strong>字幕处理失败</strong>
-          <p>{error}</p>
-        </div>
-      ) : null}
     </Dialog>
   );
 }

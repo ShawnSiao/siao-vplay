@@ -8,6 +8,7 @@ import type {
   RemoteMediaPreview,
   SubtitleImportPreview,
   SubtitleVersion,
+  TranscriptionJob,
   YouTubeMediaPreview,
 } from "./types";
 
@@ -35,6 +36,12 @@ const desktopMocks = vi.hoisted(() => ({
   inspectEmbeddedSubtitle: vi.fn(),
   importEmbeddedSubtitle: vi.fn(),
   listSubtitleVersions: vi.fn(),
+  getTranscriptionRuntimeStatus: vi.fn(),
+  startTranscription: vi.fn(),
+  getTranscriptionJob: vi.fn(),
+  listTranscriptionJobs: vi.fn(),
+  cancelTranscriptionJob: vi.fn(),
+  resumeTranscriptionJob: vi.fn(),
 }));
 
 vi.mock("./lib/desktop", () => ({
@@ -223,6 +230,25 @@ const subtitleVersion: SubtitleVersion = {
   ],
 };
 
+const transcriptionJob: TranscriptionJob = {
+  id: "e7a8d3cf-cf3e-4ae3-b02c-40181410cd36",
+  projectId: project.id,
+  status: "extracting",
+  stage: "extracting_audio",
+  progress: 0.05,
+  languageCode: "ja",
+  modelKind: "small",
+  runtimeBackend: "vulkan",
+  runtimeVersion: "1.9.1-siaocut.1",
+  subtitleVersionId: null,
+  errorCode: null,
+  errorMessage: null,
+  createdAtMs: 1_785_354_200_000,
+  updatedAtMs: 1_785_354_200_000,
+  startedAtMs: 1_785_354_200_000,
+  completedAtMs: null,
+};
+
 beforeEach(() => {
   vi.clearAllMocks();
   desktopMocks.getAppStatus.mockResolvedValue({
@@ -293,6 +319,40 @@ beforeEach(() => {
     sourceLabel: embeddedSubtitlePreview.sourceLabel,
   });
   desktopMocks.listSubtitleVersions.mockResolvedValue([]);
+  desktopMocks.getTranscriptionRuntimeStatus.mockResolvedValue({
+    available: true,
+    preferredBackend: "vulkan",
+    runtimes: [
+      {
+        backend: "vulkan",
+        available: true,
+        version: "1.9.1-siaocut.1",
+        errorMessage: null,
+      },
+      {
+        backend: "cpu",
+        available: true,
+        version: "1.9.1-siaocut.1",
+        errorMessage: null,
+      },
+    ],
+    models: [
+      { modelKind: "small", available: true, errorMessage: null },
+      { modelKind: "base", available: true, errorMessage: null },
+    ],
+  });
+  desktopMocks.listTranscriptionJobs.mockResolvedValue([]);
+  desktopMocks.startTranscription.mockResolvedValue(transcriptionJob);
+  desktopMocks.getTranscriptionJob.mockResolvedValue(transcriptionJob);
+  desktopMocks.cancelTranscriptionJob.mockResolvedValue({
+    ...transcriptionJob,
+    status: "cancelled",
+    stage: "cancelled",
+    errorCode: "cancelled",
+    errorMessage: "转写任务已取消",
+    completedAtMs: 1_785_354_210_000,
+  });
+  desktopMocks.resumeTranscriptionJob.mockResolvedValue(transcriptionJob);
 });
 
 describe("App", () => {
@@ -519,6 +579,46 @@ describe("App", () => {
       await screen.findByText("已导入 1 条原文字幕，保存为版本 1。"),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "原文字幕 · 1" }))
+      .toBeInTheDocument();
+  });
+
+  it("starts and cancels local Japanese subtitle generation", async () => {
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "继续观看" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "添加字幕" }),
+    );
+    fireEvent.click(
+      screen.getByRole("tab", { name: "从视频生成" }),
+    );
+
+    expect(
+      await screen.findByText("语音识别只在本机运行"),
+    ).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText(/视频原声语言/), {
+      target: { value: "ja" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "生成原文字幕" }),
+    );
+
+    await waitFor(() =>
+      expect(desktopMocks.startTranscription).toHaveBeenCalledWith(
+        project.id,
+        "ja",
+        "small",
+        false,
+      ),
+    );
+    expect(await screen.findByText("正在准备音轨")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "取消生成" }));
+    await waitFor(() =>
+      expect(desktopMocks.cancelTranscriptionJob).toHaveBeenCalledWith(
+        transcriptionJob.id,
+      ),
+    );
+    expect(await screen.findByText("任务已取消")).toBeInTheDocument();
+    expect(screen.getByText("临时音频和识别文件已经清理。"))
       .toBeInTheDocument();
   });
 

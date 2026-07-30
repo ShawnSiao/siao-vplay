@@ -427,7 +427,9 @@ export default function App() {
                 .map((item) => ({ ...item, isCurrent: false })),
             ]);
             setToast(
-              `已导入 ${version.segments.length} 条原文字幕，保存为版本 ${version.versionNumber}。`,
+              version.sourceKind === "transcription"
+                ? `已生成 ${version.segments.length} 条原文字幕草稿，可以开始抽查。`
+                : `已导入 ${version.segments.length} 条原文字幕，保存为版本 ${version.versionNumber}。`,
             );
             void refreshProjects();
           }}
