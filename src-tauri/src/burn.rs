@@ -1498,20 +1498,7 @@ mod tests {
         spawn_subtitle_burn_job(store.clone(), queued.id.clone())
             .expect("burn worker should start");
 
-        let mut completed = None;
-        for _ in 0..600 {
-            let current =
-                get_subtitle_burn_job(&store, &queued.id).expect("job should remain readable");
-            if matches!(
-                current.status.as_str(),
-                "completed" | "failed" | "cancelled" | "interrupted"
-            ) {
-                completed = Some(current);
-                break;
-            }
-            thread::sleep(POLL_INTERVAL);
-        }
-        let completed = completed.expect("burn should finish before timeout");
+        let completed = wait_for_burn(&store, &queued.id);
         assert_eq!(
             completed.status, "completed",
             "burn failed: {:?}",
@@ -1542,6 +1529,211 @@ mod tests {
         assert_eq!(
             hash_file(&media_path).expect("source should still hash"),
             source_sha256_before
+        );
+    }
+
+    #[test]
+    #[ignore = "requires the real FFmpeg runtime and SIAOVPLAY_MEDIA_FIXTURE_DIR"]
+    fn real_media_delivers_all_subtitle_formats_and_burn_modes_after_restart() {
+        let fixture_directory = std::env::var_os("SIAOVPLAY_MEDIA_FIXTURE_DIR")
+            .map(PathBuf::from)
+            .expect("SIAOVPLAY_MEDIA_FIXTURE_DIR must be set");
+        let media_path = fixture_directory.join("h264-aac.mp4");
+        let source_sha256_before = hash_file(&media_path).expect("source should hash");
+        let temporary = tempfile::tempdir().expect("temporary directory should work");
+        let persistent_validation_directory =
+            std::env::var_os("SIAOVPLAY_PERSIST_VALIDATION_DIR").map(PathBuf::from);
+        let data_directory = persistent_validation_directory
+            .clone()
+            .unwrap_or_else(|| temporary.path().join("data"));
+        let database_path = data_directory.join("projects").join("siaovplay.db");
+        let store = ProjectStore::open(&database_path).expect("store should open");
+        let project = store
+            .create_local_project(CreateLocalProjectInput {
+                media_path: path_to_string(&media_path),
+                title: Some("Phase 5D 真实字幕交付".to_owned()),
+            })
+            .expect("project should create");
+        let inspection =
+            media::inspect_project_media(&store, &project.id).expect("media should inspect");
+        let duration_ms = inspection
+            .probe
+            .duration_ms
+            .expect("fixture should have duration");
+        let (source_version_id, translation_version_id) =
+            insert_subtitle_fixture(&store, &project.id, &inspection.source_sha256, duration_ms);
+        let destination = data_directory.join("exports");
+        fs::create_dir_all(&destination).expect("destination should create");
+
+        for mode in [
+            SubtitleExportMode::Original,
+            SubtitleExportMode::Translation,
+            SubtitleExportMode::Bilingual,
+        ] {
+            for format in [SubtitleExportFormat::Srt, SubtitleExportFormat::Vtt] {
+                let exported = export_subtitles(
+                    &store,
+                    ExportSubtitlesInput {
+                        project_id: project.id.clone(),
+                        mode,
+                        format,
+                        source_version_id: if mode == SubtitleExportMode::Translation {
+                            None
+                        } else {
+                            Some(source_version_id.clone())
+                        },
+                        translation_version_id: if mode == SubtitleExportMode::Original {
+                            None
+                        } else {
+                            Some(translation_version_id.clone())
+                        },
+                        destination_directory: path_to_string(&destination),
+                        confirm_version_selection: true,
+                    },
+                )
+                .expect("subtitle should export");
+                assert_eq!(exported.cue_count, 1);
+                let file_path = PathBuf::from(&exported.file_path);
+                let manifest_path = PathBuf::from(&exported.manifest_path);
+                assert!(file_path.is_file());
+                assert!(manifest_path.is_file());
+                assert_eq!(
+                    hash_file(&file_path).expect("subtitle should hash"),
+                    exported.file_sha256
+                );
+                let text = fs::read_to_string(file_path).expect("subtitle should read");
+                if format == SubtitleExportFormat::Vtt {
+                    assert!(text.starts_with("WEBVTT\n\n"));
+                }
+                if mode != SubtitleExportMode::Translation {
+                    assert!(text.contains("Meet me at the station."));
+                }
+                if mode != SubtitleExportMode::Original {
+                    assert!(text.contains("在车站等我。"));
+                }
+            }
+        }
+
+        let mut completed_jobs = Vec::new();
+        for mode in [SubtitleBurnMode::Translation, SubtitleBurnMode::Bilingual] {
+            let queued = start_subtitle_burn(
+                &store,
+                StartSubtitleBurnInput {
+                    project_id: project.id.clone(),
+                    mode,
+                    source_version_id: if mode == SubtitleBurnMode::Bilingual {
+                        Some(source_version_id.clone())
+                    } else {
+                        None
+                    },
+                    translation_version_id: translation_version_id.clone(),
+                    destination_directory: path_to_string(&destination),
+                    confirm_version_selection: true,
+                },
+            )
+            .expect("burn job should prepare");
+            spawn_subtitle_burn_job(store.clone(), queued.id.clone())
+                .expect("burn worker should start");
+            let completed = wait_for_burn(&store, &queued.id);
+            assert_eq!(
+                completed.status, "completed",
+                "burn failed: {:?}",
+                completed.error_message
+            );
+            assert_real_burn_output(&completed, mode);
+            completed_jobs.push(completed);
+        }
+        assert_ne!(
+            completed_jobs[0].output_path, completed_jobs[1].output_path,
+            "translation and bilingual burns must be separate files"
+        );
+        assert_eq!(
+            hash_file(&media_path).expect("source should still hash"),
+            source_sha256_before
+        );
+
+        drop(store);
+        let reopened = ProjectStore::open(&database_path).expect("store should reopen");
+        assert_eq!(
+            recover_subtitle_burn_jobs(&reopened).expect("recovery should run"),
+            0
+        );
+        let restored_jobs =
+            list_subtitle_burn_jobs(&reopened, &project.id).expect("jobs should survive restart");
+        assert_eq!(restored_jobs.len(), 2);
+        assert!(restored_jobs.iter().all(|job| job.status == "completed"));
+        assert!(restored_jobs.iter().all(|job| {
+            job.output_path
+                .as_ref()
+                .is_some_and(|path| Path::new(path).is_file())
+        }));
+        let restored_project = reopened
+            .get_project(&project.id)
+            .expect("project should survive restart");
+        assert_eq!(
+            restored_project.media_source.locator,
+            path_to_string(&media_path)
+        );
+        if persistent_validation_directory.is_some() {
+            println!("persisted_project_id={}", project.id);
+            println!(
+                "persisted_data_directory={}",
+                path_to_string(&data_directory)
+            );
+            println!(
+                "persisted_export_directory={}",
+                path_to_string(&destination)
+            );
+        }
+    }
+
+    fn wait_for_burn(store: &ProjectStore, job_id: &str) -> SubtitleBurnJob {
+        for _ in 0..600 {
+            let current = get_subtitle_burn_job(store, job_id).expect("job should remain readable");
+            if matches!(
+                current.status.as_str(),
+                "completed" | "failed" | "cancelled" | "interrupted"
+            ) {
+                return current;
+            }
+            thread::sleep(POLL_INTERVAL);
+        }
+        panic!("burn should finish before timeout");
+    }
+
+    fn assert_real_burn_output(completed: &SubtitleBurnJob, mode: SubtitleBurnMode) {
+        let output_path = PathBuf::from(
+            completed
+                .output_path
+                .as_deref()
+                .expect("output path should be returned"),
+        );
+        let manifest_path = PathBuf::from(
+            completed
+                .manifest_path
+                .as_deref()
+                .expect("manifest path should be returned"),
+        );
+        assert!(output_path.is_file());
+        assert!(manifest_path.is_file());
+        media::validate_media_path(&output_path).expect("output should be a playable video");
+        assert_eq!(
+            hash_file(&output_path).expect("output should hash"),
+            completed
+                .output_sha256
+                .as_deref()
+                .expect("output hash should persist")
+        );
+        let manifest: serde_json::Value =
+            serde_json::from_slice(&fs::read(manifest_path).expect("manifest should read"))
+                .expect("manifest should parse");
+        assert_eq!(manifest["format"], BURN_MANIFEST_FORMAT);
+        assert_eq!(
+            manifest["mode"],
+            match mode {
+                SubtitleBurnMode::Translation => "translation",
+                SubtitleBurnMode::Bilingual => "bilingual",
+            }
         );
     }
 
