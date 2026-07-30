@@ -9,6 +9,7 @@ import type {
   SubtitleSegment,
   SubtitleVersion,
 } from "../types";
+import { UnderstandingPanel } from "./UnderstandingPanel";
 
 type PlaybackValues = {
   positionMs: number;
@@ -58,8 +59,7 @@ export function PlayerScreen({
     project.playbackState.positionMs,
   );
   const [durationMs, setDurationMs] = useState<number | null>(
-    preparation.inspection.probe.durationMs ??
-      project.playbackState.durationMs,
+    preparation.inspection.probe.durationMs ?? project.playbackState.durationMs,
   );
   const [volume, setVolume] = useState(project.playbackState.volume);
   const [playbackRate, setPlaybackRate] = useState(
@@ -69,6 +69,7 @@ export function PlayerScreen({
     project.playbackState.subtitleMode,
   );
   const [videoReady, setVideoReady] = useState(false);
+  const [panelMode, setPanelMode] = useState<"watch" | "understand">("watch");
   const persistFunctionRef = useRef<
     (video: HTMLVideoElement | null) => Promise<void>
   >(async () => undefined);
@@ -78,10 +79,7 @@ export function PlayerScreen({
   const audioStream = preparation.inspection.probe.audioStreams[0];
 
   const persistCurrentState = useCallback(
-    async (
-      video: HTMLVideoElement | null,
-      nextSubtitleMode = subtitleMode,
-    ) => {
+    async (video: HTMLVideoElement | null, nextSubtitleMode = subtitleMode) => {
       const nextPosition = video
         ? Math.max(0, Math.round(video.currentTime * 1_000))
         : positionMs;
@@ -98,14 +96,7 @@ export function PlayerScreen({
       });
       lastSavedAtRef.current = Date.now();
     },
-    [
-      durationMs,
-      onPersist,
-      playbackRate,
-      positionMs,
-      subtitleMode,
-      volume,
-    ],
+    [durationMs, onPersist, playbackRate, positionMs, subtitleMode, volume],
   );
 
   const requestProxy = useCallback(
@@ -200,27 +191,28 @@ export function PlayerScreen({
       try {
         await video.play();
       } catch (error) {
-        onError(
-          error instanceof Error ? error.message : "播放器未能开始播放",
-        );
+        onError(error instanceof Error ? error.message : "播放器未能开始播放");
       }
     } else {
       video.pause();
     }
   }, [onError]);
 
-  const seekTo = useCallback((nextPositionMs: number) => {
-    const video = videoRef.current;
-    if (!video) {
-      return;
-    }
-    const bounded = Math.max(
-      0,
-      Math.min(nextPositionMs, durationMs ?? nextPositionMs),
-    );
-    video.currentTime = bounded / 1_000;
-    setPositionMs(bounded);
-  }, [durationMs]);
+  const seekTo = useCallback(
+    (nextPositionMs: number) => {
+      const video = videoRef.current;
+      if (!video) {
+        return;
+      }
+      const bounded = Math.max(
+        0,
+        Math.min(nextPositionMs, durationMs ?? nextPositionMs),
+      );
+      video.currentTime = bounded / 1_000;
+      setPositionMs(bounded);
+    },
+    [durationMs],
+  );
 
   useEffect(() => {
     const handleKeyboard = (event: KeyboardEvent) => {
@@ -243,12 +235,16 @@ export function PlayerScreen({
         seekTo(positionMs + 10_000);
       } else if (event.key === "Escape") {
         event.preventDefault();
-        onBack();
+        if (panelMode === "understand") {
+          setPanelMode("watch");
+        } else {
+          onBack();
+        }
       }
     };
     window.addEventListener("keydown", handleKeyboard);
     return () => window.removeEventListener("keydown", handleKeyboard);
-  }, [onBack, positionMs, seekTo, togglePlayback]);
+  }, [onBack, panelMode, positionMs, seekTo, togglePlayback]);
 
   const beginPerformanceCheck = () => {
     const video = videoRef.current;
@@ -321,8 +317,7 @@ export function PlayerScreen({
     version: SubtitleVersion | null,
   ): SubtitleSegment | null =>
     version?.segments.find(
-      (segment) =>
-        positionMs >= segment.startMs && positionMs < segment.endMs,
+      (segment) => positionMs >= segment.startMs && positionMs < segment.endMs,
     ) ?? null;
   const activeOriginal = activeSegment(currentSubtitle);
   const activeTranslation = activeSegment(currentTranslation);
@@ -358,9 +353,24 @@ export function PlayerScreen({
           </div>
         </div>
         <div className="player-mode">
-          <span className="active">观影</span>
-          <span title="将在后续阶段接入">理解</span>
-          <span title="将在后续阶段接入">学习</span>
+          <button
+            className={panelMode === "watch" ? "active" : ""}
+            type="button"
+            onClick={() => setPanelMode("watch")}
+          >
+            观影
+          </button>
+          <button
+            className={panelMode === "understand" ? "active" : ""}
+            type="button"
+            disabled={!currentSubtitle}
+            onClick={() => setPanelMode("understand")}
+          >
+            理解
+          </button>
+          <button type="button" disabled title="将在下一批接入">
+            学习
+          </button>
         </div>
         <div className="player-toolbar-end">
           <button
@@ -402,169 +412,186 @@ export function PlayerScreen({
         </div>
       </header>
 
-      <main className="video-stage">
-        <video
-          ref={videoRef}
-          key={sourceUrl}
-          src={sourceUrl}
-          preload="metadata"
-          onLoadedMetadata={handleLoadedMetadata}
-          onLoadedData={handleLoadedData}
-          onTimeUpdate={handleTimeUpdate}
-          onPlay={() => {
-            setPlaying(true);
-            beginPerformanceCheck();
-          }}
-          onPause={() => {
-            setPlaying(false);
-            void persistCurrentState(videoRef.current).catch(() => undefined);
-          }}
-          onEnded={() => {
-            setPlaying(false);
-            void persistCurrentState(videoRef.current).catch(() => undefined);
-          }}
-          onError={() => requestProxy("media_element_error")}
-        ></video>
+      <div
+        className={`player-workspace ${
+          panelMode === "understand" ? "with-understanding" : ""
+        }`}
+      >
+        <main className="video-stage">
+          <video
+            ref={videoRef}
+            key={sourceUrl}
+            src={sourceUrl}
+            preload="metadata"
+            onLoadedMetadata={handleLoadedMetadata}
+            onLoadedData={handleLoadedData}
+            onTimeUpdate={handleTimeUpdate}
+            onPlay={() => {
+              setPlaying(true);
+              beginPerformanceCheck();
+            }}
+            onPause={() => {
+              setPlaying(false);
+              void persistCurrentState(videoRef.current).catch(() => undefined);
+            }}
+            onEnded={() => {
+              setPlaying(false);
+              void persistCurrentState(videoRef.current).catch(() => undefined);
+            }}
+            onError={() => requestProxy("media_element_error")}
+          ></video>
 
-        {!videoReady ? (
-          <div className="video-loading" aria-live="polite">
-            <span className="spinner large"></span>
-            <strong>正在确认视频画面</strong>
-            <span>只有检测到有效视频尺寸后才会进入观看状态。</span>
-          </div>
-        ) : null}
-
-        <div className="media-pills">
-          <span>
-            {videoStream
-              ? `${videoStream.width} × ${videoStream.height}`
-              : "分辨率未知"}
-          </span>
-          <span>
-            {formatFileSize(preparation.inspection.probe.sizeBytes)}
-          </span>
-          {preparation.reusedProxy ? <span>已复用播放版本</span> : null}
-        </div>
-
-        {activeOriginal || activeTranslation ? (
-          <div className="caption-stack" aria-live="off">
-            {(effectiveSubtitleMode === "original" ||
-              effectiveSubtitleMode === "bilingual") &&
-            activeOriginal ? (
-              <p className="caption-line original" lang={currentSubtitle?.languageCode}>
-                {activeOriginal.text}
-              </p>
-            ) : null}
-            {(effectiveSubtitleMode === "translation" ||
-              effectiveSubtitleMode === "bilingual") &&
-            activeTranslation ? (
-              <p className="caption-line translation" lang="zh-CN">
-                {activeTranslation.text}
-              </p>
-            ) : null}
-          </div>
-        ) : null}
-
-        <div className="player-controls">
-          <input
-            className="seek-control"
-            type="range"
-            min="0"
-            max={Math.max(durationMs ?? 0, 1)}
-            step="100"
-            value={Math.min(positionMs, durationMs ?? positionMs)}
-            aria-label="播放进度"
-            onChange={(event) => seekTo(Number(event.target.value))}
-          />
-          <div className="control-row">
-            <div className="playback-buttons">
-              <button
-                aria-keyshortcuts="ArrowLeft"
-                className="control-button"
-                type="button"
-                onClick={() => seekTo(positionMs - 10_000)}
-              >
-                −10
-              </button>
-              <button
-                aria-keyshortcuts="Space"
-                className="control-button play"
-                type="button"
-                onClick={() => void togglePlayback()}
-              >
-                {playing ? "暂停" : "播放"}
-              </button>
-              <button
-                aria-keyshortcuts="ArrowRight"
-                className="control-button"
-                type="button"
-                onClick={() => seekTo(positionMs + 10_000)}
-              >
-                +10
-              </button>
-              <span className="player-time">
-                {formatDuration(positionMs)} / {formatDuration(durationMs)}
-              </span>
+          {!videoReady ? (
+            <div className="video-loading" aria-live="polite">
+              <span className="spinner large"></span>
+              <strong>正在确认视频画面</strong>
+              <span>只有检测到有效视频尺寸后才会进入观看状态。</span>
             </div>
-            <div className="playback-options">
-              <div className="caption-mode" aria-label="字幕显示">
-                {(
-                  [
-                    ["translation", "中文", Boolean(currentTranslation)],
-                    ["original", "原文", Boolean(currentSubtitle)],
-                    [
-                      "bilingual",
-                      "双语",
-                      Boolean(currentSubtitle && currentTranslation),
-                    ],
-                  ] as const
-                ).map(([mode, label, available]) => (
-                  <button
-                    aria-label={`显示${label}字幕`}
-                    className={
-                      effectiveSubtitleMode === mode ? "active" : ""
-                    }
-                    disabled={!available}
-                    key={mode}
-                    type="button"
-                    onClick={() => changeSubtitleMode(mode)}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-              <label>
-                <span>音量</span>
-                <input
-                  type="range"
-                  min="0"
-                  max="1"
-                  step="0.05"
-                  value={volume}
-                  onChange={(event) =>
-                    changeVolume(Number(event.target.value))
-                  }
-                />
-              </label>
-              <label>
-                <span>速度</span>
-                <select
-                  value={playbackRate}
-                  onChange={(event) =>
-                    changePlaybackRate(Number(event.target.value))
-                  }
+          ) : null}
+
+          <div className="media-pills">
+            <span>
+              {videoStream
+                ? `${videoStream.width} × ${videoStream.height}`
+                : "分辨率未知"}
+            </span>
+            <span>
+              {formatFileSize(preparation.inspection.probe.sizeBytes)}
+            </span>
+            {preparation.reusedProxy ? <span>已复用播放版本</span> : null}
+          </div>
+
+          {activeOriginal || activeTranslation ? (
+            <div className="caption-stack" aria-live="off">
+              {(effectiveSubtitleMode === "original" ||
+                effectiveSubtitleMode === "bilingual") &&
+              activeOriginal ? (
+                <p
+                  className="caption-line original"
+                  lang={currentSubtitle?.languageCode}
                 >
-                  {[0.5, 0.75, 1, 1.25, 1.5, 2].map((rate) => (
-                    <option key={rate} value={rate}>
-                      {rate}×
-                    </option>
+                  {activeOriginal.text}
+                </p>
+              ) : null}
+              {(effectiveSubtitleMode === "translation" ||
+                effectiveSubtitleMode === "bilingual") &&
+              activeTranslation ? (
+                <p className="caption-line translation" lang="zh-CN">
+                  {activeTranslation.text}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
+
+          <div className="player-controls">
+            <input
+              className="seek-control"
+              type="range"
+              min="0"
+              max={Math.max(durationMs ?? 0, 1)}
+              step="100"
+              value={Math.min(positionMs, durationMs ?? positionMs)}
+              aria-label="播放进度"
+              onChange={(event) => seekTo(Number(event.target.value))}
+            />
+            <div className="control-row">
+              <div className="playback-buttons">
+                <button
+                  aria-keyshortcuts="ArrowLeft"
+                  className="control-button"
+                  type="button"
+                  onClick={() => seekTo(positionMs - 10_000)}
+                >
+                  −10
+                </button>
+                <button
+                  aria-keyshortcuts="Space"
+                  className="control-button play"
+                  type="button"
+                  onClick={() => void togglePlayback()}
+                >
+                  {playing ? "暂停" : "播放"}
+                </button>
+                <button
+                  aria-keyshortcuts="ArrowRight"
+                  className="control-button"
+                  type="button"
+                  onClick={() => seekTo(positionMs + 10_000)}
+                >
+                  +10
+                </button>
+                <span className="player-time">
+                  {formatDuration(positionMs)} / {formatDuration(durationMs)}
+                </span>
+              </div>
+              <div className="playback-options">
+                <div className="caption-mode" aria-label="字幕显示">
+                  {(
+                    [
+                      ["translation", "中文", Boolean(currentTranslation)],
+                      ["original", "原文", Boolean(currentSubtitle)],
+                      [
+                        "bilingual",
+                        "双语",
+                        Boolean(currentSubtitle && currentTranslation),
+                      ],
+                    ] as const
+                  ).map(([mode, label, available]) => (
+                    <button
+                      aria-label={`显示${label}字幕`}
+                      className={effectiveSubtitleMode === mode ? "active" : ""}
+                      disabled={!available}
+                      key={mode}
+                      type="button"
+                      onClick={() => changeSubtitleMode(mode)}
+                    >
+                      {label}
+                    </button>
                   ))}
-                </select>
-              </label>
+                </div>
+                <label>
+                  <span>音量</span>
+                  <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.05"
+                    value={volume}
+                    onChange={(event) =>
+                      changeVolume(Number(event.target.value))
+                    }
+                  />
+                </label>
+                <label>
+                  <span>速度</span>
+                  <select
+                    value={playbackRate}
+                    onChange={(event) =>
+                      changePlaybackRate(Number(event.target.value))
+                    }
+                  >
+                    {[0.5, 0.75, 1, 1.25, 1.5, 2].map((rate) => (
+                      <option key={rate} value={rate}>
+                        {rate}×
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
             </div>
           </div>
-        </div>
-      </main>
+        </main>
+        {panelMode === "understand" ? (
+          <UnderstandingPanel
+            key={project.id}
+            projectId={project.id}
+            playbackCutoffMs={positionMs}
+            sourceVersion={currentSubtitle}
+            translationVersion={currentTranslation}
+            onClose={() => setPanelMode("watch")}
+          />
+        ) : null}
+      </div>
     </div>
   );
 }

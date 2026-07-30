@@ -31,10 +31,7 @@ export type PlaybackState = {
   updatedAtMs: number;
 };
 
-export type SubtitleDisplayMode =
-  | "original"
-  | "translation"
-  | "bilingual";
+export type SubtitleDisplayMode = "original" | "translation" | "bilingual";
 
 export type Project = {
   id: string;
@@ -395,4 +392,65 @@ export type CodexRuntimeStatus = {
   minimumVersion: string;
   errorCode: string | null;
   errorMessage: string | null;
+};
+
+export type ExplanationFrame = {
+  id: string;
+  ordinal: number;
+  timestampMs: number;
+  path: string;
+  sha256: string;
+};
+
+export type ExplanationTask = {
+  id: string;
+  projectId: string;
+  handoffKind: "manual" | "codex";
+  protocolVersion: string;
+  status:
+    | "awaiting_external_result"
+    | "queued"
+    | "running"
+    | "validating"
+    | "completed"
+    | "failed"
+    | "cancelled"
+    | "interrupted";
+  stage: string;
+  progress: number;
+  receiverLabel: string;
+  materialScope: string[];
+  sourceVersionId: string;
+  translationVersionId: string | null;
+  authorizedSegmentIds: string[];
+  playbackCutoffMs: number;
+  sceneStartMs: number;
+  expectedProjectRevision: number;
+  outputExplanationId: string | null;
+  errorCode: string | null;
+  errorMessage: string | null;
+  createdAtMs: number;
+  updatedAtMs: number;
+  startedAtMs: number | null;
+  completedAtMs: number | null;
+  frames: ExplanationFrame[];
+};
+
+export type Explanation = {
+  id: string;
+  projectId: string;
+  taskId: string;
+  sourceVersionId: string;
+  translationVersionId: string | null;
+  playbackCutoffMs: number;
+  sceneStartMs: number;
+  confirmedFacts: string[];
+  possibleInterpretations: string[];
+  withheldReason: string | null;
+  createdAtMs: number;
+};
+
+export type ExplanationApplication = {
+  task: ExplanationTask;
+  explanation: Explanation;
 };

@@ -6,6 +6,9 @@ import type {
   DeleteProjectResult,
   DesktopCommandError,
   EmbeddedSubtitlePreview,
+  Explanation,
+  ExplanationApplication,
+  ExplanationTask,
   MediaPreparation,
   MediaRuntimeStatus,
   Project,
@@ -257,9 +260,7 @@ export async function importSubtitleFile(
   languageCode: string,
   preview: Pick<
     SubtitleImportPreview,
-    | "sourceSha256"
-    | "expectedMediaSha256"
-    | "expectedProjectRevision"
+    "sourceSha256" | "expectedMediaSha256" | "expectedProjectRevision"
   >,
 ): Promise<SubtitleVersion> {
   return invoke<SubtitleVersion>("import_subtitle_file", {
@@ -332,9 +333,7 @@ export async function importEmbeddedSubtitle(
   languageCode: string,
   preview: Pick<
     EmbeddedSubtitlePreview,
-    | "sourceSha256"
-    | "expectedMediaSha256"
-    | "expectedProjectRevision"
+    "sourceSha256" | "expectedMediaSha256" | "expectedProjectRevision"
   >,
 ): Promise<SubtitleVersion> {
   return invoke<SubtitleVersion>("import_embedded_subtitle", {
@@ -358,9 +357,7 @@ export async function getTranscriptionRuntimeStatus(): Promise<TranscriptionRunt
       models: [],
     };
   }
-  return invoke<TranscriptionRuntimeStatus>(
-    "get_transcription_runtime_status",
-  );
+  return invoke<TranscriptionRuntimeStatus>("get_transcription_runtime_status");
 }
 
 export async function startTranscription(
@@ -492,6 +489,101 @@ export async function resumeCodexTranslationTask(
   timeoutSeconds?: number,
 ): Promise<TranslationTask> {
   return invoke<TranslationTask>("resume_codex_translation_task", {
+    input: { taskId, timeoutSeconds },
+  });
+}
+
+export async function chooseExplanationResultFile(): Promise<string | null> {
+  if (!isDesktopApp) {
+    return null;
+  }
+  const selected = await open({
+    multiple: false,
+    directory: false,
+    title: "选择场景解释结果",
+    filters: [
+      {
+        name: "JSON 结果",
+        extensions: ["json"],
+      },
+    ],
+  });
+  return typeof selected === "string" ? selected : null;
+}
+
+export async function prepareExplanationTask(
+  projectId: string,
+  handoffKind: "manual" | "codex",
+  playbackCutoffMs: number,
+): Promise<ExplanationTask> {
+  return invoke<ExplanationTask>("prepare_explanation_task", {
+    input: { projectId, handoffKind, playbackCutoffMs },
+  });
+}
+
+export async function getExplanationTask(
+  taskId: string,
+): Promise<ExplanationTask> {
+  return invoke<ExplanationTask>("get_explanation_task", { taskId });
+}
+
+export async function listExplanationTasks(
+  projectId: string,
+): Promise<ExplanationTask[]> {
+  return invoke<ExplanationTask[]>("list_explanation_tasks", { projectId });
+}
+
+export async function readExplanationPrompt(taskId: string): Promise<string> {
+  return invoke<string>("read_explanation_prompt", { taskId });
+}
+
+export async function openExplanationMaterials(
+  taskId: string,
+): Promise<boolean> {
+  return invoke<boolean>("open_explanation_materials", { taskId });
+}
+
+export async function getExplanation(
+  explanationId: string,
+): Promise<Explanation> {
+  return invoke<Explanation>("get_explanation", { explanationId });
+}
+
+export async function listExplanations(
+  projectId: string,
+): Promise<Explanation[]> {
+  return invoke<Explanation[]>("list_explanations", { projectId });
+}
+
+export async function importExplanationResult(
+  taskId: string,
+  resultPath: string,
+): Promise<ExplanationApplication> {
+  return invoke<ExplanationApplication>("import_explanation_result", {
+    input: { taskId, resultPath },
+  });
+}
+
+export async function startCodexExplanationTask(
+  taskId: string,
+  timeoutSeconds?: number,
+): Promise<ExplanationTask> {
+  return invoke<ExplanationTask>("start_codex_explanation_task", {
+    input: { taskId, timeoutSeconds },
+  });
+}
+
+export async function cancelExplanationTask(
+  taskId: string,
+): Promise<ExplanationTask> {
+  return invoke<ExplanationTask>("cancel_explanation_task", { taskId });
+}
+
+export async function resumeCodexExplanationTask(
+  taskId: string,
+  timeoutSeconds?: number,
+): Promise<ExplanationTask> {
+  return invoke<ExplanationTask>("resume_codex_explanation_task", {
     input: { taskId, timeoutSeconds },
   });
 }

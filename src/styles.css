@@ -806,23 +806,40 @@ h3 {
   opacity: 0.34;
 }
 
-.player-mode span {
+.player-mode button {
   min-width: 54px;
   padding: 7px 10px;
+  border: 0;
   border-radius: 6px;
   color: var(--text-muted);
+  background: transparent;
   font-size: 12px;
   font-weight: 680;
   text-align: center;
 }
 
-.player-mode span.active {
+.player-mode button.active {
   color: var(--text-on-accent);
   background: var(--brand);
 }
 
+.player-mode button:disabled {
+  opacity: 0.32;
+}
+
 .player-toolbar-end {
   justify-content: flex-end;
+}
+
+.player-workspace {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.player-workspace.with-understanding {
+  grid-template-columns: minmax(0, 1fr) 370px;
 }
 
 .video-stage {
@@ -903,7 +920,9 @@ h3 {
   font-size: clamp(20px, 2vw, 28px);
   font-weight: 680;
   line-height: 1.48;
-  text-shadow: 0 2px 5px #000, 0 0 14px #000;
+  text-shadow:
+    0 2px 5px #000,
+    0 0 14px #000;
   text-wrap: balance;
 }
 
@@ -992,6 +1011,493 @@ h3 {
   border-radius: 6px;
   color: var(--text-primary);
   background: var(--bg-control);
+}
+
+.understanding-panel {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border-left: 1px solid var(--border-subtle);
+  background:
+    linear-gradient(180deg, rgb(185 162 255 / 5%), transparent 180px),
+    var(--bg-panel);
+}
+
+.understanding-header {
+  display: flex;
+  min-height: 66px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 13px 16px 12px 18px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.understanding-header div {
+  display: grid;
+  gap: 3px;
+}
+
+.understanding-header span {
+  color: var(--agent);
+  font-size: 10px;
+  font-weight: 760;
+  letter-spacing: 0.08em;
+}
+
+.understanding-header strong {
+  font-size: 17px;
+  letter-spacing: -0.02em;
+}
+
+.understanding-close {
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: 8px;
+  color: var(--text-muted);
+  background: transparent;
+  font-size: 22px;
+}
+
+.understanding-close:hover {
+  color: var(--text-primary);
+  background: var(--bg-control);
+}
+
+.understanding-scroll {
+  height: calc(100% - 66px);
+  overflow: auto;
+  padding: 16px;
+  scrollbar-color: var(--border-default) transparent;
+}
+
+.spoiler-boundary {
+  display: grid;
+  gap: 4px;
+  padding: 12px 13px;
+  border: 1px solid var(--agent-border);
+  border-radius: 10px;
+  background: var(--agent-soft);
+}
+
+.spoiler-boundary span,
+.understanding-scope span,
+.understanding-result-time span {
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.spoiler-boundary strong {
+  color: var(--agent);
+  font-size: 13px;
+}
+
+.spoiler-boundary small {
+  color: var(--text-secondary);
+  font-size: 10px;
+  line-height: 1.55;
+}
+
+.understanding-error,
+.understanding-runtime {
+  margin-top: 12px;
+  padding: 10px 11px;
+  border: 1px solid rgb(237 116 102 / 32%);
+  border-radius: 8px;
+  color: #f2a69d;
+  background: var(--danger-soft);
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.understanding-runtime {
+  display: grid;
+  gap: 3px;
+  color: var(--text-secondary);
+  border-color: rgb(234 184 91 / 28%);
+  background: var(--warning-soft);
+}
+
+.understanding-runtime strong {
+  color: var(--warning);
+}
+
+.understanding-loading,
+.understanding-running,
+.understanding-empty,
+.understanding-recovery {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  padding: 44px 18px 28px;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.understanding-loading {
+  grid-template-columns: auto 1fr;
+  justify-items: start;
+  padding: 22px 4px;
+  text-align: left;
+}
+
+.understanding-empty p,
+.understanding-running p,
+.understanding-recovery p {
+  max-width: 280px;
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.65;
+}
+
+.understanding-intro {
+  padding: 24px 2px 16px;
+}
+
+.understanding-intro strong {
+  display: block;
+  margin-bottom: 7px;
+  font-size: 16px;
+}
+
+.understanding-intro p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.65;
+}
+
+.understanding-handoff {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 7px;
+}
+
+.understanding-handoff button {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 11px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 9px;
+  color: var(--text-secondary);
+  background: #11161b;
+  text-align: left;
+}
+
+.understanding-handoff button:hover,
+.understanding-handoff button.selected {
+  border-color: var(--agent-border);
+  color: var(--text-primary);
+  background: var(--agent-soft);
+}
+
+.understanding-handoff strong {
+  font-size: 12px;
+}
+
+.understanding-handoff small {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.understanding-scope {
+  display: grid;
+  gap: 10px;
+  margin-top: 13px;
+  padding: 13px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 9px;
+  background: #11161b;
+}
+
+.understanding-scope > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.understanding-scope > div strong {
+  color: var(--agent);
+  font-size: 11px;
+}
+
+.understanding-scope ul {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  color: var(--text-secondary);
+  font-size: 10px;
+  list-style: none;
+}
+
+.understanding-scope li::before {
+  margin-right: 7px;
+  color: var(--success);
+  content: "✓";
+}
+
+.understanding-scope p {
+  margin: 0;
+  padding-top: 9px;
+  border-top: 1px solid var(--border-subtle);
+  color: var(--text-muted);
+  font-size: 9px;
+  line-height: 1.55;
+}
+
+.understanding-primary {
+  width: 100%;
+  margin-top: 13px;
+}
+
+.understanding-task-heading {
+  display: grid;
+  gap: 5px;
+  padding: 22px 2px 14px;
+}
+
+.understanding-task-heading span {
+  width: fit-content;
+  padding: 4px 7px;
+  border-radius: 5px;
+  color: var(--agent);
+  background: var(--agent-soft);
+  font-size: 9px;
+  font-weight: 720;
+}
+
+.understanding-task-heading strong {
+  font-size: 15px;
+}
+
+.understanding-task-heading p,
+.understanding-manual > p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1.6;
+}
+
+.understanding-manual-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 7px;
+}
+
+.understanding-manual-actions .button {
+  min-width: 0;
+  padding-right: 8px;
+  padding-left: 8px;
+  font-size: 10px;
+}
+
+.understanding-prompt-toggle {
+  width: 100%;
+  margin-top: 12px;
+  padding: 8px;
+  border: 0;
+  color: var(--agent);
+  background: transparent;
+  font-size: 10px;
+}
+
+.understanding-manual textarea {
+  width: 100%;
+  min-height: 150px;
+  resize: vertical;
+  padding: 10px;
+  border: 1px solid var(--border-default);
+  border-radius: 7px;
+  color: var(--text-secondary);
+  background: #0c1014;
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 9px;
+  line-height: 1.55;
+}
+
+.understanding-result-file {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 12px;
+  padding: 11px;
+  border: 1px dashed var(--border-default);
+  border-radius: 8px;
+  color: var(--text-secondary);
+  background: #11161b;
+  text-align: left;
+}
+
+.understanding-result-file.selected {
+  border-style: solid;
+  border-color: var(--agent-border);
+  background: var(--agent-soft);
+}
+
+.understanding-result-file span {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.understanding-result-file strong,
+.understanding-result-file small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.understanding-result-file strong {
+  font-size: 11px;
+}
+
+.understanding-result-file small,
+.understanding-result-file em {
+  color: var(--text-muted);
+  font-size: 9px;
+  font-style: normal;
+}
+
+.understanding-cancel {
+  width: 100%;
+  margin-top: 7px;
+}
+
+.understanding-progress {
+  width: 100%;
+  height: 5px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--bg-control);
+}
+
+.understanding-progress span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--agent);
+}
+
+.understanding-result {
+  padding-top: 16px;
+}
+
+.understanding-result-time {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.understanding-result-time strong {
+  color: var(--agent);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.understanding-result section {
+  margin-bottom: 12px;
+  padding: 13px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 9px;
+  background: #11161b;
+}
+
+.understanding-result section.interpretation {
+  border-color: var(--agent-border);
+  background: var(--agent-soft);
+}
+
+.understanding-result h3 {
+  margin-bottom: 9px;
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+.understanding-result section.interpretation h3 {
+  color: var(--agent);
+}
+
+.understanding-result ul {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding-left: 17px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.65;
+}
+
+.understanding-withheld {
+  padding: 10px 11px;
+  border-left: 2px solid var(--warning);
+  color: var(--text-muted);
+  background: var(--warning-soft);
+  font-size: 10px;
+  line-height: 1.55;
+}
+
+.understanding-again {
+  width: 100%;
+}
+
+.understanding-history {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.understanding-history summary {
+  color: var(--text-muted);
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.understanding-history > div {
+  display: grid;
+  gap: 6px;
+  margin-top: 9px;
+}
+
+.understanding-history button {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  gap: 8px;
+  padding: 8px;
+  border: 0;
+  border-radius: 6px;
+  color: var(--text-secondary);
+  background: #11161b;
+  text-align: left;
+}
+
+.understanding-history button:hover {
+  background: var(--bg-control);
+}
+
+.understanding-history span {
+  color: var(--agent);
+  font-size: 9px;
+}
+
+.understanding-history strong {
+  overflow: hidden;
+  font-size: 10px;
+  font-weight: 560;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .dialog-backdrop,
@@ -2699,6 +3205,10 @@ h3 {
 
   .player-toolbar {
     grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  }
+
+  .player-workspace.with-understanding {
+    grid-template-columns: minmax(0, 1fr) 350px;
   }
 }
 

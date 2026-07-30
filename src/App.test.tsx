@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type {
   EmbeddedSubtitlePreview,
+  Explanation,
+  ExplanationTask,
   MediaPreparation,
   Project,
   RemoteMediaPreview,
@@ -56,6 +58,18 @@ const desktopMocks = vi.hoisted(() => ({
   startCodexTranslationTask: vi.fn(),
   cancelTranslationTask: vi.fn(),
   resumeCodexTranslationTask: vi.fn(),
+  chooseExplanationResultFile: vi.fn(),
+  prepareExplanationTask: vi.fn(),
+  getExplanationTask: vi.fn(),
+  listExplanationTasks: vi.fn(),
+  readExplanationPrompt: vi.fn(),
+  openExplanationMaterials: vi.fn(),
+  getExplanation: vi.fn(),
+  listExplanations: vi.fn(),
+  importExplanationResult: vi.fn(),
+  startCodexExplanationTask: vi.fn(),
+  cancelExplanationTask: vi.fn(),
+  resumeCodexExplanationTask: vi.fn(),
 }));
 
 vi.mock("./lib/desktop", () => ({
@@ -164,8 +178,7 @@ const remoteProject: Project = {
   mediaSource: {
     ...project.mediaSource,
     id: "29645135-bcb4-4f56-b4c7-3ec1bf59cd28",
-    locator:
-      "W:\\SiaoVPlay\\app-data\\remote-media\\import-1\\source.mp4",
+    locator: "W:\\SiaoVPlay\\app-data\\remote-media\\import-1\\source.mp4",
     originUrl: remotePreview.originalUrl,
   },
 };
@@ -343,6 +356,58 @@ const completedTranslationTask: TranslationTask = {
   completedAtMs: 1_785_354_310_000,
 };
 
+const explanationTask: ExplanationTask = {
+  id: "3f4ed2ea-f522-4914-a846-c4187e39caa9",
+  projectId: project.id,
+  handoffKind: "codex",
+  protocolVersion: "siaovplay-understanding-v1",
+  status: "queued",
+  stage: "queued",
+  progress: 0,
+  receiverLabel: "本机 Codex",
+  materialScope: [
+    "播放截止时间以内的原文字幕",
+    "对应的简体中文字幕（如有）",
+    "不晚于播放位置的最多三张关键帧",
+  ],
+  sourceVersionId: subtitleVersion.id,
+  translationVersionId: translatedVersion.id,
+  authorizedSegmentIds: [subtitleVersion.segments[0].id],
+  playbackCutoffMs: 42_000,
+  sceneStartMs: 0,
+  expectedProjectRevision: 3,
+  outputExplanationId: null,
+  errorCode: null,
+  errorMessage: null,
+  createdAtMs: 1_785_354_320_000,
+  updatedAtMs: 1_785_354_320_000,
+  startedAtMs: null,
+  completedAtMs: null,
+  frames: [
+    {
+      id: "16e2210a-62e4-4df8-a0cc-25a9c218f998",
+      ordinal: 0,
+      timestampMs: 41_750,
+      path: "W:\\SiaoVPlay\\agent-tasks\\task\\input\\frames\\frame-0001.jpg",
+      sha256: "d".repeat(64),
+    },
+  ],
+};
+
+const explanation: Explanation = {
+  id: "194b4275-8790-426a-91bb-ee31c01dc902",
+  projectId: project.id,
+  taskId: explanationTask.id,
+  sourceVersionId: subtitleVersion.id,
+  translationVersionId: translatedVersion.id,
+  playbackCutoffMs: 42_000,
+  sceneStartMs: 0,
+  confirmedFacts: ["人物明确提到会在车站前见面。"],
+  possibleInterpretations: ["结合当前语气，这个约定对人物可能很重要。"],
+  withheldReason: "后续发展未展开，以避免剧透。",
+  createdAtMs: 1_785_354_330_000,
+};
+
 beforeEach(() => {
   vi.clearAllMocks();
   desktopMocks.getAppStatus.mockResolvedValue({
@@ -374,8 +439,7 @@ beforeEach(() => {
     ...project,
     mediaSource: {
       ...project.mediaSource,
-      posterPath:
-        "W:\\SiaoVPlay\\app-data\\media-cache\\project\\poster.jpg",
+      posterPath: "W:\\SiaoVPlay\\app-data\\media-cache\\project\\poster.jpg",
     },
   });
   desktopMocks.markProjectOpened.mockImplementation(async (projectId) =>
@@ -498,6 +562,54 @@ beforeEach(() => {
     subtitleVersion: translatedVersion,
     validation: completedTranslationTask.validation,
   });
+  desktopMocks.listExplanationTasks.mockResolvedValue([]);
+  desktopMocks.listExplanations.mockResolvedValue([]);
+  desktopMocks.prepareExplanationTask.mockResolvedValue(explanationTask);
+  desktopMocks.startCodexExplanationTask.mockResolvedValue({
+    ...explanationTask,
+    status: "running",
+    stage: "running",
+    progress: 0.1,
+    startedAtMs: 1_785_354_321_000,
+  });
+  desktopMocks.getExplanationTask.mockResolvedValue({
+    ...explanationTask,
+    status: "running",
+    stage: "running",
+    progress: 0.4,
+    startedAtMs: 1_785_354_321_000,
+  });
+  desktopMocks.readExplanationPrompt.mockResolvedValue(
+    "# SiaoVPlay 当前场景解释任务\n\n只返回 JSON。",
+  );
+  desktopMocks.openExplanationMaterials.mockResolvedValue(true);
+  desktopMocks.getExplanation.mockResolvedValue(explanation);
+  desktopMocks.chooseExplanationResultFile.mockResolvedValue(null);
+  desktopMocks.importExplanationResult.mockResolvedValue({
+    task: {
+      ...explanationTask,
+      handoffKind: "manual",
+      status: "completed",
+      stage: "completed",
+      progress: 1,
+      outputExplanationId: explanation.id,
+      completedAtMs: 1_785_354_330_000,
+    },
+    explanation,
+  });
+  desktopMocks.cancelExplanationTask.mockResolvedValue({
+    ...explanationTask,
+    status: "cancelled",
+    stage: "cancelled",
+    completedAtMs: 1_785_354_322_000,
+  });
+  desktopMocks.resumeCodexExplanationTask.mockResolvedValue({
+    ...explanationTask,
+    status: "running",
+    stage: "running",
+    progress: 0.1,
+    startedAtMs: 1_785_354_323_000,
+  });
   Object.defineProperty(navigator, "clipboard", {
     configurable: true,
     value: {
@@ -517,9 +629,7 @@ describe("App", () => {
     ).toBeInTheDocument();
     expect(await screen.findByText("雨站台")).toBeInTheDocument();
     expect(screen.getByText("本地媒体工具可用")).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "导入本地视频" }),
-    ).toBeEnabled();
+    expect(screen.getByRole("button", { name: "导入本地视频" })).toBeEnabled();
     expect(screen.getByLabelText("观看进度 23%")).toBeInTheDocument();
     await waitFor(() =>
       expect(desktopMocks.ensureProjectPoster).toHaveBeenCalledWith(project.id),
@@ -536,9 +646,7 @@ describe("App", () => {
     render(<App />);
     fireEvent.click(await screen.findByRole("button", { name: "继续观看" }));
 
-    expect(
-      await screen.findByText("正在确认视频画面"),
-    ).toBeInTheDocument();
+    expect(await screen.findByText("正在确认视频画面")).toBeInTheDocument();
     expect(desktopMocks.markProjectOpened).toHaveBeenCalledWith(project.id);
     expect(desktopMocks.prepareProjectMedia).toHaveBeenCalledWith(
       project.id,
@@ -562,10 +670,7 @@ describe("App", () => {
       translatedVersion,
     ]);
     desktopMocks.updatePlaybackState.mockImplementation(
-      async (
-        _projectId: string,
-        values: Project["playbackState"],
-      ) => ({
+      async (_projectId: string, values: Project["playbackState"]) => ({
         ...captionProject,
         playbackState: {
           ...values,
@@ -598,13 +703,107 @@ describe("App", () => {
     );
   });
 
+  it("keeps watching quiet until the user opens understanding and confirms the Codex scope", async () => {
+    desktopMocks.listSubtitleVersions.mockResolvedValue([
+      subtitleVersion,
+      translatedVersion,
+    ]);
+
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "继续观看" }));
+
+    expect(screen.queryByLabelText("场景理解")).not.toBeInTheDocument();
+    fireEvent.click(await screen.findByRole("button", { name: "理解" }));
+
+    expect(await screen.findByLabelText("场景理解")).toBeInTheDocument();
+    expect(screen.getByText("仅使用 00:42 之前")).toBeInTheDocument();
+    expect(
+      screen.getByText("不包含完整视频、音频、源媒体路径、数据库或凭证。"),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText("本机 Codex")).toHaveLength(2);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "确认范围并理解当前场景" }),
+    );
+    await waitFor(() =>
+      expect(desktopMocks.prepareExplanationTask).toHaveBeenCalledWith(
+        project.id,
+        "codex",
+        42_000,
+      ),
+    );
+    await waitFor(() =>
+      expect(desktopMocks.startCodexExplanationTask).toHaveBeenCalledWith(
+        explanationTask.id,
+      ),
+    );
+    expect(
+      await screen.findByText("正在结合字幕和关键帧理解当前场景"),
+    ).toBeInTheDocument();
+  });
+
+  it("copies a manual explanation prompt, exposes controlled frames, and imports JSON", async () => {
+    desktopMocks.listSubtitleVersions.mockResolvedValue([
+      subtitleVersion,
+      translatedVersion,
+    ]);
+    desktopMocks.prepareExplanationTask.mockResolvedValue({
+      ...explanationTask,
+      handoffKind: "manual",
+      status: "awaiting_external_result",
+      stage: "awaiting_external_result",
+      receiverLabel: "手动选择的外部 Agent",
+    });
+    desktopMocks.chooseExplanationResultFile.mockResolvedValue(
+      "W:\\SiaoVPlay\\handoff\\explanation.json",
+    );
+
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "继续观看" }));
+    fireEvent.click(await screen.findByRole("button", { name: "理解" }));
+    fireEvent.click(await screen.findByRole("button", { name: /复制提示词/ }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "确认范围并理解当前场景" }),
+    );
+
+    expect(await screen.findByText("复制文字并附上关键帧")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "复制完整提示词" }));
+    await waitFor(() =>
+      expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
+        expect.stringContaining("当前场景解释任务"),
+      ),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "打开 1 张关键帧" }));
+    expect(desktopMocks.openExplanationMaterials).toHaveBeenCalledWith(
+      explanationTask.id,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /选择返回的 JSON/ }));
+    expect(await screen.findByText("explanation.json")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "检查并显示解释" }));
+
+    await waitFor(() =>
+      expect(desktopMocks.importExplanationResult).toHaveBeenCalledWith(
+        explanationTask.id,
+        "W:\\SiaoVPlay\\handoff\\explanation.json",
+      ),
+    );
+    expect(
+      await screen.findByText("结合当前剧情的可能解读"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("结合当前语气，这个约定对人物可能很重要。"),
+    ).toBeInTheDocument();
+  });
+
   it("opens the local import dialog with Ctrl+O", async () => {
     render(<App />);
     await screen.findByText("雨站台");
 
     fireEvent.keyDown(window, { key: "o", ctrlKey: true });
 
-    await waitFor(() => expect(desktopMocks.chooseLocalVideo).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(desktopMocks.chooseLocalVideo).toHaveBeenCalled(),
+    );
   });
 
   it("opens a local video passed by the desktop process", async () => {
@@ -678,11 +877,8 @@ describe("App", () => {
     await screen.findByText("媒体文件");
     fireEvent.click(screen.getByRole("button", { name: "确认并导入" }));
 
-    fireEvent.click(
-      await screen.findByRole("button", { name: "取消导入" }),
-    );
-    const operationId =
-      desktopMocks.importRemoteMediaUrl.mock.calls[0][2];
+    fireEvent.click(await screen.findByRole("button", { name: "取消导入" }));
+    const operationId = desktopMocks.importRemoteMediaUrl.mock.calls[0][2];
     await waitFor(() =>
       expect(desktopMocks.cancelRemoteMediaImport).toHaveBeenCalledWith(
         operationId,
@@ -746,13 +942,9 @@ describe("App", () => {
     );
     render(<App />);
     fireEvent.click(await screen.findByRole("button", { name: "继续观看" }));
-    fireEvent.click(
-      await screen.findByRole("button", { name: "添加字幕" }),
-    );
+    fireEvent.click(await screen.findByRole("button", { name: "添加字幕" }));
 
-    fireEvent.click(
-      screen.getByRole("button", { name: /选择字幕文件/ }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: /选择字幕文件/ }));
     await waitFor(() =>
       expect(desktopMocks.chooseSubtitleFile).toHaveBeenCalled(),
     );
@@ -768,11 +960,10 @@ describe("App", () => {
         "ja",
       ),
     );
-    expect(await screen.findByText("时间轴和媒体范围检查通过，可以导入。"))
-      .toBeInTheDocument();
-    fireEvent.click(
-      screen.getByRole("button", { name: "导入原文字幕" }),
-    );
+    expect(
+      await screen.findByText("时间轴和媒体范围检查通过，可以导入。"),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "导入原文字幕" }));
 
     await waitFor(() =>
       expect(desktopMocks.importSubtitleFile).toHaveBeenCalled(),
@@ -780,29 +971,22 @@ describe("App", () => {
     expect(
       await screen.findByText("已导入 1 条原文字幕，保存为版本 1。"),
     ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "原文字幕 · 1" }))
-      .toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "原文字幕 · 1" }),
+    ).toBeInTheDocument();
   });
 
   it("starts and cancels local Japanese subtitle generation", async () => {
     render(<App />);
     fireEvent.click(await screen.findByRole("button", { name: "继续观看" }));
-    fireEvent.click(
-      await screen.findByRole("button", { name: "添加字幕" }),
-    );
-    fireEvent.click(
-      screen.getByRole("tab", { name: "从视频生成" }),
-    );
+    fireEvent.click(await screen.findByRole("button", { name: "添加字幕" }));
+    fireEvent.click(screen.getByRole("tab", { name: "从视频生成" }));
 
-    expect(
-      await screen.findByText("语音识别只在本机运行"),
-    ).toBeInTheDocument();
+    expect(await screen.findByText("语音识别只在本机运行")).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText(/视频原声语言/), {
       target: { value: "ja" },
     });
-    fireEvent.click(
-      screen.getByRole("button", { name: "生成原文字幕" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "生成原文字幕" }));
 
     await waitFor(() =>
       expect(desktopMocks.startTranscription).toHaveBeenCalledWith(
@@ -820,8 +1004,9 @@ describe("App", () => {
       ),
     );
     expect(await screen.findByText("任务已取消")).toBeInTheDocument();
-    expect(screen.getByText("临时音频和识别文件已经清理。"))
-      .toBeInTheDocument();
+    expect(
+      screen.getByText("临时音频和识别文件已经清理。"),
+    ).toBeInTheDocument();
   });
 
   it("uses a supported embedded text subtitle track", async () => {
@@ -850,12 +1035,8 @@ describe("App", () => {
     });
     render(<App />);
     fireEvent.click(await screen.findByRole("button", { name: "继续观看" }));
-    fireEvent.click(
-      await screen.findByRole("button", { name: "添加字幕" }),
-    );
-    fireEvent.click(
-      screen.getByRole("button", { name: /内嵌字幕轨 2/ }),
-    );
+    fireEvent.click(await screen.findByRole("button", { name: "添加字幕" }));
+    fireEvent.click(screen.getByRole("button", { name: /内嵌字幕轨 2/ }));
     expect(
       screen.getByText("检测到 1 条图片或未知格式字幕轨，MVP 暂不支持提取。"),
     ).toBeInTheDocument();
@@ -883,9 +1064,7 @@ describe("App", () => {
     expect(
       await screen.findByRole("heading", { name: "先准备原文字幕" }),
     ).toBeInTheDocument();
-    fireEvent.click(
-      screen.getByRole("button", { name: "准备原文字幕" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "准备原文字幕" }));
     expect(
       screen.getByRole("heading", { name: "准备原文字幕" }),
     ).toBeInTheDocument();
@@ -906,9 +1085,7 @@ describe("App", () => {
       ),
     ).toBeInTheDocument();
     expect(screen.getByText("本机已就绪")).toBeInTheDocument();
-    fireEvent.click(
-      screen.getByRole("button", { name: "确认范围并开始翻译" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "确认范围并开始翻译" }));
 
     await waitFor(() =>
       expect(desktopMocks.prepareTranslationTask).toHaveBeenCalledWith(
@@ -950,16 +1127,12 @@ describe("App", () => {
     fireEvent.click(
       await screen.findByRole("button", { name: /复制任务提示词/ }),
     );
-    fireEvent.click(
-      screen.getByRole("button", { name: "生成完整任务提示词" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "生成完整任务提示词" }));
 
     expect(
       await screen.findByText("完整任务提示词已经生成"),
     ).toBeInTheDocument();
-    fireEvent.click(
-      screen.getByRole("button", { name: "复制完整提示词" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "复制完整提示词" }));
     await waitFor(() =>
       expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
         expect.stringContaining("只返回 JSON"),
@@ -969,9 +1142,7 @@ describe("App", () => {
       screen.getByRole("button", { name: /选择 Agent 返回的 JSON/ }),
     );
     expect(await screen.findByText("result.json")).toBeInTheDocument();
-    fireEvent.click(
-      screen.getByRole("button", { name: "检查并生成中文字幕" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "检查并生成中文字幕" }));
 
     await waitFor(() =>
       expect(desktopMocks.importTranslationResult).toHaveBeenCalledWith(
@@ -980,9 +1151,7 @@ describe("App", () => {
       ),
     );
     expect(
-      await screen.findByText(
-        "已生成 1 条简体中文字幕草稿，可以开始抽查。",
-      ),
+      await screen.findByText("已生成 1 条简体中文字幕草稿，可以开始抽查。"),
     ).toBeInTheDocument();
   });
 
@@ -1003,8 +1172,9 @@ describe("App", () => {
     expect(
       await screen.findByText("翻译完成，可以开始抽查"),
     ).toBeInTheDocument();
-    expect(screen.getByText(subtitleVersion.segments[0].text))
-      .toBeInTheDocument();
+    expect(
+      screen.getByText(subtitleVersion.segments[0].text),
+    ).toBeInTheDocument();
     expect(screen.getByText("明天在车站前见吧。")).toBeInTheDocument();
     expect(
       screen.getByText("已检查 1 条字幕的任务、版本、范围和完整性。"),
@@ -1035,9 +1205,7 @@ describe("App", () => {
         "重新开始会从受控任务包的第一批字幕开始，不复用未确认的中间结果。",
       ),
     ).toBeInTheDocument();
-    fireEvent.click(
-      screen.getByRole("button", { name: "重新开始本机翻译" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "重新开始本机翻译" }));
     await waitFor(() =>
       expect(desktopMocks.resumeCodexTranslationTask).toHaveBeenCalledWith(
         translationTask.id,
@@ -1074,9 +1242,7 @@ describe("App", () => {
     fireEvent.change(screen.getByRole("combobox", { name: "问题标记" }), {
       target: { value: "incorrect" },
     });
-    fireEvent.click(
-      screen.getByRole("button", { name: "保存为新版本" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "保存为新版本" }));
 
     await waitFor(() =>
       expect(desktopMocks.reviseSubtitleVersion).toHaveBeenCalledWith(
@@ -1094,9 +1260,7 @@ describe("App", () => {
         0,
       ),
     );
-    expect(
-      await screen.findByText("已保存原文字幕修正。"),
-    ).toBeInTheDocument();
+    expect(await screen.findByText("已保存原文字幕修正。")).toBeInTheDocument();
   });
 
   it("applies an exact global replacement through the revision workflow", async () => {
@@ -1110,18 +1274,14 @@ describe("App", () => {
     render(<App />);
     fireEvent.click(await screen.findByRole("button", { name: "继续观看" }));
     fireEvent.click(await screen.findByRole("button", { name: "修正字幕" }));
-    fireEvent.click(
-      await screen.findByRole("button", { name: "全局替换" }),
-    );
+    fireEvent.click(await screen.findByRole("button", { name: "全局替换" }));
     fireEvent.change(screen.getByRole("textbox", { name: "查找" }), {
       target: { value: "駅前" },
     });
     fireEvent.change(screen.getByRole("textbox", { name: "替换为" }), {
       target: { value: "车站前" },
     });
-    fireEvent.click(
-      screen.getByRole("button", { name: "替换并创建新版本" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "替换并创建新版本" }));
 
     await waitFor(() =>
       expect(desktopMocks.reviseSubtitleVersion).toHaveBeenCalledWith(
@@ -1160,9 +1320,7 @@ describe("App", () => {
     render(<App />);
     fireEvent.click(await screen.findByRole("button", { name: "继续观看" }));
     fireEvent.click(await screen.findByRole("button", { name: "修正字幕" }));
-    fireEvent.click(
-      await screen.findByRole("button", { name: "历史版本" }),
-    );
+    fireEvent.click(await screen.findByRole("button", { name: "历史版本" }));
     fireEvent.click(
       await screen.findByRole("button", { name: "恢复为新版本" }),
     );
@@ -1227,17 +1385,13 @@ describe("App", () => {
     fireEvent.click(
       screen.getByRole("checkbox", { name: "选择第 0 条字幕重译" }),
     );
-    fireEvent.click(
-      screen.getByRole("button", { name: "重新翻译选中字幕" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "重新翻译选中字幕" }));
 
     expect(
       await screen.findByRole("heading", { name: "重新翻译选中字幕" }),
     ).toBeInTheDocument();
     expect(screen.getByText("只处理选中的 1 条原文字幕")).toBeInTheDocument();
-    fireEvent.click(
-      screen.getByRole("button", { name: "确认范围并开始翻译" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "确认范围并开始翻译" }));
     await waitFor(() =>
       expect(desktopMocks.prepareTranslationTask).toHaveBeenCalledWith(
         project.id,
