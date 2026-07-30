@@ -1904,6 +1904,7 @@ mod tests {
                 PrepareTranslationTaskInput {
                     project_id: self.project_id.clone(),
                     handoff_kind: handoff_kind.to_owned(),
+                    segment_ids: None,
                 },
             )
             .expect("translation task should be prepared")

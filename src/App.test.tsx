@@ -17,6 +17,7 @@ const desktopMocks = vi.hoisted(() => ({
   getAppStatus: vi.fn(),
   getMediaRuntimeStatus: vi.fn(),
   listProjects: vi.fn(),
+  getProject: vi.fn(),
   chooseLocalVideo: vi.fn(),
   chooseSubtitleFile: vi.fn(),
   createLocalProject: vi.fn(),
@@ -37,6 +38,8 @@ const desktopMocks = vi.hoisted(() => ({
   inspectEmbeddedSubtitle: vi.fn(),
   importEmbeddedSubtitle: vi.fn(),
   listSubtitleVersions: vi.fn(),
+  reviseSubtitleVersion: vi.fn(),
+  restoreSubtitleVersion: vi.fn(),
   getTranscriptionRuntimeStatus: vi.fn(),
   startTranscription: vi.fn(),
   getTranscriptionJob: vi.fn(),
@@ -238,7 +241,9 @@ const subtitleVersion: SubtitleVersion = {
   segments: [
     {
       id: "5a460d9a-97f6-4482-af1d-e7dbb7a6bc56",
+      lineageId: "5a460d9a-97f6-4482-af1d-e7dbb7a6bc56",
       sourceSegmentId: null,
+      issueKind: null,
       ...subtitlePreview.cues[0],
       words: [],
     },
@@ -283,8 +288,10 @@ const translationTask: TranslationTask = {
   sourceVersionId: subtitleVersion.id,
   sourceLanguageCode: "ja",
   targetLanguageCode: "zh-cn",
+  authorizedSegmentIds: [subtitleVersion.segments[0].id],
   segmentCount: 1,
   expectedProjectRevision: 2,
+  baseTranslationVersionId: null,
   outputVersionId: null,
   validation: null,
   errorCode: null,
@@ -311,7 +318,9 @@ const translatedVersion: SubtitleVersion = {
     {
       ...subtitleVersion.segments[0],
       id: "f88389a3-5a44-43e9-a474-696cad8f29ea",
+      lineageId: "f88389a3-5a44-43e9-a474-696cad8f29ea",
       sourceSegmentId: subtitleVersion.segments[0].id,
+      issueKind: null,
       text: "明天在车站前见吧。",
     },
   ],
@@ -350,6 +359,7 @@ beforeEach(() => {
     errorMessage: null,
   });
   desktopMocks.listProjects.mockResolvedValue([project]);
+  desktopMocks.getProject.mockResolvedValue(project);
   desktopMocks.chooseLocalVideo.mockResolvedValue(null);
   desktopMocks.chooseSubtitleFile.mockResolvedValue(null);
   desktopMocks.createLocalProject.mockResolvedValue(project);
@@ -403,6 +413,8 @@ beforeEach(() => {
     sourceLabel: embeddedSubtitlePreview.sourceLabel,
   });
   desktopMocks.listSubtitleVersions.mockResolvedValue([]);
+  desktopMocks.reviseSubtitleVersion.mockResolvedValue(subtitleVersion);
+  desktopMocks.restoreSubtitleVersion.mockResolvedValue(subtitleVersion);
   desktopMocks.getTranscriptionRuntimeStatus.mockResolvedValue({
     available: true,
     preferredBackend: "vulkan",
@@ -977,6 +989,208 @@ describe("App", () => {
     await waitFor(() =>
       expect(desktopMocks.resumeCodexTranslationTask).toHaveBeenCalledWith(
         translationTask.id,
+      ),
+    );
+  });
+
+  it("saves a single subtitle correction and issue marker as a new version", async () => {
+    desktopMocks.listSubtitleVersions.mockResolvedValue([subtitleVersion]);
+    desktopMocks.reviseSubtitleVersion.mockResolvedValue({
+      ...subtitleVersion,
+      id: "83f706fc-554d-4de1-9a56-718685277117",
+      versionNumber: 2,
+      sourceLabel: "轻量修正 · 逐句修正",
+      projectRevision: 2,
+      parentVersionId: subtitleVersion.id,
+      segments: [
+        {
+          ...subtitleVersion.segments[0],
+          id: "99944ef3-4916-4f8c-8495-185484173b2f",
+          text: "明日は駅の前で会いましょう。",
+          issueKind: "incorrect",
+        },
+      ],
+    });
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "继续观看" }));
+    fireEvent.click(await screen.findByRole("button", { name: "修正字幕" }));
+
+    const editor = await screen.findByRole("textbox", { name: "原文字幕" });
+    fireEvent.change(editor, {
+      target: { value: "明日は駅の前で会いましょう。" },
+    });
+    fireEvent.change(screen.getByRole("combobox", { name: "问题标记" }), {
+      target: { value: "incorrect" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "保存为新版本" }),
+    );
+
+    await waitFor(() =>
+      expect(desktopMocks.reviseSubtitleVersion).toHaveBeenCalledWith(
+        project.id,
+        subtitleVersion.id,
+        project.revision,
+        [
+          {
+            segmentId: subtitleVersion.segments[0].id,
+            text: "明日は駅の前で会いましょう。",
+            issueKind: "incorrect",
+          },
+        ],
+        null,
+        0,
+      ),
+    );
+    expect(
+      await screen.findByText("已保存原文字幕修正。"),
+    ).toBeInTheDocument();
+  });
+
+  it("applies an exact global replacement through the revision workflow", async () => {
+    desktopMocks.listSubtitleVersions.mockResolvedValue([subtitleVersion]);
+    desktopMocks.reviseSubtitleVersion.mockResolvedValue({
+      ...subtitleVersion,
+      id: "1d451b5c-37fb-4aed-b151-a88192a263c0",
+      versionNumber: 2,
+      parentVersionId: subtitleVersion.id,
+    });
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "继续观看" }));
+    fireEvent.click(await screen.findByRole("button", { name: "修正字幕" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "全局替换" }),
+    );
+    fireEvent.change(screen.getByRole("textbox", { name: "查找" }), {
+      target: { value: "駅前" },
+    });
+    fireEvent.change(screen.getByRole("textbox", { name: "替换为" }), {
+      target: { value: "车站前" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "替换并创建新版本" }),
+    );
+
+    await waitFor(() =>
+      expect(desktopMocks.reviseSubtitleVersion).toHaveBeenCalledWith(
+        project.id,
+        subtitleVersion.id,
+        project.revision,
+        [],
+        { findText: "駅前", replaceText: "车站前" },
+        0,
+      ),
+    );
+  });
+
+  it("restores subtitle history by creating another immutable version", async () => {
+    const currentVersion: SubtitleVersion = {
+      ...subtitleVersion,
+      id: "4586c09f-566e-453e-8ebf-43e2df96d9e8",
+      versionNumber: 2,
+      parentVersionId: subtitleVersion.id,
+      sourceLabel: "轻量修正 · 逐句修正",
+      isCurrent: true,
+    };
+    const historyVersion = { ...subtitleVersion, isCurrent: false };
+    desktopMocks.listSubtitleVersions.mockResolvedValue([
+      currentVersion,
+      historyVersion,
+    ]);
+    desktopMocks.restoreSubtitleVersion.mockResolvedValue({
+      ...historyVersion,
+      id: "7688d3bb-504b-484e-bf86-e5632a41d698",
+      versionNumber: 3,
+      parentVersionId: currentVersion.id,
+      sourceLabel: "恢复自版本 1",
+      isCurrent: true,
+    });
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "继续观看" }));
+    fireEvent.click(await screen.findByRole("button", { name: "修正字幕" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "历史版本" }),
+    );
+    fireEvent.click(
+      await screen.findByRole("button", { name: "恢复为新版本" }),
+    );
+
+    await waitFor(() =>
+      expect(desktopMocks.restoreSubtitleVersion).toHaveBeenCalledWith(
+        project.id,
+        currentVersion.id,
+        historyVersion.id,
+        project.revision,
+      ),
+    );
+    expect(
+      await screen.findByText("已从版本 1 创建恢复版本。"),
+    ).toBeInTheDocument();
+  });
+
+  it("hands only selected original segments to the retranslation task", async () => {
+    const secondOriginalSegment = {
+      ...subtitleVersion.segments[0],
+      id: "ff14a28d-c2a2-47a8-b5ad-6a1f951f6b24",
+      lineageId: "ff14a28d-c2a2-47a8-b5ad-6a1f951f6b24",
+      ordinal: 2,
+      startMs: 2_000,
+      endMs: 3_400,
+      text: "約束だからね。",
+    };
+    const originalWithSelection = {
+      ...subtitleVersion,
+      segments: [...subtitleVersion.segments, secondOriginalSegment],
+    };
+    const translationWithSelection = {
+      ...translatedVersion,
+      segments: [
+        translatedVersion.segments[0],
+        {
+          ...translatedVersion.segments[0],
+          id: "b7821c0b-b384-482f-b40e-49de8a54d6ee",
+          lineageId: "b7821c0b-b384-482f-b40e-49de8a54d6ee",
+          sourceSegmentId: secondOriginalSegment.id,
+          ordinal: 2,
+          startMs: 2_000,
+          endMs: 3_400,
+          text: "说好了哦。",
+        },
+      ],
+    };
+    desktopMocks.listSubtitleVersions.mockResolvedValue([
+      originalWithSelection,
+      translationWithSelection,
+    ]);
+    desktopMocks.prepareTranslationTask.mockResolvedValue({
+      ...translationTask,
+      authorizedSegmentIds: [subtitleVersion.segments[0].id],
+      segmentCount: 1,
+      baseTranslationVersionId: translationWithSelection.id,
+    });
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "继续观看" }));
+    fireEvent.click(await screen.findByRole("button", { name: "修正字幕" }));
+    fireEvent.click(await screen.findByRole("tab", { name: /原文字幕/ }));
+    fireEvent.click(
+      screen.getByRole("checkbox", { name: "选择第 0 条字幕重译" }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "重新翻译选中字幕" }),
+    );
+
+    expect(
+      await screen.findByRole("heading", { name: "重新翻译选中字幕" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("只处理选中的 1 条原文字幕")).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: "确认范围并开始翻译" }),
+    );
+    await waitFor(() =>
+      expect(desktopMocks.prepareTranslationTask).toHaveBeenCalledWith(
+        project.id,
+        "codex",
+        [subtitleVersion.segments[0].id],
       ),
     );
   });

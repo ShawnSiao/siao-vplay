@@ -15,8 +15,8 @@ use crate::{
     store::{ProjectStore, StoreError},
     subtitles::{
         self, EmbeddedSubtitlePreview, ImportEmbeddedSubtitleInput, ImportSubtitleFileInput,
-        InspectEmbeddedSubtitleInput, InspectSubtitleFileInput, SubtitleError,
-        SubtitleImportPreview, SubtitleVersion,
+        InspectEmbeddedSubtitleInput, InspectSubtitleFileInput, RestoreSubtitleVersionInput,
+        ReviseSubtitleVersionInput, SubtitleError, SubtitleImportPreview, SubtitleVersion,
     },
     transcription::{
         self, StartTranscriptionInput, TranscriptionError, TranscriptionJob, TranscriptionJobInput,
@@ -117,6 +117,10 @@ impl From<SubtitleError> for CommandError {
             SubtitleError::SubtitleSourceChanged => "subtitle_source_changed",
             SubtitleError::ProjectChanged => "project_changed",
             SubtitleError::MediaChanged => "media_changed",
+            SubtitleError::VersionNotFound(_) => "subtitle_version_not_found",
+            SubtitleError::VersionChanged => "subtitle_version_changed",
+            SubtitleError::InvalidRevision(_) => "subtitle_revision_invalid",
+            SubtitleError::ActiveTranslationTask => "translation_task_active",
             SubtitleError::Serialization(_) => "subtitle_serialization_failed",
         };
         Self {
@@ -483,6 +487,32 @@ pub fn list_subtitle_versions(
     project_id: String,
 ) -> Result<Vec<SubtitleVersion>, CommandError> {
     subtitles::list_subtitle_versions(store.inner(), &project_id).map_err(Into::into)
+}
+
+#[tauri::command]
+pub async fn revise_subtitle_version(
+    store: State<'_, ProjectStore>,
+    input: ReviseSubtitleVersionInput,
+) -> Result<SubtitleVersion, CommandError> {
+    let store = store.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        subtitles::revise_subtitle_version(&store, input).map_err(CommandError::from)
+    })
+    .await
+    .map_err(CommandError::background_task_failed)?
+}
+
+#[tauri::command]
+pub async fn restore_subtitle_version(
+    store: State<'_, ProjectStore>,
+    input: RestoreSubtitleVersionInput,
+) -> Result<SubtitleVersion, CommandError> {
+    let store = store.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        subtitles::restore_subtitle_version(&store, input).map_err(CommandError::from)
+    })
+    .await
+    .map_err(CommandError::background_task_failed)?
 }
 
 #[tauri::command]

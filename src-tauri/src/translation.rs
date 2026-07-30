@@ -14,7 +14,7 @@ use uuid::Uuid;
 
 use crate::{
     store::{ProjectStore, StoreError},
-    subtitles::{self, SubtitleCue, SubtitleError, SubtitleVersion},
+    subtitles::{self, SubtitleCue, SubtitleError, SubtitleSegment, SubtitleVersion},
 };
 
 const PROTOCOL_VERSION: &str = "siaovplay-agent-v1";
@@ -37,6 +37,10 @@ pub enum TranslationError {
     InvalidHandoff(String),
     #[error("项目还没有可翻译的当前原文字幕")]
     MissingOriginalSubtitle,
+    #[error("选段重译前需要先生成完整的简体中文字幕")]
+    MissingTranslationSubtitle,
+    #[error("选段重译范围无效：{0}")]
+    InvalidSelection(String),
     #[error("项目已有等待或正在处理的翻译任务")]
     ActiveTaskExists,
     #[error("翻译任务当前状态不允许此操作：{0}")]
@@ -75,6 +79,8 @@ impl TranslationError {
             Self::TaskNotFound(_) => "translation_task_not_found",
             Self::InvalidHandoff(_) => "translation_handoff_invalid",
             Self::MissingOriginalSubtitle => "original_subtitle_missing",
+            Self::MissingTranslationSubtitle => "translation_subtitle_missing",
+            Self::InvalidSelection(_) => "translation_selection_invalid",
             Self::ActiveTaskExists => "translation_task_active",
             Self::InvalidTaskState(_) => "translation_task_state_invalid",
             Self::TaskIntegrity(_) => "translation_task_integrity",
@@ -93,6 +99,8 @@ impl TranslationError {
 pub struct PrepareTranslationTaskInput {
     pub project_id: String,
     pub handoff_kind: String,
+    #[serde(default)]
+    pub segment_ids: Option<Vec<String>>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -124,8 +132,10 @@ pub struct TranslationTask {
     pub source_version_id: String,
     pub source_language_code: String,
     pub target_language_code: String,
+    pub authorized_segment_ids: Vec<String>,
     pub segment_count: usize,
     pub expected_project_revision: i64,
+    pub base_translation_version_id: Option<String>,
     pub output_version_id: Option<String>,
     pub validation: Option<TranslationValidation>,
     pub error_code: Option<String>,
@@ -211,11 +221,27 @@ struct ValidatedResult {
     validation: TranslationValidation,
 }
 
+#[derive(Clone, Debug)]
+struct OutputTranslationSegment {
+    lineage_id: String,
+    source_segment_id: String,
+    ordinal: usize,
+    start_ms: i64,
+    end_ms: i64,
+    text: String,
+    issue_kind: Option<String>,
+}
+
 pub fn prepare_translation_task(
     store: &ProjectStore,
     input: PrepareTranslationTaskInput,
 ) -> Result<TranslationTask, TranslationError> {
-    let (status, stage, receiver_label) = match input.handoff_kind.trim() {
+    let PrepareTranslationTaskInput {
+        project_id,
+        handoff_kind,
+        segment_ids,
+    } = input;
+    let (status, stage, receiver_label) = match handoff_kind.trim() {
         "manual" => (
             "awaiting_external_result",
             "awaiting_external_result",
@@ -224,7 +250,7 @@ pub fn prepare_translation_task(
         "codex" => ("queued", "queued", "本机 Codex"),
         value => return Err(TranslationError::InvalidHandoff(value.to_owned())),
     };
-    let project = store.get_project(&input.project_id)?;
+    let project = store.get_project(&project_id)?;
     let source = current_original_subtitle(store, &project.id)?;
     let current_media_sha256 = project
         .media_source
@@ -255,9 +281,72 @@ pub fn prepare_translation_task(
     }
     drop(connection);
 
+    let requested_ids = segment_ids.unwrap_or_default();
+    let authorized_ids = if requested_ids.is_empty() {
+        source
+            .segments
+            .iter()
+            .map(|segment| segment.id.clone())
+            .collect::<Vec<_>>()
+    } else {
+        let requested = requested_ids.into_iter().collect::<BTreeSet<_>>();
+        if requested.len() > source.segments.len() {
+            return Err(TranslationError::InvalidSelection(
+                "所选字幕段数量超过当前原文字幕".to_owned(),
+            ));
+        }
+        let selected = source
+            .segments
+            .iter()
+            .filter(|segment| requested.contains(&segment.id))
+            .map(|segment| segment.id.clone())
+            .collect::<Vec<_>>();
+        if selected.len() != requested.len() {
+            return Err(TranslationError::InvalidSelection(
+                "部分字幕段不属于当前原文版本".to_owned(),
+            ));
+        }
+        selected
+    };
+    if authorized_ids.is_empty() {
+        return Err(TranslationError::InvalidSelection(
+            "至少选择一条原文字幕".to_owned(),
+        ));
+    }
+    let selected_source = SourceSubtitle {
+        id: source.id.clone(),
+        language_code: source.language_code.clone(),
+        media_sha256: source.media_sha256.clone(),
+        media_duration_ms: source.media_duration_ms,
+        segments: source
+            .segments
+            .iter()
+            .filter(|segment| authorized_ids.contains(&segment.id))
+            .cloned()
+            .collect(),
+    };
+    let current_translation = subtitles::list_subtitle_versions(store, &project.id)?
+        .into_iter()
+        .find(|version| version.role == "translation" && version.is_current);
+    let partial_selection = authorized_ids.len() < source.segments.len();
+    if partial_selection
+        && current_translation
+            .as_ref()
+            .is_none_or(|version| version.segments.len() != source.segments.len())
+    {
+        return Err(TranslationError::MissingTranslationSubtitle);
+    }
+    let base_translation_version_id = current_translation
+        .as_ref()
+        .map(|version| version.id.clone());
+
     let task_id = Uuid::new_v4().to_string();
     let material_scope = vec![
-        "原文字幕文本".to_owned(),
+        if partial_selection {
+            format!("选定原文字幕文本（{} 条）", authorized_ids.len())
+        } else {
+            "原文字幕文本".to_owned()
+        },
         "字幕时间码".to_owned(),
         "任务与字幕版本标识".to_owned(),
         "人物与术语上下文（当前为空）".to_owned(),
@@ -266,36 +355,40 @@ pub fn prepare_translation_task(
         store,
         &task_id,
         &project.id,
-        &input.handoff_kind,
+        &handoff_kind,
         receiver_label,
         &material_scope,
-        &source,
+        &selected_source,
         project.revision,
     )?;
     let timestamp = now_ms()?;
-    let authorized_ids = source
-        .segments
-        .iter()
-        .map(|segment| segment.id.clone())
-        .collect::<Vec<_>>();
     let insertion = (|| -> Result<(), TranslationError> {
         let mut connection = store.connect()?;
         let transaction = connection.transaction()?;
         let current_state = transaction
             .query_row(
-                "SELECT p.revision, m.source_sha256, t.current_version_id
+                "SELECT
+                    p.revision, m.source_sha256, t.current_version_id,
+                    (
+                        SELECT current_version_id
+                        FROM subtitle_tracks
+                        WHERE project_id = p.id
+                          AND role = 'translation'
+                          AND language_code = ?2
+                    )
                  FROM projects p
                  JOIN media_sources m
                    ON m.project_id = p.id AND m.is_primary = 1
                  JOIN subtitle_tracks t
                    ON t.project_id = p.id AND t.role = 'original'
                  WHERE p.id = ?1",
-                params![project.id],
+                params![project.id, TARGET_LANGUAGE],
                 |row| {
                     Ok((
                         row.get::<_, i64>(0)?,
                         row.get::<_, Option<String>>(1)?,
                         row.get::<_, Option<String>>(2)?,
+                        row.get::<_, Option<String>>(3)?,
                     ))
                 },
             )
@@ -303,6 +396,7 @@ pub fn prepare_translation_task(
             .ok_or_else(|| StoreError::ProjectNotFound(project.id.clone()))?;
         if current_state.0 != project.revision
             || current_state.2.as_deref() != Some(source.id.as_str())
+            || current_state.3 != base_translation_version_id
         {
             return Err(TranslationError::ProjectChanged);
         }
@@ -320,17 +414,18 @@ pub fn prepare_translation_task(
                 source_version_id, source_language_code, target_language_code,
                 authorized_segment_ids_json, segment_count,
                 expected_project_revision, expected_media_sha256,
-                material_manifest_sha256, created_at_ms, updated_at_ms
+                material_manifest_sha256, base_translation_version_id,
+                created_at_ms, updated_at_ms
              ) VALUES (
                 ?1, ?2, 'subtitle_translation', ?3, ?4,
                 ?5, ?6, 0.0, ?7, ?8,
                 ?9, ?10, ?11, ?12, ?13,
-                ?14, ?15, ?16, ?17, ?17
+                ?14, ?15, ?16, ?17, ?18, ?18
              )",
             params![
                 task_id,
                 project.id,
-                input.handoff_kind,
+                handoff_kind,
                 PROTOCOL_VERSION,
                 status,
                 stage,
@@ -346,6 +441,7 @@ pub fn prepare_translation_task(
                 project.revision,
                 current_media_sha256,
                 package.manifest_sha256,
+                base_translation_version_id,
                 timestamp,
             ],
         )?;
@@ -390,7 +486,8 @@ pub fn get_translation_task(
                 source_version_id, source_language_code, target_language_code,
                 segment_count, output_version_id, error_code, error_message,
                 created_at_ms, updated_at_ms, started_at_ms, completed_at_ms,
-                expected_project_revision, result_validation_json
+                expected_project_revision, result_validation_json,
+                authorized_segment_ids_json, base_translation_version_id
              FROM agent_tasks
              WHERE id = ?1",
             params![task_id],
@@ -423,6 +520,17 @@ pub fn get_translation_task(
                         })
                     })
                     .transpose()?;
+                let authorized_segment_ids_json = row.get::<_, String>(23)?;
+                let authorized_segment_ids = serde_json::from_str::<Vec<String>>(
+                    &authorized_segment_ids_json,
+                )
+                .map_err(|error| {
+                    rusqlite::Error::FromSqlConversionFailure(
+                        23,
+                        rusqlite::types::Type::Text,
+                        Box::new(error),
+                    )
+                })?;
                 Ok(TranslationTask {
                     id: row.get(0)?,
                     project_id: row.get(1)?,
@@ -437,8 +545,10 @@ pub fn get_translation_task(
                     source_version_id: row.get(10)?,
                     source_language_code: row.get(11)?,
                     target_language_code: row.get(12)?,
+                    authorized_segment_ids,
                     segment_count,
                     expected_project_revision: row.get(21)?,
+                    base_translation_version_id: row.get(24)?,
                     output_version_id: row.get(14)?,
                     validation,
                     error_code: row.get(15)?,
@@ -571,11 +681,25 @@ fn validate_result(
         ));
     }
 
+    let authorized = task
+        .authorized_segment_ids
+        .iter()
+        .map(String::as_str)
+        .collect::<BTreeSet<_>>();
+    if authorized.len() != task.segment_count {
+        return Err(TranslationError::TaskIntegrity(
+            "任务授权字幕段数量不一致".to_owned(),
+        ));
+    }
     let source_by_id = source
         .segments
         .iter()
+        .filter(|segment| authorized.contains(segment.id.as_str()))
         .map(|segment| (segment.id.as_str(), segment))
         .collect::<BTreeMap<_, _>>();
+    if source_by_id.len() != authorized.len() {
+        return Err(TranslationError::ProjectChanged);
+    }
     let mut translated_by_id = BTreeMap::new();
     for item in result.translations {
         let segment_id = item.segment_id.trim();
@@ -610,17 +734,18 @@ fn validate_result(
         }
         translated_by_id.insert(segment_id.to_owned(), translated_text.to_owned());
     }
-    if translated_by_id.len() != source.segments.len() {
+    if translated_by_id.len() != authorized.len() {
         let missing = source
             .segments
             .iter()
+            .filter(|segment| authorized.contains(segment.id.as_str()))
             .filter(|segment| !translated_by_id.contains_key(&segment.id))
             .map(|segment| segment.id.clone())
             .take(5)
             .collect::<Vec<_>>();
         return Err(TranslationError::InvalidResult(format!(
             "结果缺少 {} 条字幕段，示例：{}",
-            source.segments.len() - translated_by_id.len(),
+            authorized.len() - translated_by_id.len(),
             missing.join("、")
         )));
     }
@@ -628,6 +753,7 @@ fn validate_result(
     let translations = source
         .segments
         .iter()
+        .filter(|segment| authorized.contains(segment.id.as_str()))
         .map(|segment| {
             (
                 segment.clone(),
@@ -687,14 +813,71 @@ fn persist_translation_result(
     validated: ValidatedResult,
 ) -> Result<TranslationApplication, TranslationError> {
     let result_sha256 = hash_bytes(raw.as_bytes());
-    let cues = validated
+    let base_translation = if let Some(version_id) = &task.base_translation_version_id {
+        Some(
+            subtitles::list_subtitle_versions(store, &task.project_id)?
+                .into_iter()
+                .find(|version| version.id == *version_id)
+                .ok_or(TranslationError::ProjectChanged)?,
+        )
+    } else {
+        None
+    };
+    let translated_by_source = validated
         .translations
         .iter()
-        .map(|(segment, translated_text)| SubtitleCue {
+        .map(|(segment, text)| (segment.id.as_str(), text.as_str()))
+        .collect::<BTreeMap<_, _>>();
+    let partial_selection = validated.translations.len() < source.segments.len();
+    if partial_selection && base_translation.is_none() {
+        return Err(TranslationError::MissingTranslationSubtitle);
+    }
+    let base_by_ordinal = base_translation
+        .as_ref()
+        .map(|version| {
+            version
+                .segments
+                .iter()
+                .map(|segment| (segment.ordinal, segment))
+                .collect::<BTreeMap<_, _>>()
+        })
+        .unwrap_or_default();
+    if partial_selection && base_by_ordinal.len() != source.segments.len() {
+        return Err(TranslationError::ProjectChanged);
+    }
+    let output_segments = source
+        .segments
+        .iter()
+        .map(|source_segment| {
+            if let Some(translated_text) = translated_by_source.get(source_segment.id.as_str()) {
+                let base = base_by_ordinal.get(&source_segment.ordinal).copied();
+                Ok(OutputTranslationSegment {
+                    lineage_id: base
+                        .map(|segment| segment.lineage_id.clone())
+                        .unwrap_or_else(|| Uuid::new_v4().to_string()),
+                    source_segment_id: source_segment.id.clone(),
+                    ordinal: source_segment.ordinal,
+                    start_ms: source_segment.start_ms,
+                    end_ms: source_segment.end_ms,
+                    text: (*translated_text).to_owned(),
+                    issue_kind: base.and_then(|segment| segment.issue_kind.clone()),
+                })
+            } else {
+                let base = base_by_ordinal
+                    .get(&source_segment.ordinal)
+                    .copied()
+                    .ok_or(TranslationError::ProjectChanged)?;
+                Ok(output_segment_from_base(base))
+            }
+        })
+        .collect::<Result<Vec<_>, TranslationError>>()?;
+    let cues = output_segments
+        .iter()
+        .map(|segment| SubtitleCue {
             ordinal: segment.ordinal,
             start_ms: segment.start_ms,
             end_ms: segment.end_ms,
-            text: translated_text.clone(),
+            text: segment.text.clone(),
             confidence: None,
         })
         .collect::<Vec<_>>();
@@ -770,6 +953,13 @@ fn persist_translation_result(
                 |row| Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?)),
             )
             .optional()?;
+        if existing_translation
+            .as_ref()
+            .and_then(|(_, current_version_id)| current_version_id.clone())
+            != task.base_translation_version_id
+        {
+            return Err(TranslationError::ProjectChanged);
+        }
         let (track_id, parent_version_id) =
             if let Some((track_id, current_version_id)) = existing_translation {
                 (track_id, current_version_id)
@@ -791,10 +981,11 @@ fn persist_translation_result(
             params![track_id],
             |row| row.get::<_, i64>(0),
         )?;
-        let source_label = if delivery_kind == "codex" {
-            "Codex 翻译"
-        } else {
-            "手动 Agent 翻译"
+        let source_label = match (delivery_kind, partial_selection) {
+            ("codex", true) => "Codex 选段重译",
+            ("codex", false) => "Codex 翻译",
+            (_, true) => "手动 Agent 选段重译",
+            (_, false) => "手动 Agent 翻译",
         };
         transaction.execute(
             "INSERT INTO subtitle_versions (
@@ -822,24 +1013,24 @@ fn persist_translation_result(
                 task.id,
             ],
         )?;
-        for ((source_segment, translated_text), cue) in
-            validated.translations.iter().zip(cues.iter())
-        {
+        for segment in &output_segments {
             transaction.execute(
                 "INSERT INTO subtitle_segments (
-                    id, version_id, source_segment_id, ordinal,
-                    start_ms, end_ms, text, confidence
-                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, NULL)",
+                    id, version_id, lineage_id, source_segment_id, ordinal,
+                    start_ms, end_ms, text, confidence, issue_kind
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, NULL, ?9)",
                 params![
                     Uuid::new_v4().to_string(),
                     version_id,
-                    source_segment.id,
-                    i64::try_from(cue.ordinal).map_err(|_| {
+                    segment.lineage_id,
+                    segment.source_segment_id,
+                    i64::try_from(segment.ordinal).map_err(|_| {
                         StoreError::Validation("中文字幕段序号超出支持范围".to_owned())
                     })?,
-                    cue.start_ms,
-                    cue.end_ms,
-                    translated_text,
+                    segment.start_ms,
+                    segment.end_ms,
+                    segment.text,
+                    segment.issue_kind,
                 ],
             )?;
         }
@@ -913,6 +1104,21 @@ fn persist_translation_result(
         subtitle_version,
         validation: validated.validation,
     })
+}
+
+fn output_segment_from_base(segment: &SubtitleSegment) -> OutputTranslationSegment {
+    OutputTranslationSegment {
+        lineage_id: segment.lineage_id.clone(),
+        source_segment_id: segment
+            .source_segment_id
+            .clone()
+            .unwrap_or_else(|| segment.id.clone()),
+        ordinal: segment.ordinal,
+        start_ms: segment.start_ms,
+        end_ms: segment.end_ms,
+        text: segment.text.clone(),
+        issue_kind: segment.issue_kind.clone(),
+    }
 }
 
 fn set_task_validating(
@@ -1617,6 +1823,7 @@ mod tests {
                 PrepareTranslationTaskInput {
                     project_id: self.project_id.clone(),
                     handoff_kind: "manual".to_owned(),
+                    segment_ids: None,
                 },
             )
             .expect("manual task should be prepared")
@@ -1788,6 +1995,97 @@ mod tests {
             .expect("task directory")
             .join("output/result.json");
         assert!(output.is_file());
+    }
+
+    #[test]
+    fn selected_retranslation_only_authorizes_and_replaces_requested_segments() {
+        let fixture = TranslationFixture::new();
+        let initial_task = fixture.prepare_manual();
+        let initial_result =
+            fixture.write_result("initial-result.json", &fixture.result_value(&initial_task));
+        let initial = import_translation_result(
+            &fixture.store,
+            ImportTranslationResultInput {
+                task_id: initial_task.id,
+                result_path: initial_result.to_string_lossy().into_owned(),
+            },
+        )
+        .expect("initial translation should apply");
+
+        let selected_task = prepare_translation_task(
+            &fixture.store,
+            PrepareTranslationTaskInput {
+                project_id: fixture.project_id.clone(),
+                handoff_kind: "manual".to_owned(),
+                segment_ids: Some(vec![fixture.segment_ids[0].clone()]),
+            },
+        )
+        .expect("selected translation task should prepare");
+        assert_eq!(
+            selected_task.base_translation_version_id.as_deref(),
+            Some(initial.subtitle_version.id.as_str())
+        );
+        assert_eq!(
+            selected_task.authorized_segment_ids,
+            vec![fixture.segment_ids[0].clone()]
+        );
+        assert_eq!(selected_task.segment_count, 1);
+        let package_segments = fs::read_to_string(
+            task_directory(&fixture.store, &selected_task.id)
+                .expect("task directory")
+                .join("input/segments.json"),
+        )
+        .expect("segments should read");
+        assert!(package_segments.contains(&fixture.segment_ids[0]));
+        assert!(!package_segments.contains(&fixture.segment_ids[1]));
+
+        let selected_result = fixture.write_result(
+            "selected-result.json",
+            &json!({
+                "protocolVersion": PROTOCOL_VERSION,
+                "taskId": selected_task.id,
+                "sourceVersionId": fixture.source_version_id,
+                "targetLanguageCode": TARGET_LANGUAGE,
+                "translations": [{
+                    "segmentId": fixture.segment_ids[0],
+                    "translatedText": "明天车站前再见。"
+                }]
+            }),
+        );
+        let selected = import_translation_result(
+            &fixture.store,
+            ImportTranslationResultInput {
+                task_id: selected_task.id,
+                result_path: selected_result.to_string_lossy().into_owned(),
+            },
+        )
+        .expect("selected translation should apply");
+
+        assert_eq!(selected.validation.translation_count, 1);
+        assert_eq!(selected.subtitle_version.version_number, 2);
+        assert_eq!(
+            selected.subtitle_version.parent_version_id.as_deref(),
+            Some(initial.subtitle_version.id.as_str())
+        );
+        assert_eq!(
+            selected.subtitle_version.segments[0].text,
+            "明天车站前再见。"
+        );
+        assert_eq!(
+            selected.subtitle_version.segments[1].text,
+            initial.subtitle_version.segments[1].text
+        );
+        assert_eq!(
+            selected.subtitle_version.segments[1].lineage_id,
+            initial.subtitle_version.segments[1].lineage_id
+        );
+        let versions = subtitles::list_subtitle_versions(&fixture.store, &fixture.project_id)
+            .expect("versions should list");
+        assert!(versions.iter().any(|version| {
+            version.id == initial.subtitle_version.id
+                && version.segments[0].text == "明天还在车站前见。"
+                && !version.is_current
+        }));
     }
 
     #[test]

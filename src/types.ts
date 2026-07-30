@@ -242,8 +242,21 @@ export type SubtitleWord = {
 
 export type SubtitleSegment = SubtitleCue & {
   id: string;
+  lineageId: string;
   sourceSegmentId: string | null;
+  issueKind: "missing" | "duplicate" | "incorrect" | null;
   words: SubtitleWord[];
+};
+
+export type SubtitleSegmentEdit = {
+  segmentId: string;
+  text?: string;
+  issueKind?: "none" | "missing" | "duplicate" | "incorrect";
+};
+
+export type SubtitleGlobalReplacement = {
+  findText: string;
+  replaceText: string;
 };
 
 export type SubtitleVersion = {
@@ -340,8 +353,10 @@ export type TranslationTask = {
   sourceVersionId: string;
   sourceLanguageCode: string;
   targetLanguageCode: "zh-cn";
+  authorizedSegmentIds: string[];
   segmentCount: number;
   expectedProjectRevision: number;
+  baseTranslationVersionId: string | null;
   outputVersionId: string | null;
   validation: TranslationValidation | null;
   errorCode: string | null;

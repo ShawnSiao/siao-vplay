@@ -1,4 +1,5 @@
 use std::{
+    collections::{HashMap, HashSet},
     fs,
     path::{Path, PathBuf},
     time::{SystemTime, UNIX_EPOCH},
@@ -20,6 +21,8 @@ const LONG_GAP_MS: i64 = 30_000;
 const MAX_CUE_DURATION_MS: i64 = 10_000;
 const MIN_CUE_DURATION_MS: i64 = 200;
 const MAX_CHARACTERS_PER_SECOND: f64 = 25.0;
+const MAX_REVISION_TEXT_CHARACTERS: usize = 4_000;
+const MAX_TRACK_OFFSET_MS: i64 = 3_600_000;
 
 #[derive(Debug, Error)]
 pub enum SubtitleError {
@@ -45,6 +48,14 @@ pub enum SubtitleError {
     ProjectChanged,
     #[error("媒体在字幕预检后发生变化，请重新预检")]
     MediaChanged,
+    #[error("找不到字幕版本：{0}")]
+    VersionNotFound(String),
+    #[error("字幕版本已发生变化，请重新打开修正界面")]
+    VersionChanged,
+    #[error("字幕修正内容无效：{0}")]
+    InvalidRevision(String),
+    #[error("当前有翻译任务尚未结束，请先完成或取消翻译任务")]
+    ActiveTranslationTask,
     #[error("字幕预检结果无法保存：{0}")]
     Serialization(#[from] serde_json::Error),
 }
@@ -223,12 +234,14 @@ pub struct SubtitleWord {
 #[serde(rename_all = "camelCase")]
 pub struct SubtitleSegment {
     pub id: String,
+    pub lineage_id: String,
     pub source_segment_id: Option<String>,
     pub ordinal: usize,
     pub start_ms: i64,
     pub end_ms: i64,
     pub text: String,
     pub confidence: Option<f64>,
+    pub issue_kind: Option<String>,
     pub words: Vec<SubtitleWord>,
 }
 
@@ -253,6 +266,43 @@ pub struct SubtitleVersion {
     pub created_at_ms: i64,
     pub is_current: bool,
     pub segments: Vec<SubtitleSegment>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SubtitleSegmentEdit {
+    pub segment_id: String,
+    pub text: Option<String>,
+    pub issue_kind: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SubtitleGlobalReplacement {
+    pub find_text: String,
+    pub replace_text: String,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReviseSubtitleVersionInput {
+    pub project_id: String,
+    pub base_version_id: String,
+    pub expected_project_revision: i64,
+    #[serde(default)]
+    pub segment_edits: Vec<SubtitleSegmentEdit>,
+    pub global_replacement: Option<SubtitleGlobalReplacement>,
+    #[serde(default)]
+    pub offset_ms: i64,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RestoreSubtitleVersionInput {
+    pub project_id: String,
+    pub current_version_id: String,
+    pub restore_version_id: String,
+    pub expected_project_revision: i64,
 }
 
 #[derive(Clone, Copy)]
@@ -617,6 +667,452 @@ pub fn list_subtitle_versions(
         .collect()
 }
 
+pub fn revise_subtitle_version(
+    store: &ProjectStore,
+    input: ReviseSubtitleVersionInput,
+) -> Result<SubtitleVersion, SubtitleError> {
+    let project = store.get_project(&input.project_id)?;
+    if project.revision != input.expected_project_revision {
+        return Err(SubtitleError::ProjectChanged);
+    }
+    if input.offset_ms.unsigned_abs() > MAX_TRACK_OFFSET_MS as u64 {
+        return Err(SubtitleError::InvalidRevision(
+            "整轨时间偏移不能超过 3,600 秒".to_owned(),
+        ));
+    }
+    if input.segment_edits.is_empty() && input.global_replacement.is_none() && input.offset_ms == 0
+    {
+        return Err(SubtitleError::InvalidRevision(
+            "至少需要一项字幕修正".to_owned(),
+        ));
+    }
+
+    let versions = list_subtitle_versions(store, &input.project_id)?;
+    let base = versions
+        .into_iter()
+        .find(|version| version.id == input.base_version_id)
+        .ok_or_else(|| SubtitleError::VersionNotFound(input.base_version_id.clone()))?;
+    if !base.is_current {
+        return Err(SubtitleError::VersionChanged);
+    }
+    ensure_no_active_translation_task(store, &input.project_id)?;
+
+    let mut segments = base.segments.clone();
+    let segment_indexes = segments
+        .iter()
+        .enumerate()
+        .map(|(index, segment)| (segment.id.clone(), index))
+        .collect::<HashMap<_, _>>();
+    let mut edited_ids = HashSet::new();
+    let mut labels = Vec::new();
+
+    for edit in &input.segment_edits {
+        if !edited_ids.insert(edit.segment_id.clone()) {
+            return Err(SubtitleError::InvalidRevision(format!(
+                "字幕段重复提交：{}",
+                edit.segment_id
+            )));
+        }
+        let index = segment_indexes
+            .get(&edit.segment_id)
+            .copied()
+            .ok_or_else(|| {
+                SubtitleError::InvalidRevision(format!("字幕段不属于当前版本：{}", edit.segment_id))
+            })?;
+        let segment = &mut segments[index];
+        if let Some(text) = &edit.text {
+            let text = text.trim();
+            if text.is_empty() {
+                return Err(SubtitleError::InvalidRevision(
+                    "字幕文本不能为空".to_owned(),
+                ));
+            }
+            if text.chars().count() > MAX_REVISION_TEXT_CHARACTERS {
+                return Err(SubtitleError::InvalidRevision(format!(
+                    "单条字幕不能超过 {MAX_REVISION_TEXT_CHARACTERS} 个字符"
+                )));
+            }
+            if segment.text != text {
+                segment.text = text.to_owned();
+                segment.confidence = None;
+                segment.words.clear();
+            }
+        }
+        if let Some(issue_kind) = &edit.issue_kind {
+            segment.issue_kind = normalize_issue_kind(issue_kind)?;
+        }
+    }
+    if !input.segment_edits.is_empty() {
+        labels.push("逐句修正");
+    }
+
+    if let Some(replacement) = &input.global_replacement {
+        let find_text = replacement.find_text.trim();
+        if find_text.is_empty() {
+            return Err(SubtitleError::InvalidRevision(
+                "全局替换的查找文本不能为空".to_owned(),
+            ));
+        }
+        if find_text.chars().count() > 200 || replacement.replace_text.chars().count() > 200 {
+            return Err(SubtitleError::InvalidRevision(
+                "全局替换的查找或替换文本不能超过 200 个字符".to_owned(),
+            ));
+        }
+        let mut replacement_count = 0usize;
+        for segment in &mut segments {
+            if segment.text.contains(find_text) {
+                let replaced = segment
+                    .text
+                    .replace(find_text, replacement.replace_text.as_str());
+                if replaced.trim().is_empty() {
+                    return Err(SubtitleError::InvalidRevision(
+                        "全局替换不能产生空字幕".to_owned(),
+                    ));
+                }
+                segment.text = replaced;
+                segment.confidence = None;
+                segment.words.clear();
+                replacement_count += 1;
+            }
+        }
+        if replacement_count == 0 {
+            return Err(SubtitleError::InvalidRevision(
+                "当前字幕轨没有找到要替换的文本".to_owned(),
+            ));
+        }
+        labels.push("全局替换");
+    }
+
+    if input.offset_ms != 0 {
+        for segment in &mut segments {
+            segment.start_ms = shifted_time(segment.start_ms, input.offset_ms)?;
+            segment.end_ms = shifted_time(segment.end_ms, input.offset_ms)?;
+            for word in &mut segment.words {
+                word.start_ms = shifted_time(word.start_ms, input.offset_ms)?;
+                word.end_ms = shifted_time(word.end_ms, input.offset_ms)?;
+            }
+        }
+        labels.push("整轨偏移");
+    }
+    if segments == base.segments {
+        return Err(SubtitleError::InvalidRevision(
+            "字幕内容和问题标记没有变化".to_owned(),
+        ));
+    }
+
+    let cues = segments
+        .iter()
+        .map(|segment| SubtitleCue {
+            ordinal: segment.ordinal,
+            start_ms: segment.start_ms,
+            end_ms: segment.end_ms,
+            text: segment.text.clone(),
+            confidence: segment.confidence,
+        })
+        .collect::<Vec<_>>();
+    let preflight = inspect_cues(&cues, base.preflight.media_duration_ms);
+    if preflight.error_count > 0 {
+        let reason = preflight
+            .issues
+            .iter()
+            .find(|issue| issue.severity == SubtitleIssueSeverity::Error)
+            .map(|issue| issue.message.clone())
+            .unwrap_or_else(|| "修正后的字幕时间轴无效".to_owned());
+        return Err(SubtitleError::InvalidRevision(reason));
+    }
+
+    let source_sha256 = subtitle_revision_sha256(&segments)?;
+    persist_revision_version(
+        store,
+        &base,
+        &base,
+        &segments,
+        &preflight,
+        &format!("轻量修正 · {}", labels.join("、")),
+        &source_sha256,
+        input.expected_project_revision,
+    )
+}
+
+pub fn restore_subtitle_version(
+    store: &ProjectStore,
+    input: RestoreSubtitleVersionInput,
+) -> Result<SubtitleVersion, SubtitleError> {
+    let project = store.get_project(&input.project_id)?;
+    if project.revision != input.expected_project_revision {
+        return Err(SubtitleError::ProjectChanged);
+    }
+    if input.current_version_id == input.restore_version_id {
+        return Err(SubtitleError::InvalidRevision(
+            "当前版本不需要恢复".to_owned(),
+        ));
+    }
+    let versions = list_subtitle_versions(store, &input.project_id)?;
+    let current = versions
+        .iter()
+        .find(|version| version.id == input.current_version_id)
+        .cloned()
+        .ok_or_else(|| SubtitleError::VersionNotFound(input.current_version_id.clone()))?;
+    if !current.is_current {
+        return Err(SubtitleError::VersionChanged);
+    }
+    let restore = versions
+        .iter()
+        .find(|version| version.id == input.restore_version_id)
+        .cloned()
+        .ok_or_else(|| SubtitleError::VersionNotFound(input.restore_version_id.clone()))?;
+    if restore.track_id != current.track_id {
+        return Err(SubtitleError::InvalidRevision(
+            "只能恢复同一字幕轨的历史版本".to_owned(),
+        ));
+    }
+    ensure_no_active_translation_task(store, &input.project_id)?;
+    persist_revision_version(
+        store,
+        &current,
+        &restore,
+        &restore.segments,
+        &restore.preflight,
+        &format!("恢复自版本 {}", restore.version_number),
+        &restore.source_sha256,
+        input.expected_project_revision,
+    )
+}
+
+fn normalize_issue_kind(value: &str) -> Result<Option<String>, SubtitleError> {
+    match value.trim() {
+        "" | "none" => Ok(None),
+        "missing" | "duplicate" | "incorrect" => Ok(Some(value.trim().to_owned())),
+        _ => Err(SubtitleError::InvalidRevision(
+            "字幕问题标记无效".to_owned(),
+        )),
+    }
+}
+
+fn shifted_time(value: i64, offset_ms: i64) -> Result<i64, SubtitleError> {
+    value
+        .checked_add(offset_ms)
+        .filter(|shifted| *shifted >= 0)
+        .ok_or_else(|| SubtitleError::InvalidRevision("时间偏移不能让字幕早于视频开始".to_owned()))
+}
+
+fn subtitle_revision_sha256(segments: &[SubtitleSegment]) -> Result<String, SubtitleError> {
+    let semantic_content = segments
+        .iter()
+        .map(|segment| {
+            (
+                &segment.lineage_id,
+                &segment.source_segment_id,
+                segment.ordinal,
+                segment.start_ms,
+                segment.end_ms,
+                &segment.text,
+                segment.confidence,
+                &segment.issue_kind,
+                &segment.words,
+            )
+        })
+        .collect::<Vec<_>>();
+    let bytes = serde_json::to_vec(&semantic_content)?;
+    Ok(format!("{:x}", Sha256::digest(bytes)))
+}
+
+fn ensure_no_active_translation_task(
+    store: &ProjectStore,
+    project_id: &str,
+) -> Result<(), SubtitleError> {
+    let connection = store.connect()?;
+    let active = connection.query_row(
+        "SELECT EXISTS(
+            SELECT 1
+            FROM agent_tasks
+            WHERE project_id = ?1
+              AND status IN (
+                'awaiting_external_result', 'queued', 'running', 'validating'
+              )
+         )",
+        params![project_id],
+        |row| row.get::<_, bool>(0),
+    )?;
+    if active {
+        return Err(SubtitleError::ActiveTranslationTask);
+    }
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+fn persist_revision_version(
+    store: &ProjectStore,
+    current: &SubtitleVersion,
+    template: &SubtitleVersion,
+    segments: &[SubtitleSegment],
+    preflight: &SubtitlePreflightReport,
+    source_label: &str,
+    source_sha256: &str,
+    expected_project_revision: i64,
+) -> Result<SubtitleVersion, SubtitleError> {
+    if current.project_id != template.project_id
+        || current.track_id != template.track_id
+        || current.project_id.is_empty()
+    {
+        return Err(SubtitleError::InvalidRevision(
+            "字幕版本不属于同一项目和字幕轨".to_owned(),
+        ));
+    }
+    let timestamp = now_ms()?;
+    let version_id = Uuid::new_v4().to_string();
+    let new_project_revision = expected_project_revision + 1;
+    let preflight_json = serde_json::to_string(preflight)?;
+    let mut connection = store.connect()?;
+    let transaction = connection.transaction()?;
+    let current_state = transaction
+        .query_row(
+            "SELECT p.revision, m.source_sha256, t.current_version_id
+             FROM projects p
+             JOIN media_sources m ON m.project_id = p.id AND m.is_primary = 1
+             JOIN subtitle_tracks t ON t.id = ?2 AND t.project_id = p.id
+             WHERE p.id = ?1",
+            params![current.project_id, current.track_id],
+            |row| {
+                Ok((
+                    row.get::<_, i64>(0)?,
+                    row.get::<_, Option<String>>(1)?,
+                    row.get::<_, Option<String>>(2)?,
+                ))
+            },
+        )
+        .optional()?
+        .ok_or_else(|| StoreError::ProjectNotFound(current.project_id.clone()))?;
+    if current_state.0 != expected_project_revision
+        || current_state.2.as_deref() != Some(current.id.as_str())
+    {
+        return Err(SubtitleError::VersionChanged);
+    }
+    if current_state
+        .1
+        .as_deref()
+        .is_none_or(|value| !value.eq_ignore_ascii_case(&current.media_sha256))
+    {
+        return Err(SubtitleError::MediaChanged);
+    }
+    let active = transaction.query_row(
+        "SELECT EXISTS(
+            SELECT 1
+            FROM agent_tasks
+            WHERE project_id = ?1
+              AND status IN (
+                'awaiting_external_result', 'queued', 'running', 'validating'
+              )
+         )",
+        params![current.project_id],
+        |row| row.get::<_, bool>(0),
+    )?;
+    if active {
+        return Err(SubtitleError::ActiveTranslationTask);
+    }
+    let version_number = transaction.query_row(
+        "SELECT COALESCE(MAX(version_number), 0) + 1
+         FROM subtitle_versions
+         WHERE track_id = ?1",
+        params![current.track_id],
+        |row| row.get::<_, i64>(0),
+    )?;
+    transaction.execute(
+        "INSERT INTO subtitle_versions (
+            id, track_id, project_id, version_number, status, source_kind,
+            source_label, source_sha256, media_sha256, language_code,
+            project_revision, preflight_json, created_at_ms,
+            parent_version_id, source_task_id
+         ) VALUES (
+            ?1, ?2, ?3, ?4, ?5, ?6,
+            ?7, ?8, ?9, ?10, ?11, ?12, ?13,
+            ?14, NULL
+         )",
+        params![
+            version_id,
+            current.track_id,
+            current.project_id,
+            version_number,
+            template.status,
+            template.source_kind,
+            source_label,
+            source_sha256,
+            template.media_sha256,
+            template.language_code,
+            new_project_revision,
+            preflight_json,
+            timestamp,
+            current.id,
+        ],
+    )?;
+    for segment in segments {
+        let segment_id = Uuid::new_v4().to_string();
+        transaction.execute(
+            "INSERT INTO subtitle_segments (
+                id, version_id, lineage_id, source_segment_id, ordinal,
+                start_ms, end_ms, text, confidence, issue_kind
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+            params![
+                segment_id,
+                version_id,
+                segment.lineage_id,
+                segment.source_segment_id,
+                i64::try_from(segment.ordinal).map_err(|_| {
+                    StoreError::Validation("字幕段序号超出支持范围".to_owned())
+                })?,
+                segment.start_ms,
+                segment.end_ms,
+                segment.text,
+                segment.confidence,
+                segment.issue_kind,
+            ],
+        )?;
+        for word in &segment.words {
+            transaction.execute(
+                "INSERT INTO subtitle_words (
+                    id, segment_id, ordinal, start_ms, end_ms, text, confidence
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                params![
+                    Uuid::new_v4().to_string(),
+                    segment_id,
+                    i64::try_from(word.ordinal).map_err(|_| {
+                        StoreError::Validation("字幕词序号超出支持范围".to_owned())
+                    })?,
+                    word.start_ms,
+                    word.end_ms,
+                    word.text,
+                    word.confidence,
+                ],
+            )?;
+        }
+    }
+    transaction.execute(
+        "UPDATE subtitle_tracks
+         SET current_version_id = ?2, updated_at_ms = ?3
+         WHERE id = ?1",
+        params![current.track_id, version_id, timestamp],
+    )?;
+    let updated = transaction.execute(
+        "UPDATE projects
+         SET revision = ?2, updated_at_ms = ?3
+         WHERE id = ?1 AND revision = ?4",
+        params![
+            current.project_id,
+            new_project_revision,
+            timestamp,
+            expected_project_revision
+        ],
+    )?;
+    if updated != 1 {
+        return Err(SubtitleError::ProjectChanged);
+    }
+    transaction.commit()?;
+    list_subtitle_versions(store, &current.project_id)?
+        .into_iter()
+        .find(|version| version.id == version_id)
+        .ok_or_else(|| StoreError::Validation("字幕修正已写入，但无法重新读取".to_owned()).into())
+}
+
 fn persist_import(
     store: &ProjectStore,
     project_id: &str,
@@ -722,8 +1218,9 @@ fn persist_import(
         let segment_id = Uuid::new_v4().to_string();
         transaction.execute(
             "INSERT INTO subtitle_segments (
-                id, version_id, ordinal, start_ms, end_ms, text, confidence
-             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                id, version_id, lineage_id, ordinal,
+                start_ms, end_ms, text, confidence
+             ) VALUES (?1, ?2, ?1, ?3, ?4, ?5, ?6, ?7)",
             params![
                 segment_id,
                 version_id,
@@ -793,29 +1290,33 @@ fn load_segments(
     version_id: &str,
 ) -> Result<Vec<SubtitleSegment>, SubtitleError> {
     let mut statement = connection.prepare(
-        "SELECT id, source_segment_id, ordinal, start_ms, end_ms, text, confidence
+        "SELECT
+            id, COALESCE(lineage_id, id), source_segment_id, ordinal,
+            start_ms, end_ms, text, confidence, issue_kind
          FROM subtitle_segments
          WHERE version_id = ?1
          ORDER BY ordinal ASC",
     )?;
     let mut segments = statement
         .query_map(params![version_id], |row| {
-            let ordinal = row.get::<_, i64>(2)?;
+            let ordinal = row.get::<_, i64>(3)?;
             let ordinal = usize::try_from(ordinal).map_err(|error| {
                 rusqlite::Error::FromSqlConversionFailure(
-                    2,
+                    3,
                     rusqlite::types::Type::Integer,
                     Box::new(error),
                 )
             })?;
             Ok(SubtitleSegment {
                 id: row.get(0)?,
-                source_segment_id: row.get(1)?,
+                lineage_id: row.get(1)?,
+                source_segment_id: row.get(2)?,
                 ordinal,
-                start_ms: row.get(3)?,
-                end_ms: row.get(4)?,
-                text: row.get(5)?,
-                confidence: row.get(6)?,
+                start_ms: row.get(4)?,
+                end_ms: row.get(5)?,
+                text: row.get(6)?,
+                confidence: row.get(7)?,
+                issue_kind: row.get(8)?,
                 words: Vec::new(),
             })
         })?
@@ -1304,6 +1805,58 @@ mod tests {
         (temp, store, project.id)
     }
 
+    fn create_store_with_subtitles() -> (tempfile::TempDir, ProjectStore, String, SubtitleVersion) {
+        let (temp, store, project_id) = create_store_with_media();
+        let media_sha256 = "a".repeat(64);
+        let project = store.get_project(&project_id).expect("project should load");
+        store
+            .record_media_probe(
+                &project_id,
+                &project.media_source.id,
+                &media_sha256,
+                r#"{"containerFormats":["mov"],"durationMs":5000,"sizeBytes":5,"bitRate":null,"videoStreams":[],"audioStreams":[],"subtitleStreams":[]}"#,
+                5,
+                Some(1),
+            )
+            .expect("media probe should be recorded");
+        let cues = vec![
+            SubtitleCue {
+                ordinal: 1,
+                start_ms: 0,
+                end_ms: 1_500,
+                text: "First name".to_owned(),
+                confidence: Some(0.9),
+            },
+            SubtitleCue {
+                ordinal: 2,
+                start_ms: 1_700,
+                end_ms: 3_000,
+                text: "Second name".to_owned(),
+                confidence: Some(0.8),
+            },
+        ];
+        let version = persist_import(
+            &store,
+            &project_id,
+            SubtitleImportPreview {
+                format: SubtitleFileFormat::Srt,
+                source_label: "captions.srt".to_owned(),
+                source_sha256: "b".repeat(64),
+                language_code: "en".to_owned(),
+                expected_project_revision: 1,
+                expected_media_sha256: media_sha256,
+                preflight: inspect_cues(&cues, Some(5_000)),
+                can_import: true,
+                cues,
+            },
+            SubtitleSourceKind::ImportedFile,
+            SubtitleVersionStatus::Ready,
+            None,
+        )
+        .expect("subtitle fixture should persist");
+        (temp, store, project_id, version)
+    }
+
     #[test]
     fn parses_srt_and_webvtt_with_multiline_cues() {
         let srt = parse_srt(
@@ -1450,6 +2003,137 @@ mod tests {
         assert_eq!(versions[0].segments[0].text, "Revised");
         assert_eq!(versions[1].segments[0].text, "First");
         assert!(!versions[1].is_current);
+    }
+
+    #[test]
+    fn revision_edits_replaces_offsets_and_marks_without_mutating_the_parent() {
+        let (_temp, store, project_id, original) = create_store_with_subtitles();
+        let revised = revise_subtitle_version(
+            &store,
+            ReviseSubtitleVersionInput {
+                project_id: project_id.clone(),
+                base_version_id: original.id.clone(),
+                expected_project_revision: 2,
+                segment_edits: vec![SubtitleSegmentEdit {
+                    segment_id: original.segments[0].id.clone(),
+                    text: Some("Edited name".to_owned()),
+                    issue_kind: Some("incorrect".to_owned()),
+                }],
+                global_replacement: Some(SubtitleGlobalReplacement {
+                    find_text: "name".to_owned(),
+                    replace_text: "character".to_owned(),
+                }),
+                offset_ms: 100,
+            },
+        )
+        .expect("revision should persist");
+
+        assert_eq!(revised.version_number, 2);
+        assert_eq!(
+            revised.parent_version_id.as_deref(),
+            Some(original.id.as_str())
+        );
+        assert_eq!(revised.project_revision, 3);
+        assert_eq!(revised.segments[0].text, "Edited character");
+        assert_eq!(revised.segments[0].start_ms, 100);
+        assert_eq!(revised.segments[0].issue_kind.as_deref(), Some("incorrect"));
+        assert_eq!(
+            revised.segments[0].lineage_id,
+            original.segments[0].lineage_id
+        );
+        assert_eq!(revised.segments[1].text, "Second character");
+
+        let versions = list_subtitle_versions(&store, &project_id).expect("versions should list");
+        let parent = versions
+            .iter()
+            .find(|version| version.id == original.id)
+            .expect("parent should remain");
+        assert_eq!(parent.segments[0].text, "First name");
+        assert_eq!(parent.segments[0].start_ms, 0);
+        assert_eq!(parent.segments[0].issue_kind, None);
+        assert!(!parent.is_current);
+    }
+
+    #[test]
+    fn invalid_negative_offset_does_not_create_a_version() {
+        let (_temp, store, project_id, original) = create_store_with_subtitles();
+        let error = revise_subtitle_version(
+            &store,
+            ReviseSubtitleVersionInput {
+                project_id: project_id.clone(),
+                base_version_id: original.id,
+                expected_project_revision: 2,
+                segment_edits: Vec::new(),
+                global_replacement: None,
+                offset_ms: -1,
+            },
+        )
+        .expect_err("negative first timestamp must be rejected");
+
+        assert!(matches!(error, SubtitleError::InvalidRevision(_)));
+        assert_eq!(
+            list_subtitle_versions(&store, &project_id)
+                .expect("versions should list")
+                .len(),
+            1
+        );
+        assert_eq!(
+            store
+                .get_project(&project_id)
+                .expect("project should load")
+                .revision,
+            2
+        );
+    }
+
+    #[test]
+    fn restoring_history_creates_a_new_immutable_version() {
+        let (_temp, store, project_id, original) = create_store_with_subtitles();
+        let revised = revise_subtitle_version(
+            &store,
+            ReviseSubtitleVersionInput {
+                project_id: project_id.clone(),
+                base_version_id: original.id.clone(),
+                expected_project_revision: 2,
+                segment_edits: vec![SubtitleSegmentEdit {
+                    segment_id: original.segments[0].id.clone(),
+                    text: Some("Edited".to_owned()),
+                    issue_kind: None,
+                }],
+                global_replacement: None,
+                offset_ms: 0,
+            },
+        )
+        .expect("revision should persist");
+        let restored = restore_subtitle_version(
+            &store,
+            RestoreSubtitleVersionInput {
+                project_id: project_id.clone(),
+                current_version_id: revised.id.clone(),
+                restore_version_id: original.id.clone(),
+                expected_project_revision: 3,
+            },
+        )
+        .expect("history should restore as a new version");
+
+        assert_eq!(restored.version_number, 3);
+        assert_eq!(
+            restored.parent_version_id.as_deref(),
+            Some(revised.id.as_str())
+        );
+        assert_eq!(restored.segments[0].text, original.segments[0].text);
+        assert_eq!(
+            restored.segments[0].lineage_id,
+            original.segments[0].lineage_id
+        );
+        assert_ne!(restored.id, original.id);
+        assert!(restored.is_current);
+        assert_eq!(
+            list_subtitle_versions(&store, &project_id)
+                .expect("versions should list")
+                .len(),
+            3
+        );
     }
 
     #[test]

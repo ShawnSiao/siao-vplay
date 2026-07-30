@@ -10,7 +10,9 @@ import type {
   MediaRuntimeStatus,
   Project,
   RemoteMediaPreview,
+  SubtitleGlobalReplacement,
   SubtitleImportPreview,
+  SubtitleSegmentEdit,
   SubtitleVersion,
   TranscriptionJob,
   TranscriptionRuntimeStatus,
@@ -73,6 +75,10 @@ export async function listProjects(): Promise<Project[]> {
     return [];
   }
   return invoke<Project[]>("list_projects");
+}
+
+export async function getProject(projectId: string): Promise<Project> {
+  return invoke<Project>("get_project", { projectId });
 }
 
 export async function chooseLocalVideo(): Promise<string | null> {
@@ -273,6 +279,42 @@ export async function listSubtitleVersions(
   return invoke<SubtitleVersion[]>("list_subtitle_versions", { projectId });
 }
 
+export async function reviseSubtitleVersion(
+  projectId: string,
+  baseVersionId: string,
+  expectedProjectRevision: number,
+  segmentEdits: SubtitleSegmentEdit[] = [],
+  globalReplacement: SubtitleGlobalReplacement | null = null,
+  offsetMs = 0,
+): Promise<SubtitleVersion> {
+  return invoke<SubtitleVersion>("revise_subtitle_version", {
+    input: {
+      projectId,
+      baseVersionId,
+      expectedProjectRevision,
+      segmentEdits,
+      globalReplacement,
+      offsetMs,
+    },
+  });
+}
+
+export async function restoreSubtitleVersion(
+  projectId: string,
+  currentVersionId: string,
+  restoreVersionId: string,
+  expectedProjectRevision: number,
+): Promise<SubtitleVersion> {
+  return invoke<SubtitleVersion>("restore_subtitle_version", {
+    input: {
+      projectId,
+      currentVersionId,
+      restoreVersionId,
+      expectedProjectRevision,
+    },
+  });
+}
+
 export async function inspectEmbeddedSubtitle(
   projectId: string,
   streamIndex: number,
@@ -387,9 +429,10 @@ export async function chooseTranslationResultFile(): Promise<string | null> {
 export async function prepareTranslationTask(
   projectId: string,
   handoffKind: "manual" | "codex",
+  segmentIds?: string[],
 ): Promise<TranslationTask> {
   return invoke<TranslationTask>("prepare_translation_task", {
-    input: { projectId, handoffKind },
+    input: { projectId, handoffKind, segmentIds },
   });
 }
 

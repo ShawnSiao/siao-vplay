@@ -25,6 +25,7 @@ type TranslationDialogProps = {
   projectId: string;
   sourceVersion: SubtitleVersion | null;
   translationVersion: SubtitleVersion | null;
+  requestedSegmentIds?: string[];
   onClose: () => void;
   onPrepareOriginal: () => void;
   onTaskCompleted: (
@@ -101,11 +102,21 @@ export function TranslationDialog({
   projectId,
   sourceVersion,
   translationVersion,
+  requestedSegmentIds,
   onClose,
   onPrepareOriginal,
   onTaskCompleted,
 }: TranslationDialogProps) {
   const notifiedTaskRef = useRef<string | null>(null);
+  const requestedKey = [...(requestedSegmentIds ?? [])].sort().join("|");
+  const requestedSet = useMemo(
+    () => new Set(requestedSegmentIds ?? []),
+    [requestedSegmentIds],
+  );
+  const selectedCount = requestedSet.size || sourceVersion?.segments.length || 0;
+  const isSelectedRetranslation =
+    requestedSet.size > 0 &&
+    requestedSet.size < (sourceVersion?.segments.length ?? 0);
   const [handoff, setHandoff] = useState<HandoffKind>("codex");
   const [runtime, setRuntime] = useState<CodexRuntimeStatus | null>(null);
   const [task, setTask] = useState<TranslationTask | null>(null);
@@ -141,14 +152,26 @@ export function TranslationDialog({
         }
         setRuntime(nextRuntime);
         const activeTask = tasks.find((item) => activeStatuses.has(item.status));
+        const taskMatchesSelection = (item: TranslationTask) => {
+          const taskKey = [...item.authorizedSegmentIds].sort().join("|");
+          if (requestedKey) {
+            return taskKey === requestedKey;
+          }
+          return item.segmentCount === sourceVersion?.segments.length;
+        };
         const currentTask =
           activeTask ??
           tasks.find(
             (item) =>
+              taskMatchesSelection(item) &&
               item.sourceVersionId === sourceVersion?.id &&
               item.outputVersionId === translationVersion?.id,
           ) ??
-          tasks.find((item) => item.sourceVersionId === sourceVersion?.id) ??
+          tasks.find(
+            (item) =>
+              taskMatchesSelection(item) &&
+              item.sourceVersionId === sourceVersion?.id,
+          ) ??
           null;
         setTask(currentTask);
         if (currentTask) {
@@ -168,7 +191,13 @@ export function TranslationDialog({
     return () => {
       active = false;
     };
-  }, [projectId, sourceVersion?.id, translationVersion?.id]);
+  }, [
+    projectId,
+    requestedKey,
+    sourceVersion?.id,
+    sourceVersion?.segments.length,
+    translationVersion?.id,
+  ]);
 
   useEffect(() => {
     if (
@@ -244,7 +273,9 @@ export function TranslationDialog({
     setError(null);
     setCopyNotice(null);
     try {
-      const prepared = await prepareTranslationTask(projectId, handoff);
+      const prepared = requestedSegmentIds?.length
+        ? await prepareTranslationTask(projectId, handoff, requestedSegmentIds)
+        : await prepareTranslationTask(projectId, handoff);
       setTask(prepared);
       if (handoff === "codex") {
         const started = await startCodexTranslationTask(prepared.id);
@@ -500,8 +531,12 @@ export function TranslationDialog({
 
   return (
     <Dialog
-      title="生成简体中文字幕"
-      eyebrow="原文字幕保持不变，结果先保存为草稿"
+      title={isSelectedRetranslation ? "重新翻译选中字幕" : "生成简体中文字幕"}
+      eyebrow={
+        isSelectedRetranslation
+          ? `只处理选中的 ${selectedCount} 条原文字幕`
+          : "原文字幕保持不变，结果先保存为草稿"
+      }
       onClose={running ? onClose : busy ? () => undefined : onClose}
       actions={actions}
     >
@@ -543,7 +578,11 @@ export function TranslationDialog({
             <div>
               <span>目标字幕</span>
               <strong>简体中文</strong>
-              <small>独立草稿 · 不覆盖原文</small>
+              <small>
+                {isSelectedRetranslation
+                  ? `更新 ${selectedCount} 条 · 其余译文保持不变`
+                  : "独立草稿 · 不覆盖原文"}
+              </small>
             </div>
           </div>
 
@@ -596,7 +635,12 @@ export function TranslationDialog({
             </div>
             <div className="translation-scope-grid">
               {[
-                ["原文字幕文本", `${sourceVersion.segments.length} 条`],
+                [
+                  isSelectedRetranslation
+                    ? "选中的原文字幕文本"
+                    : "原文字幕文本",
+                  `${selectedCount} 条`,
+                ],
                 ["字幕时间码", "用于保持播放同步"],
                 ["任务与字幕版本标识", "用于拒绝过期结果"],
                 ["人物与术语上下文", "当前为空"],
@@ -634,7 +678,15 @@ export function TranslationDialog({
           ) : null}
           {taskVersion ? (
             <div className="translation-samples">
-              {taskVersion.segments.slice(0, 4).map((segment) => {
+              {taskVersion.segments
+                .filter(
+                  (segment) =>
+                    !isSelectedRetranslation ||
+                    (segment.sourceSegmentId !== null &&
+                      requestedSet.has(segment.sourceSegmentId)),
+                )
+                .slice(0, 4)
+                .map((segment) => {
                 const source = segment.sourceSegmentId
                   ? sourceById.get(segment.sourceSegmentId)
                   : null;
@@ -644,7 +696,7 @@ export function TranslationDialog({
                     <strong>{segment.text}</strong>
                   </div>
                 );
-              })}
+                })}
             </div>
           ) : (
             <div className="translation-loading" role="status">

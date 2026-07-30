@@ -6,6 +6,7 @@ import { PlayerScreen } from "./components/PlayerScreen";
 import { PreparationScreen } from "./components/PreparationScreen";
 import { RemoteUrlDialog } from "./components/RemoteUrlDialog";
 import { SubtitleImportDialog } from "./components/SubtitleImportDialog";
+import { SubtitleRevisionDialog } from "./components/SubtitleRevisionDialog";
 import { TranslationDialog } from "./components/TranslationDialog";
 import {
   chooseLocalVideo,
@@ -14,6 +15,7 @@ import {
   deleteProject,
   ensureProjectPoster,
   getAppStatus,
+  getProject,
   getMediaRuntimeStatus,
   isDesktopApp,
   listProjects,
@@ -57,6 +59,10 @@ export default function App() {
   );
   const [subtitleDialogOpen, setSubtitleDialogOpen] = useState(false);
   const [translationDialogOpen, setTranslationDialogOpen] = useState(false);
+  const [translationSegmentIds, setTranslationSegmentIds] = useState<
+    string[] | undefined
+  >(undefined);
+  const [revisionDialogOpen, setRevisionDialogOpen] = useState(false);
   const [remoteUrlDialogOpen, setRemoteUrlDialogOpen] = useState(false);
   const [deleteCandidate, setDeleteCandidate] = useState<Project | null>(null);
   const [busyMessage, setBusyMessage] = useState<string | null>(null);
@@ -221,6 +227,8 @@ export default function App() {
     setSubtitleVersions([]);
     setSubtitleDialogOpen(false);
     setTranslationDialogOpen(false);
+    setTranslationSegmentIds(undefined);
+    setRevisionDialogOpen(false);
     setRemoteUrlDialogOpen(false);
     void refreshProjects();
   }, [refreshProjects]);
@@ -393,6 +401,29 @@ export default function App() {
           ? `中文字幕草稿已生成，另有 ${task.validation.warningCount} 项一致性提示。`
           : `已生成 ${task.segmentCount} 条简体中文字幕草稿，可以开始抽查。`,
       );
+      const updatedProject = await getProject(task.projectId);
+      setActiveProject(updatedProject);
+      setProjects((current) =>
+        current.map((project) =>
+          project.id === updatedProject.id ? updatedProject : project,
+        ),
+      );
+      void refreshProjects();
+    },
+    [mergeSubtitleVersion, refreshProjects],
+  );
+
+  const handleSubtitleVersionCreated = useCallback(
+    async (version: SubtitleVersion, message: string) => {
+      mergeSubtitleVersion(version);
+      const updatedProject = await getProject(version.projectId);
+      setActiveProject(updatedProject);
+      setProjects((current) =>
+        current.map((project) =>
+          project.id === updatedProject.id ? updatedProject : project,
+        ),
+      );
+      setToast(message);
       void refreshProjects();
     },
     [mergeSubtitleVersion, refreshProjects],
@@ -444,7 +475,11 @@ export default function App() {
           }
           onBack={returnToLibrary}
           onManageSubtitles={() => setSubtitleDialogOpen(true)}
-          onManageTranslation={() => setTranslationDialogOpen(true)}
+          onManageTranslation={() => {
+            setTranslationSegmentIds(undefined);
+            setTranslationDialogOpen(true);
+          }}
+          onReviseSubtitles={() => setRevisionDialogOpen(true)}
           onNeedProxy={() => void prepareAndOpen(activeProject, true)}
           onPersist={persistPlayback}
           onError={(message) => {
@@ -466,13 +501,12 @@ export default function App() {
           }
           onClose={() => setSubtitleDialogOpen(false)}
           onImported={(version) => {
-            mergeSubtitleVersion(version);
-            setToast(
+            void handleSubtitleVersionCreated(
+              version,
               version.sourceKind === "transcription"
                 ? `已生成 ${version.segments.length} 条原文字幕草稿，可以开始抽查。`
                 : `已导入 ${version.segments.length} 条原文字幕，保存为版本 ${version.versionNumber}。`,
             );
-            void refreshProjects();
           }}
         />
       ) : null}
@@ -491,12 +525,30 @@ export default function App() {
                 version.role === "translation" && version.isCurrent,
             ) ?? null
           }
-          onClose={() => setTranslationDialogOpen(false)}
+          requestedSegmentIds={translationSegmentIds}
+          onClose={() => {
+            setTranslationDialogOpen(false);
+            setTranslationSegmentIds(undefined);
+          }}
           onPrepareOriginal={() => {
             setTranslationDialogOpen(false);
             setSubtitleDialogOpen(true);
           }}
           onTaskCompleted={handleTranslationCompleted}
+        />
+      ) : null}
+
+      {revisionDialogOpen && activeProject ? (
+        <SubtitleRevisionDialog
+          project={activeProject}
+          versions={subtitleVersions}
+          onClose={() => setRevisionDialogOpen(false)}
+          onVersionCreated={handleSubtitleVersionCreated}
+          onRetranslate={(segmentIds) => {
+            setRevisionDialogOpen(false);
+            setTranslationSegmentIds(segmentIds);
+            setTranslationDialogOpen(true);
+          }}
         />
       ) : null}
 

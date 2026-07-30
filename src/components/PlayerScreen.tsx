@@ -19,6 +19,7 @@ type PlayerScreenProps = {
   onBack: () => void;
   onManageSubtitles: () => void;
   onManageTranslation: () => void;
+  onReviseSubtitles: () => void;
   onNeedProxy: (reason: string) => void;
   onPersist: (values: PlaybackValues) => Promise<void>;
   onError: (message: string) => void;
@@ -32,6 +33,7 @@ export function PlayerScreen({
   onBack,
   onManageSubtitles,
   onManageTranslation,
+  onReviseSubtitles,
   onNeedProxy,
   onPersist,
   onError,
@@ -330,6 +332,14 @@ export function PlayerScreen({
             {currentTranslation
               ? `中文字幕 · ${currentTranslation.segments.length}`
               : "生成中文字幕"}
+          </button>
+          <button
+            className="button quiet small"
+            type="button"
+            disabled={!currentSubtitle}
+            onClick={onReviseSubtitles}
+          >
+            修正字幕
           </button>
           <span className={`status-pill ${videoReady ? "ready" : "warning"}`}>
             {videoReady ? "画面已确认" : "正在确认画面"}

@@ -14,7 +14,7 @@ use crate::domain::{
     UpdatePlaybackStateInput,
 };
 
-const CURRENT_SCHEMA_VERSION: i64 = 8;
+const CURRENT_SCHEMA_VERSION: i64 = 9;
 
 #[derive(Clone, Debug)]
 pub(crate) struct RemoteImportProvenance {
@@ -819,6 +819,16 @@ impl ProjectStore {
                 params![now_ms()?],
             )?;
             transaction.commit()?;
+            current_version = 8;
+        }
+        if current_version < 9 {
+            let transaction = connection.transaction()?;
+            Self::apply_migration_9(&transaction)?;
+            transaction.execute(
+                "INSERT INTO schema_migrations (version, applied_at_ms) VALUES (9, ?1)",
+                params![now_ms()?],
+            )?;
+            transaction.commit()?;
         }
         Ok(())
     }
@@ -1177,6 +1187,44 @@ impl ProjectStore {
              CREATE INDEX subtitle_segments_source
              ON subtitle_segments(source_segment_id)
              WHERE source_segment_id IS NOT NULL;",
+        )?;
+        Ok(())
+    }
+
+    fn apply_migration_9(transaction: &Transaction<'_>) -> Result<(), StoreError> {
+        transaction.execute_batch(
+            "ALTER TABLE subtitle_segments
+             ADD COLUMN lineage_id TEXT;
+
+             UPDATE subtitle_segments
+             SET lineage_id = id
+             WHERE lineage_id IS NULL;
+
+             CREATE INDEX subtitle_segments_lineage
+             ON subtitle_segments(lineage_id);
+
+             ALTER TABLE subtitle_segments
+             ADD COLUMN issue_kind TEXT
+                 CHECK (
+                    issue_kind IS NULL
+                    OR issue_kind IN ('missing', 'duplicate', 'incorrect')
+                 );
+
+             ALTER TABLE agent_tasks
+             ADD COLUMN base_translation_version_id TEXT
+                 REFERENCES subtitle_versions(id) ON DELETE SET NULL;
+
+             UPDATE agent_tasks
+             SET base_translation_version_id = (
+                SELECT current_version_id
+                FROM subtitle_tracks
+                WHERE subtitle_tracks.project_id = agent_tasks.project_id
+                  AND subtitle_tracks.role = 'translation'
+                  AND subtitle_tracks.language_code = 'zh-cn'
+             )
+             WHERE status IN (
+                'awaiting_external_result', 'queued', 'running', 'validating'
+             );",
         )?;
         Ok(())
     }
