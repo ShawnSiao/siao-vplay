@@ -1098,6 +1098,41 @@ describe("App", () => {
     ).toBeInTheDocument();
   });
 
+  it("keeps understanding and learning available before subtitles exist", async () => {
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "继续观看" }));
+
+    const understandButton = await screen.findByRole("button", {
+      name: "理解",
+    });
+    const learnButton = screen.getByRole("button", { name: "学习" });
+    expect(understandButton).toBeEnabled();
+    expect(learnButton).toBeEnabled();
+
+    fireEvent.click(understandButton);
+    expect(
+      await screen.findByText("场景理解以当前播放点之前的真实字幕和关键帧为依据。"),
+    ).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: "生成或导入原文字幕" }),
+    );
+    expect(
+      await screen.findByRole("heading", { name: "准备原文字幕" }),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "关闭" }));
+
+    fireEvent.click(learnButton);
+    expect(
+      await screen.findByText("词义查询只使用真实原文字幕和已有的简体中文字幕。"),
+    ).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: "生成或导入原文字幕" }),
+    );
+    expect(
+      await screen.findByRole("heading", { name: "准备原文字幕" }),
+    ).toBeInTheDocument();
+  });
+
   it("copies a manual explanation prompt, exposes controlled frames, and imports JSON", async () => {
     desktopMocks.listSubtitleVersions.mockResolvedValue([
       subtitleVersion,

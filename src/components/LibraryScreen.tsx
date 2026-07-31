@@ -167,7 +167,8 @@ export function LibraryScreen({
         </div>
       </header>
 
-      <main className="library-content">
+      <div className="library-scroll">
+        <main className="library-content">
         <header className="library-header">
           <div>
             <p className="eyebrow">本地优先的跨语言播放器</p>
@@ -277,7 +278,8 @@ export function LibraryScreen({
             </div>
           )}
         </section>
-      </main>
+        </main>
+      </div>
     </div>
   );
 }

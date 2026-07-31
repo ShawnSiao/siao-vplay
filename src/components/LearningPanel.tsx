@@ -39,6 +39,7 @@ type LearningPanelProps = {
   translationVersion: SubtitleVersion | null;
   sourceSegment: SubtitleSegment | null;
   translationSegment: SubtitleSegment | null;
+  onPrepareSubtitles: () => void;
   onClose: () => void;
   onJump: (positionMs: number) => void;
 };
@@ -135,6 +136,7 @@ export function LearningPanel({
   translationVersion,
   sourceSegment,
   translationSegment,
+  onPrepareSubtitles,
   onClose,
   onJump,
 }: LearningPanelProps) {
@@ -543,6 +545,13 @@ export function LearningPanel({
           <div className="learning-empty">
             <strong>需要先准备原文字幕</strong>
             <p>词义查询只使用真实原文字幕和已有的简体中文字幕。</p>
+            <button
+              className="button primary small"
+              type="button"
+              onClick={onPrepareSubtitles}
+            >
+              生成或导入原文字幕
+            </button>
           </div>
         ) : !sourceSegment ? (
           <div className="learning-empty">

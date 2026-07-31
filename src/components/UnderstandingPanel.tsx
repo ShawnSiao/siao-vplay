@@ -29,6 +29,7 @@ type UnderstandingPanelProps = {
   playbackCutoffMs: number;
   sourceVersion: SubtitleVersion | null;
   translationVersion: SubtitleVersion | null;
+  onPrepareSubtitles: () => void;
   onClose: () => void;
 };
 
@@ -69,6 +70,7 @@ export function UnderstandingPanel({
   playbackCutoffMs,
   sourceVersion,
   translationVersion,
+  onPrepareSubtitles,
   onClose,
 }: UnderstandingPanelProps) {
   const handledCompletionRef = useRef<string | null>(null);
@@ -418,6 +420,13 @@ export function UnderstandingPanel({
           <div className="understanding-empty">
             <strong>需要先准备原文字幕</strong>
             <p>场景理解以当前播放点之前的真实字幕和关键帧为依据。</p>
+            <button
+              className="button primary small"
+              type="button"
+              onClick={onPrepareSubtitles}
+            >
+              生成或导入原文字幕
+            </button>
           </div>
         ) : !task ? (
           <div className="understanding-setup">

@@ -368,7 +368,6 @@ export function PlayerScreen({
           <button
             className={panelMode === "understand" ? "active" : ""}
             type="button"
-            disabled={!currentSubtitle}
             onClick={() => setPanelMode("understand")}
           >
             理解
@@ -376,7 +375,6 @@ export function PlayerScreen({
           <button
             className={panelMode === "learn" ? "active learning-active" : ""}
             type="button"
-            disabled={!currentSubtitle}
             onClick={() => setPanelMode("learn")}
           >
             学习
@@ -607,6 +605,7 @@ export function PlayerScreen({
             playbackCutoffMs={positionMs}
             sourceVersion={currentSubtitle}
             translationVersion={currentTranslation}
+            onPrepareSubtitles={onManageSubtitles}
             onClose={() => setPanelMode("watch")}
           />
         ) : panelMode === "learn" ? (
@@ -618,6 +617,7 @@ export function PlayerScreen({
             translationVersion={currentTranslation}
             sourceSegment={activeOriginal}
             translationSegment={activeTranslation}
+            onPrepareSubtitles={onManageSubtitles}
             onClose={() => setPanelMode("watch")}
             onJump={seekTo}
           />
