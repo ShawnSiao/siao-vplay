@@ -14,7 +14,7 @@ use crate::domain::{
     SubtitleDisplayMode, UpdatePlaybackStateInput,
 };
 
-const CURRENT_SCHEMA_VERSION: i64 = 13;
+const CURRENT_SCHEMA_VERSION: i64 = 14;
 
 #[derive(Clone, Debug)]
 pub(crate) struct RemoteImportProvenance {
@@ -902,6 +902,16 @@ impl ProjectStore {
                 params![now_ms()?],
             )?;
             transaction.commit()?;
+            current_version = 13;
+        }
+        if current_version < 14 {
+            let transaction = connection.transaction()?;
+            Self::apply_migration_14(&transaction)?;
+            transaction.execute(
+                "INSERT INTO schema_migrations (version, applied_at_ms) VALUES (14, ?1)",
+                params![now_ms()?],
+            )?;
+            transaction.commit()?;
         }
         Ok(())
     }
@@ -1585,6 +1595,80 @@ impl ProjectStore {
         Ok(())
     }
 
+    fn apply_migration_14(transaction: &Transaction<'_>) -> Result<(), StoreError> {
+        transaction.execute_batch(
+            "ALTER TABLE transcription_jobs RENAME TO transcription_jobs_v13;
+
+             CREATE TABLE transcription_jobs (
+                id TEXT PRIMARY KEY,
+                project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+                source_media_id TEXT NOT NULL REFERENCES media_sources(id) ON DELETE CASCADE,
+                status TEXT NOT NULL CHECK (
+                    status IN (
+                        'queued', 'extracting', 'transcribing', 'validating',
+                        'completed', 'failed', 'cancelled', 'interrupted'
+                    )
+                ),
+                stage TEXT NOT NULL,
+                progress REAL NOT NULL CHECK (progress >= 0.0 AND progress <= 1.0),
+                language_code TEXT NOT NULL
+                    CHECK (language_code IN ('auto', 'en', 'th', 'ja', 'ko')),
+                model_kind TEXT NOT NULL CHECK (model_kind IN ('small', 'base')),
+                model_path TEXT NOT NULL,
+                model_sha256 TEXT NOT NULL CHECK (length(model_sha256) = 64),
+                runtime_path TEXT NOT NULL,
+                runtime_backend TEXT NOT NULL CHECK (runtime_backend IN ('vulkan', 'cpu')),
+                runtime_version TEXT NOT NULL,
+                runtime_sha256 TEXT NOT NULL CHECK (length(runtime_sha256) = 64),
+                runtime_metadata_sha256 TEXT NOT NULL CHECK (length(runtime_metadata_sha256) = 64),
+                parameters_json TEXT NOT NULL,
+                expected_project_revision INTEGER NOT NULL CHECK (expected_project_revision >= 1),
+                expected_media_sha256 TEXT NOT NULL CHECK (length(expected_media_sha256) = 64),
+                media_duration_ms INTEGER NOT NULL CHECK (media_duration_ms > 0),
+                confirm_replace_original INTEGER NOT NULL
+                    CHECK (confirm_replace_original IN (0, 1)),
+                subtitle_version_id TEXT
+                    REFERENCES subtitle_versions(id) ON DELETE SET NULL,
+                cancel_requested_at_ms INTEGER,
+                error_code TEXT,
+                error_message TEXT,
+                created_at_ms INTEGER NOT NULL,
+                updated_at_ms INTEGER NOT NULL,
+                started_at_ms INTEGER,
+                completed_at_ms INTEGER
+             );
+
+             INSERT INTO transcription_jobs (
+                id, project_id, source_media_id, status, stage, progress,
+                language_code, model_kind, model_path, model_sha256,
+                runtime_path, runtime_backend, runtime_version, runtime_sha256,
+                runtime_metadata_sha256, parameters_json, expected_project_revision,
+                expected_media_sha256, media_duration_ms, confirm_replace_original,
+                subtitle_version_id, cancel_requested_at_ms, error_code, error_message,
+                created_at_ms, updated_at_ms, started_at_ms, completed_at_ms
+             )
+             SELECT
+                id, project_id, source_media_id, status, stage, progress,
+                language_code, model_kind, model_path, model_sha256,
+                runtime_path, runtime_backend, runtime_version, runtime_sha256,
+                runtime_metadata_sha256, parameters_json, expected_project_revision,
+                expected_media_sha256, media_duration_ms, confirm_replace_original,
+                subtitle_version_id, cancel_requested_at_ms, error_code, error_message,
+                created_at_ms, updated_at_ms, started_at_ms, completed_at_ms
+             FROM transcription_jobs_v13;
+
+             DROP TABLE transcription_jobs_v13;
+
+             CREATE INDEX transcription_jobs_project_created
+             ON transcription_jobs(project_id, created_at_ms DESC);
+
+             CREATE UNIQUE INDEX one_active_transcription_per_project
+             ON transcription_jobs(project_id)
+             WHERE status IN ('queued', 'extracting', 'transcribing', 'validating');",
+        )?;
+        Ok(())
+    }
+
     fn load_project(connection: &Connection, project_id: &str) -> Result<Project, StoreError> {
         let row = connection
             .query_row(
@@ -2221,6 +2305,143 @@ mod tests {
             .collect::<Result<Vec<_>, _>>()
             .expect("schema rows should load");
         assert_eq!(subtitle_tables.len(), 3);
+    }
+
+    #[test]
+    fn migrates_v13_transcription_jobs_and_allows_automatic_language_detection() {
+        let temp_dir = tempfile::tempdir().expect("temporary directory should be created");
+        let database_path = temp_dir.path().join("v13.sqlite3");
+        let project_id = Uuid::new_v4().to_string();
+        let media_id = Uuid::new_v4().to_string();
+        let legacy_job_id = Uuid::new_v4().to_string();
+        let mut connection = Connection::open(&database_path).expect("database should open");
+        connection
+            .execute_batch(
+                "PRAGMA foreign_keys = ON;
+                 CREATE TABLE schema_migrations (
+                    version INTEGER PRIMARY KEY,
+                    applied_at_ms INTEGER NOT NULL
+                 );",
+            )
+            .expect("migration table should be created");
+        let transaction = connection.transaction().expect("transaction should open");
+        ProjectStore::apply_migration_1(&transaction).expect("v1 should apply");
+        ProjectStore::apply_migration_2(&transaction).expect("v2 should apply");
+        ProjectStore::apply_migration_3(&transaction).expect("v3 should apply");
+        ProjectStore::apply_migration_4(&transaction).expect("v4 should apply");
+        ProjectStore::apply_migration_5(&transaction).expect("v5 should apply");
+        ProjectStore::apply_migration_6(&transaction).expect("v6 should apply");
+        ProjectStore::apply_migration_7(&transaction).expect("v7 should apply");
+        ProjectStore::apply_migration_8(&transaction).expect("v8 should apply");
+        ProjectStore::apply_migration_9(&transaction).expect("v9 should apply");
+        ProjectStore::apply_migration_10(&transaction).expect("v10 should apply");
+        ProjectStore::apply_migration_11(&transaction).expect("v11 should apply");
+        ProjectStore::apply_migration_12(&transaction).expect("v12 should apply");
+        ProjectStore::apply_migration_13(&transaction).expect("v13 should apply");
+        for version in 1..=13 {
+            transaction
+                .execute(
+                    "INSERT INTO schema_migrations (version, applied_at_ms)
+                     VALUES (?1, 0)",
+                    params![version],
+                )
+                .expect("migration should be recorded");
+        }
+        transaction
+            .execute(
+                "INSERT INTO projects (
+                    id, title, revision, created_at_ms, updated_at_ms, last_opened_at_ms
+                 ) VALUES (?1, 'legacy project', 1, 1, 1, 1)",
+                params![project_id],
+            )
+            .expect("legacy project should be inserted");
+        transaction
+            .execute(
+                "INSERT INTO media_sources (
+                    id, project_id, kind, locator, display_name, is_primary,
+                    created_at_ms, updated_at_ms
+                 ) VALUES (?1, ?2, 'local_file', 'legacy.mp4', 'legacy.mp4', 1, 1, 1)",
+                params![media_id, project_id],
+            )
+            .expect("legacy media should be inserted");
+        transaction
+            .execute(
+                "INSERT INTO transcription_jobs (
+                    id, project_id, source_media_id, status, stage, progress,
+                    language_code, model_kind, model_path, model_sha256,
+                    runtime_path, runtime_backend, runtime_version, runtime_sha256,
+                    runtime_metadata_sha256, parameters_json, expected_project_revision,
+                    expected_media_sha256, media_duration_ms, confirm_replace_original,
+                    subtitle_version_id, cancel_requested_at_ms, error_code, error_message,
+                    created_at_ms, updated_at_ms, started_at_ms, completed_at_ms
+                 ) VALUES (
+                    ?1, ?2, ?3, 'completed', 'completed', 1.0,
+                    'en', 'small', 'model.bin', ?4,
+                    'runtime.exe', 'cpu', 'test', ?5,
+                    ?6, '{}', 1,
+                    ?7, 1000, 0,
+                    NULL, NULL, NULL, NULL,
+                    1, 1, 1, 1
+                 )",
+                params![
+                    legacy_job_id,
+                    project_id,
+                    media_id,
+                    "a".repeat(64),
+                    "b".repeat(64),
+                    "c".repeat(64),
+                    "d".repeat(64),
+                ],
+            )
+            .expect("legacy transcription job should be inserted");
+        transaction.commit().expect("v13 fixture should commit");
+        drop(connection);
+
+        let store = ProjectStore::open(&database_path).expect("v13 store should upgrade");
+        assert_eq!(
+            store.schema_version().expect("schema version"),
+            CURRENT_SCHEMA_VERSION
+        );
+        let connection = store.connect().expect("database should reopen");
+        let migrated_language = connection
+            .query_row(
+                "SELECT language_code FROM transcription_jobs WHERE id = ?1",
+                params![legacy_job_id],
+                |row| row.get::<_, String>(0),
+            )
+            .expect("legacy job should remain readable");
+        assert_eq!(migrated_language, "en");
+
+        connection
+            .execute(
+                "INSERT INTO transcription_jobs (
+                    id, project_id, source_media_id, status, stage, progress,
+                    language_code, model_kind, model_path, model_sha256,
+                    runtime_path, runtime_backend, runtime_version, runtime_sha256,
+                    runtime_metadata_sha256, parameters_json, expected_project_revision,
+                    expected_media_sha256, media_duration_ms, confirm_replace_original,
+                    subtitle_version_id, cancel_requested_at_ms, error_code, error_message,
+                    created_at_ms, updated_at_ms, started_at_ms, completed_at_ms
+                 ) VALUES (
+                    ?1, ?2, ?3, 'completed', 'completed', 1.0,
+                    'auto', 'small', 'model.bin', ?4,
+                    'runtime.exe', 'cpu', 'test', ?5,
+                    ?6, '{}', 1,
+                    ?7, 1000, 0,
+                    NULL, NULL, NULL, NULL,
+                    2, 2, 2, 2
+                 )",
+                params![
+                    Uuid::new_v4().to_string(),
+                    project_id,
+                    media_id,
+                    "a".repeat(64),
+                    "b".repeat(64),
+                    "c".repeat(64),
+                    "d".repeat(64),
+                ],
+            )
+            .expect("automatic language job should be accepted");
     }
 
     #[test]
