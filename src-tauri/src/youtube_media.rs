@@ -1064,6 +1064,72 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "requires an authorized URL, a W: acceptance store, pinned runtimes, and network access"]
+    fn imports_authorized_public_youtube_url_to_persistent_store() {
+        let url = env::var("SIAOVPLAY_YOUTUBE_ACCEPTANCE_URL")
+            .expect("SIAOVPLAY_YOUTUBE_ACCEPTANCE_URL must be set");
+        let store_path = env::var_os("SIAOVPLAY_YOUTUBE_ACCEPTANCE_STORE")
+            .map(PathBuf::from)
+            .expect("SIAOVPLAY_YOUTUBE_ACCEPTANCE_STORE must be set");
+        let evidence_path = env::var_os("SIAOVPLAY_YOUTUBE_ACCEPTANCE_EVIDENCE")
+            .map(PathBuf::from)
+            .expect("SIAOVPLAY_YOUTUBE_ACCEPTANCE_EVIDENCE must be set");
+        let store = ProjectStore::open(store_path).expect("acceptance store should open");
+
+        let project = store
+            .list_projects()
+            .expect("projects should be readable")
+            .into_iter()
+            .find(|project| project.media_source.origin_url.as_deref() == Some(url.as_str()))
+            .unwrap_or_else(|| {
+                let preview = inspect_youtube_url(InspectYouTubeUrlInput { url: url.clone() })
+                    .expect("authorized public video should inspect");
+                import_youtube_url(
+                    &store,
+                    ImportYouTubeUrlInput {
+                        url: url.clone(),
+                        expected_preview_token: preview.preview_token,
+                        operation_id: Uuid::new_v4().to_string(),
+                    },
+                )
+                .expect("authorized public video should import")
+            });
+        let inspection = media::inspect_project_media(&store, &project.id)
+            .expect("imported video should pass media inspection");
+        let media_path = PathBuf::from(&project.media_source.locator);
+        let evidence = serde_json::json!({
+            "url": url,
+            "projectId": project.id,
+            "title": project.title,
+            "mediaPath": project.media_source.locator,
+            "mediaSizeBytes": fs::metadata(&media_path)
+                .expect("imported media should exist")
+                .len(),
+            "durationMs": inspection.probe.duration_ms,
+            "videoStreamCount": inspection.probe.video_streams.len(),
+            "audioStreamCount": inspection.probe.audio_streams.len(),
+            "sourceSha256": inspection.source_sha256,
+            "importerVersion": PINNED_YT_DLP_VERSION,
+            "importerSha256": PINNED_YT_DLP_SHA256
+        });
+        fs::create_dir_all(
+            evidence_path
+                .parent()
+                .expect("acceptance evidence path should have a parent"),
+        )
+        .expect("acceptance evidence directory should exist");
+        fs::write(
+            &evidence_path,
+            serde_json::to_vec_pretty(&evidence).expect("evidence should serialize"),
+        )
+        .expect("acceptance evidence should be written");
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&evidence).expect("evidence should serialize")
+        );
+    }
+
+    #[test]
     #[ignore = "requires SIAOVPLAY_RUNTIME_DIR, FFmpeg and network access"]
     fn imports_probes_persists_and_cleans_a_real_public_youtube_video() {
         let temporary = tempfile::tempdir().expect("temp directory should be created");

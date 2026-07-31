@@ -2401,4 +2401,102 @@ mod tests {
                 .any(|segment| !segment.words.is_empty())
         );
     }
+
+    #[test]
+    #[ignore = "requires a persistent W: acceptance store and pinned local transcription assets"]
+    fn transcribes_persistent_acceptance_project() {
+        let store_path = env::var_os("SIAOVPLAY_TRANSCRIPTION_ACCEPTANCE_STORE")
+            .map(PathBuf::from)
+            .expect("SIAOVPLAY_TRANSCRIPTION_ACCEPTANCE_STORE must be set");
+        let project_id = env::var("SIAOVPLAY_TRANSCRIPTION_ACCEPTANCE_PROJECT_ID")
+            .expect("SIAOVPLAY_TRANSCRIPTION_ACCEPTANCE_PROJECT_ID must be set");
+        let language_code = env::var("SIAOVPLAY_TRANSCRIPTION_ACCEPTANCE_LANGUAGE")
+            .expect("SIAOVPLAY_TRANSCRIPTION_ACCEPTANCE_LANGUAGE must be set");
+        let evidence_path = env::var_os("SIAOVPLAY_TRANSCRIPTION_ACCEPTANCE_EVIDENCE")
+            .map(PathBuf::from)
+            .expect("SIAOVPLAY_TRANSCRIPTION_ACCEPTANCE_EVIDENCE must be set");
+        let store = ProjectStore::open(store_path).expect("acceptance store should open");
+        recover_transcription_jobs(&store).expect("interrupted acceptance jobs should recover");
+
+        let existing_source = subtitles::list_subtitle_versions(&store, &project_id)
+            .expect("subtitle versions should be readable")
+            .into_iter()
+            .find(|version| version.role == "original" && version.is_current);
+        let completed_job = if existing_source.is_some() {
+            list_transcription_jobs(&store, &project_id)
+                .expect("transcription jobs should be readable")
+                .into_iter()
+                .find(|job| job.status == "completed")
+        } else {
+            let resumable = list_transcription_jobs(&store, &project_id)
+                .expect("transcription jobs should be readable")
+                .into_iter()
+                .find(|job| matches!(job.status.as_str(), "failed" | "cancelled" | "interrupted"));
+            let job = if let Some(job) = resumable {
+                resume_transcription_job(&store, &job.id)
+                    .expect("acceptance transcription should resume")
+            } else {
+                start_transcription(
+                    &store,
+                    StartTranscriptionInput {
+                        project_id: project_id.clone(),
+                        language_code,
+                        model_kind: "small".to_owned(),
+                        confirm_replace_original: false,
+                    },
+                )
+                .expect("acceptance transcription should start")
+            };
+            run_job(&store, &job.id, &AtomicBool::new(false))
+                .expect("acceptance transcription should complete");
+            Some(get_transcription_job(&store, &job.id).expect("completed job should be readable"))
+        };
+        let source = existing_source.unwrap_or_else(|| {
+            subtitles::list_subtitle_versions(&store, &project_id)
+                .expect("completed source subtitle should be readable")
+                .into_iter()
+                .find(|version| version.role == "original" && version.is_current)
+                .expect("transcription should create a current original subtitle")
+        });
+        let word_count = source
+            .segments
+            .iter()
+            .map(|segment| segment.words.len())
+            .sum::<usize>();
+        let evidence = serde_json::json!({
+            "projectId": project_id,
+            "jobId": completed_job.as_ref().map(|job| &job.id),
+            "runtimeBackend": completed_job.as_ref().map(|job| &job.runtime_backend),
+            "runtimeVersion": completed_job.as_ref().map(|job| &job.runtime_version),
+            "requestedLanguage": completed_job.as_ref().map(|job| &job.language_code),
+            "detectedLanguage": source.language_code,
+            "sourceVersionId": source.id,
+            "segmentCount": source.segments.len(),
+            "wordCount": word_count,
+            "firstStartMs": source.segments.first().map(|segment| segment.start_ms),
+            "lastEndMs": source.segments.last().map(|segment| segment.end_ms),
+            "samples": source.segments.iter().take(5).map(|segment| {
+                serde_json::json!({
+                    "startMs": segment.start_ms,
+                    "endMs": segment.end_ms,
+                    "text": segment.text
+                })
+            }).collect::<Vec<_>>()
+        });
+        fs::create_dir_all(
+            evidence_path
+                .parent()
+                .expect("acceptance evidence path should have a parent"),
+        )
+        .expect("acceptance evidence directory should exist");
+        fs::write(
+            &evidence_path,
+            serde_json::to_vec_pretty(&evidence).expect("evidence should serialize"),
+        )
+        .expect("acceptance evidence should be written");
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&evidence).expect("evidence should serialize")
+        );
+    }
 }
