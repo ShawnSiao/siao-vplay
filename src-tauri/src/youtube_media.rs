@@ -293,11 +293,9 @@ fn parse_metadata(
     if !extractor.eq_ignore_ascii_case("youtube") {
         return Err(YouTubeMediaError::UncertainMedia);
     }
+    let live_status = metadata.get("live_status").and_then(Value::as_str);
     if metadata.get("is_live").and_then(Value::as_bool) == Some(true)
-        || metadata
-            .get("live_status")
-            .and_then(Value::as_str)
-            .is_some_and(|status| status != "not_live")
+        || live_status.is_some_and(|status| !matches!(status, "not_live" | "was_live"))
     {
         return Err(YouTubeMediaError::LiveNotAllowed);
     }
@@ -856,6 +854,13 @@ fn hidden_command(program: &Path) -> Command {
 mod tests {
     use super::*;
 
+    #[derive(Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct RealUrlFixture {
+        url: String,
+        expected_video_id: String,
+    }
+
     fn tool() -> ToolIdentity {
         ToolIdentity {
             path: PathBuf::from("yt-dlp.exe"),
@@ -969,6 +974,13 @@ mod tests {
             Err(YouTubeMediaError::LiveNotAllowed)
         ));
 
+        let mut archived_live = public_metadata();
+        archived_live["live_status"] = Value::String("was_live".to_owned());
+        assert!(
+            parse_metadata(&original, &archived_live, &tool()).is_ok(),
+            "an archived public live replay should import like other on-demand media"
+        );
+
         let mut restricted = public_metadata();
         restricted["availability"] = Value::String("needs_auth".to_owned());
         assert!(matches!(
@@ -1026,6 +1038,29 @@ mod tests {
         .expect("public video should inspect");
         assert_eq!(preview.video_id, "jNQXAC9IVRw");
         assert!(preview.duration_seconds > 0.0);
+    }
+
+    #[test]
+    #[ignore = "requires an authorized URL manifest, SIAOVPLAY_RUNTIME_DIR, and network access"]
+    fn inspects_authorized_public_youtube_manifest() {
+        let manifest_path = env::var_os("SIAOVPLAY_YOUTUBE_ACCEPTANCE_MANIFEST")
+            .map(PathBuf::from)
+            .expect("SIAOVPLAY_YOUTUBE_ACCEPTANCE_MANIFEST must be set");
+        let fixtures: Vec<RealUrlFixture> =
+            serde_json::from_slice(&fs::read(manifest_path).expect("URL manifest should load"))
+                .expect("URL manifest should parse");
+
+        for fixture in fixtures {
+            let preview = inspect_youtube_url(InspectYouTubeUrlInput { url: fixture.url })
+                .expect("authorized public video should inspect");
+            assert_eq!(preview.video_id, fixture.expected_video_id);
+            assert!(preview.duration_seconds > 0.0);
+            assert!(
+                preview
+                    .file_size_bytes
+                    .is_none_or(|size| size <= MAX_MEDIA_BYTES)
+            );
+        }
     }
 
     #[test]
