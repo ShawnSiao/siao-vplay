@@ -373,7 +373,7 @@ export async function getTranscriptionRuntimeStatus(): Promise<TranscriptionRunt
 
 export async function startTranscription(
   projectId: string,
-  languageCode: "en" | "th" | "ja" | "ko",
+  languageCode: "auto" | "en" | "th" | "ja" | "ko",
   modelKind: "small" | "base" = "small",
   confirmReplaceOriginal = false,
 ): Promise<TranscriptionJob> {

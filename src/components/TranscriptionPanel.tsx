@@ -23,6 +23,7 @@ type TranscriptionPanelProps = {
 };
 
 const languageOptions = [
+  ["auto", "自动识别（混合讲解）"],
   ["en", "英语"],
   ["th", "泰语"],
   ["ja", "日语"],
@@ -77,7 +78,7 @@ function jobFailureMessage(job: TranscriptionJob): string {
     case "missing_audio":
       return "这段视频没有可识别的音轨。";
     case "invalid_output":
-      return "没有得到可信的语音字幕，项目内容保持不变。";
+      return job.errorMessage ?? "语音结果没有通过时间轴或置信度检查，项目内容保持不变。";
     case "cancelled":
       return "临时音频和识别文件已经清理。";
     case "app_interrupted":
@@ -388,7 +389,7 @@ export function TranscriptionPanel({
         <span className="status-dot"></span>
         <div>
           <strong>语音识别只在本机运行</strong>
-          <p>视频不会上传。英语、泰语、日语和韩语可直接生成原文字幕草稿。</p>
+          <p>视频不会上传。英语、泰语、日语和韩语可直接识别，也可自动判断以中文讲解为主的混合教程。</p>
         </div>
       </div>
 
@@ -413,14 +414,17 @@ export function TranscriptionPanel({
             setError(null);
           }}
         >
-          <option value="">确认语言</option>
+          <option value="">选择识别方式</option>
           {languageOptions.map(([value, label]) => (
             <option key={value} value={value}>
               {label}
             </option>
           ))}
         </select>
-        <small>不会自动猜测语言，避免把错误识别结果写入项目。</small>
+        <small>
+          中文讲解夹杂外语示例时可选自动识别；单一原声选择固定语言更稳定。
+          自动识别按视频主要语种生成字幕。
+        </small>
       </label>
 
       <fieldset className="transcription-models">

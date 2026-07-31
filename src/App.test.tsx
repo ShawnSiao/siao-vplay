@@ -1528,6 +1528,27 @@ describe("App", () => {
     ).toBeInTheDocument();
   });
 
+  it("offers automatic language detection for mixed-language tutorials", async () => {
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "继续观看" }));
+    fireEvent.click(await screen.findByRole("button", { name: "添加字幕" }));
+    fireEvent.click(screen.getByRole("tab", { name: "从视频生成" }));
+
+    fireEvent.change(await screen.findByLabelText(/视频原声语言/), {
+      target: { value: "auto" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "生成原文字幕" }));
+
+    await waitFor(() =>
+      expect(desktopMocks.startTranscription).toHaveBeenCalledWith(
+        project.id,
+        "auto",
+        "small",
+        false,
+      ),
+    );
+  });
+
   it("uses a supported embedded text subtitle track", async () => {
     desktopMocks.prepareProjectMedia.mockResolvedValue({
       ...preparation,

@@ -321,7 +321,7 @@ export type TranscriptionJob = {
     | "interrupted";
   stage: string;
   progress: number;
-  languageCode: "en" | "th" | "ja" | "ko";
+  languageCode: "auto" | "en" | "th" | "ja" | "ko";
   modelKind: "small" | "base";
   runtimeBackend: "vulkan" | "cpu";
   runtimeVersion: string;

@@ -39,6 +39,12 @@ const SMALL_MODEL_SIZE: u64 = 487_601_967;
 const SMALL_MODEL_SHA256: &str = "1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b";
 const BASE_MODEL_SIZE: u64 = 147_951_465;
 const BASE_MODEL_SHA256: &str = "60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe";
+const VAD_MODEL_FILE_NAME: &str = "ggml-silero-v6.2.0.bin";
+const VAD_MODEL_SIZE: u64 = 885_098;
+const VAD_MODEL_SHA256: &str = "2aa269b785eeb53a82983a20501ddf7c1d9c48e33ab63a41391ac6c9f7fb6987";
+const VAD_TIMELINE_FIXTURE_SHA256: &str =
+    "e2d55c32ca5900c677bf86c541dedd98e7e67c31cc0d967d7509b0eba36871cb";
+const VAD_TIMELINE_VERIFIER: &str = "tools/test-whisper-vad-timeline.ps1";
 const POLL_INTERVAL: Duration = Duration::from_millis(100);
 
 static ACTIVE_JOBS: OnceLock<Mutex<HashMap<String, Arc<AtomicBool>>>> = OnceLock::new();
@@ -98,6 +104,7 @@ impl From<rusqlite::Error> for TranscriptionError {
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum TranscriptionLanguage {
+    Auto,
     En,
     Th,
     Ja,
@@ -107,6 +114,7 @@ pub enum TranscriptionLanguage {
 impl TranscriptionLanguage {
     fn as_str(self) -> &'static str {
         match self {
+            Self::Auto => "auto",
             Self::En => "en",
             Self::Th => "th",
             Self::Ja => "ja",
@@ -116,6 +124,7 @@ impl TranscriptionLanguage {
 
     fn parse(value: &str) -> Result<Self, TranscriptionError> {
         match value.trim().to_ascii_lowercase().as_str() {
+            "auto" => Ok(Self::Auto),
             "en" => Ok(Self::En),
             "th" => Ok(Self::Th),
             "ja" => Ok(Self::Ja),
@@ -232,12 +241,19 @@ struct RuntimeBundle {
     version: String,
     executable_sha256: String,
     metadata_sha256: String,
+    vad_timeline_verified: bool,
 }
 
 #[derive(Clone, Debug)]
 struct ModelBundle {
     path: PathBuf,
     kind: TranscriptionModelKind,
+    sha256: String,
+}
+
+#[derive(Clone, Debug)]
+struct VadModelBundle {
+    path: PathBuf,
     sha256: String,
 }
 
@@ -250,6 +266,7 @@ struct RuntimeMetadata {
     source_commit: String,
     executable_sha256: String,
     source_capabilities: RuntimeCapabilities,
+    vad_timeline_verification: VadTimelineVerification,
     files: Vec<RuntimeFile>,
 }
 
@@ -259,6 +276,15 @@ struct RuntimeCapabilities {
     segment_timestamp_domain: String,
     token_api_timestamp_domain: String,
     cli_json_token_timestamp_domain: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct VadTimelineVerification {
+    status: String,
+    time_domain: String,
+    fixture_sha256: String,
+    verifier: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -435,6 +461,13 @@ fn verify_runtime(backend: &'static str) -> Result<RuntimeBundle, TranscriptionE
         || metadata.source_capabilities.segment_timestamp_domain != "original_media"
         || metadata.source_capabilities.token_api_timestamp_domain != "original_media"
         || metadata.source_capabilities.cli_json_token_timestamp_domain != "original_media"
+        || metadata.vad_timeline_verification.status != "verified"
+        || metadata.vad_timeline_verification.time_domain != "original_media"
+        || !metadata
+            .vad_timeline_verification
+            .fixture_sha256
+            .eq_ignore_ascii_case(VAD_TIMELINE_FIXTURE_SHA256)
+        || metadata.vad_timeline_verification.verifier != VAD_TIMELINE_VERIFIER
     {
         return Err(TranscriptionError::RuntimeIntegrity(format!(
             "{} 的版本、后端或时间轴能力不符合固定基线",
@@ -494,6 +527,7 @@ fn verify_runtime(backend: &'static str) -> Result<RuntimeBundle, TranscriptionE
         version: metadata.version,
         executable_sha256: executable_hash,
         metadata_sha256: metadata_hash,
+        vad_timeline_verified: true,
     })
 }
 
@@ -605,6 +639,108 @@ fn verify_model(kind: TranscriptionModelKind) -> Result<ModelBundle, Transcripti
     Ok(ModelBundle { path, kind, sha256 })
 }
 
+fn vad_model_path() -> Result<PathBuf, TranscriptionError> {
+    if let Some(path) = env::var_os("SIAOVPLAY_WHISPER_VAD_MODEL")
+        .filter(|value| !value.is_empty())
+        .map(PathBuf::from)
+    {
+        return Ok(path);
+    }
+    let runtime_root = env::var_os("SIAOVPLAY_RUNTIME_DIR")
+        .filter(|value| !value.is_empty())
+        .map(PathBuf::from);
+    let executable_path = env::current_exe().ok();
+    let cpu_runtime_directory = runtime_directory("cpu").ok();
+    resolve_vad_model_path(
+        runtime_root.as_deref(),
+        executable_path.as_deref(),
+        cpu_runtime_directory.as_deref(),
+    )
+}
+
+fn resolve_vad_model_path(
+    runtime_root: Option<&Path>,
+    executable_path: Option<&Path>,
+    cpu_runtime_directory: Option<&Path>,
+) -> Result<PathBuf, TranscriptionError> {
+    let mut candidates = Vec::new();
+    if let Some(cpu_runtime_directory) = cpu_runtime_directory {
+        push_unique(
+            &mut candidates,
+            cpu_runtime_directory.join(VAD_MODEL_FILE_NAME),
+        );
+    }
+    if let Some(runtime_root) = runtime_root {
+        push_unique(
+            &mut candidates,
+            runtime_root.join("whisper").join(VAD_MODEL_FILE_NAME),
+        );
+        push_unique(&mut candidates, runtime_root.join(VAD_MODEL_FILE_NAME));
+    }
+    if let Some(executable_directory) = executable_path.and_then(Path::parent) {
+        for ancestor in executable_directory
+            .ancestors()
+            .take(5)
+            .take_while(|ancestor| ancestor.parent().is_some())
+        {
+            for relative_file in [
+                Path::new("runtimes")
+                    .join("whisper")
+                    .join(VAD_MODEL_FILE_NAME),
+                Path::new("runtime")
+                    .join("whisper")
+                    .join(VAD_MODEL_FILE_NAME),
+                Path::new("resources")
+                    .join("runtimes")
+                    .join("whisper")
+                    .join(VAD_MODEL_FILE_NAME),
+                Path::new("resources")
+                    .join("whisper")
+                    .join(VAD_MODEL_FILE_NAME),
+                Path::new("whisper").join(VAD_MODEL_FILE_NAME),
+            ] {
+                push_unique(&mut candidates, ancestor.join(relative_file));
+            }
+        }
+    }
+    candidates
+        .iter()
+        .find(|path| path.is_file())
+        .cloned()
+        .ok_or_else(|| {
+            let checked = candidates
+                .iter()
+                .take(16)
+                .map(|path| path.display().to_string())
+                .collect::<Vec<_>>()
+                .join("；");
+            TranscriptionError::ModelUnavailable(format!(
+                "找不到 Whisper VAD 模型。可以设置 SIAOVPLAY_WHISPER_VAD_MODEL，或将 {VAD_MODEL_FILE_NAME} 放在 CPU 运行时目录。已检查：{checked}"
+            ))
+        })
+}
+
+fn verify_vad_model() -> Result<VadModelBundle, TranscriptionError> {
+    let path = vad_model_path()?;
+    let size = fs::metadata(&path)
+        .map_err(|_| TranscriptionError::ModelUnavailable(format!("缺少 {}", path.display())))?
+        .len();
+    if size != VAD_MODEL_SIZE {
+        return Err(TranscriptionError::ModelIntegrity(format!(
+            "{} 的大小不符合固定 VAD 模型基线",
+            path.display()
+        )));
+    }
+    let sha256 = hash_file(&path)?;
+    if !sha256.eq_ignore_ascii_case(VAD_MODEL_SHA256) {
+        return Err(TranscriptionError::ModelIntegrity(format!(
+            "{} 的哈希不符合固定 VAD 模型基线",
+            path.display()
+        )));
+    }
+    Ok(VadModelBundle { path, sha256 })
+}
+
 fn preferred_runtime() -> Result<RuntimeBundle, TranscriptionError> {
     match verify_runtime("vulkan") {
         Ok(runtime) => Ok(runtime),
@@ -617,14 +753,23 @@ fn preferred_runtime() -> Result<RuntimeBundle, TranscriptionError> {
 }
 
 pub fn transcription_runtime_status() -> TranscriptionRuntimeStatus {
+    let vad_status = verify_vad_model()
+        .map(|_| ())
+        .map_err(|error| error.to_string());
     let runtimes = ["vulkan", "cpu"]
         .into_iter()
         .map(|backend| match verify_runtime(backend) {
-            Ok(runtime) => TranscriptionRuntimeOption {
+            Ok(runtime) if vad_status.is_ok() => TranscriptionRuntimeOption {
                 backend: backend.to_owned(),
                 available: true,
                 version: Some(runtime.version),
                 error_message: None,
+            },
+            Ok(_) => TranscriptionRuntimeOption {
+                backend: backend.to_owned(),
+                available: false,
+                version: None,
+                error_message: vad_status.as_ref().err().cloned(),
             },
             Err(error) => TranscriptionRuntimeOption {
                 backend: backend.to_owned(),
@@ -661,6 +806,28 @@ pub fn transcription_runtime_status() -> TranscriptionRuntimeStatus {
     }
 }
 
+fn transcription_parameters(
+    language_code: &str,
+    vad_model: &VadModelBundle,
+) -> Result<String, TranscriptionError> {
+    Ok(serde_json::to_string(&serde_json::json!({
+        "audioStream": "0:a:0",
+        "sampleFormat": "pcm_s16le",
+        "sampleRateHz": 16000,
+        "channels": 1,
+        "language": language_code,
+        "output": "json_full",
+        "splitOnWord": true,
+        "maxSegmentCharacters": 60,
+        "vad": true,
+        "vadModelPath": vad_model.path.to_string_lossy(),
+        "vadModelSha256": vad_model.sha256,
+        "vadTimelineDomain": "original_media",
+        "vadMinSilenceDurationMs": 250,
+        "vadSpeechPadMs": 80
+    }))?)
+}
+
 pub fn start_transcription(
     store: &ProjectStore,
     input: StartTranscriptionInput,
@@ -669,6 +836,12 @@ pub fn start_transcription(
     let model_kind = TranscriptionModelKind::parse(&input.model_kind)?;
     let runtime = preferred_runtime()?;
     let model = verify_model(model_kind)?;
+    let vad_model = verify_vad_model()?;
+    if !runtime.vad_timeline_verified {
+        return Err(TranscriptionError::RuntimeIntegrity(
+            "当前转写运行时没有通过 VAD 原媒体时间轴验证".to_owned(),
+        ));
+    }
     let inspection = media::inspect_project_media(store, &input.project_id)?;
     if inspection.probe.audio_streams.is_empty() {
         return Err(TranscriptionError::MissingAudio);
@@ -708,17 +881,7 @@ pub fn start_transcription(
 
     let timestamp = now_ms()?;
     let job_id = Uuid::new_v4().to_string();
-    let parameters_json = serde_json::to_string(&serde_json::json!({
-        "audioStream": "0:a:0",
-        "sampleFormat": "pcm_s16le",
-        "sampleRateHz": 16000,
-        "channels": 1,
-        "language": language.as_str(),
-        "output": "json_full",
-        "splitOnWord": true,
-        "maxSegmentCharacters": 60,
-        "vad": false
-    }))?;
+    let parameters_json = transcription_parameters(language.as_str(), &vad_model)?;
     connection
         .execute(
             "INSERT INTO transcription_jobs (
@@ -983,7 +1146,6 @@ pub fn resume_transcription_job(
         return Err(TranscriptionError::InvalidJobState(job.public.status));
     }
     validate_baseline(store, &job)?;
-    verify_job_assets(&job)?;
     let active_exists = store
         .connect()?
         .query_row(
@@ -998,16 +1160,42 @@ pub fn resume_transcription_job(
     if active_exists {
         return Err(TranscriptionError::ActiveJobExists);
     }
+    let language = TranscriptionLanguage::parse(&job.public.language_code)?;
+    let model_kind = TranscriptionModelKind::parse(&job.public.model_kind)?;
+    let runtime = preferred_runtime()?;
+    let model = verify_model(model_kind)?;
+    let vad_model = verify_vad_model()?;
+    if !runtime.vad_timeline_verified {
+        return Err(TranscriptionError::RuntimeIntegrity(
+            "当前转写运行时没有通过 VAD 原媒体时间轴验证".to_owned(),
+        ));
+    }
+    let parameters_json = transcription_parameters(language.as_str(), &vad_model)?;
     let timestamp = now_ms()?;
     let changed = store.connect()?.execute(
         "UPDATE transcription_jobs
          SET status = 'queued', stage = 'queued', progress = 0.0,
              subtitle_version_id = NULL, cancel_requested_at_ms = NULL,
              error_code = NULL, error_message = NULL, updated_at_ms = ?2,
-             started_at_ms = NULL, completed_at_ms = NULL
+             started_at_ms = NULL, completed_at_ms = NULL,
+             model_path = ?3, model_sha256 = ?4,
+             runtime_path = ?5, runtime_backend = ?6, runtime_version = ?7,
+             runtime_sha256 = ?8, runtime_metadata_sha256 = ?9,
+             parameters_json = ?10
          WHERE id = ?1
            AND status IN ('failed', 'cancelled', 'interrupted')",
-        params![job_id, timestamp],
+        params![
+            job_id,
+            timestamp,
+            model.path.to_string_lossy(),
+            model.sha256,
+            runtime.executable.to_string_lossy(),
+            runtime.backend,
+            runtime.version,
+            runtime.executable_sha256,
+            runtime.metadata_sha256,
+            parameters_json,
+        ],
     )?;
     if changed != 1 {
         return Err(TranscriptionError::InvalidJobState(job.public.status));
@@ -1057,7 +1245,9 @@ fn validate_baseline(store: &ProjectStore, job: &StoredJob) -> Result<PathBuf, T
     Ok(media_path)
 }
 
-fn verify_job_assets(job: &StoredJob) -> Result<(RuntimeBundle, ModelBundle), TranscriptionError> {
+fn verify_job_assets(
+    job: &StoredJob,
+) -> Result<(RuntimeBundle, ModelBundle, VadModelBundle), TranscriptionError> {
     let backend: &'static str = match job.public.runtime_backend.as_str() {
         "vulkan" => "vulkan",
         "cpu" => "cpu",
@@ -1091,13 +1281,45 @@ fn verify_job_assets(job: &StoredJob) -> Result<(RuntimeBundle, ModelBundle), Tr
     let parameters: serde_json::Value = serde_json::from_str(&job.parameters_json)?;
     if parameters.get("language").and_then(|value| value.as_str())
         != Some(job.public.language_code.as_str())
-        || parameters.get("vad").and_then(|value| value.as_bool()) != Some(false)
+        || parameters.get("vad").and_then(|value| value.as_bool()) != Some(true)
+        || parameters
+            .get("vadTimelineDomain")
+            .and_then(|value| value.as_str())
+            != Some("original_media")
+        || parameters
+            .get("vadMinSilenceDurationMs")
+            .and_then(|value| value.as_u64())
+            != Some(250)
+        || parameters
+            .get("vadSpeechPadMs")
+            .and_then(|value| value.as_u64())
+            != Some(80)
     {
         return Err(TranscriptionError::InvalidOutput(
             "任务参数与固定转写基线不一致".to_owned(),
         ));
     }
-    Ok((runtime, model))
+    if !runtime.vad_timeline_verified {
+        return Err(TranscriptionError::RuntimeIntegrity(
+            "任务运行时没有通过 VAD 原媒体时间轴验证".to_owned(),
+        ));
+    }
+    let vad_model = verify_vad_model()?;
+    let recorded_vad_path = parameters
+        .get("vadModelPath")
+        .and_then(|value| value.as_str())
+        .map(PathBuf::from);
+    let recorded_vad_sha256 = parameters
+        .get("vadModelSha256")
+        .and_then(|value| value.as_str());
+    if recorded_vad_path.as_deref() != Some(vad_model.path.as_path())
+        || recorded_vad_sha256.is_none_or(|value| !value.eq_ignore_ascii_case(&vad_model.sha256))
+    {
+        return Err(TranscriptionError::ModelIntegrity(
+            "任务固定的 VAD 模型身份与当前文件不一致".to_owned(),
+        ));
+    }
+    Ok((runtime, model, vad_model))
 }
 
 pub(crate) fn run_job(
@@ -1121,7 +1343,7 @@ pub(crate) fn run_job(
         0.05,
     )?;
     let media_path = validate_baseline(store, &job)?;
-    let (mut runtime, model) = verify_job_assets(&job)?;
+    let (mut runtime, model, vad_model) = verify_job_assets(&job)?;
     let work_directory = reset_job_directory(store, job_id)?;
     let audio_path = work_directory.join("audio-16khz-mono.wav");
     let ffmpeg_log = work_directory.join("ffmpeg.log");
@@ -1170,6 +1392,7 @@ pub(crate) fn run_job(
         cancellation,
         &runtime,
         &model,
+        &vad_model,
         &audio_path,
         &job.public.language_code,
         &output_prefix,
@@ -1188,6 +1411,7 @@ pub(crate) fn run_job(
             cancellation,
             &runtime,
             &model,
+            &vad_model,
             &audio_path,
             &job.public.language_code,
             &output_prefix,
@@ -1211,12 +1435,12 @@ pub(crate) fn run_job(
         0.85,
     )?;
     let output_hash = hash_file(&output_path)?;
-    let generated = parse_whisper_output(
+    let parsed = parse_whisper_output(
         &output_path,
         &job.public.language_code,
         job.media_duration_ms,
     )?;
-    let report = subtitles::inspect_generated_cues(&generated, Some(job.media_duration_ms));
+    let report = subtitles::inspect_generated_cues(&parsed.cues, Some(job.media_duration_ms));
     if report.error_count > 0 {
         return Err(TranscriptionError::InvalidOutput(format!(
             "字幕预检包含 {} 项错误",
@@ -1231,11 +1455,11 @@ pub(crate) fn run_job(
             project_id: job.public.project_id.clone(),
             source_label: format!("本地转写 · {} · {}", job.public.model_kind, runtime.backend),
             source_sha256: output_hash,
-            language_code: job.public.language_code.clone(),
+            language_code: parsed.language_code,
             expected_project_revision: job.expected_project_revision,
             expected_media_sha256: job.expected_media_sha256.clone(),
             media_duration_ms: Some(job.media_duration_ms),
-            cues: generated,
+            cues: parsed.cues,
         },
     )?;
     let timestamp = now_ms()?;
@@ -1264,6 +1488,7 @@ fn run_whisper(
     cancellation: &AtomicBool,
     runtime: &RuntimeBundle,
     model: &ModelBundle,
+    vad_model: &VadModelBundle,
     audio_path: &Path,
     language_code: &str,
     output_prefix: &Path,
@@ -1276,7 +1501,16 @@ fn run_whisper(
         .arg(&model.path)
         .arg("-f")
         .arg(audio_path)
-        .args(["-ojf", "-sow", "-ml", "60", "-l"])
+        .args(["-ojf", "-sow", "-ml", "60"])
+        .args(["--vad", "-vm"])
+        .arg(&vad_model.path)
+        .args([
+            "--vad-min-silence-duration-ms",
+            "250",
+            "--vad-speech-pad-ms",
+            "80",
+            "-l",
+        ])
         .arg(language_code)
         .arg("-of")
         .arg(output_prefix);
@@ -1604,19 +1838,35 @@ struct WhisperToken {
     p: Option<f64>,
 }
 
+struct ParsedWhisperOutput {
+    language_code: String,
+    cues: Vec<GeneratedSubtitleCue>,
+}
+
 fn parse_whisper_output(
     path: &Path,
     expected_language: &str,
     media_duration_ms: i64,
-) -> Result<Vec<GeneratedSubtitleCue>, TranscriptionError> {
+) -> Result<ParsedWhisperOutput, TranscriptionError> {
     let bytes = fs::read(path)?;
     let output: WhisperOutput = serde_json::from_slice(&bytes).map_err(|error| {
         TranscriptionError::InvalidOutput(format!("Whisper JSON 无法解析：{error}"))
     })?;
-    if output.result.language != expected_language {
+    let detected_language = output.result.language.trim().to_ascii_lowercase();
+    if detected_language.len() < 2
+        || detected_language.len() > 12
+        || !detected_language
+            .chars()
+            .all(|character| character.is_ascii_lowercase() || character == '-')
+    {
+        return Err(TranscriptionError::InvalidOutput(
+            "Whisper 返回了无效的语言标识".to_owned(),
+        ));
+    }
+    if expected_language != "auto" && detected_language != expected_language {
         return Err(TranscriptionError::InvalidOutput(format!(
             "Whisper 返回语言 {}，与已确认语言 {} 不一致",
-            output.result.language, expected_language
+            detected_language, expected_language
         )));
     }
     let mut generated = Vec::new();
@@ -1706,7 +1956,10 @@ fn parse_whisper_output(
             "语音 token 置信度不足，结果没有写入项目".to_owned(),
         ));
     }
-    Ok(generated)
+    Ok(ParsedWhisperOutput {
+        language_code: detected_language,
+        cues: generated,
+    })
 }
 
 fn is_special_token(value: &str) -> bool {
@@ -1791,6 +2044,21 @@ mod tests {
     }
 
     #[test]
+    fn bundled_vad_model_is_discovered_from_cpu_runtime() {
+        let temp = tempfile::tempdir().expect("temp directory should work");
+        let executable = temp.path().join("app").join("bin").join("SiaoVPlay.exe");
+        let cpu_runtime = temp.path().join("app").join("runtimes").join("whisper");
+        let vad_model = cpu_runtime.join(VAD_MODEL_FILE_NAME);
+        fs::create_dir_all(&cpu_runtime).expect("runtime fixture should be created");
+        fs::write(&vad_model, b"vad").expect("VAD fixture should be written");
+
+        let resolved = resolve_vad_model_path(None, Some(&executable), Some(&cpu_runtime))
+            .expect("bundled VAD model should be discovered");
+
+        assert_eq!(resolved, vad_model);
+    }
+
+    #[test]
     fn configured_roots_take_precedence_over_bundled_candidates() {
         let temp = tempfile::tempdir().expect("temp directory should work");
         let executable = temp.path().join("app").join("SiaoVPlay.exe");
@@ -1842,10 +2110,38 @@ mod tests {
 
         let parsed = parse_whisper_output(&path, "ja", 2_000).expect("output should parse");
 
-        assert_eq!(parsed.len(), 1);
-        assert_eq!(parsed[0].cue.text, "こんにちは");
-        assert_eq!(parsed[0].words.len(), 2);
-        assert_eq!(parsed[0].words[0].start_ms, 50);
+        assert_eq!(parsed.language_code, "ja");
+        assert_eq!(parsed.cues.len(), 1);
+        assert_eq!(parsed.cues[0].cue.text, "こんにちは");
+        assert_eq!(parsed.cues[0].words.len(), 2);
+        assert_eq!(parsed.cues[0].words[0].start_ms, 50);
+    }
+
+    #[test]
+    fn parser_accepts_detected_language_for_auto_mode() {
+        let temp = tempfile::tempdir().expect("temp directory should work");
+        let path = temp.path().join("result.json");
+        fs::write(
+            &path,
+            r#"{
+                "result":{"language":"zh"},
+                "transcription":[{
+                    "offsets":{"from":0,"to":900},
+                    "text":"这是中文讲解",
+                    "tokens":[
+                        {"text":"这是","offsets":{"from":50,"to":400},"p":0.8},
+                        {"text":"中文讲解","offsets":{"from":400,"to":850},"p":0.9}
+                    ]
+                }]
+            }"#,
+        )
+        .expect("fixture should be written");
+
+        let parsed = parse_whisper_output(&path, "auto", 1_000)
+            .expect("auto mode should retain the detected language");
+
+        assert_eq!(parsed.language_code, "zh");
+        assert_eq!(parsed.cues.len(), 1);
     }
 
     #[test]
@@ -2038,5 +2334,71 @@ mod tests {
                 "{language}"
             );
         }
+    }
+
+    #[test]
+    #[ignore = "requires a caller-provided real media file and the pinned local transcription assets"]
+    fn real_regression_media_transcribes_with_verified_vad() {
+        let media_path = env::var_os("SIAOVPLAY_TRANSCRIPTION_REGRESSION_MEDIA")
+            .map(PathBuf::from)
+            .expect("SIAOVPLAY_TRANSCRIPTION_REGRESSION_MEDIA must be set");
+        let language_code = env::var("SIAOVPLAY_TRANSCRIPTION_REGRESSION_LANGUAGE")
+            .unwrap_or_else(|_| "auto".to_owned());
+        let temp = tempfile::tempdir().expect("temp directory should work");
+        let store = ProjectStore::open(temp.path().join("data/projects/siaovplay.db"))
+            .expect("store should open");
+        let project = store
+            .create_local_project(CreateLocalProjectInput {
+                media_path: media_path.to_string_lossy().into_owned(),
+                title: Some("real transcription regression".to_owned()),
+            })
+            .expect("project should be created");
+        let job = start_transcription(
+            &store,
+            StartTranscriptionInput {
+                project_id: project.id.clone(),
+                language_code,
+                model_kind: "small".to_owned(),
+                confirm_replace_original: false,
+            },
+        )
+        .expect("job should be created");
+        store
+            .connect()
+            .expect("database should connect")
+            .execute(
+                "UPDATE transcription_jobs
+                 SET status = 'failed', stage = 'failed', parameters_json = ?2,
+                     error_code = 'invalid_output', error_message = 'legacy no-VAD failure'
+                 WHERE id = ?1",
+                params![
+                    job.id,
+                    serde_json::json!({
+                        "language": job.language_code,
+                        "vad": false
+                    })
+                    .to_string()
+                ],
+            )
+            .expect("legacy failed job should be simulated");
+        let resumed =
+            resume_transcription_job(&store, &job.id).expect("legacy failed job should resume");
+        assert_eq!(resumed.status, "queued");
+
+        run_job(&store, &job.id, &AtomicBool::new(false))
+            .expect("real transcription should complete");
+
+        let completed = get_transcription_job(&store, &job.id).expect("job should be readable");
+        assert_eq!(completed.status, "completed");
+        let versions = subtitles::list_subtitle_versions(&store, &project.id)
+            .expect("subtitle should be readable");
+        assert_eq!(versions.len(), 1);
+        assert!(!versions[0].segments.is_empty());
+        assert!(
+            versions[0]
+                .segments
+                .iter()
+                .any(|segment| !segment.words.is_empty())
+        );
     }
 }
