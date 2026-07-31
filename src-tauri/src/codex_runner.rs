@@ -3711,4 +3711,117 @@ process.stdin.on("end", () => {{
             serde_json::to_string_pretty(&evidence).expect("evidence should serialize")
         );
     }
+
+    #[test]
+    #[ignore = "requires a persistent acceptance store and an authenticated Codex CLI"]
+    fn translates_persistent_acceptance_project_to_chinese() {
+        assert_eq!(
+            env::var("SIAOVPLAY_RUN_REAL_CODEX").as_deref(),
+            Ok("1"),
+            "set SIAOVPLAY_RUN_REAL_CODEX=1 for the explicit real Codex check"
+        );
+        let store_path = env::var_os("SIAOVPLAY_TRANSLATION_ACCEPTANCE_STORE")
+            .map(PathBuf::from)
+            .expect("SIAOVPLAY_TRANSLATION_ACCEPTANCE_STORE must be set");
+        let project_id = env::var("SIAOVPLAY_TRANSLATION_ACCEPTANCE_PROJECT_ID")
+            .expect("SIAOVPLAY_TRANSLATION_ACCEPTANCE_PROJECT_ID must be set");
+        let evidence_path = env::var_os("SIAOVPLAY_TRANSLATION_ACCEPTANCE_EVIDENCE")
+            .map(PathBuf::from)
+            .expect("SIAOVPLAY_TRANSLATION_ACCEPTANCE_EVIDENCE must be set");
+        let store = ProjectStore::open(store_path).expect("acceptance store should open");
+        let source = subtitles::list_subtitle_versions(&store, &project_id)
+            .expect("subtitle versions should be readable")
+            .into_iter()
+            .find(|version| version.role == "original" && version.is_current)
+            .expect("acceptance project should have a current original subtitle");
+        let existing_translation = subtitles::list_subtitle_versions(&store, &project_id)
+            .expect("subtitle versions should be readable")
+            .into_iter()
+            .find(|version| version.role == "translation" && version.is_current);
+
+        let (task, translated) = if let Some(translated) = existing_translation {
+            let task = translation::list_translation_tasks(&store, &project_id)
+                .expect("translation tasks should be readable")
+                .into_iter()
+                .find(|task| {
+                    task.status == "completed"
+                        && task.output_version_id.as_deref() == Some(translated.id.as_str())
+                })
+                .expect("completed translation should retain its task");
+            (task, translated)
+        } else {
+            let runtime = require_ready_codex().expect("real Codex should be ready");
+            let task = prepare_translation_task(
+                &store,
+                PrepareTranslationTaskInput {
+                    project_id: project_id.clone(),
+                    handoff_kind: "codex".to_owned(),
+                    segment_ids: None,
+                },
+            )
+            .expect("translation task should be prepared");
+            claim_task_for_run(&store, &task.id, &runtime, false)
+                .expect("Codex task should enter running");
+            let application = run_task(
+                &store,
+                &task.id,
+                &runtime,
+                Duration::from_secs(DEFAULT_TIMEOUT_SECONDS),
+                &AtomicBool::new(false),
+            )
+            .expect("Codex should create a Chinese subtitle");
+            (application.task, application.subtitle_version)
+        };
+
+        assert_eq!(task.status, "completed");
+        assert_eq!(translated.language_code, TARGET_LANGUAGE);
+        assert_eq!(translated.segments.len(), source.segments.len());
+        assert!(source.segments.iter().zip(&translated.segments).all(
+            |(source_segment, translated_segment)| {
+                translated_segment.source_segment_id.as_deref() == Some(source_segment.id.as_str())
+                    && !translated_segment.text.trim().is_empty()
+            }
+        ));
+        assert!(translated.segments.iter().any(|segment| {
+            segment
+                .text
+                .chars()
+                .any(|character| ('\u{4e00}'..='\u{9fff}').contains(&character))
+        }));
+
+        let evidence = serde_json::json!({
+            "projectId": project_id,
+            "taskId": task.id,
+            "taskStatus": task.status,
+            "sourceLanguage": source.language_code,
+            "targetLanguage": translated.language_code,
+            "sourceVersionId": source.id,
+            "translationVersionId": translated.id,
+            "sourceSegmentCount": source.segments.len(),
+            "translationSegmentCount": translated.segments.len(),
+            "samples": source.segments.iter().zip(&translated.segments).take(5).map(
+                |(source_segment, translated_segment)| serde_json::json!({
+                    "startMs": source_segment.start_ms,
+                    "endMs": source_segment.end_ms,
+                    "source": source_segment.text,
+                    "translation": translated_segment.text
+                })
+            ).collect::<Vec<_>>()
+        });
+        fs::create_dir_all(
+            evidence_path
+                .parent()
+                .expect("acceptance evidence path should have a parent"),
+        )
+        .expect("acceptance evidence directory should exist");
+        fs::write(
+            &evidence_path,
+            serde_json::to_vec_pretty(&evidence).expect("evidence should serialize"),
+        )
+        .expect("acceptance evidence should be written");
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&evidence).expect("evidence should serialize")
+        );
+    }
 }
