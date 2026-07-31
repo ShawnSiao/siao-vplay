@@ -1862,6 +1862,24 @@ h3 {
   line-height: 1.6;
 }
 
+.external-return-guide {
+  display: grid;
+  gap: 6px;
+  margin: 10px 0 2px;
+  padding: 10px 10px 10px 28px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  color: var(--text-secondary);
+  background: #10151a;
+  font-size: 10px;
+  line-height: 1.55;
+}
+
+.external-return-guide li::marker {
+  color: var(--agent);
+  font-weight: 750;
+}
+
 .learning-prompt-toggle {
   width: 100%;
   margin-top: 8px;

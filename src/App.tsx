@@ -23,6 +23,7 @@ import {
   listSubtitleVersions,
   markProjectOpened,
   prepareProjectMedia,
+  reconcileExternalAgentResults,
   relinkProjectMedia,
   updatePlaybackState,
 } from "./lib/desktop";
@@ -41,6 +42,7 @@ export default function App() {
   const operationTokenRef = useRef(0);
   const startupMediaHandledRef = useRef(false);
   const posterJobsRef = useRef(new Set<string>());
+  const externalResultScanRef = useRef(false);
   const [screen, setScreen] = useState<Screen>("library");
   const [appStatus, setAppStatus] = useState<AppStatus | null>(null);
   const [runtimeStatus, setRuntimeStatus] =
@@ -415,6 +417,67 @@ export default function App() {
     },
     [mergeSubtitleVersion, refreshProjects],
   );
+  const activeProjectId = activeProject?.id;
+
+  useEffect(() => {
+    if (!isDesktopApp) {
+      return undefined;
+    }
+    let active = true;
+    const reconcile = async () => {
+      if (externalResultScanRef.current) {
+        return;
+      }
+      externalResultScanRef.current = true;
+      try {
+        const updates = await reconcileExternalAgentResults();
+        if (!active || !updates.length) {
+          return;
+        }
+        const latest = updates.at(-1);
+        if (latest) {
+          setToast(
+            latest.status === "rejected"
+              ? `外部 Agent 返回未通过检查：${latest.message}`
+              : latest.message,
+          );
+        }
+        if (
+          updates.some(
+            (update) =>
+              update.status === "completed" &&
+              update.taskKind === "translation" &&
+              update.projectId === activeProjectId,
+          ) &&
+          activeProjectId
+        ) {
+          const [versions, updatedProject] = await Promise.all([
+            listSubtitleVersions(activeProjectId),
+            getProject(activeProjectId),
+          ]);
+          if (active) {
+            setSubtitleVersions(versions);
+            setActiveProject(updatedProject);
+            setProjects((current) =>
+              current.map((project) =>
+                project.id === updatedProject.id ? updatedProject : project,
+              ),
+            );
+          }
+        }
+      } catch {
+        // 自动检测是后台增强能力；显式导入入口仍可继续使用。
+      } finally {
+        externalResultScanRef.current = false;
+      }
+    };
+    void reconcile();
+    const timer = window.setInterval(() => void reconcile(), 1_000);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, [activeProjectId]);
 
   const handleSubtitleVersionCreated = useCallback(
     async (version: SubtitleVersion, message: string) => {

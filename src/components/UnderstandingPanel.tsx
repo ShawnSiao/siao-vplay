@@ -11,6 +11,7 @@ import {
   listExplanations,
   listExplanationTasks,
   openExplanationMaterials,
+  openExternalResultDirectory,
   prepareExplanationTask,
   readExplanationPrompt,
   resumeCodexExplanationTask,
@@ -163,7 +164,12 @@ export function UnderstandingPanel({
   }, [prompt, task]);
 
   useEffect(() => {
-    if (!task || !["running", "validating"].includes(task.status)) {
+    if (
+      !task ||
+      !["awaiting_external_result", "running", "validating"].includes(
+        task.status,
+      )
+    ) {
       return;
     }
     let active = true;
@@ -309,6 +315,19 @@ export function UnderstandingPanel({
       if (path) {
         setResultPath(path);
       }
+    } catch (cause) {
+      setError(commandError(cause).message);
+    }
+  };
+
+  const openReturnDirectory = async () => {
+    if (!task) {
+      return;
+    }
+    setError(null);
+    try {
+      await openExternalResultDirectory("explanation", task.id);
+      setCopyNotice("已打开自动返回目录。保存为 result.json 后会自动检测。");
     } catch (cause) {
       setError(commandError(cause).message);
     }
@@ -488,10 +507,16 @@ export function UnderstandingPanel({
         ) : task.status === "awaiting_external_result" ? (
           <div className="understanding-manual">
             <div className="understanding-task-heading">
-              <span>提示词已准备</span>
-              <strong>复制文字并附上关键帧</strong>
-              <p>SiaoVPlay 不会自动发送材料，返回后只导入 JSON 文件。</p>
+              <span>等待其他 Agent 返回</span>
+              <strong>复制文字并按提示附上关键帧</strong>
+              <p>SiaoVPlay 不会自动发送材料，只检查受控返回目录。</p>
             </div>
+            {task.errorMessage ? (
+              <div className="notice danger" role="alert">
+                <strong>返回结果未通过检查</strong>
+                <p>{task.errorMessage}</p>
+              </div>
+            ) : null}
             <div className="understanding-manual-actions">
               <button
                 className="button primary"
@@ -514,6 +539,23 @@ export function UnderstandingPanel({
                 打开 {task.frames.length} 张关键帧
               </button>
             </div>
+            <button
+              className="button quiet understanding-primary"
+              type="button"
+              disabled={busy}
+              onClick={() => void openReturnDirectory()}
+            >
+              打开自动返回目录
+            </button>
+            <ol className="external-return-guide">
+              <li>将完整提示词发送给聊天型 AI，并按提示附上关键帧。</li>
+              <li>等待其返回一个纯 JSON 对象，只复制 JSON 本身。</li>
+              <li>
+                用记事本「另存为」result.json，文件类型选「所有文件」，编码选
+                UTF-8。
+              </li>
+              <li>保存到自动返回目录；也可保存到其他位置后在下方手动选择。</li>
+            </ol>
             {copyNotice ? <p role="status">{copyNotice}</p> : null}
             <button
               className="understanding-prompt-toggle"
@@ -541,7 +583,9 @@ export function UnderstandingPanel({
             >
               <span>
                 <strong>
-                  {resultPath ? fileName(resultPath) : "选择返回的 JSON"}
+                  {resultPath
+                    ? fileName(resultPath)
+                    : "未自动识别？手动选择 JSON"}
                 </strong>
                 <small>只读取选择的结果文件</small>
               </span>
@@ -568,7 +612,11 @@ export function UnderstandingPanel({
           <div className="understanding-running">
             <span className="spinner large"></span>
             <strong>{statusCopy(task)}</strong>
-            <p>可以继续观看；关闭面板不会中断本机处理。</p>
+            <p>
+              {task.handoffKind === "manual"
+                ? "已自动检测到 result.json，正在核对播放范围和结果完整性。"
+                : "可以继续观看；关闭面板不会中断本机处理。"}
+            </p>
             <div
               aria-label="场景理解进度"
               aria-valuemax={100}

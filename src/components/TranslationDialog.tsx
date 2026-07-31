@@ -8,6 +8,7 @@ import {
   getTranslationTask,
   importTranslationResult,
   listTranslationTasks,
+  openExternalResultDirectory,
   prepareTranslationTask,
   readTranslationPrompt,
   resumeCodexTranslationTask,
@@ -226,7 +227,12 @@ export function TranslationDialog({
   }, [prompt, task]);
 
   useEffect(() => {
-    if (!task || !["running", "validating"].includes(task.status)) {
+    if (
+      !task ||
+      !["awaiting_external_result", "running", "validating"].includes(
+        task.status,
+      )
+    ) {
       return;
     }
     let active = true;
@@ -373,6 +379,19 @@ export function TranslationDialog({
     }
   };
 
+  const openReturnDirectory = async () => {
+    if (!task) {
+      return;
+    }
+    setError(null);
+    try {
+      await openExternalResultDirectory("translation", task.id);
+      setCopyNotice("已打开自动返回目录。保存为 result.json 后会自动检测。");
+    } catch (cause) {
+      setError(commandError(cause).message);
+    }
+  };
+
   const importResult = async () => {
     if (!task || !resultPath) {
       return;
@@ -465,7 +484,11 @@ export function TranslationDialog({
           disabled={busy}
           onClick={() => void cancel()}
         >
-          {operation === "cancel" ? "正在取消…" : "取消翻译"}
+          {operation === "cancel"
+            ? "正在取消…"
+            : task.handoffKind === "manual"
+              ? "取消任务"
+              : "取消翻译"}
         </button>
       </>
     );
@@ -713,10 +736,16 @@ export function TranslationDialog({
               <h3>完整任务提示词已经生成</h3>
               <p>
                 SiaoVPlay 不会自动发送材料。复制提示词后，在自行选择的
-                Agent 中执行，再导入返回的 JSON 文件。
+                Agent 中执行；保存 result.json 后会自动检测。
               </p>
             </div>
           </div>
+          {task.errorMessage ? (
+            <div className="notice danger" role="alert">
+              <strong>返回结果未通过检查</strong>
+              <p>{task.errorMessage}</p>
+            </div>
+          ) : null}
           <div className="translation-manual-steps">
             <div>
               <span>1</span>
@@ -730,10 +759,26 @@ export function TranslationDialog({
             </div>
             <div>
               <span>3</span>
-              <strong>导入 result.json</strong>
-              <small>SiaoVPlay 会重新检查全部结果。</small>
+              <strong>保存 result.json</strong>
+              <small>放入自动返回目录后会自动检查。</small>
             </div>
           </div>
+          <button
+            className="button quiet"
+            type="button"
+            disabled={busy}
+            onClick={() => void openReturnDirectory()}
+          >
+            打开自动返回目录
+          </button>
+          <ol className="external-return-guide">
+            <li>聊天型 AI 返回后，只复制 JSON，不包含说明或 Markdown 代码围栏。</li>
+            <li>
+              用记事本「另存为」result.json，文件类型选「所有文件」，编码选
+              UTF-8。
+            </li>
+            <li>保存到自动返回目录；也可保存到其他位置后在下方手动选择。</li>
+          </ol>
           <button
             className="translation-prompt-toggle"
             type="button"
@@ -766,7 +811,9 @@ export function TranslationDialog({
           >
             <span>
               <strong>
-                {resultPath ? fileName(resultPath) : "选择 Agent 返回的 JSON"}
+                {resultPath
+                  ? fileName(resultPath)
+                  : "未自动识别？手动选择 JSON"}
               </strong>
               <small>
                 {resultPath
@@ -782,11 +829,17 @@ export function TranslationDialog({
           <div className="translation-task-heading">
             <div>
               <span className={`status-pill ${statusTone(task)}`}>
-                {task.status === "queued" ? "等待开始" : "本机处理中"}
+                {task.status === "queued"
+                  ? "等待开始"
+                  : task.handoffKind === "manual"
+                    ? "正在检查"
+                    : "本机处理中"}
               </span>
               <h3>{taskStage(task)}</h3>
               <p>
-                只处理受控字幕文本。可以关闭窗口；应用退出造成中断后可重新开始。
+                {task.handoffKind === "manual"
+                  ? "已自动检测到 result.json，正在核对任务、版本和字幕范围。"
+                  : "只处理受控字幕文本。可以关闭窗口；应用退出造成中断后可重新开始。"}
               </p>
             </div>
             <strong>{Math.round(task.progress * 100)}%</strong>
