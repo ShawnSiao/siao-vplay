@@ -17,6 +17,7 @@ use crate::{
         ImportLearningResultInput, LearningApplication, LearningCard, LearningCardsExport,
         LearningError, LearningTask, PrepareLearningTaskInput,
     },
+    library::LibraryError,
     media::{self, MediaError, MediaInspection, MediaPreparation, MediaRuntimeStatus},
     remote_media::{
         self, CancelRemoteMediaImportInput, ImportRemoteMediaUrlInput, InspectRemoteMediaUrlInput,
@@ -65,6 +66,29 @@ impl From<StoreError> for CommandError {
             | StoreError::InvalidMediaSourceKind(_)
             | StoreError::InvalidMediaArtifactStatus(_)
             | StoreError::InvalidSubtitleDisplayMode(_) => "database_error",
+        };
+        Self {
+            code,
+            message: error.to_string(),
+        }
+    }
+}
+
+impl From<LibraryError> for CommandError {
+    fn from(error: LibraryError) -> Self {
+        let code = match &error {
+            LibraryError::Store(StoreError::ProjectNotFound(_)) => "project_not_found",
+            LibraryError::Validation(_) | LibraryError::Store(StoreError::Validation(_)) => {
+                "validation_error"
+            }
+            LibraryError::CollectionNotFound(_) => "collection_not_found",
+            LibraryError::MembershipNotFound { .. } => "membership_not_found",
+            LibraryError::MembershipExists { .. } | LibraryError::Conflict(_) => "library_conflict",
+            LibraryError::Store(StoreError::UnsupportedSchema { .. }) => "unsupported_schema",
+            LibraryError::Store(StoreError::FileSystem(_)) => "filesystem_error",
+            LibraryError::Store(_) | LibraryError::Database(_) | LibraryError::InvalidData(_) => {
+                "database_error"
+            }
         };
         Self {
             code,
