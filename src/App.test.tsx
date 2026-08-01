@@ -1737,6 +1737,58 @@ describe("App", () => {
     ).toBeInTheDocument();
   });
 
+  it("keeps tracking a transcription created after its dialog closes", async () => {
+    const completedJob: TranscriptionJob = {
+      ...transcriptionJob,
+      status: "completed",
+      stage: "completed",
+      progress: 1,
+      subtitleVersionId: subtitleVersion.id,
+      completedAtMs: 1_785_354_220_000,
+    };
+    let resolveStart: (job: TranscriptionJob) => void = () => undefined;
+    let resolveVersions: (versions: SubtitleVersion[]) => void = () =>
+      undefined;
+    desktopMocks.startTranscription.mockImplementation(
+      () =>
+        new Promise<TranscriptionJob>((resolve) => {
+          resolveStart = resolve;
+        }),
+    );
+    desktopMocks.getTranscriptionJob.mockResolvedValue(completedJob);
+
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "继续观看" }));
+    fireEvent.click(await screen.findByRole("button", { name: "添加字幕" }));
+    fireEvent.click(screen.getByRole("tab", { name: "从视频生成" }));
+    fireEvent.change(await screen.findByLabelText(/视频原声语言/), {
+      target: { value: "auto" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "生成原文字幕" }));
+    fireEvent.click(screen.getByRole("button", { name: "关闭" }));
+
+    desktopMocks.listSubtitleVersions.mockImplementation(
+      () =>
+        new Promise<SubtitleVersion[]>((resolve) => {
+          resolveVersions = resolve;
+        }),
+    );
+    resolveStart(transcriptionJob);
+
+    await waitFor(() =>
+      expect(desktopMocks.getTranscriptionJob).toHaveBeenCalledWith(
+        transcriptionJob.id,
+      ),
+    );
+    resolveVersions([subtitleVersion]);
+    expect(
+      await screen.findByText("已生成 1 条原文字幕草稿，可以开始抽查。"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "原文字幕 · 1" }),
+    ).toBeInTheDocument();
+  });
+
   it("offers automatic language detection for mixed-language tutorials", async () => {
     render(<App />);
     fireEvent.click(await screen.findByRole("button", { name: "继续观看" }));

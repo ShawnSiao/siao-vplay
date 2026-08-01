@@ -529,12 +529,14 @@ export default function App() {
           return;
         }
 
-        setTrackedTranscriptionJobId(null);
         if (
           job.status !== "completed" ||
           !job.subtitleVersionId ||
           job.projectId !== activeProjectId
         ) {
+          setTrackedTranscriptionJobId((current) =>
+            current === job.id ? null : current,
+          );
           return;
         }
         const versions = await listSubtitleVersions(activeProjectId);
@@ -553,6 +555,9 @@ export default function App() {
             `已生成 ${version.segments.length} 条原文字幕草稿，可以开始抽查。`,
           );
         }
+        setTrackedTranscriptionJobId((current) =>
+          current === job.id ? null : current,
+        );
       } catch (error) {
         if (active) {
           setToast(commandError(error).message);

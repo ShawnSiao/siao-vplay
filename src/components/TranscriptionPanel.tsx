@@ -259,6 +259,7 @@ export function TranscriptionPanel({
         modelKind,
         Boolean(currentVersion),
       );
+      onJobTracked(nextJob.id);
       setJob(nextJob);
     } catch (cause) {
       setError(userFacingError(cause));
@@ -289,7 +290,9 @@ export function TranscriptionPanel({
     setOperation("resume");
     setError(null);
     try {
-      setJob(await resumeTranscriptionJob(job.id));
+      const nextJob = await resumeTranscriptionJob(job.id);
+      onJobTracked(nextJob.id);
+      setJob(nextJob);
     } catch (cause) {
       setError(userFacingError(cause));
     } finally {
