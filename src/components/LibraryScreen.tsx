@@ -18,6 +18,15 @@ type LibraryScreenProps = {
   onDelete: (project: Project) => void;
 };
 
+function projectLocation(project: Project): string {
+  if (project.mediaSource.originUrl) {
+    return project.mediaSource.originUrl;
+  }
+  const locator = project.mediaSource.locator;
+  const separatorIndex = Math.max(locator.lastIndexOf("\\"), locator.lastIndexOf("/"));
+  return separatorIndex > 0 ? locator.slice(0, separatorIndex) : "本地文件";
+}
+
 function LibraryItemRow({
   project,
   onOpen,
@@ -138,7 +147,11 @@ function ContinueWatchingItem({
         <small className="continue-kicker">继续观看</small>
         <strong>{project.title}</strong>
         <small>
-          {project.mediaSource.displayName} · 看到 {formatDuration(project.playbackState.positionMs)}
+          {project.mediaSource.displayName} · {formatDuration(project.playbackState.positionMs)}
+          {durationMs > 0 ? ` / ${formatDuration(durationMs)}` : ""}
+        </small>
+        <small>
+          上次观看于 {formatRecentTime(project.lastOpenedAtMs)}
         </small>
         <span
           className="watch-progress"
@@ -154,6 +167,41 @@ function ContinueWatchingItem({
   );
 }
 
+function RecentlyAddedItem({
+  project,
+  onOpen,
+  onRelink,
+}: {
+  project: Project;
+  onOpen: (project: Project) => void;
+  onRelink: (project: Project) => void;
+}) {
+  const needsRelink = project.status === "needs_relink";
+  return (
+    <button
+      className="recently-added-row"
+      type="button"
+      aria-label={`${needsRelink ? "重新定位" : "打开"}最近加入的 ${project.title}`}
+      onClick={() => (needsRelink ? onRelink(project) : onOpen(project))}
+    >
+      <span className="library-file-kind">
+        {fileExtension(project.mediaSource.displayName)}
+      </span>
+      <span className="recently-added-title">
+        <strong>{project.title}</strong>
+        <small title={projectLocation(project)}>{projectLocation(project)}</small>
+      </span>
+      <span className={`library-item-status ${needsRelink ? "warning" : "ready"}`}>
+        {needsRelink ? "需要重新定位" : "可以观看"}
+      </span>
+      <span className="library-item-recent">
+        {formatRecentTime(project.createdAtMs)}
+      </span>
+      <span className="recently-added-open" aria-hidden="true">›</span>
+    </button>
+  );
+}
+
 export function LibraryScreen({
   projects,
   loading,
@@ -165,10 +213,14 @@ export function LibraryScreen({
   onRelink,
   onDelete,
 }: LibraryScreenProps) {
-  const continueWatching = [...projects]
+  const allContinueWatching = [...projects]
     .filter((project) => project.playbackState.positionMs > 0)
-    .sort((left, right) => right.lastOpenedAtMs - left.lastOpenedAtMs)
-    .slice(0, 4);
+    .sort((left, right) => right.lastOpenedAtMs - left.lastOpenedAtMs);
+  const continueWatching = allContinueWatching.slice(0, 4);
+  const recentlyAdded = [...projects]
+    .sort((left, right) => right.createdAtMs - left.createdAtMs)
+    .slice(0, 5);
+  const latestContinueProject = allContinueWatching[0] ?? null;
 
   return (
     <div className="library-screen" data-screen-label="媒体库">
@@ -179,7 +231,29 @@ export function LibraryScreen({
               <h1>媒体库</h1>
               <p>本地视频、观看进度和字幕资料都保存在当前设备。</p>
             </div>
-            <span className="library-count">{projects.length} 个视频</span>
+            <div className="library-header-actions">
+              <button
+                aria-label="打开文件夹，将在 Phase 7D 启用"
+                className="button unavailable"
+                type="button"
+                title="文件夹扫描将在 Phase 7D 启用"
+                disabled
+              >
+                打开文件夹
+              </button>
+              {latestContinueProject ? (
+                <button
+                  className="button primary"
+                  type="button"
+                  aria-label={`打开最近观看的 ${latestContinueProject.title}`}
+                  onClick={() => onOpen(latestContinueProject)}
+                >
+                  继续播放
+                </button>
+              ) : (
+                <span className="library-count">{projects.length} 个视频</span>
+              )}
+            </div>
           </header>
 
           {continueWatching.length > 0 ? (
@@ -189,7 +263,7 @@ export function LibraryScreen({
             >
               <div className="section-heading">
                 <h2 id="continue-title">继续观看</h2>
-                <span>按最近打开排序</span>
+                <span>{allContinueWatching.length} 个播放中内容</span>
               </div>
               <div className="continue-grid">
                 {continueWatching.map((project) => (
@@ -197,6 +271,46 @@ export function LibraryScreen({
                     key={project.id}
                     project={project}
                     onOpen={onOpen}
+                  />
+                ))}
+              </div>
+            </section>
+          ) : null}
+
+          <section className="project-section" aria-labelledby="series-title">
+            <div className="section-heading">
+              <h2 id="series-title">剧集</h2>
+              <button
+                className="section-link"
+                type="button"
+                title="剧集与合集将在 Phase 7C 启用"
+                disabled
+              >
+                查看全部 ›
+              </button>
+            </div>
+            <div className="library-series-empty">
+              <strong>尚未建立剧集或合集</strong>
+              <p>Phase 7C 接入真实集合数据后，这里会显示季、集数和观看进度。</p>
+            </div>
+          </section>
+
+          {recentlyAdded.length > 0 ? (
+            <section className="project-section" aria-labelledby="recent-title">
+              <div className="section-heading">
+                <div>
+                  <h2 id="recent-title">最近加入</h2>
+                  <p>单个视频保留在「未归类」</p>
+                </div>
+                <span>{recentlyAdded.length} 个最近项目</span>
+              </div>
+              <div className="recently-added-list">
+                {recentlyAdded.map((project) => (
+                  <RecentlyAddedItem
+                    key={project.id}
+                    project={project}
+                    onOpen={onOpen}
+                    onRelink={onRelink}
                   />
                 ))}
               </div>

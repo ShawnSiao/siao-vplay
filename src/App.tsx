@@ -635,6 +635,15 @@ export default function App() {
         currentTranslationCount={currentTranslation?.segments.length ?? null}
         canReviseSubtitles={Boolean(currentSubtitle)}
         canDeliverSubtitles={Boolean(currentSubtitle || currentTranslation)}
+        libraryCounts={{
+          continueWatching: projects.filter(
+            (project) => project.playbackState.positionMs > 0,
+          ).length,
+          series: null,
+          folders: null,
+          watchLater: null,
+          unclassified: projects.length,
+        }}
         onToggleNavigation={shellController.toggleNavigation}
         onToggleDrawer={shellController.toggleDrawer}
         onGoLibrary={returnToLibrary}

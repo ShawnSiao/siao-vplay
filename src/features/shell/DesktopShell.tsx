@@ -17,6 +17,13 @@ type DesktopShellProps = {
   currentTranslationCount: number | null;
   canReviseSubtitles: boolean;
   canDeliverSubtitles: boolean;
+  libraryCounts: {
+    continueWatching: number;
+    series: number | null;
+    folders: number | null;
+    watchLater: number | null;
+    unclassified: number;
+  };
   onToggleNavigation: () => void;
   onToggleDrawer: (tab: ShellDrawerTab) => void;
   onGoLibrary: () => void;
@@ -42,6 +49,7 @@ export function DesktopShell({
   currentTranslationCount,
   canReviseSubtitles,
   canDeliverSubtitles,
+  libraryCounts,
   onToggleNavigation,
   onToggleDrawer,
   onGoLibrary,
@@ -107,7 +115,7 @@ export function DesktopShell({
           >
             <button
               aria-label="打开文件夹，文件夹与剧集导入将在 Phase 7D 启用"
-              className="shell-command"
+              className="shell-command shell-command-primary shell-command-unavailable"
               type="button"
               disabled
             >
@@ -235,6 +243,9 @@ export function DesktopShell({
             >
               <span aria-hidden="true">▶</span>
               <span className="desktop-navigation-label">继续观看</span>
+              <span className="desktop-navigation-count">
+                {libraryCounts.continueWatching}
+              </span>
             </button>
             <button
               aria-label="媒体库：剧集"
@@ -244,6 +255,9 @@ export function DesktopShell({
             >
               <span aria-hidden="true">▦</span>
               <span className="desktop-navigation-label">剧集</span>
+              {libraryCounts.series === null ? null : (
+                <span className="desktop-navigation-count">{libraryCounts.series}</span>
+              )}
             </button>
             <button
               aria-label="媒体库：文件夹"
@@ -253,6 +267,23 @@ export function DesktopShell({
             >
               <span aria-hidden="true">▰</span>
               <span className="desktop-navigation-label">文件夹</span>
+              {libraryCounts.folders === null ? null : (
+                <span className="desktop-navigation-count">{libraryCounts.folders}</span>
+              )}
+            </button>
+            <button
+              aria-label="媒体库：稍后观看，将在 Phase 7C 启用"
+              type="button"
+              title="稍后观看将在 Phase 7C 启用"
+              disabled
+            >
+              <span aria-hidden="true">◷</span>
+              <span className="desktop-navigation-label">稍后观看</span>
+              {libraryCounts.watchLater === null ? null : (
+                <span className="desktop-navigation-count">
+                  {libraryCounts.watchLater}
+                </span>
+              )}
             </button>
             <button
               aria-label="媒体库：未归类视频"
@@ -262,6 +293,9 @@ export function DesktopShell({
             >
               <span aria-hidden="true">▸</span>
               <span className="desktop-navigation-label">未归类</span>
+              <span className="desktop-navigation-count">
+                {libraryCounts.unclassified}
+              </span>
             </button>
           </nav>
           <div className="desktop-navigation-note">

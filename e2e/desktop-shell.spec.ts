@@ -14,6 +14,19 @@ test("media home uses a compact responsive desktop shell", async ({ page }) => {
     }),
   ).toBeDisabled();
   await expect(
+    page.getByRole("button", {
+      name: "打开文件夹，文件夹与剧集导入将在 Phase 7D 启用",
+    }),
+  ).toHaveCSS("opacity", "0.78");
+  await expect(
+    page.getByRole("button", {
+      name: "打开文件夹，文件夹与剧集导入将在 Phase 7D 启用",
+    }),
+  ).toHaveCSS(
+    "background-image",
+    "linear-gradient(rgba(195, 241, 135, 0.72), rgba(169, 220, 105, 0.68))",
+  );
+  await expect(
     page.getByRole("heading", { name: "专注观看，需要时再理解。" }),
   ).toHaveCount(0);
   await expect(page.getByRole("complementary", { name: "媒体库导航" })).toHaveCSS(
@@ -21,6 +34,15 @@ test("media home uses a compact responsive desktop shell", async ({ page }) => {
     "220px",
   );
   await expect(page.locator(".continue-item")).toHaveCount(1);
+  await expect(page.getByText("00:42 / 03:00")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "剧集" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "查看全部 ›" })).toBeDisabled();
+  await expect(page.getByRole("heading", { name: "最近加入" })).toBeVisible();
+  await expect(
+    page.getByRole("button", {
+      name: "媒体库：稍后观看，将在 Phase 7C 启用",
+    }),
+  ).toBeDisabled();
   await expect(page.locator(".library-item-list")).toBeVisible();
   await expect(page.locator(".project-card")).toHaveCount(0);
 

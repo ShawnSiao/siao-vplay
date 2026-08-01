@@ -131,6 +131,13 @@ export function PlayerHarness() {
       currentTranslationCount={null}
       canReviseSubtitles={false}
       canDeliverSubtitles={false}
+      libraryCounts={{
+        continueWatching: 1,
+        series: null,
+        folders: null,
+        watchLater: null,
+        unclassified: 1,
+      }}
       onToggleNavigation={() => undefined}
       onToggleDrawer={toggleDrawer}
       onGoLibrary={() => undefined}

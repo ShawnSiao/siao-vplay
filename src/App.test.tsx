@@ -856,6 +856,11 @@ describe("App", () => {
         name: "打开文件夹，文件夹与剧集导入将在 Phase 7D 启用",
       }),
     ).toBeDisabled();
+    expect(
+      screen.getByRole("button", {
+        name: "媒体库：稍后观看，将在 Phase 7C 启用",
+      }),
+    ).toBeDisabled();
     fireEvent.click(
       screen.getByRole("button", { name: "折叠媒体库导航" }),
     );
@@ -877,6 +882,11 @@ describe("App", () => {
       await screen.findByRole("heading", { name: "继续观看" }),
     ).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "未归类视频" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "剧集" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "查看全部 ›" })).toBeDisabled();
+    expect(screen.getByRole("heading", { name: "最近加入" })).toBeInTheDocument();
+    expect(screen.getByText(/00:42 \/ 03:00/)).toBeInTheDocument();
+    expect(screen.getByText("1 个播放中内容")).toBeInTheDocument();
     expect(screen.queryByLabelText("媒体导入说明")).not.toBeInTheDocument();
     expect(await screen.findAllByText("雨站台")).not.toHaveLength(0);
     expect(screen.getByText("本地媒体工具可用")).toBeInTheDocument();
