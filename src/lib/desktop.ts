@@ -6,6 +6,8 @@ import type {
   DeleteProjectResult,
   DesktopCommandError,
   EmbeddedSubtitlePreview,
+  ExternalAgentResultUpdate,
+  ExternalAgentTaskKind,
   Explanation,
   ExplanationApplication,
   ExplanationTask,
@@ -705,6 +707,27 @@ export async function resumeCodexLearningTask(
 ): Promise<LearningTask> {
   return invoke<LearningTask>("resume_codex_learning_task", {
     input: { taskId, timeoutSeconds },
+  });
+}
+
+export async function reconcileExternalAgentResults(): Promise<
+  ExternalAgentResultUpdate[]
+> {
+  if (!isDesktopApp) {
+    return [];
+  }
+  return invoke<ExternalAgentResultUpdate[]>(
+    "reconcile_external_agent_results",
+  );
+}
+
+export async function openExternalResultDirectory(
+  taskKind: ExternalAgentTaskKind,
+  taskId: string,
+): Promise<boolean> {
+  return invoke<boolean>("open_external_result_directory", {
+    taskKind,
+    taskId,
   });
 }
 

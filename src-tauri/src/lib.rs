@@ -1,8 +1,10 @@
+mod agent_result;
 mod burn;
 mod codex_runner;
 mod commands;
 mod delivery;
 mod domain;
+mod external_handoff;
 mod learning;
 mod media;
 mod remote_media;
@@ -158,6 +160,8 @@ pub fn run() {
             commands::list_learning_cards,
             commands::delete_learning_card,
             commands::export_learning_cards,
+            commands::reconcile_external_agent_results,
+            commands::open_external_result_directory,
             commands::export_subtitles,
             commands::start_subtitle_burn,
             commands::get_subtitle_burn_job,

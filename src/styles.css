@@ -1862,6 +1862,24 @@ h3 {
   line-height: 1.6;
 }
 
+.external-return-guide {
+  display: grid;
+  gap: 6px;
+  margin: 10px 0 2px;
+  padding: 10px 10px 10px 28px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  color: var(--text-secondary);
+  background: #10151a;
+  font-size: 10px;
+  line-height: 1.55;
+}
+
+.external-return-guide li::marker {
+  color: var(--agent);
+  font-weight: 750;
+}
+
 .learning-prompt-toggle {
   width: 100%;
   margin-top: 8px;
@@ -2213,6 +2231,8 @@ h3 {
 
 .dialog:has(.subtitle-dialog-section),
 .dialog:has(.subtitle-preview),
+.dialog:has(.transcription-setup),
+.dialog:has(.transcription-task),
 .dialog:has(.remote-url-field),
 .dialog:has(.delivery-dialog) {
   width: min(680px, calc(100vw - 64px));
@@ -2608,23 +2628,6 @@ h3 {
 .subtitle-current-note strong {
   color: var(--text-primary);
   font-size: 13px;
-}
-
-.subtitle-current-samples {
-  display: grid;
-  gap: 5px;
-  margin-top: 7px;
-  padding-top: 9px;
-  border-top: 1px solid var(--border-subtle);
-}
-
-.subtitle-current-samples p {
-  margin: 0;
-  overflow: hidden;
-  color: var(--text-secondary);
-  font-size: 11px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .subtitle-dialog-section {
@@ -3838,7 +3841,22 @@ h3 {
 .transcription-setup,
 .transcription-task {
   display: grid;
-  gap: 16px;
+  gap: 12px;
+}
+
+.dialog:has(.transcription-setup),
+.dialog:has(.transcription-task) {
+  padding: 22px 26px;
+}
+
+.dialog:has(.transcription-setup) .subtitle-workflow-switch,
+.dialog:has(.transcription-task) .subtitle-workflow-switch {
+  margin: 12px 0;
+}
+
+.dialog:has(.transcription-setup) .subtitle-current-note,
+.dialog:has(.transcription-task) .subtitle-current-note {
+  margin-bottom: 12px;
 }
 
 .transcription-local-note {
@@ -3875,6 +3893,7 @@ h3 {
 
 .transcription-models {
   display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
   margin: 0;
   padding: 0;
@@ -3882,6 +3901,7 @@ h3 {
 }
 
 .transcription-models legend {
+  grid-column: 1 / -1;
   margin-bottom: 7px;
   color: var(--text-secondary);
   font-size: 12px;
@@ -3893,7 +3913,7 @@ h3 {
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 10px;
-  min-height: 58px;
+  min-height: 56px;
   padding: 10px 12px;
   border: 1px solid var(--border-default);
   border-radius: 8px;
@@ -4035,6 +4055,58 @@ h3 {
 
 .transcription-failure .button {
   margin-top: 10px;
+}
+
+/* Dialog text must remain readable on high-density Windows displays. */
+.dialog > .eyebrow,
+.dialog-body small,
+.dialog-body em,
+.dialog-body dt {
+  font-size: 12px;
+}
+
+.dialog-body,
+.dialog-body p,
+.dialog-body button,
+.dialog-body input,
+.dialog-body select,
+.dialog-body textarea,
+.dialog-actions .button {
+  font-size: 13px;
+}
+
+.dialog .status-pill,
+.source-file-note span,
+.delivery-version-grid label > span,
+.delivery-fixed-format > span,
+.remote-url-preview > div:first-child span,
+.remote-url-preview dt,
+.subtitle-current-note span,
+.subtitle-preview-head span:first-child,
+.subtitle-preview-stats small,
+.translation-source-summary span,
+.translation-section-heading > span,
+.revision-search span,
+.revision-segment-list button span,
+.revision-retranslate-bar > span,
+.revision-editor-heading strong,
+.revision-segment-editor .field > span,
+.revision-single-panel .field > span,
+.transcription-task-head span:first-child,
+.transcription-summary dt {
+  font-size: 12px;
+}
+
+.translation-scope-grid strong,
+.translation-manual-steps strong,
+.revision-history-list strong {
+  font-size: 13px;
+}
+
+.translation-prompt,
+.revision-segment-editor textarea,
+.delivery-path {
+  font-size: 12px;
 }
 
 .busy-backdrop {

@@ -11,6 +11,7 @@ use crate::{
         CreateLocalProjectInput, DeleteProjectResult, PrepareProjectMediaInput, Project,
         RelinkProjectMediaInput, UpdatePlaybackStateInput,
     },
+    external_handoff::{self, ExternalAgentResultUpdate, ExternalHandoffError},
     learning::{
         self, CreateLearningCardInput, DictionaryEntry, ExportLearningCardsInput,
         ImportLearningResultInput, LearningApplication, LearningCard, LearningCardsExport,
@@ -313,6 +314,15 @@ impl From<UnderstandingError> for CommandError {
 
 impl From<LearningError> for CommandError {
     fn from(error: LearningError) -> Self {
+        Self {
+            code: error.code(),
+            message: error.to_string(),
+        }
+    }
+}
+
+impl From<ExternalHandoffError> for CommandError {
+    fn from(error: ExternalHandoffError) -> Self {
         Self {
             code: error.code(),
             message: error.to_string(),
@@ -1013,6 +1023,33 @@ pub async fn export_learning_cards(
     let store = store.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
         learning::export_learning_cards(&store, input).map_err(CommandError::from)
+    })
+    .await
+    .map_err(CommandError::background_task_failed)?
+}
+
+#[tauri::command]
+pub async fn reconcile_external_agent_results(
+    store: State<'_, ProjectStore>,
+) -> Result<Vec<ExternalAgentResultUpdate>, CommandError> {
+    let store = store.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        external_handoff::reconcile_external_agent_results(&store).map_err(CommandError::from)
+    })
+    .await
+    .map_err(CommandError::background_task_failed)?
+}
+
+#[tauri::command]
+pub async fn open_external_result_directory(
+    store: State<'_, ProjectStore>,
+    task_kind: String,
+    task_id: String,
+) -> Result<bool, CommandError> {
+    let store = store.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        external_handoff::open_external_result_directory(&store, &task_kind, &task_id)
+            .map_err(CommandError::from)
     })
     .await
     .map_err(CommandError::background_task_failed)?

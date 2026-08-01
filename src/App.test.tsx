@@ -87,6 +87,8 @@ const desktopMocks = vi.hoisted(() => ({
   startCodexLearningTask: vi.fn(),
   cancelLearningTask: vi.fn(),
   resumeCodexLearningTask: vi.fn(),
+  reconcileExternalAgentResults: vi.fn(),
+  openExternalResultDirectory: vi.fn(),
   createLearningCard: vi.fn(),
   getLearningCard: vi.fn(),
   listLearningCards: vi.fn(),
@@ -619,6 +621,8 @@ beforeEach(() => {
   desktopMocks.listSubtitleVersions.mockResolvedValue([]);
   desktopMocks.reviseSubtitleVersion.mockResolvedValue(subtitleVersion);
   desktopMocks.restoreSubtitleVersion.mockResolvedValue(subtitleVersion);
+  desktopMocks.reconcileExternalAgentResults.mockResolvedValue([]);
+  desktopMocks.openExternalResultDirectory.mockResolvedValue(true);
   desktopMocks.getTranscriptionRuntimeStatus.mockResolvedValue({
     available: true,
     preferredBackend: "vulkan",
@@ -866,6 +870,41 @@ describe("App", () => {
       false,
     );
     expect(screen.getByText(/H264\s*\/ AAC/)).toBeInTheDocument();
+  });
+
+  it("toggles playback from the video surface and keeps the button label in sync", async () => {
+    let paused = true;
+    const pausedState = vi
+      .spyOn(HTMLMediaElement.prototype, "paused", "get")
+      .mockImplementation(() => paused);
+    const play = vi
+      .spyOn(HTMLMediaElement.prototype, "play")
+      .mockImplementation(async function (this: HTMLMediaElement) {
+        paused = false;
+        fireEvent.play(this);
+      });
+    const pause = vi
+      .spyOn(HTMLMediaElement.prototype, "pause")
+      .mockImplementation(function (this: HTMLMediaElement) {
+        paused = true;
+        fireEvent.pause(this);
+      });
+
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "继续观看" }));
+    const video = await screen.findByLabelText("视频画面，单击播放或暂停");
+
+    fireEvent.click(video);
+    await waitFor(() => expect(play).toHaveBeenCalledTimes(1));
+    expect(screen.getByRole("button", { name: "暂停" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "暂停" }));
+    expect(pause).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("button", { name: "播放" })).toBeInTheDocument();
+
+    pausedState.mockRestore();
+    play.mockRestore();
+    pause.mockRestore();
   });
 
   it("shows original, Chinese, and bilingual subtitles and persists the choice", async () => {
@@ -1157,7 +1196,16 @@ describe("App", () => {
       screen.getByRole("button", { name: "确认范围并理解当前场景" }),
     );
 
-    expect(await screen.findByText("复制文字并附上关键帧")).toBeInTheDocument();
+    expect(
+      await screen.findByText("复制文字并按提示附上关键帧"),
+    ).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: "打开自动返回目录" }),
+    );
+    expect(desktopMocks.openExternalResultDirectory).toHaveBeenCalledWith(
+      "explanation",
+      explanationTask.id,
+    );
     fireEvent.click(screen.getByRole("button", { name: "复制完整提示词" }));
     await waitFor(() =>
       expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
@@ -1168,7 +1216,7 @@ describe("App", () => {
     expect(desktopMocks.openExplanationMaterials).toHaveBeenCalledWith(
       explanationTask.id,
     );
-    fireEvent.click(screen.getByRole("button", { name: /选择返回的 JSON/ }));
+    fireEvent.click(screen.getByRole("button", { name: /手动选择 JSON/ }));
     expect(await screen.findByText("explanation.json")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "检查并显示解释" }));
 
@@ -1267,15 +1315,22 @@ describe("App", () => {
     fireEvent.click(screen.getByRole("button", { name: "确认范围并查询" }));
 
     expect(
-      await screen.findByText("复制后交给自行选择的工具"),
+      await screen.findByText("复制提示词后，可自动检测 result.json"),
     ).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: "打开自动返回目录" }),
+    );
+    expect(desktopMocks.openExternalResultDirectory).toHaveBeenCalledWith(
+      "learning",
+      learningTask.id,
+    );
     fireEvent.click(screen.getByRole("button", { name: "复制完整提示词" }));
     await waitFor(() =>
       expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
         expect.stringContaining("语境词义查询任务"),
       ),
     );
-    fireEvent.click(screen.getByRole("button", { name: /选择返回的 JSON/ }));
+    fireEvent.click(screen.getByRole("button", { name: /手动选择 JSON/ }));
     expect(await screen.findByText("learning.json")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "检查并显示词义" }));
 
@@ -1317,6 +1372,85 @@ describe("App", () => {
         screen.queryByAltText("待っていたの？ 的场景截图"),
       ).not.toBeInTheDocument(),
     );
+  });
+
+  it("automatically detects, validates, and displays an external learning result", async () => {
+    const captionProject: Project = {
+      ...project,
+      playbackState: {
+        ...project.playbackState,
+        positionMs: 500,
+      },
+    };
+    const waitingTask: LearningTask = {
+      ...learningTask,
+      handoffKind: "manual",
+      status: "awaiting_external_result",
+      stage: "awaiting_external_result",
+      receiverLabel: "手动选择的外部 Agent",
+    };
+    const validatingTask: LearningTask = {
+      ...waitingTask,
+      status: "validating",
+      stage: "validating",
+      progress: 0.9,
+    };
+    const completedTask: LearningTask = {
+      ...validatingTask,
+      status: "completed",
+      stage: "completed",
+      progress: 1,
+      outputDictionaryEntryId: dictionaryEntry.id,
+      completedAtMs: 1_785_354_350_000,
+    };
+    desktopMocks.listProjects.mockResolvedValue([captionProject]);
+    desktopMocks.markProjectOpened.mockResolvedValue(captionProject);
+    desktopMocks.listSubtitleVersions.mockResolvedValue([
+      subtitleVersion,
+      translatedVersion,
+    ]);
+    desktopMocks.listLearningTasks.mockResolvedValue([waitingTask]);
+    desktopMocks.getLearningTask
+      .mockResolvedValueOnce(validatingTask)
+      .mockResolvedValue(completedTask);
+    desktopMocks.reconcileExternalAgentResults
+      .mockResolvedValueOnce([
+        {
+          taskKind: "learning",
+          taskId: waitingTask.id,
+          projectId: project.id,
+          status: "validating",
+          outputId: null,
+          message: "已检测到外部 Agent 返回，正在检查词义",
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          taskKind: "learning",
+          taskId: waitingTask.id,
+          projectId: project.id,
+          status: "completed",
+          outputId: dictionaryEntry.id,
+          message: "已检测并导入外部 Agent 返回的词义结果",
+        },
+      ])
+      .mockResolvedValue([]);
+
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "继续观看" }));
+    fireEvent.click(await screen.findByRole("button", { name: "学习" }));
+
+    expect(await screen.findByText("等待其他 Agent 返回")).toBeInTheDocument();
+    expect(
+      await screen.findByText("正在检查查询范围和结果", {}, { timeout: 3_000 }),
+    ).toBeInTheDocument();
+    expect(
+      await screen.findByText(
+        "结合当前台词，询问对方是否一直在等待。",
+        {},
+        { timeout: 3_000 },
+      ),
+    ).toBeInTheDocument();
   });
 
   it("restores a completed learning result and saved card for the current subtitle", async () => {
@@ -1563,6 +1697,46 @@ describe("App", () => {
     ).toBeInTheDocument();
   });
 
+  it("refreshes player subtitles when generation finishes after the dialog closes", async () => {
+    const completedJob: TranscriptionJob = {
+      ...transcriptionJob,
+      status: "completed",
+      stage: "completed",
+      progress: 1,
+      subtitleVersionId: subtitleVersion.id,
+      completedAtMs: 1_785_354_220_000,
+    };
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "继续观看" }));
+    fireEvent.click(await screen.findByRole("button", { name: "添加字幕" }));
+    fireEvent.click(screen.getByRole("tab", { name: "从视频生成" }));
+    fireEvent.change(await screen.findByLabelText(/视频原声语言/), {
+      target: { value: "ja" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "生成原文字幕" }));
+
+    await waitFor(() =>
+      expect(desktopMocks.startTranscription).toHaveBeenCalled(),
+    );
+    desktopMocks.getTranscriptionJob.mockResolvedValue(completedJob);
+    desktopMocks.listSubtitleVersions.mockResolvedValue([subtitleVersion]);
+
+    expect(screen.getAllByRole("button", { name: "关闭" })).toHaveLength(1);
+    fireEvent.click(screen.getByRole("button", { name: "关闭" }));
+
+    await waitFor(() =>
+      expect(desktopMocks.getTranscriptionJob).toHaveBeenCalledWith(
+        transcriptionJob.id,
+      ),
+    );
+    expect(
+      await screen.findByText("已生成 1 条原文字幕草稿，可以开始抽查。"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "原文字幕 · 1" }),
+    ).toBeInTheDocument();
+  });
+
   it("offers automatic language detection for mixed-language tutorials", async () => {
     render(<App />);
     fireEvent.click(await screen.findByRole("button", { name: "继续观看" }));
@@ -1714,7 +1888,14 @@ describe("App", () => {
       ),
     );
     fireEvent.click(
-      screen.getByRole("button", { name: /选择 Agent 返回的 JSON/ }),
+      screen.getByRole("button", { name: "打开自动返回目录" }),
+    );
+    expect(desktopMocks.openExternalResultDirectory).toHaveBeenCalledWith(
+      "translation",
+      translationTask.id,
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: /手动选择 JSON/ }),
     );
     expect(await screen.findByText("result.json")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "检查并生成中文字幕" }));

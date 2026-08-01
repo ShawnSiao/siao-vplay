@@ -16,6 +16,7 @@ import {
   deleteProject,
   ensureProjectPoster,
   getAppStatus,
+  getTranscriptionJob,
   getProject,
   getMediaRuntimeStatus,
   isDesktopApp,
@@ -23,6 +24,7 @@ import {
   listSubtitleVersions,
   markProjectOpened,
   prepareProjectMedia,
+  reconcileExternalAgentResults,
   relinkProjectMedia,
   updatePlaybackState,
 } from "./lib/desktop";
@@ -32,15 +34,24 @@ import type {
   MediaRuntimeStatus,
   Project,
   SubtitleVersion,
+  TranscriptionJob,
   TranslationTask,
 } from "./types";
 
 type Screen = "library" | "preparing" | "player";
 
+const activeTranscriptionStatuses = new Set<TranscriptionJob["status"]>([
+  "queued",
+  "extracting",
+  "transcribing",
+  "validating",
+]);
+
 export default function App() {
   const operationTokenRef = useRef(0);
   const startupMediaHandledRef = useRef(false);
   const posterJobsRef = useRef(new Set<string>());
+  const externalResultScanRef = useRef(false);
   const [screen, setScreen] = useState<Screen>("library");
   const [appStatus, setAppStatus] = useState<AppStatus | null>(null);
   const [runtimeStatus, setRuntimeStatus] =
@@ -59,6 +70,9 @@ export default function App() {
     [],
   );
   const [subtitleDialogOpen, setSubtitleDialogOpen] = useState(false);
+  const [trackedTranscriptionJobId, setTrackedTranscriptionJobId] = useState<
+    string | null
+  >(null);
   const [translationDialogOpen, setTranslationDialogOpen] = useState(false);
   const [translationSegmentIds, setTranslationSegmentIds] = useState<
     string[] | undefined
@@ -415,6 +429,67 @@ export default function App() {
     },
     [mergeSubtitleVersion, refreshProjects],
   );
+  const activeProjectId = activeProject?.id;
+
+  useEffect(() => {
+    if (!isDesktopApp) {
+      return undefined;
+    }
+    let active = true;
+    const reconcile = async () => {
+      if (externalResultScanRef.current) {
+        return;
+      }
+      externalResultScanRef.current = true;
+      try {
+        const updates = await reconcileExternalAgentResults();
+        if (!active || !updates.length) {
+          return;
+        }
+        const latest = updates.at(-1);
+        if (latest) {
+          setToast(
+            latest.status === "rejected"
+              ? `外部 Agent 返回未通过检查：${latest.message}`
+              : latest.message,
+          );
+        }
+        if (
+          updates.some(
+            (update) =>
+              update.status === "completed" &&
+              update.taskKind === "translation" &&
+              update.projectId === activeProjectId,
+          ) &&
+          activeProjectId
+        ) {
+          const [versions, updatedProject] = await Promise.all([
+            listSubtitleVersions(activeProjectId),
+            getProject(activeProjectId),
+          ]);
+          if (active) {
+            setSubtitleVersions(versions);
+            setActiveProject(updatedProject);
+            setProjects((current) =>
+              current.map((project) =>
+                project.id === updatedProject.id ? updatedProject : project,
+              ),
+            );
+          }
+        }
+      } catch {
+        // 自动检测是后台增强能力；显式导入入口仍可继续使用。
+      } finally {
+        externalResultScanRef.current = false;
+      }
+    };
+    void reconcile();
+    const timer = window.setInterval(() => void reconcile(), 1_000);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, [activeProjectId]);
 
   const handleSubtitleVersionCreated = useCallback(
     async (version: SubtitleVersion, message: string) => {
@@ -431,6 +506,75 @@ export default function App() {
     },
     [mergeSubtitleVersion, refreshProjects],
   );
+
+  useEffect(() => {
+    if (
+      !trackedTranscriptionJobId ||
+      subtitleDialogOpen ||
+      !activeProjectId
+    ) {
+      return undefined;
+    }
+
+    let active = true;
+    let timer: number | undefined;
+    const poll = async () => {
+      try {
+        const job = await getTranscriptionJob(trackedTranscriptionJobId);
+        if (!active) {
+          return;
+        }
+        if (activeTranscriptionStatuses.has(job.status)) {
+          timer = window.setTimeout(() => void poll(), 900);
+          return;
+        }
+
+        setTrackedTranscriptionJobId(null);
+        if (
+          job.status !== "completed" ||
+          !job.subtitleVersionId ||
+          job.projectId !== activeProjectId
+        ) {
+          return;
+        }
+        const versions = await listSubtitleVersions(activeProjectId);
+        if (!active) {
+          return;
+        }
+        const version = versions.find(
+          (item) => item.id === job.subtitleVersionId,
+        );
+        if (!version) {
+          throw new Error("生成的字幕版本暂时无法读取");
+        }
+        if (!subtitleVersions.some((item) => item.id === version.id)) {
+          await handleSubtitleVersionCreated(
+            version,
+            `已生成 ${version.segments.length} 条原文字幕草稿，可以开始抽查。`,
+          );
+        }
+      } catch (error) {
+        if (active) {
+          setToast(commandError(error).message);
+          timer = window.setTimeout(() => void poll(), 1_500);
+        }
+      }
+    };
+
+    void poll();
+    return () => {
+      active = false;
+      if (timer !== undefined) {
+        window.clearTimeout(timer);
+      }
+    };
+  }, [
+    activeProjectId,
+    handleSubtitleVersionCreated,
+    subtitleDialogOpen,
+    subtitleVersions,
+    trackedTranscriptionJobId,
+  ]);
 
   return (
     <div className="app-shell">
@@ -504,6 +648,7 @@ export default function App() {
             ) ?? null
           }
           onClose={() => setSubtitleDialogOpen(false)}
+          onTranscriptionTracked={setTrackedTranscriptionJobId}
           onImported={(version) => {
             void handleSubtitleVersionCreated(
               version,

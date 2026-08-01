@@ -195,11 +195,13 @@ export function PlayerScreen({
     if (video.paused) {
       try {
         await video.play();
+        setPlaying(true);
       } catch (error) {
         onError(error instanceof Error ? error.message : "播放器未能开始播放");
       }
     } else {
       video.pause();
+      setPlaying(false);
     }
   }, [onError]);
 
@@ -440,6 +442,8 @@ export function PlayerScreen({
             key={sourceUrl}
             src={sourceUrl}
             preload="metadata"
+            aria-label="视频画面，单击播放或暂停"
+            onClick={() => void togglePlayback()}
             onLoadedMetadata={handleLoadedMetadata}
             onLoadedData={handleLoadedData}
             onTimeUpdate={handleTimeUpdate}

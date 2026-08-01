@@ -383,6 +383,20 @@ export type TranslationApplication = {
   validation: TranslationValidation;
 };
 
+export type ExternalAgentTaskKind =
+  | "translation"
+  | "explanation"
+  | "learning";
+
+export type ExternalAgentResultUpdate = {
+  taskKind: ExternalAgentTaskKind;
+  taskId: string;
+  projectId: string;
+  status: "validating" | "completed" | "rejected";
+  outputId: string | null;
+  message: string;
+};
+
 export type CodexRuntimeStatus = {
   available: boolean;
   authenticated: boolean;
