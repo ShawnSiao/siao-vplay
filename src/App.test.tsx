@@ -25,6 +25,7 @@ import type {
 const desktopMocks = vi.hoisted(() => ({
   getAppStatus: vi.fn(),
   getMediaRuntimeStatus: vi.fn(),
+  getRuntimeCatalog: vi.fn(),
   setMainWindowMediaTitle: vi.fn(),
   listProjects: vi.fn(),
   getProject: vi.fn(),
@@ -631,6 +632,13 @@ beforeEach(() => {
     version: "ffmpeg 8.1.1",
     errorMessage: null,
   });
+  desktopMocks.getRuntimeCatalog.mockResolvedValue({
+    settings: {
+      storageRoot: "W:\\SiaoVPlay\\runtime-data",
+      preferredModel: "small",
+    },
+    components: [],
+  });
   desktopMocks.setMainWindowMediaTitle.mockResolvedValue(undefined);
   desktopMocks.listProjects.mockResolvedValue([project]);
   libraryGatewayMocks.getLibraryHome.mockResolvedValue(libraryHomeFor());
@@ -958,13 +966,20 @@ describe("App", () => {
     expect(
       screen.getByRole("searchbox", { name: "搜索媒体库" }),
     ).toBeEnabled();
-    expect(screen.getByRole("button", { name: "设置，内容待定义" })).toBeDisabled();
     expect(screen.getByRole("contentinfo", { name: "媒体库状态" })).toHaveTextContent(
       "0 个剧集文件",
     );
     expect(screen.getByRole("contentinfo", { name: "媒体库状态" })).toHaveTextContent(
       "0 个授权文件夹",
     );
+    const settingsButton = screen.getByRole("button", { name: "设置" });
+    expect(settingsButton).toBeEnabled();
+    fireEvent.click(settingsButton);
+    expect(
+      await screen.findByRole("dialog", { name: "运行时与模型设置" }),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "完成" }));
+    expect(screen.queryByRole("dialog", { name: "运行时与模型设置" })).toBeNull();
     fireEvent.click(
       screen.getByRole("button", { name: "折叠媒体库导航" }),
     );

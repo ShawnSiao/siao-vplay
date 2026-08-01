@@ -40,7 +40,7 @@ test("media home uses a compact responsive desktop shell", async ({ page }) => {
   await expect(
     page.getByRole("searchbox", { name: "搜索媒体库" }),
   ).toBeEnabled();
-  await expect(page.getByRole("button", { name: "设置，内容待定义" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "设置" })).toBeEnabled();
   await expect(page.getByRole("contentinfo", { name: "媒体库状态" })).toHaveCSS(
     "height",
     "26px",

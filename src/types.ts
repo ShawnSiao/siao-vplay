@@ -405,6 +405,32 @@ export type MediaRuntimeStatus = {
   errorMessage: string | null;
 };
 
+export type RuntimeSettings = {
+  storageRoot: string | null;
+  preferredModel: "small" | "base";
+};
+
+export type RuntimeComponent = {
+  id: string;
+  title: string;
+  componentKind: "bundled" | "download";
+  version: string;
+  available: boolean;
+  installedPath: string | null;
+  expectedSizeBytes: number;
+  installedSizeBytes: number | null;
+  expectedSha256: string;
+  sourceUrl: string;
+  sourcePage: string;
+  license: string;
+  errorMessage: string | null;
+};
+
+export type RuntimeCatalog = {
+  settings: RuntimeSettings;
+  components: RuntimeComponent[];
+};
+
 export type DeleteProjectResult = {
   projectId: string;
   deleted: boolean;

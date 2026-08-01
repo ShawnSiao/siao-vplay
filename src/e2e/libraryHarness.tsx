@@ -239,6 +239,7 @@ export function LibraryHarness() {
       onManageTranslation={() => undefined}
       onReviseSubtitles={() => undefined}
       onDeliverSubtitles={() => undefined}
+      onOpenSettings={() => undefined}
     >
       <LibraryScreen
         home={libraryHome}
