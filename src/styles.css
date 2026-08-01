@@ -175,6 +175,57 @@ h3 {
   font-size: 12px;
 }
 
+.shell-search-wrap {
+  position: relative;
+}
+
+.shell-search:focus-within {
+  border-color: #65717c;
+  box-shadow: 0 0 0 1px rgb(174 234 105 / 18%);
+}
+
+.shell-search-results {
+  position: absolute;
+  z-index: 30;
+  top: 35px;
+  right: 0;
+  display: grid;
+  overflow: auto;
+  width: 360px;
+  max-height: min(420px, calc(100vh - 90px));
+  padding: 5px;
+  border: 1px solid #3a444d;
+  border-radius: 5px;
+  background: #12171c;
+  box-shadow: 0 12px 30px rgb(0 0 0 / 48%);
+}
+
+.shell-search-results button {
+  display: grid;
+  gap: 2px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 3px;
+  color: var(--text-primary);
+  background: transparent;
+  text-align: left;
+}
+
+.shell-search-results button:hover,
+.shell-search-results button:focus-visible {
+  background: #222a31;
+}
+
+.shell-search-results small,
+.shell-search-message {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.shell-search-message {
+  padding: 11px 10px;
+}
+
 .shell-search input {
   min-width: 0;
   flex: 1;
@@ -4993,7 +5044,95 @@ h3 {
 
 .library-item-actions {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 6px;
+}
+
+.library-item-actions select,
+.section-heading select {
+  min-height: 28px;
+  border: 1px solid #3b4650;
+  border-radius: 3px;
+  color: var(--text-secondary);
+  background: #171d22;
+  font-size: 12px;
+}
+
+.library-item-actions select {
+  width: 88px;
+}
+
+.library-collection-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 8px;
+}
+
+.library-collection-card {
+  display: grid;
+  min-height: 104px;
+  grid-template-columns: 42px minmax(0, 1fr);
+  align-content: center;
+  gap: 7px 11px;
+  padding: 13px;
+  border: 1px solid #37424c;
+  border-radius: 4px;
+  color: var(--text-primary);
+  background: linear-gradient(#171d22, #12171b);
+  text-align: left;
+}
+
+.library-collection-card:hover {
+  border-color: #56626d;
+  background: #1d242a;
+}
+
+.library-collection-card > span:nth-child(2) {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.library-collection-card strong,
+.library-collection-card small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.library-collection-card small {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.library-collection-card > .watch-progress,
+.library-collection-card > small {
+  grid-column: 2;
+  margin: 0;
+}
+
+.library-collection-icon {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  grid-row: 1 / span 3;
+  place-items: center;
+  border-radius: 4px;
+  color: var(--brand);
+  background: var(--brand-soft);
+  font-size: 18px;
+}
+
+.library-dialog-field {
+  display: grid;
+  gap: 7px;
+}
+
+.library-dialog-field span {
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 650;
 }
 
 .button {

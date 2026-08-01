@@ -357,6 +357,13 @@ impl From<ExternalHandoffError> for CommandError {
 }
 
 impl CommandError {
+    pub(crate) fn asset_scope_failed(message: impl ToString) -> Self {
+        Self {
+            code: "asset_scope_error",
+            message: message.to_string(),
+        }
+    }
+
     fn background_task_failed(message: impl ToString) -> Self {
         Self {
             code: "background_task_failed",

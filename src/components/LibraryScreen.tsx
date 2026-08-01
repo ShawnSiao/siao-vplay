@@ -1,74 +1,125 @@
-import type { Project } from "../types";
+import { useMemo, useState } from "react";
+
+import type { LibrarySection } from "../features/library/useLibraryController";
 import { playbackUrl } from "../lib/desktop";
-import {
-  fileExtension,
-  formatDuration,
-  formatRecentTime,
-} from "../lib/format";
+import { fileExtension, formatDuration, formatRecentTime } from "../lib/format";
+import type {
+  CollectionDetail,
+  CollectionSummary,
+  LibraryHome,
+  LibraryMediaSummary,
+} from "../types";
+import { Dialog } from "./Dialog";
 
 type LibraryScreenProps = {
-  projects: Project[];
+  home: LibraryHome;
+  section: LibrarySection;
+  currentCollection: CollectionDetail | null;
+  currentEpisodes: LibraryMediaSummary[];
+  selectedSeason: number | null;
   loading: boolean;
+  collectionLoading: boolean;
+  mutationPending: boolean;
   error: string | null;
   previewMode: boolean;
   onImport: () => void;
   onImportUrl: () => void;
-  onOpen: (project: Project) => void;
-  onRelink: (project: Project) => void;
-  onDelete: (project: Project) => void;
+  onOpen: (media: LibraryMediaSummary) => void;
+  onRelink: (media: LibraryMediaSummary) => void;
+  onDelete: (media: LibraryMediaSummary) => void;
+  onSelectSection: (section: LibrarySection) => void;
+  onOpenCollection: (collectionId: string) => void;
+  onCloseCollection: () => void;
+  onSelectSeason: (season: number | null) => void;
+  onCreateCollection: (title: string) => Promise<unknown>;
+  onUpdateCollection: (
+    collectionId: string,
+    values: { title?: string; autoPlayNext?: boolean },
+  ) => Promise<unknown>;
+  onDeleteCollection: (collectionId: string) => Promise<unknown>;
+  onAddToCollection: (collectionId: string, projectId: string) => Promise<unknown>;
+  onRemoveFromCollection: (collectionId: string, projectId: string) => Promise<unknown>;
+  onSetWatchLater: (projectId: string, enabled: boolean) => Promise<unknown>;
 };
 
-function projectLocation(project: Project): string {
-  if (project.mediaSource.originUrl) {
-    return project.mediaSource.originUrl;
-  }
-  const locator = project.mediaSource.locator;
-  const separatorIndex = Math.max(locator.lastIndexOf("\\"), locator.lastIndexOf("/"));
-  return separatorIndex > 0 ? locator.slice(0, separatorIndex) : "本地文件";
+function mediaLocation(media: LibraryMediaSummary): string {
+  const separatorIndex = Math.max(
+    media.mediaLocator.lastIndexOf("\\"),
+    media.mediaLocator.lastIndexOf("/"),
+  );
+  return separatorIndex > 0
+    ? media.mediaLocator.slice(0, separatorIndex)
+    : "本地文件";
 }
 
-function LibraryItemRow({
-  project,
+function mediaProgress(media: LibraryMediaSummary): number {
+  return media.durationMs && media.durationMs > 0
+    ? Math.round(Math.max(0, Math.min(100, (media.positionMs / media.durationMs) * 100)))
+    : 0;
+}
+
+function MediaStatus({ media }: { media: LibraryMediaSummary }) {
+  const unavailable = !media.mediaAvailable || media.itemAvailability === "missing";
+  return (
+    <span className={`library-item-status ${unavailable ? "warning" : "ready"}`}>
+      {unavailable
+        ? "需要重新定位"
+        : media.completedAtMs
+          ? "已看"
+          : media.positionMs > 0
+            ? "观看中"
+            : "可以观看"}
+    </span>
+  );
+}
+
+function MediaRow({
+  media,
+  collections,
+  collectionContext,
+  mutationPending,
   onOpen,
   onRelink,
   onDelete,
+  onAddToCollection,
+  onRemoveFromCollection,
+  onSetWatchLater,
 }: {
-  project: Project;
-  onOpen: (project: Project) => void;
-  onRelink: (project: Project) => void;
-  onDelete: (project: Project) => void;
+  media: LibraryMediaSummary;
+  collections: CollectionSummary[];
+  collectionContext: string | null;
+  mutationPending: boolean;
+  onOpen: (media: LibraryMediaSummary) => void;
+  onRelink: (media: LibraryMediaSummary) => void;
+  onDelete: (media: LibraryMediaSummary) => void;
+  onAddToCollection: (collectionId: string, projectId: string) => Promise<unknown>;
+  onRemoveFromCollection: (collectionId: string, projectId: string) => Promise<unknown>;
+  onSetWatchLater: (projectId: string, enabled: boolean) => Promise<unknown>;
 }) {
-  const needsRelink = project.status === "needs_relink";
-  const progress =
-    project.playbackState.durationMs && project.playbackState.durationMs > 0
-      ? Math.round(
-          Math.max(
-            0,
-            Math.min(
-              100,
-              (project.playbackState.positionMs /
-                project.playbackState.durationMs) *
-                100,
-            ),
-          ),
-        )
-      : 0;
+  const [selectedCollection, setSelectedCollection] = useState("");
+  const needsRelink = !media.mediaAvailable || media.itemAvailability === "missing";
+  const progress = mediaProgress(media);
+  const watchLater = collections.find((item) => item.systemKey === "watch_later");
+  const isWatchLater = collectionContext === watchLater?.id;
+  const manualCollections = collections.filter(
+    (item) => item.systemKey === null && item.id !== collectionContext,
+  );
 
   return (
     <article className="library-item-row">
       <button
         className="library-item-open"
         type="button"
-        onClick={() => (needsRelink ? onRelink(project) : onOpen(project))}
-        aria-label={`${needsRelink ? "重新定位" : "打开"} ${project.title}`}
+        onClick={() => (needsRelink ? onRelink(media) : onOpen(media))}
+        aria-label={`${needsRelink ? "重新定位" : "打开"} ${media.projectTitle}`}
       >
-        <span className="library-file-kind">
-          {fileExtension(project.mediaSource.displayName)}
-        </span>
+        <span className="library-file-kind">{fileExtension(media.displayName)}</span>
         <span className="library-item-title">
-          <strong>{project.title}</strong>
-          <small title={project.mediaSource.displayName}>
-            {project.mediaSource.displayName}
+          <strong>{media.episodeTitle ?? media.projectTitle}</strong>
+          <small title={media.displayName}>
+            {media.seasonNumber === null ? "" : `S${String(media.seasonNumber).padStart(2, "0")} `}
+            {media.episodeNumber === null ? "" : `E${String(media.episodeNumber).padStart(2, "0")} · `}
+            {media.displayName}
           </small>
         </span>
       </button>
@@ -77,31 +128,75 @@ function LibraryItemRow({
           <span style={{ width: `${progress}%` }} />
         </div>
         <span>
-          {project.playbackState.positionMs > 0
-            ? `看到 ${formatDuration(project.playbackState.positionMs)}`
-            : "未观看"}
+          {media.positionMs > 0 ? `看到 ${formatDuration(media.positionMs)}` : "未观看"}
+          {media.durationMs ? ` / ${formatDuration(media.durationMs)}` : ""}
         </span>
       </div>
-      <span className={`library-item-status ${needsRelink ? "warning" : "ready"}`}>
-        {needsRelink ? "需要重新定位" : "可以观看"}
-      </span>
-      <span className="library-item-recent">
-        {formatRecentTime(project.lastOpenedAtMs)}
-      </span>
+      <MediaStatus media={media} />
+      <span className="library-item-recent">{formatRecentTime(media.lastOpenedAtMs)}</span>
       <div className="library-item-actions">
-        <button
-          className="button quiet small"
-          type="button"
-          onClick={() => onDelete(project)}
-        >
-          删除
-        </button>
+        {collectionContext ? (
+          <button
+            className="button quiet small"
+            type="button"
+            disabled={mutationPending}
+            onClick={() => void onRemoveFromCollection(collectionContext, media.projectId)}
+          >
+            移出合集
+          </button>
+        ) : (
+          <>
+            <select
+              aria-label={`将 ${media.projectTitle} 加入合集`}
+              value={selectedCollection}
+              disabled={mutationPending || manualCollections.length === 0}
+              onChange={(event) => {
+                const collectionId = event.target.value;
+                setSelectedCollection("");
+                if (collectionId) {
+                  void onAddToCollection(collectionId, media.projectId);
+                }
+              }}
+            >
+              <option value="">加入合集…</option>
+              {manualCollections.map((collection) => (
+                <option value={collection.id} key={collection.id}>
+                  {collection.title}
+                </option>
+              ))}
+            </select>
+            <button
+              className="button quiet small"
+              type="button"
+              aria-label={`将 ${media.projectTitle} 加入稍后观看`}
+              disabled={mutationPending}
+              onClick={() => void onSetWatchLater(media.projectId, true)}
+            >
+              稍后
+            </button>
+          </>
+        )}
+        {isWatchLater ? (
+          <button
+            className="button quiet small"
+            type="button"
+            disabled={mutationPending}
+            onClick={() => void onSetWatchLater(media.projectId, false)}
+          >
+            取消稍后观看
+          </button>
+        ) : null}
+        {!collectionContext ? (
+          <button className="button quiet small" type="button" onClick={() => onDelete(media)}>
+            删除
+          </button>
+        ) : null}
         <button
           className={`button small ${needsRelink ? "" : "primary"}`}
           type="button"
-          onClick={() => (needsRelink ? onRelink(project) : onOpen(project))}
+          onClick={() => (needsRelink ? onRelink(media) : onOpen(media))}
         >
-          {needsRelink ? "重新定位" : project.playbackState.positionMs > 0 ? "继续" : "播放"}
+          {needsRelink ? "重新定位" : media.positionMs > 0 ? "继续" : "播放"}
         </button>
       </div>
     </article>
@@ -109,118 +204,121 @@ function LibraryItemRow({
 }
 
 function ContinueWatchingItem({
-  project,
+  media,
   onOpen,
 }: {
-  project: Project;
-  onOpen: (project: Project) => void;
+  media: LibraryMediaSummary;
+  onOpen: (media: LibraryMediaSummary) => void;
 }) {
-  const posterPath = project.mediaSource.posterPath;
-  const durationMs = project.playbackState.durationMs ?? 0;
-  const progress =
-    durationMs > 0
-      ? Math.round(
-          Math.max(
-            0,
-            Math.min(100, (project.playbackState.positionMs / durationMs) * 100),
-          ),
-        )
-      : 0;
-
+  const progress = mediaProgress(media);
   return (
     <button
       className="continue-item"
       type="button"
-      aria-label={`继续播放 ${project.title}`}
-      onClick={() => onOpen(project)}
+      aria-label={`继续播放 ${media.projectTitle}`}
+      onClick={() => onOpen(media)}
     >
       <span className="continue-thumbnail">
-        {posterPath ? (
-          <img className="poster-image" src={playbackUrl(posterPath)} alt="" />
+        {media.posterPath ? (
+          <img className="poster-image" src={playbackUrl(media.posterPath)} alt="" />
         ) : (
-          <span className="poster-extension">
-            {fileExtension(project.mediaSource.displayName)}
-          </span>
+          <span className="poster-extension">{fileExtension(media.displayName)}</span>
         )}
       </span>
       <span className="continue-item-copy">
         <small className="continue-kicker">继续观看</small>
-        <strong>{project.title}</strong>
+        <strong>{media.projectTitle}</strong>
         <small>
-          {project.mediaSource.displayName} · {formatDuration(project.playbackState.positionMs)}
-          {durationMs > 0 ? ` / ${formatDuration(durationMs)}` : ""}
+          {media.displayName} · {formatDuration(media.positionMs)}
+          {media.durationMs ? ` / ${formatDuration(media.durationMs)}` : ""}
         </small>
-        <small>
-          上次观看于 {formatRecentTime(project.lastOpenedAtMs)}
-        </small>
-        <span
-          className="watch-progress"
-          aria-label={`继续观看进度 ${progress}%`}
-        >
+        <small>上次观看于 {formatRecentTime(media.lastOpenedAtMs)}</small>
+        <span className="watch-progress" aria-label={`继续观看进度 ${progress}%`}>
           <span style={{ width: `${progress}%` }} />
         </span>
       </span>
-      <span className="continue-action">
-        从 {formatDuration(project.playbackState.positionMs)} 继续
-      </span>
+      <span className="continue-action">从 {formatDuration(media.positionMs)} 继续</span>
     </button>
   );
 }
 
-function RecentlyAddedItem({
-  project,
+function CollectionCard({
+  collection,
   onOpen,
-  onRelink,
 }: {
-  project: Project;
-  onOpen: (project: Project) => void;
-  onRelink: (project: Project) => void;
+  collection: CollectionSummary;
+  onOpen: (collectionId: string) => void;
 }) {
-  const needsRelink = project.status === "needs_relink";
+  const progress = collection.itemCount
+    ? Math.round((collection.watchedCount / collection.itemCount) * 100)
+    : 0;
   return (
     <button
-      className="recently-added-row"
+      className="library-collection-card"
       type="button"
-      aria-label={`${needsRelink ? "重新定位" : "打开"}最近加入的 ${project.title}`}
-      onClick={() => (needsRelink ? onRelink(project) : onOpen(project))}
+      onClick={() => onOpen(collection.id)}
+      aria-label={`打开合集 ${collection.title}`}
     >
-      <span className="library-file-kind">
-        {fileExtension(project.mediaSource.displayName)}
+      <span className="library-collection-icon" aria-hidden="true">
+        {collection.systemKey === "watch_later" ? "◷" : collection.kind === "series" ? "▦" : "▤"}
       </span>
-      <span className="recently-added-title">
-        <strong>{project.title}</strong>
-        <small title={projectLocation(project)}>{projectLocation(project)}</small>
+      <span>
+        <strong>{collection.title}</strong>
+        <small>
+          {collection.itemCount} 集{collection.seasonCount ? ` · ${collection.seasonCount} 季` : ""}
+          {collection.totalDurationMs ? ` · ${formatDuration(collection.totalDurationMs)}` : ""}
+        </small>
       </span>
-      <span className={`library-item-status ${needsRelink ? "warning" : "ready"}`}>
-        {needsRelink ? "需要重新定位" : "可以观看"}
+      <span className="watch-progress" aria-label={`合集观看进度 ${progress}%`}>
+        <span style={{ width: `${progress}%` }} />
       </span>
-      <span className="library-item-recent">
-        {formatRecentTime(project.createdAtMs)}
-      </span>
-      <span className="recently-added-open" aria-hidden="true">›</span>
+      <small>{collection.watchedCount} 集已看</small>
     </button>
   );
 }
 
-export function LibraryScreen({
-  projects,
-  loading,
-  error,
-  previewMode,
-  onImport,
-  onImportUrl,
-  onOpen,
-  onRelink,
-  onDelete,
-}: LibraryScreenProps) {
-  const allContinueWatching = [...projects]
-    .filter((project) => project.playbackState.positionMs > 0)
-    .sort((left, right) => right.lastOpenedAtMs - left.lastOpenedAtMs);
-  const continueWatching = allContinueWatching.slice(0, 4);
-  const recentlyAdded = [...projects]
-    .sort((left, right) => right.createdAtMs - left.createdAtMs)
-    .slice(0, 5);
-  const latestContinueProject = allContinueWatching[0] ?? null;
+export function LibraryScreen(props: LibraryScreenProps) {
+  const {
+    home,
+    section,
+    currentCollection,
+    currentEpisodes,
+    selectedSeason,
+    loading,
+    collectionLoading,
+    mutationPending,
+    error,
+    previewMode,
+    onImport,
+    onImportUrl,
+    onOpen,
+    onRelink,
+    onDelete,
+    onSelectSection,
+    onOpenCollection,
+    onCloseCollection,
+    onSelectSeason,
+    onCreateCollection,
+    onUpdateCollection,
+    onDeleteCollection,
+    onAddToCollection,
+    onRemoveFromCollection,
+    onSetWatchLater,
+  } = props;
+  const [createOpen, setCreateOpen] = useState(false);
+  const [collectionTitle, setCollectionTitle] = useState("");
+  const [editOpen, setEditOpen] = useState(false);
+  const [editTitle, setEditTitle] = useState("");
+  const collections = useMemo(
+    () => home.collections.filter((item) => item.systemKey === null),
+    [home.collections],
+  );
+  const watchLater = home.collections.find((item) => item.systemKey === "watch_later") ?? null;
+  const visibleCollections = section === "watch_later" ? (watchLater ? [watchLater] : []) : collections;
+  const showHome = section === "home" && currentCollection === null;
+  const showCollections = (section === "series" || section === "watch_later") && currentCollection === null;
+  const showUnclassified = (section === "unclassified" || section === "home") && currentCollection === null;
+  const latestContinue = home.continueWatching[0] ?? null;
 
   return (
     <div className="library-screen" data-screen-label="媒体库">
@@ -228,164 +326,285 @@ export function LibraryScreen({
         <main className="library-content">
           <header className="library-header">
             <div>
-              <h1>媒体库</h1>
-              <p>本地视频、观看进度和字幕资料都保存在当前设备。</p>
+              <h1>{currentCollection?.summary.title ?? (section === "series" ? "剧集与合集" : section === "watch_later" ? "稍后观看" : section === "unclassified" ? "未归类视频" : "媒体库")}</h1>
+              <p>
+                {currentCollection
+                  ? `${currentCollection.summary.itemCount} 集 · 自动连播${currentCollection.summary.autoPlayNext ? "已开启" : "关闭"}`
+                  : "本地视频、观看进度和字幕资料都保存在当前设备。"}
+              </p>
             </div>
             <div className="library-header-actions">
-              <button
-                aria-label="打开文件夹，将在 Phase 7D 启用"
-                className="button unavailable"
-                type="button"
-                title="文件夹扫描将在 Phase 7D 启用"
-                disabled
-              >
-                打开文件夹
-              </button>
-              {latestContinueProject ? (
-                <button
-                  className="button primary"
-                  type="button"
-                  aria-label={`打开最近观看的 ${latestContinueProject.title}`}
-                  onClick={() => onOpen(latestContinueProject)}
-                >
-                  继续播放
-                </button>
+              {currentCollection ? (
+                <>
+                  <button className="button quiet" type="button" onClick={onCloseCollection}>
+                    返回合集
+                  </button>
+                  <button
+                    className="button quiet"
+                    type="button"
+                    aria-pressed={currentCollection.summary.autoPlayNext}
+                    disabled={mutationPending}
+                    onClick={() =>
+                      void onUpdateCollection(currentCollection.summary.id, {
+                        autoPlayNext: !currentCollection.summary.autoPlayNext,
+                      })
+                    }
+                  >
+                    自动连播：{currentCollection.summary.autoPlayNext ? "开" : "关"}
+                  </button>
+                  {currentCollection.summary.systemKey === null ? (
+                    <>
+                      <button
+                        className="button quiet"
+                        type="button"
+                        onClick={() => {
+                          setEditTitle(currentCollection.summary.title);
+                          setEditOpen(true);
+                        }}
+                      >
+                        重命名
+                      </button>
+                      <button
+                        className="button danger"
+                        type="button"
+                        disabled={mutationPending}
+                        onClick={() => void onDeleteCollection(currentCollection.summary.id)}
+                      >
+                        删除合集
+                      </button>
+                    </>
+                  ) : null}
+                </>
               ) : (
-                <span className="library-count">{projects.length} 个视频</span>
+                <>
+                  <button
+                    aria-label="打开文件夹，将在 Phase 7D 启用"
+                    className="button unavailable"
+                    type="button"
+                    title="文件夹扫描将在 Phase 7D 启用"
+                    disabled
+                  >
+                    打开文件夹
+                  </button>
+                  <button className="button" type="button" onClick={() => setCreateOpen(true)}>
+                    新建合集
+                  </button>
+                  {latestContinue ? (
+                    <button
+                      className="button primary"
+                      type="button"
+                      aria-label={`打开最近观看的 ${latestContinue.projectTitle}`}
+                      onClick={() => onOpen(latestContinue)}
+                    >
+                      继续播放
+                    </button>
+                  ) : null}
+                </>
               )}
             </div>
           </header>
 
-          {continueWatching.length > 0 ? (
-            <section
-              className="project-section continue-section"
-              aria-labelledby="continue-title"
-            >
-              <div className="section-heading">
-                <h2 id="continue-title">继续观看</h2>
-                <span>{allContinueWatching.length} 个播放中内容</span>
-              </div>
-              <div className="continue-grid">
-                {continueWatching.map((project) => (
-                  <ContinueWatchingItem
-                    key={project.id}
-                    project={project}
-                    onOpen={onOpen}
-                  />
-                ))}
-              </div>
-            </section>
+          {error ? (
+            <div className="notice danger" role="alert">
+              <strong>媒体库暂时无法读取</strong>
+              <p>{error}</p>
+            </div>
           ) : null}
 
-          <section className="project-section" aria-labelledby="series-title">
-            <div className="section-heading">
-              <h2 id="series-title">剧集</h2>
-              <button
-                className="section-link"
-                type="button"
-                title="剧集与合集将在 Phase 7C 启用"
-                disabled
-              >
-                查看全部 ›
-              </button>
-            </div>
-            <div className="library-series-empty">
-              <strong>尚未建立剧集或合集</strong>
-              <p>Phase 7C 接入真实集合数据后，这里会显示季、集数和观看进度。</p>
-            </div>
-          </section>
-
-          {recentlyAdded.length > 0 ? (
-            <section className="project-section" aria-labelledby="recent-title">
+          {currentCollection ? (
+            <section className="project-section" aria-labelledby="episodes-title">
               <div className="section-heading">
                 <div>
-                  <h2 id="recent-title">最近加入</h2>
-                  <p>单个视频保留在「未归类」</p>
+                  <h2 id="episodes-title">单集</h2>
+                  <p>每一集保留独立的字幕、理解和学习资料。</p>
                 </div>
-                <span>{recentlyAdded.length} 个最近项目</span>
+                {currentCollection.seasons.length > 0 ? (
+                  <select
+                    aria-label="选择季"
+                    value={selectedSeason ?? "all"}
+                    onChange={(event) =>
+                      onSelectSeason(event.target.value === "all" ? null : Number(event.target.value))
+                    }
+                  >
+                    <option value="all">全部季</option>
+                    {currentCollection.seasons.map((season) => (
+                      <option key={season.seasonNumber ?? "none"} value={season.seasonNumber ?? "all"}>
+                        {season.seasonNumber === null ? "未分季" : `第 ${season.seasonNumber} 季`} · {season.episodeCount} 集
+                      </option>
+                    ))}
+                  </select>
+                ) : null}
               </div>
-              <div className="recently-added-list">
-                {recentlyAdded.map((project) => (
-                  <RecentlyAddedItem
-                    key={project.id}
-                    project={project}
-                    onOpen={onOpen}
-                    onRelink={onRelink}
-                  />
+              {collectionLoading ? (
+                <div className="project-loading"><span className="spinner" /><span>正在读取单集…</span></div>
+              ) : currentEpisodes.length ? (
+                <div className="library-item-list">
+                  {currentEpisodes.map((media) => (
+                    <MediaRow
+                      key={media.projectId}
+                      media={media}
+                      collections={home.collections}
+                      collectionContext={currentCollection.summary.id}
+                      mutationPending={mutationPending}
+                      onOpen={onOpen}
+                      onRelink={onRelink}
+                      onDelete={onDelete}
+                      onAddToCollection={onAddToCollection}
+                      onRemoveFromCollection={onRemoveFromCollection}
+                      onSetWatchLater={onSetWatchLater}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <div className="library-series-empty"><strong>合集还是空的</strong><p>可在「未归类视频」中把现有视频加入这个合集。</p></div>
+              )}
+            </section>
+          ) : null}
+
+          {showHome && home.continueWatching.length > 0 ? (
+            <section className="project-section continue-section" aria-labelledby="continue-title">
+              <div className="section-heading"><h2 id="continue-title">继续观看</h2><span>{home.continueWatching.length} 个播放中内容</span></div>
+              <div className="continue-grid">
+                {home.continueWatching.slice(0, 4).map((media) => (
+                  <ContinueWatchingItem key={media.projectId} media={media} onOpen={onOpen} />
                 ))}
               </div>
             </section>
           ) : null}
 
-          <section className="project-section" aria-labelledby="projects-title">
-            <div className="section-heading">
-              <div>
-                <h2 id="projects-title">未归类视频</h2>
-                <p>剧集与合集功能接通前，现有视频统一显示在这里。</p>
+          {showHome ? (
+            <section className="project-section" aria-labelledby="series-title">
+              <div className="section-heading">
+                <h2 id="series-title">剧集</h2>
+                <button className="section-link" type="button" onClick={() => onSelectSection("series")}>查看全部 ›</button>
               </div>
-              <span>{projects.length} 个视频</span>
-            </div>
-
-            {error ? (
-              <div className="notice danger" role="alert">
-                <strong>媒体库暂时无法读取</strong>
-                <p>{error}</p>
-              </div>
-            ) : null}
-
-            {loading ? (
-              <div className="project-loading" aria-live="polite">
-                <span className="spinner"></span>
-                <span>正在读取本地视频…</span>
-              </div>
-            ) : projects.length === 0 ? (
-              <div className="empty-library">
-                <div className="empty-glyph" aria-hidden="true">
-                  ▶
+              {collections.length ? (
+                <div className="library-collection-grid">
+                  {collections.slice(0, 6).map((collection) => (
+                    <CollectionCard key={collection.id} collection={collection} onOpen={onOpenCollection} />
+                  ))}
                 </div>
-                <h3>
-                  {previewMode ? "桌面应用会显示真实视频" : "还没有本地视频"}
-                </h3>
-                <p>
-                  {previewMode
-                    ? "当前页面只用于检查界面，不会读取浏览器中的本地文件。"
-                    : "可从命令栏打开本地视频或公开媒体 URL。SiaoVPlay 不会修改源视频。"}
-                </p>
-                <div className="empty-library-actions">
-                  <button
-                    className="button"
-                    type="button"
-                    onClick={onImportUrl}
-                  >
-                    打开 URL
-                  </button>
-                  <button
-                    aria-keyshortcuts="Control+O"
-                    autoFocus
-                    className="button primary"
-                    type="button"
-                    onClick={onImport}
-                  >
-                    打开视频
-                  </button>
+              ) : (
+                <div className="library-series-empty"><strong>尚未建立剧集或合集</strong><p>新建手动合集，或在 Phase 7D 从文件夹识别剧集。</p></div>
+              )}
+            </section>
+          ) : null}
+
+          {showCollections ? (
+            <section className="project-section" aria-labelledby="collections-title">
+              <div className="section-heading"><h2 id="collections-title">{section === "watch_later" ? "稍后观看" : "全部合集"}</h2><span>{visibleCollections.length} 个</span></div>
+              {visibleCollections.length ? (
+                <div className="library-collection-grid">
+                  {visibleCollections.map((collection) => (
+                    <CollectionCard key={collection.id} collection={collection} onOpen={onOpenCollection} />
+                  ))}
                 </div>
-              </div>
-            ) : (
-              <div className="library-item-list">
-                {projects.map((project) => (
-                  <LibraryItemRow
-                    key={project.id}
-                    project={project}
-                    onOpen={onOpen}
-                    onRelink={onRelink}
-                    onDelete={onDelete}
-                  />
+              ) : (
+                <div className="library-series-empty"><strong>{section === "watch_later" ? "还没有稍后观看的视频" : "尚未建立合集"}</strong><p>{section === "watch_later" ? "可从未归类视频或播放器中加入。" : "使用右上角「新建合集」开始整理。"}</p></div>
+              )}
+            </section>
+          ) : null}
+
+          {showHome && home.unclassified.length > 0 ? (
+            <section className="project-section" aria-labelledby="recent-title">
+              <div className="section-heading"><div><h2 id="recent-title">最近加入</h2><p>尚未加入剧集或合集的视频</p></div><span>{Math.min(5, home.unclassified.length)} 个最近视频</span></div>
+              <div className="recently-added-list">
+                {home.unclassified.slice(0, 5).map((media) => (
+                  <button className="recently-added-row" type="button" key={media.projectId} aria-label={`打开最近加入的 ${media.projectTitle}`} onClick={() => onOpen(media)}>
+                    <span className="library-file-kind">{fileExtension(media.displayName)}</span>
+                    <span className="recently-added-title"><strong>{media.projectTitle}</strong><small title={mediaLocation(media)}>{mediaLocation(media)}</small></span>
+                    <MediaStatus media={media} />
+                    <span className="library-item-recent">{formatRecentTime(media.createdAtMs)}</span>
+                    <span className="recently-added-open" aria-hidden="true">›</span>
+                  </button>
                 ))}
               </div>
-            )}
-          </section>
+            </section>
+          ) : null}
+
+          {showUnclassified ? (
+            <section className="project-section" aria-labelledby="projects-title">
+              <div className="section-heading"><div><h2 id="projects-title">未归类视频</h2><p>可继续观看，或加入手动合集。</p></div><span>{home.unclassifiedCount} 个视频</span></div>
+              {loading ? (
+                <div className="project-loading" aria-live="polite"><span className="spinner" /><span>正在读取本地视频…</span></div>
+              ) : home.unclassified.length === 0 ? (
+                <div className="empty-library">
+                  <div className="empty-glyph" aria-hidden="true">▶</div>
+                  <h3>{previewMode ? "桌面应用会显示真实视频" : home.totalProjectCount ? "所有视频都已归类" : "还没有本地视频"}</h3>
+                  <p>{previewMode ? "当前页面只用于检查界面，不会读取浏览器中的本地文件。" : "可从命令栏打开本地视频或公开媒体 URL。SiaoVPlay 不会修改源视频。"}</p>
+                  <div className="empty-library-actions"><button className="button" type="button" onClick={onImportUrl}>打开 URL</button><button aria-keyshortcuts="Control+O" className="button primary" type="button" onClick={onImport}>打开视频</button></div>
+                </div>
+              ) : (
+                <div className="library-item-list">
+                  {home.unclassified.map((media) => (
+                    <MediaRow
+                      key={media.projectId}
+                      media={media}
+                      collections={home.collections}
+                      collectionContext={null}
+                      mutationPending={mutationPending}
+                      onOpen={onOpen}
+                      onRelink={onRelink}
+                      onDelete={onDelete}
+                      onAddToCollection={onAddToCollection}
+                      onRemoveFromCollection={onRemoveFromCollection}
+                      onSetWatchLater={onSetWatchLater}
+                    />
+                  ))}
+                </div>
+              )}
+            </section>
+          ) : null}
         </main>
       </div>
+
+      {createOpen ? (
+        <Dialog
+          eyebrow="媒体库"
+          title="新建合集"
+          onClose={() => setCreateOpen(false)}
+          actions={<><button className="button quiet" type="button" onClick={() => setCreateOpen(false)}>取消</button><button className="button primary" type="submit" form="create-collection-form" disabled={mutationPending || !collectionTitle.trim()}>创建合集</button></>}
+        >
+          <form
+            id="create-collection-form"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void onCreateCollection(collectionTitle).then((created) => {
+                if (created) {
+                  setCollectionTitle("");
+                  setCreateOpen(false);
+                }
+              });
+            }}
+          >
+            <label className="library-dialog-field"><span>合集名称</span><input autoFocus value={collectionTitle} maxLength={200} onChange={(event) => setCollectionTitle(event.target.value)} placeholder="例如：周末电影" /></label>
+            <p>合集只整理现有视频，不复制或修改源文件。</p>
+          </form>
+        </Dialog>
+      ) : null}
+
+      {editOpen && currentCollection ? (
+        <Dialog
+          eyebrow="合集设置"
+          title="重命名合集"
+          onClose={() => setEditOpen(false)}
+          actions={<><button className="button quiet" type="button" onClick={() => setEditOpen(false)}>取消</button><button className="button primary" type="submit" form="edit-collection-form" disabled={mutationPending || !editTitle.trim()}>保存</button></>}
+        >
+          <form
+            id="edit-collection-form"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void onUpdateCollection(currentCollection.summary.id, { title: editTitle }).then((updated) => {
+                if (updated) {
+                  setEditOpen(false);
+                }
+              });
+            }}
+          >
+            <label className="library-dialog-field"><span>合集名称</span><input autoFocus value={editTitle} maxLength={200} onChange={(event) => setEditTitle(event.target.value)} /></label>
+          </form>
+        </Dialog>
+      ) : null}
     </div>
   );
 }

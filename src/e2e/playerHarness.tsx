@@ -140,9 +140,16 @@ export function PlayerHarness() {
         watchLater: 0,
         unclassified: 1,
       }}
+      librarySection="home"
+      searchQuery=""
+      searchResults={[]}
+      searchLoading={false}
       onToggleNavigation={() => undefined}
       onToggleDrawer={toggleDrawer}
       onGoLibrary={() => undefined}
+      onSelectLibrarySection={() => undefined}
+      onSearchQueryChange={() => undefined}
+      onOpenSearchResult={() => undefined}
       onOpenFile={() => undefined}
       onOpenUrl={() => undefined}
       onManageSubtitles={() => undefined}

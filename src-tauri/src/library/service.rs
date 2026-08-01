@@ -148,13 +148,14 @@ impl LibraryService {
     pub(crate) fn add_project_to_collection(
         &self,
         input: AddProjectToCollectionInput,
-    ) -> Result<(), LibraryError> {
+    ) -> Result<CollectionDetail, LibraryError> {
         validate_id("集合", &input.collection_id)?;
         validate_id("视频", &input.project_id)?;
         validate_optional_number("季号", input.season_number)?;
         validate_optional_number("集号", input.episode_number)?;
         validate_optional_number("排序号", input.absolute_order)?;
 
+        let collection_id = input.collection_id.clone();
         let mut connection = self.store.connect()?;
         let transaction = connection.transaction()?;
         let repository = LibraryRepository::new(&transaction);
@@ -185,14 +186,14 @@ impl LibraryService {
             now_ms()?,
         )?;
         transaction.commit()?;
-        Ok(())
+        self.get_collection_detail(&collection_id)
     }
 
     pub(crate) fn remove_project_from_collection(
         &self,
         collection_id: &str,
         project_id: &str,
-    ) -> Result<(), LibraryError> {
+    ) -> Result<CollectionDetail, LibraryError> {
         validate_id("集合", collection_id)?;
         validate_id("视频", project_id)?;
         let mut connection = self.store.connect()?;
@@ -200,7 +201,7 @@ impl LibraryService {
         let repository = LibraryRepository::new(&transaction);
         repository.remove_membership(collection_id, project_id)?;
         transaction.commit()?;
-        Ok(())
+        self.get_collection_detail(collection_id)
     }
 
     pub(crate) fn get_episode_neighbors(
@@ -230,7 +231,7 @@ impl LibraryService {
         &self,
         project_id: &str,
         enabled: bool,
-    ) -> Result<(), LibraryError> {
+    ) -> Result<Option<CollectionDetail>, LibraryError> {
         validate_id("视频", project_id)?;
         let mut connection = self.store.connect()?;
         let transaction = connection.transaction()?;
@@ -240,7 +241,7 @@ impl LibraryService {
         if !enabled && existing_collection.is_none() {
             repository.project_title(project_id)?;
             transaction.commit()?;
-            return Ok(());
+            return Ok(None);
         }
         let collection = match existing_collection {
             Some(collection) => collection,
@@ -282,7 +283,7 @@ impl LibraryService {
             repository.project_title(project_id)?;
         }
         transaction.commit()?;
-        Ok(())
+        self.get_collection_detail(&collection.id).map(Some)
     }
 }
 

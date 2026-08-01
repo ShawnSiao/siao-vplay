@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Dialog } from "./components/Dialog";
 import { LibraryScreen } from "./components/LibraryScreen";
 import { PlayerScreen } from "./features/playback/PlayerScreen";
+import { useLibraryController } from "./features/library/useLibraryController";
 import { PreparationScreen } from "./components/PreparationScreen";
 import { RemoteUrlDialog } from "./components/RemoteUrlDialog";
 import { SubtitleImportDialog } from "./components/SubtitleImportDialog";
@@ -40,6 +41,8 @@ import type {
   SubtitleVersion,
   TranscriptionJob,
   TranslationTask,
+  LibraryMediaSummary,
+  LibrarySearchResult,
 } from "./types";
 
 const activeTranscriptionStatuses = new Set<TranscriptionJob["status"]>([
@@ -51,6 +54,21 @@ const activeTranscriptionStatuses = new Set<TranscriptionJob["status"]>([
 
 export default function App() {
   const shellController = useShellController();
+  const {
+    state: libraryState,
+    refresh: refreshLibrary,
+    setSection: setLibrarySection,
+    setSearchQuery,
+    openCollection,
+    closeCollection,
+    selectSeason,
+    createManualCollection,
+    editCollection,
+    removeCollection,
+    addToCollection,
+    removeFromCollection,
+    changeWatchLater,
+  } = useLibraryController();
   const screen = shellController.state.activeView;
   const setScreen = shellController.setActiveView;
   const operationTokenRef = useRef(0);
@@ -61,7 +79,6 @@ export default function App() {
   const [runtimeStatus, setRuntimeStatus] =
     useState<MediaRuntimeStatus | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
-  const [libraryLoading, setLibraryLoading] = useState(true);
   const [libraryError, setLibraryError] = useState<string | null>(null);
   const [activeProject, setActiveProject] = useState<Project | null>(null);
   const [preparation, setPreparation] =
@@ -89,17 +106,15 @@ export default function App() {
   const [toast, setToast] = useState<string | null>(null);
 
   const refreshProjects = useCallback(async () => {
-    setLibraryLoading(true);
     try {
       const nextProjects = await listProjects();
       setProjects(nextProjects);
       setLibraryError(null);
+      await refreshLibrary();
     } catch (error) {
       setLibraryError(commandError(error).message);
-    } finally {
-      setLibraryLoading(false);
     }
-  }, []);
+  }, [refreshLibrary]);
 
   useEffect(() => {
     let active = true;
@@ -137,11 +152,6 @@ export default function App() {
           setLibraryError(commandError(error).message);
         }
       })
-      .finally(() => {
-        if (active) {
-          setLibraryLoading(false);
-        }
-      });
     return () => {
       active = false;
     };
@@ -184,13 +194,14 @@ export default function App() {
           setActiveProject((current) =>
             current?.id === updated.id ? updated : current,
           );
+          void refreshLibrary();
         })
         .catch(() => undefined)
         .finally(() => {
           posterJobsRef.current.delete(project.id);
         });
     }
-  }, [projects]);
+  }, [projects, refreshLibrary]);
 
   const prepareAndOpen = useCallback(
     async (project: Project, shouldForceProxy: boolean) => {
@@ -248,6 +259,7 @@ export default function App() {
 
   const returnToLibrary = useCallback(() => {
     operationTokenRef.current += 1;
+    setLibrarySection("home");
     setScreen("library");
     setPreparation(null);
     setPreparationError(null);
@@ -259,7 +271,7 @@ export default function App() {
     setRevisionDialogOpen(false);
     setRemoteUrlDialogOpen(false);
     void refreshProjects();
-  }, [refreshProjects, setScreen]);
+  }, [refreshProjects, setLibrarySection, setScreen]);
 
   const importMediaPath = useCallback(
     async (mediaPath: string) => {
@@ -313,14 +325,14 @@ export default function App() {
     if (
       !isDesktopApp ||
       !startupMediaPath ||
-      libraryLoading ||
+      libraryState.loading ||
       startupMediaHandledRef.current
     ) {
       return;
     }
     startupMediaHandledRef.current = true;
     void importMediaPath(startupMediaPath);
-  }, [appStatus, importMediaPath, libraryLoading]);
+  }, [appStatus, importMediaPath, libraryState.loading]);
 
   useEffect(() => {
     const handleOpenShortcut = (event: KeyboardEvent) => {
@@ -352,7 +364,7 @@ export default function App() {
     translationDialogOpen,
   ]);
 
-  const relinkProject = async (project: Project) => {
+  const relinkProject = useCallback(async (project: Project) => {
     try {
       const mediaPath = await chooseLocalVideo();
       if (!mediaPath) {
@@ -366,7 +378,66 @@ export default function App() {
       setBusyMessage(null);
       setLibraryError(commandError(error).message);
     }
-  };
+  }, [prepareAndOpen]);
+
+  const openLibraryMedia = useCallback(
+    async (media: LibraryMediaSummary) => {
+      try {
+        const project = await getProject(media.projectId);
+        await prepareAndOpen(project, false);
+      } catch (error) {
+        setLibraryError(commandError(error).message);
+      }
+    },
+    [prepareAndOpen],
+  );
+
+  const relinkLibraryMedia = useCallback(async (media: LibraryMediaSummary) => {
+    try {
+      const project = await getProject(media.projectId);
+      await relinkProject(project);
+    } catch (error) {
+      setLibraryError(commandError(error).message);
+    }
+  }, [relinkProject]);
+
+  const deleteLibraryMedia = useCallback(async (media: LibraryMediaSummary) => {
+    try {
+      setDeleteCandidate(await getProject(media.projectId));
+    } catch (error) {
+      setLibraryError(commandError(error).message);
+    }
+  }, []);
+
+  const selectLibrarySection = useCallback(
+    (section: Parameters<typeof setLibrarySection>[0]) => {
+      if (screen !== "library") {
+        returnToLibrary();
+      }
+      setLibrarySection(section);
+    },
+    [returnToLibrary, screen, setLibrarySection],
+  );
+
+  const openLibrarySearchResult = useCallback(
+    (result: LibrarySearchResult) => {
+      setSearchQuery("");
+      if (result.kind === "collection" && result.collectionId) {
+        selectLibrarySection("series");
+        void openCollection(result.collectionId);
+      } else if (result.projectId) {
+        void getProject(result.projectId)
+          .then((project) => prepareAndOpen(project, false))
+          .catch((error: unknown) => setLibraryError(commandError(error).message));
+      }
+    },
+    [
+      openCollection,
+      prepareAndOpen,
+      setSearchQuery,
+      selectLibrarySection,
+    ],
+  );
 
   const confirmDeleteProject = async () => {
     const project = deleteCandidate;
@@ -636,18 +707,28 @@ export default function App() {
         canReviseSubtitles={Boolean(currentSubtitle)}
         canDeliverSubtitles={Boolean(currentSubtitle || currentTranslation)}
         libraryCounts={{
-          continueWatching: projects.filter(
-            (project) => project.playbackState.positionMs > 0,
+          continueWatching: libraryState.home.continueWatching.length,
+          episodeFiles: libraryState.home.totalProjectCount,
+          series: libraryState.home.collections.filter(
+            (collection) => collection.systemKey === null,
           ).length,
-          episodeFiles: 0,
-          series: 0,
-          folders: 0,
-          watchLater: 0,
-          unclassified: projects.length,
+          folders: libraryState.home.folders.length,
+          watchLater:
+            libraryState.home.collections.find(
+              (collection) => collection.systemKey === "watch_later",
+            )?.itemCount ?? 0,
+          unclassified: libraryState.home.unclassifiedCount,
         }}
+        librarySection={libraryState.section}
+        searchQuery={libraryState.searchQuery}
+        searchResults={libraryState.searchResults}
+        searchLoading={libraryState.searchLoading}
         onToggleNavigation={shellController.toggleNavigation}
         onToggleDrawer={shellController.toggleDrawer}
         onGoLibrary={returnToLibrary}
+        onSelectLibrarySection={selectLibrarySection}
+        onSearchQueryChange={setSearchQuery}
+        onOpenSearchResult={openLibrarySearchResult}
         onOpenFile={() => void importLocalVideo()}
         onOpenUrl={openRemoteUrlImport}
         onManageSubtitles={() => setSubtitleDialogOpen(true)}
@@ -660,15 +741,33 @@ export default function App() {
       >
         {screen === "library" ? (
           <LibraryScreen
-            projects={projects}
-            loading={libraryLoading}
-            error={libraryError}
+            home={libraryState.home}
+            section={libraryState.section}
+            currentCollection={libraryState.currentCollection}
+            currentEpisodes={libraryState.currentEpisodes}
+            selectedSeason={libraryState.selectedSeason}
+            loading={libraryState.loading}
+            collectionLoading={libraryState.collectionLoading}
+            mutationPending={libraryState.mutationPending}
+            error={libraryError ?? libraryState.error}
             previewMode={!isDesktopApp}
             onImport={() => void importLocalVideo()}
             onImportUrl={openRemoteUrlImport}
-            onOpen={(project) => void prepareAndOpen(project, false)}
-            onRelink={(project) => void relinkProject(project)}
-            onDelete={setDeleteCandidate}
+            onOpen={(media) => void openLibraryMedia(media)}
+            onRelink={(media) => void relinkLibraryMedia(media)}
+            onDelete={(media) => void deleteLibraryMedia(media)}
+            onSelectSection={selectLibrarySection}
+            onOpenCollection={(collectionId) =>
+              void openCollection(collectionId)
+            }
+            onCloseCollection={closeCollection}
+            onSelectSeason={selectSeason}
+            onCreateCollection={createManualCollection}
+            onUpdateCollection={editCollection}
+            onDeleteCollection={removeCollection}
+            onAddToCollection={addToCollection}
+            onRemoveFromCollection={removeFromCollection}
+            onSetWatchLater={changeWatchLater}
           />
         ) : null}
 
