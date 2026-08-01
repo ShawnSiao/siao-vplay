@@ -145,8 +145,10 @@ export function DesktopShell({
           </button>
           <button
             aria-label="打开剧集文件夹"
+            aria-keyshortcuts="Control+Shift+O"
             className="shell-command shell-command-primary"
             type="button"
+            title="打开文件夹 Ctrl+Shift+O"
             onClick={onOpenFolder}
           >
             <span aria-hidden="true">▰</span>

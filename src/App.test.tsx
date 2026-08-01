@@ -1040,11 +1040,10 @@ describe("App", () => {
     libraryGatewayMocks.listCollectionEpisodes.mockResolvedValue([]);
     render(<App />);
 
-    const commandbar = screen.getByRole("banner", { name: "应用命令栏" });
-    fireEvent.click(within(commandbar).getByRole("button", { name: "打开剧集文件夹" }));
+    fireEvent.keyDown(window, { key: "o", ctrlKey: true, shiftKey: true });
     expect(await screen.findByRole("heading", { name: "确认剧集识别结果" })).toBeInTheDocument();
     expect(screen.getByText("Rain.S01E01.mp4")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "导入 1 集" }));
+    fireEvent.keyDown(window, { key: "Enter", ctrlKey: true });
 
     await waitFor(() => expect(libraryGatewayMocks.confirmLibraryImport).toHaveBeenCalledOnce());
     expect(await screen.findByRole("heading", { name: "Rain" })).toBeInTheDocument();

@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 
 import {
   importItemNeedsConfirmation,
@@ -91,6 +91,24 @@ export function LibraryFolderImportDialog({
   const importing = state.stage === "importing";
   const preview = state.preview;
 
+  useEffect(() => {
+    const submitWithKeyboard = (event: KeyboardEvent) => {
+      if (
+        event.ctrlKey &&
+        event.key === "Enter" &&
+        preview &&
+        validation.valid &&
+        !importing
+      ) {
+        event.preventDefault();
+        event.stopPropagation();
+        void onImport();
+      }
+    };
+    window.addEventListener("keydown", submitWithKeyboard, true);
+    return () => window.removeEventListener("keydown", submitWithKeyboard, true);
+  }, [importing, onImport, preview, validation.valid]);
+
   return (
     <Dialog
       eyebrow="文件夹预检"
@@ -107,6 +125,7 @@ export function LibraryFolderImportDialog({
               取消
             </button>
             <button
+              aria-keyshortcuts="Control+Enter"
               className="button primary"
               type="button"
               disabled={!validation.valid || importing}

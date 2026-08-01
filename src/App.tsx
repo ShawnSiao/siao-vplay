@@ -418,10 +418,16 @@ export default function App() {
         !revisionDialogOpen &&
         !deliveryDialogOpen &&
         !remoteUrlDialogOpen &&
+        libraryState.folderImport.stage === "closed" &&
+        libraryState.recovery.stage === "closed" &&
         !busyMessage
       ) {
         event.preventDefault();
-        void importLocalVideo();
+        if (event.shiftKey) {
+          void importLocalFolder();
+        } else {
+          void importLocalVideo();
+        }
       }
     };
     window.addEventListener("keydown", handleOpenShortcut);
@@ -430,7 +436,10 @@ export default function App() {
     busyMessage,
     deleteCandidate,
     deliveryDialogOpen,
+    importLocalFolder,
     importLocalVideo,
+    libraryState.folderImport.stage,
+    libraryState.recovery.stage,
     remoteUrlDialogOpen,
     revisionDialogOpen,
     subtitleDialogOpen,

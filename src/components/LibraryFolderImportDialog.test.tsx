@@ -90,7 +90,7 @@ describe("LibraryFolderImportDialog", () => {
     expect(importButton).toBeDisabled();
     fireEvent.click(screen.getByRole("checkbox", { name: "确认 special.mp4" }));
     expect(importButton).toBeEnabled();
-    fireEvent.click(importButton);
+    fireEvent.keyDown(window, { key: "Enter", ctrlKey: true });
     expect(onImport).toHaveBeenCalledOnce();
   });
 
