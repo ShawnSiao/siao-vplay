@@ -177,7 +177,7 @@ pub struct StartTranscriptionInput {
 }
 
 fn default_model_kind() -> String {
-    "small".to_owned()
+    crate::runtime::preferred_model_kind()
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -212,6 +212,7 @@ pub struct TranscriptionJob {
 pub struct TranscriptionRuntimeOption {
     pub backend: String,
     pub available: bool,
+    pub path: Option<String>,
     pub version: Option<String>,
     pub error_message: Option<String>,
 }
@@ -221,6 +222,7 @@ pub struct TranscriptionRuntimeOption {
 pub struct TranscriptionModelStatus {
     pub model_kind: String,
     pub available: bool,
+    pub path: Option<String>,
     pub error_message: Option<String>,
 }
 
@@ -364,9 +366,14 @@ fn runtime_directory(backend: &str) -> Result<PathBuf, TranscriptionError> {
     }
     let runtime_root = env::var_os("SIAOVPLAY_RUNTIME_DIR")
         .filter(|value| !value.is_empty())
-        .map(PathBuf::from);
+        .map(PathBuf::from)
+        .or_else(crate::runtime::configured_runtime_root);
     let executable_path = env::current_exe().ok();
     resolve_runtime_directory(backend, runtime_root.as_deref(), executable_path.as_deref())
+}
+
+pub(crate) fn runtime_directory_for_status(backend: &str) -> Result<PathBuf, TranscriptionError> {
+    runtime_directory(backend)
 }
 
 fn resolve_runtime_directory(
@@ -410,6 +417,10 @@ fn runtime_directory_candidates(
     let mut candidates = Vec::new();
     if let Some(runtime_root) = runtime_root {
         push_unique(&mut candidates, runtime_root.join(directory_name));
+        push_unique(
+            &mut candidates,
+            runtime_root.join("runtimes").join(directory_name),
+        );
     }
     if let Some(executable_directory) = executable_path.and_then(Path::parent) {
         for ancestor in executable_directory
@@ -544,9 +555,15 @@ fn model_path(kind: TranscriptionModelKind) -> Result<PathBuf, TranscriptionErro
     }
     let model_root = env::var_os("SIAOVPLAY_MODEL_DIR")
         .filter(|value| !value.is_empty())
-        .map(PathBuf::from);
+        .map(PathBuf::from)
+        .or_else(crate::runtime::configured_model_root);
     let executable_path = env::current_exe().ok();
     resolve_model_path(kind, model_root.as_deref(), executable_path.as_deref())
+}
+
+pub(crate) fn model_path_for_status(model_kind: &str) -> Result<PathBuf, TranscriptionError> {
+    let kind = TranscriptionModelKind::parse(model_kind)?;
+    model_path(kind)
 }
 
 fn resolve_model_path(
@@ -648,7 +665,8 @@ fn vad_model_path() -> Result<PathBuf, TranscriptionError> {
     }
     let runtime_root = env::var_os("SIAOVPLAY_RUNTIME_DIR")
         .filter(|value| !value.is_empty())
-        .map(PathBuf::from);
+        .map(PathBuf::from)
+        .or_else(crate::runtime::configured_runtime_root);
     let executable_path = env::current_exe().ok();
     let cpu_runtime_directory = runtime_directory("cpu").ok();
     resolve_vad_model_path(
@@ -674,6 +692,13 @@ fn resolve_vad_model_path(
         push_unique(
             &mut candidates,
             runtime_root.join("whisper").join(VAD_MODEL_FILE_NAME),
+        );
+        push_unique(
+            &mut candidates,
+            runtime_root
+                .join("runtimes")
+                .join("whisper")
+                .join(VAD_MODEL_FILE_NAME),
         );
         push_unique(&mut candidates, runtime_root.join(VAD_MODEL_FILE_NAME));
     }
@@ -759,21 +784,17 @@ pub fn transcription_runtime_status() -> TranscriptionRuntimeStatus {
     let runtimes = ["vulkan", "cpu"]
         .into_iter()
         .map(|backend| match verify_runtime(backend) {
-            Ok(runtime) if vad_status.is_ok() => TranscriptionRuntimeOption {
+            Ok(runtime) => TranscriptionRuntimeOption {
                 backend: backend.to_owned(),
-                available: true,
+                available: vad_status.is_ok(),
+                path: Some(runtime.directory.to_string_lossy().into_owned()),
                 version: Some(runtime.version),
-                error_message: None,
-            },
-            Ok(_) => TranscriptionRuntimeOption {
-                backend: backend.to_owned(),
-                available: false,
-                version: None,
                 error_message: vad_status.as_ref().err().cloned(),
             },
             Err(error) => TranscriptionRuntimeOption {
                 backend: backend.to_owned(),
                 available: false,
+                path: None,
                 version: None,
                 error_message: Some(error.to_string()),
             },
@@ -785,11 +806,17 @@ pub fn transcription_runtime_status() -> TranscriptionRuntimeStatus {
             Ok(_) => TranscriptionModelStatus {
                 model_kind: kind.as_str().to_owned(),
                 available: true,
+                path: model_path(kind)
+                    .ok()
+                    .map(|path| path.to_string_lossy().into_owned()),
                 error_message: None,
             },
             Err(error) => TranscriptionModelStatus {
                 model_kind: kind.as_str().to_owned(),
                 available: false,
+                path: model_path(kind)
+                    .ok()
+                    .map(|path| path.to_string_lossy().into_owned()),
                 error_message: Some(error.to_string()),
             },
         })

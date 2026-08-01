@@ -641,7 +641,8 @@ fn resolve_yt_dlp_path() -> Result<PathBuf, YouTubeMediaError> {
     }
     let runtime_root = env::var_os("SIAOVPLAY_RUNTIME_DIR")
         .filter(|value| !value.is_empty())
-        .map(PathBuf::from);
+        .map(PathBuf::from)
+        .or_else(crate::runtime::configured_runtime_root);
     let executable_path = env::current_exe().ok();
     let candidates = yt_dlp_candidates(runtime_root.as_deref(), executable_path.as_deref());
     candidates
@@ -668,6 +669,13 @@ fn yt_dlp_candidates(runtime_root: Option<&Path>, executable_path: Option<&Path>
             &mut candidates,
             runtime_root.join("yt-dlp").join("yt-dlp.exe"),
         );
+        push_unique(
+            &mut candidates,
+            runtime_root
+                .join("runtimes")
+                .join("yt-dlp")
+                .join("yt-dlp.exe"),
+        );
         push_unique(&mut candidates, runtime_root.join("bin").join("yt-dlp.exe"));
     }
     if let Some(executable_directory) = executable_path.and_then(Path::parent) {
@@ -690,6 +698,10 @@ fn yt_dlp_candidates(runtime_root: Option<&Path>, executable_path: Option<&Path>
         }
     }
     candidates
+}
+
+pub(crate) fn yt_dlp_path_for_status() -> Result<PathBuf, YouTubeMediaError> {
+    resolve_yt_dlp_path()
 }
 
 fn push_unique(candidates: &mut Vec<PathBuf>, path: PathBuf) {

@@ -4,7 +4,6 @@ use std::{
     io::{BufReader, Read},
     path::{Path, PathBuf},
     process::{Command, Output},
-    sync::OnceLock,
     time::SystemTime,
 };
 
@@ -19,7 +18,6 @@ use crate::{
 
 const PLAYBACK_PROXY_PROFILE: &str = "h264-yuv420p-aac-v1";
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-static MEDIA_RUNTIME: OnceLock<MediaRuntime> = OnceLock::new();
 
 #[derive(Debug, Error)]
 pub enum MediaError {
@@ -168,19 +166,14 @@ struct MediaRuntime {
 
 impl MediaRuntime {
     fn resolve() -> Result<Self, MediaError> {
-        if let Some(runtime) = MEDIA_RUNTIME.get() {
-            return Ok(runtime.clone());
-        }
         let ffmpeg_path = resolve_runtime_tool("SIAOVPLAY_FFMPEG", "ffmpeg.exe")?;
         let ffprobe_path = resolve_runtime_tool("SIAOVPLAY_FFPROBE", "ffprobe.exe")?;
         let version = tool_version(&ffmpeg_path)?;
-        let runtime = Self {
+        Ok(Self {
             ffmpeg_path,
             ffprobe_path,
             version,
-        };
-        let _ = MEDIA_RUNTIME.set(runtime.clone());
-        Ok(runtime)
+        })
     }
 
     fn status() -> MediaRuntimeStatus {
@@ -993,7 +986,8 @@ fn resolve_runtime_tool(
     }
     let runtime_root = env::var_os("SIAOVPLAY_RUNTIME_DIR")
         .filter(|value| !value.is_empty())
-        .map(PathBuf::from);
+        .map(PathBuf::from)
+        .or_else(crate::runtime::configured_runtime_root);
     let executable_path = env::current_exe().ok();
     let candidates = runtime_tool_candidates(
         file_name,
@@ -1024,6 +1018,14 @@ fn runtime_tool_candidates(
         push_unique(
             &mut candidates,
             runtime_root.join("ffmpeg").join("bin").join(file_name),
+        );
+        push_unique(
+            &mut candidates,
+            runtime_root
+                .join("runtimes")
+                .join("ffmpeg")
+                .join("bin")
+                .join(file_name),
         );
         push_unique(&mut candidates, runtime_root.join("bin").join(file_name));
     }

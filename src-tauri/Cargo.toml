@@ -26,6 +26,7 @@ tauri-plugin-dialog = "2"
 thiserror = "2.0.19"
 url = "2.5.7"
 uuid = { version = "1.24.0", features = ["v4"] }
+zip = { version = "2", default-features = false, features = ["deflate"] }
 windows-sys = { version = "0.61.2", features = [
     "Win32_Foundation",
     "Win32_Graphics_Dwm",
