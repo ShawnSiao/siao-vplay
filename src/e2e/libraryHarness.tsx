@@ -1,7 +1,15 @@
-import { StrictMode } from "react";
+import { StrictMode, useState } from "react";
 import { createRoot } from "react-dom/client";
 
+import { LibraryFolderImportDialog } from "../components/LibraryFolderImportDialog";
+import { LibraryRecoveryDialog } from "../components/LibraryRecoveryDialog";
 import { LibraryScreen } from "../components/LibraryScreen";
+import type {
+  LibraryFolderImportState,
+  LibraryImportDraftItem,
+  LibraryRecoveryState,
+  LibrarySection,
+} from "../features/library/useLibraryController";
 import { DesktopShell } from "../features/shell/DesktopShell";
 import type { LibraryHome, LibraryMediaSummary, Project } from "../types";
 import "../styles.css";
@@ -82,16 +90,106 @@ const libraryHome: LibraryHome = {
       totalDurationMs: 12 * 45 * 60 * 1_000,
     },
   ],
-  folders: [],
+  folders: [{
+    id: "e2e-library-root",
+    path: "W:\\Series\\Rain",
+    displayName: "Rain",
+    availability: "available",
+    lastScannedAtMs: Date.now(),
+    itemCount: 3,
+  }],
   unclassified: [mediaSummary],
   totalProjectCount: 1,
   collectionItemCount: 0,
   unclassifiedCount: 1,
 };
 
+const unresolvedItem: LibraryImportDraftItem = {
+  candidateId: "e2e-folder-candidate",
+  relativePath: "Special.mp4",
+  recognition: "unresolved",
+  confirmationReason: "没有识别到明确集号",
+  initiallyNeedsConfirmation: true,
+  originalDisplayTitle: "Special",
+  originalSeasonNumber: null,
+  originalEpisodeNumber: null,
+  originalAbsoluteOrder: 0,
+  displayTitle: "Special",
+  seasonNumber: null,
+  episodeNumber: null,
+  absoluteOrder: 0,
+  confirmed: false,
+};
+
+const folderPreview: LibraryFolderImportState = {
+  stage: "preview",
+  scanId: "e2e-folder-scan",
+  rootPath: "W:\\Series\\Special",
+  progress: null,
+  preview: {
+    scanId: "e2e-folder-scan",
+    previewToken: "e2e-folder-preview",
+    rootPath: "W:\\Series\\Special",
+    rootDisplayName: "Special",
+    suggestedCollectionTitle: "Special",
+    candidates: [{
+      candidateId: unresolvedItem.candidateId,
+      relativePath: unresolvedItem.relativePath,
+      displayTitle: unresolvedItem.displayTitle,
+      seasonNumber: unresolvedItem.seasonNumber,
+      episodeNumber: unresolvedItem.episodeNumber,
+      absoluteOrder: unresolvedItem.absoluteOrder,
+      recognition: unresolvedItem.recognition,
+      needsConfirmation: true,
+      confirmationReason: unresolvedItem.confirmationReason,
+      sourceSizeBytes: 8_000_000,
+      sourceModifiedAtMs: 1,
+      quickFingerprint: "e2e-fingerprint",
+    }],
+    ignoredEntries: [],
+    ignoredCount: 2,
+    needsConfirmationCount: 1,
+    expiresAtMs: 1_900_000_000_000,
+  },
+  collectionTitle: "Special",
+  items: [unresolvedItem],
+  confirmFingerprintDuplicates: false,
+  error: null,
+};
+
+const offlineRecovery: LibraryRecoveryState = {
+  stage: "rescan_preview",
+  rootId: "e2e-library-root",
+  rescanPreview: {
+    previewToken: "e2e-rescan-preview",
+    rootId: "e2e-library-root",
+    rootPath: "W:\\Series\\Rain",
+    rootDisplayName: "Rain",
+    collectionId: "e2e-library-collection",
+    rootOffline: true,
+    newCandidates: [],
+    missingItems: [],
+    changedItems: [],
+    availableItemCount: 0,
+    ignoredCount: 0,
+    expiresAtMs: 1_900_000_000_000,
+  },
+  relocationPreview: null,
+  newItems: [],
+  confirmMissing: false,
+  confirmChanged: false,
+  confirmFingerprintDuplicates: false,
+  error: null,
+};
+
 export function LibraryHarness() {
+  const [folderImport, setFolderImport] = useState<LibraryFolderImportState | null>(null);
+  const [section, setSection] = useState<LibrarySection>("home");
+  const [recovery, setRecovery] = useState<LibraryRecoveryState | null>(null);
+  const openFolderImport = () => setFolderImport(folderPreview);
   return (
-    <DesktopShell
+    <>
+      <DesktopShell
       activeView="library"
       navigationCollapsed={false}
       drawerTab={null}
@@ -120,21 +218,22 @@ export function LibraryHarness() {
         continueWatching: 1,
         episodeFiles: 1,
         series: 1,
-        folders: 0,
+        folders: 1,
         watchLater: 0,
         unclassified: 1,
       }}
-      librarySection="home"
+      librarySection={section}
       searchQuery=""
       searchResults={[]}
       searchLoading={false}
       onToggleNavigation={() => undefined}
       onToggleDrawer={() => undefined}
       onGoLibrary={() => undefined}
-      onSelectLibrarySection={() => undefined}
+      onSelectLibrarySection={setSection}
       onSearchQueryChange={() => undefined}
       onOpenSearchResult={() => undefined}
       onOpenFile={() => undefined}
+      onOpenFolder={openFolderImport}
       onOpenUrl={() => undefined}
       onManageSubtitles={() => undefined}
       onManageTranslation={() => undefined}
@@ -143,7 +242,7 @@ export function LibraryHarness() {
     >
       <LibraryScreen
         home={libraryHome}
-        section="home"
+        section={section}
         currentCollection={null}
         currentEpisodes={[]}
         selectedSeason={null}
@@ -153,11 +252,32 @@ export function LibraryHarness() {
         error={null}
         previewMode
         onImport={() => undefined}
+        onImportFolder={openFolderImport}
         onImportUrl={() => undefined}
+        onRescanRoot={() => setRecovery(offlineRecovery)}
+        onRelocateRoot={() => setRecovery({
+          ...offlineRecovery,
+          stage: "relocation_preview",
+          rescanPreview: null,
+          relocationPreview: {
+            previewToken: "e2e-relocation-preview",
+            rootId: "e2e-library-root",
+            currentRootPath: "W:\\Series\\Rain",
+            newRootPath: "W:\\Moved\\Rain",
+            matchedItemCount: 2,
+            mismatches: [{
+              projectId: "e2e-missing",
+              relativePath: "Rain.S01E03.mp4",
+              reason: "missing",
+            }],
+            expiresAtMs: 1_900_000_000_000,
+          },
+        })}
         onOpen={() => undefined}
         onRelink={() => undefined}
         onDelete={() => undefined}
-        onSelectSection={() => undefined}
+        onOpenLocation={() => undefined}
+        onSelectSection={setSection}
         onOpenCollection={() => undefined}
         onCloseCollection={() => undefined}
         onSelectSeason={() => undefined}
@@ -168,7 +288,40 @@ export function LibraryHarness() {
         onRemoveFromCollection={async () => undefined}
         onSetWatchLater={async () => undefined}
       />
-    </DesktopShell>
+      </DesktopShell>
+      {folderImport ? (
+        <LibraryFolderImportDialog
+          state={folderImport}
+          onClose={() => setFolderImport(null)}
+          onCancelScan={async () => setFolderImport(null)}
+          onTitleChange={(collectionTitle) =>
+            setFolderImport((current) => current ? { ...current, collectionTitle } : current)
+          }
+          onItemChange={(candidateId, values) =>
+            setFolderImport((current) => current ? {
+              ...current,
+              items: current.items.map((item) => item.candidateId === candidateId ? { ...item, ...values } : item),
+            } : current)
+          }
+          onConfirmFingerprintDuplicatesChange={(confirmFingerprintDuplicates) =>
+            setFolderImport((current) => current ? { ...current, confirmFingerprintDuplicates } : current)
+          }
+          onImport={async () => setFolderImport(null)}
+        />
+      ) : null}
+      {recovery ? (
+        <LibraryRecoveryDialog
+          state={recovery}
+          onClose={() => setRecovery(null)}
+          onItemChange={() => undefined}
+          onConfirmationChange={(field, checked) =>
+            setRecovery((current) => current ? { ...current, [field]: checked } : current)
+          }
+          onApplyRescan={async () => setRecovery(null)}
+          onApplyRelocation={async () => setRecovery(null)}
+        />
+      ) : null}
+    </>
   );
 }
 

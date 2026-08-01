@@ -71,6 +71,15 @@ pub(crate) enum ItemAvailability {
 }
 
 impl ItemAvailability {
+    pub(crate) fn as_database_value(self) -> &'static str {
+        match self {
+            Self::Available => "available",
+            Self::Missing => "missing",
+            Self::RootOffline => "root_offline",
+            Self::Changed => "changed",
+        }
+    }
+
     pub(crate) fn from_database_value(value: &str) -> Result<Self, LibraryError> {
         match value {
             "available" => Ok(Self::Available),
@@ -249,4 +258,231 @@ pub(crate) struct AddProjectToCollectionInput {
     pub episode_number: Option<i64>,
     pub absolute_order: Option<i64>,
     pub display_title: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ScanLibraryFolderInput {
+    pub scan_id: String,
+    pub root_path: String,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum EpisodeRecognition {
+    SxxExx,
+    SeasonXEpisode,
+    ChineseEpisode,
+    NumericPrefix,
+    SeasonDirectory,
+    Unresolved,
+    Conflict,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct LibraryScanCandidate {
+    pub candidate_id: String,
+    pub relative_path: String,
+    pub display_title: String,
+    pub season_number: Option<i64>,
+    pub episode_number: Option<i64>,
+    pub absolute_order: i64,
+    pub recognition: EpisodeRecognition,
+    pub needs_confirmation: bool,
+    pub confirmation_reason: Option<String>,
+    pub source_size_bytes: u64,
+    pub source_modified_at_ms: Option<i64>,
+    pub quick_fingerprint: String,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum IgnoredEntryReason {
+    Hidden,
+    System,
+    ReparsePoint,
+    IgnoredName,
+    Temporary,
+    UnsupportedExtension,
+    OutsideRoot,
+    Unreadable,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct IgnoredLibraryEntry {
+    pub relative_path: String,
+    pub reason: IgnoredEntryReason,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum LibraryScanPhase {
+    Scanning,
+    Fingerprinting,
+    Completed,
+    Cancelled,
+    Failed,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct LibraryScanProgress {
+    pub scan_id: String,
+    pub phase: LibraryScanPhase,
+    pub scanned_directories: u64,
+    pub scanned_files: u64,
+    pub candidate_files: u64,
+    pub ignored_entries: u64,
+    pub current_relative_path: Option<String>,
+    pub message: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct LibraryScanPreview {
+    pub scan_id: String,
+    pub preview_token: String,
+    pub root_path: String,
+    pub root_display_name: String,
+    pub suggested_collection_title: String,
+    pub candidates: Vec<LibraryScanCandidate>,
+    pub ignored_entries: Vec<IgnoredLibraryEntry>,
+    pub ignored_count: u64,
+    pub needs_confirmation_count: u64,
+    pub expires_at_ms: i64,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ConfirmLibraryItemInput {
+    pub candidate_id: String,
+    pub display_title: String,
+    pub season_number: Option<i64>,
+    pub episode_number: Option<i64>,
+    pub absolute_order: i64,
+    #[serde(default)]
+    pub confirmed: bool,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ConfirmLibraryImportInput {
+    pub preview_token: String,
+    pub collection_title: String,
+    pub items: Vec<ConfirmLibraryItemInput>,
+    #[serde(default)]
+    pub confirm_fingerprint_duplicates: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct LibraryImportResult {
+    pub root_id: String,
+    pub collection: CollectionDetail,
+    pub imported_item_count: u64,
+    pub created_project_count: u64,
+    pub reused_project_count: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct LibraryRecoveryItem {
+    pub collection_id: String,
+    pub project_id: String,
+    pub relative_path: String,
+    pub display_title: String,
+    pub previous_availability: ItemAvailability,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct LibraryRescanPreview {
+    pub preview_token: String,
+    pub root_id: String,
+    pub root_path: String,
+    pub root_display_name: String,
+    pub collection_id: String,
+    pub root_offline: bool,
+    pub new_candidates: Vec<LibraryScanCandidate>,
+    pub missing_items: Vec<LibraryRecoveryItem>,
+    pub changed_items: Vec<LibraryRecoveryItem>,
+    pub available_item_count: u64,
+    pub ignored_count: u64,
+    pub expires_at_ms: i64,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ApplyLibraryRescanInput {
+    pub preview_token: String,
+    pub new_items: Vec<ConfirmLibraryItemInput>,
+    #[serde(default)]
+    pub confirm_missing: bool,
+    #[serde(default)]
+    pub confirm_changed: bool,
+    #[serde(default)]
+    pub confirm_fingerprint_duplicates: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct LibraryRescanResult {
+    pub root: LibraryRootSummary,
+    pub collection: CollectionDetail,
+    pub added_item_count: u64,
+    pub created_project_count: u64,
+    pub reused_project_count: u64,
+    pub missing_item_count: u64,
+    pub changed_item_count: u64,
+    pub available_item_count: u64,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct InspectLibraryRootRelocationInput {
+    pub root_id: String,
+    pub new_root_path: String,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum RelocationMismatchReason {
+    Missing,
+    FingerprintChanged,
+    InvalidRelativePath,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct LibraryRelocationMismatch {
+    pub project_id: String,
+    pub relative_path: String,
+    pub reason: RelocationMismatchReason,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct LibraryRootRelocationPreview {
+    pub preview_token: String,
+    pub root_id: String,
+    pub current_root_path: String,
+    pub new_root_path: String,
+    pub matched_item_count: u64,
+    pub mismatches: Vec<LibraryRelocationMismatch>,
+    pub expires_at_ms: i64,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ApplyLibraryRootRelocationInput {
+    pub preview_token: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct LibraryRootRelocationResult {
+    pub root: LibraryRootSummary,
+    pub updated_item_count: u64,
 }

@@ -70,10 +70,12 @@ export function usePlaybackController({
     null,
   );
   const surfaceClickTimerRef = useRef<number | null>(null);
+  const skipUnmountPersistRef = useRef(false);
   const persistFunctionRef = useRef<
     (video: HTMLVideoElement | null) => Promise<void>
   >(async () => undefined);
   const [playing, setPlaying] = useState(false);
+  const [ended, setEnded] = useState(false);
   const [muted, setMuted] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   const [positionMs, setPositionMs] = useState(
@@ -165,7 +167,9 @@ export function usePlaybackController({
       if (surfaceClickTimerRef.current !== null) {
         window.clearTimeout(surfaceClickTimerRef.current);
       }
-      void persistFunctionRef.current(video).catch(() => undefined);
+      if (!skipUnmountPersistRef.current) {
+        void persistFunctionRef.current(video).catch(() => undefined);
+      }
     };
   }, []);
 
@@ -208,7 +212,11 @@ export function usePlaybackController({
     }
     if (video.paused) {
       try {
+        if (video.ended) {
+          video.currentTime = 0;
+        }
         await video.play();
+        setEnded(false);
         setPlaying(true);
       } catch (error) {
         onError(error instanceof Error ? error.message : "播放器未能开始播放");
@@ -421,6 +429,7 @@ export function usePlaybackController({
   };
 
   const handlePlay = () => {
+    setEnded(false);
     setPlaying(true);
     beginPerformanceCheck();
   };
@@ -430,8 +439,22 @@ export function usePlaybackController({
   };
   const handleEnded = () => {
     setPlaying(false);
-    void persistCurrentState(videoRef.current).catch(() => undefined);
+    setEnded(true);
+    return persistCurrentState(videoRef.current);
   };
+  const persistBeforeSourceChange = useCallback(
+    async () => {
+      await persistCurrentState(videoRef.current);
+      skipUnmountPersistRef.current = true;
+    },
+    [persistCurrentState],
+  );
+  const resumeUnmountPersist = useCallback(() => {
+    skipUnmountPersistRef.current = false;
+  }, []);
+  const markCurrentStatePersistedForSourceChange = useCallback(() => {
+    skipUnmountPersistRef.current = true;
+  }, []);
   const changeVolume = (nextVolume: number) => {
     if (videoRef.current) {
       videoRef.current.volume = nextVolume;
@@ -472,6 +495,7 @@ export function usePlaybackController({
     videoStream,
     audioStream,
     playing,
+    ended,
     muted,
     fullscreen,
     positionMs,
@@ -498,5 +522,8 @@ export function usePlaybackController({
     changeVolume,
     changePlaybackRate,
     changeSubtitleMode,
+    persistBeforeSourceChange,
+    resumeUnmountPersist,
+    markCurrentStatePersistedForSourceChange,
   };
 }

@@ -44,7 +44,7 @@ export const isDesktopApp = "__TAURI_INTERNALS__" in window;
 
 const browserStatus: AppStatus = {
   appName: "SiaoVPlay",
-  version: "0.1.0",
+  version: "0.2.0",
   platform: "browser-preview",
   dataDirectory: "仅桌面应用可用",
   startupMediaPath: null,
@@ -122,6 +122,18 @@ export async function chooseLocalVideo(): Promise<string | null> {
         extensions: [...supportedVideoExtensions],
       },
     ],
+  });
+  return typeof selected === "string" ? selected : null;
+}
+
+export async function chooseLocalFolder(): Promise<string | null> {
+  if (!isDesktopApp) {
+    return null;
+  }
+  const selected = await open({
+    multiple: false,
+    directory: true,
+    title: "选择剧集文件夹",
   });
   return typeof selected === "string" ? selected : null;
 }

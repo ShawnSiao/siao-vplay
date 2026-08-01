@@ -20,7 +20,7 @@ function classifyPaths(paths: string[]): MediaDropFeedback {
   if (!isSupportedVideoPath(paths[0])) {
     return {
       tone: "blocked",
-      message: "暂不支持文件夹或这种文件；文件夹导入将在 Phase 7D 启用",
+      message: "请拖入一个受支持的视频；文件夹请使用「打开文件夹」预检导入",
     };
   }
   return { tone: "ready", message: "松开以导入这个视频" };

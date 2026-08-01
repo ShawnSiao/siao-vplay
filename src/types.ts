@@ -152,6 +152,166 @@ export type LibrarySearchResult = {
   episodeNumber: number | null;
 };
 
+export type EpisodeRecognition =
+  | "sxx_exx"
+  | "season_x_episode"
+  | "chinese_episode"
+  | "numeric_prefix"
+  | "season_directory"
+  | "unresolved"
+  | "conflict";
+
+export type LibraryScanCandidate = {
+  candidateId: string;
+  relativePath: string;
+  displayTitle: string;
+  seasonNumber: number | null;
+  episodeNumber: number | null;
+  absoluteOrder: number;
+  recognition: EpisodeRecognition;
+  needsConfirmation: boolean;
+  confirmationReason: string | null;
+  sourceSizeBytes: number;
+  sourceModifiedAtMs: number | null;
+  quickFingerprint: string;
+};
+
+export type IgnoredLibraryEntry = {
+  relativePath: string;
+  reason:
+    | "hidden"
+    | "system"
+    | "reparse_point"
+    | "ignored_name"
+    | "temporary"
+    | "unsupported_extension"
+    | "outside_root"
+    | "unreadable";
+};
+
+export type LibraryScanPhase =
+  | "scanning"
+  | "fingerprinting"
+  | "completed"
+  | "cancelled"
+  | "failed";
+
+export type LibraryScanProgress = {
+  scanId: string;
+  phase: LibraryScanPhase;
+  scannedDirectories: number;
+  scannedFiles: number;
+  candidateFiles: number;
+  ignoredEntries: number;
+  currentRelativePath: string | null;
+  message: string | null;
+};
+
+export type LibraryScanPreview = {
+  scanId: string;
+  previewToken: string;
+  rootPath: string;
+  rootDisplayName: string;
+  suggestedCollectionTitle: string;
+  candidates: LibraryScanCandidate[];
+  ignoredEntries: IgnoredLibraryEntry[];
+  ignoredCount: number;
+  needsConfirmationCount: number;
+  expiresAtMs: number;
+};
+
+export type ConfirmLibraryItemInput = {
+  candidateId: string;
+  displayTitle: string;
+  seasonNumber: number | null;
+  episodeNumber: number | null;
+  absoluteOrder: number;
+  confirmed: boolean;
+};
+
+export type ConfirmLibraryImportInput = {
+  previewToken: string;
+  collectionTitle: string;
+  items: ConfirmLibraryItemInput[];
+  confirmFingerprintDuplicates: boolean;
+};
+
+export type LibraryImportResult = {
+  rootId: string;
+  collection: CollectionDetail;
+  importedItemCount: number;
+  createdProjectCount: number;
+  reusedProjectCount: number;
+};
+
+export type LibraryRecoveryItem = {
+  collectionId: string;
+  projectId: string;
+  relativePath: string;
+  displayTitle: string;
+  previousAvailability: LibraryItemAvailability;
+};
+
+export type LibraryRescanPreview = {
+  previewToken: string;
+  rootId: string;
+  rootPath: string;
+  rootDisplayName: string;
+  collectionId: string;
+  rootOffline: boolean;
+  newCandidates: LibraryScanCandidate[];
+  missingItems: LibraryRecoveryItem[];
+  changedItems: LibraryRecoveryItem[];
+  availableItemCount: number;
+  ignoredCount: number;
+  expiresAtMs: number;
+};
+
+export type ApplyLibraryRescanInput = {
+  previewToken: string;
+  newItems: ConfirmLibraryItemInput[];
+  confirmMissing: boolean;
+  confirmChanged: boolean;
+  confirmFingerprintDuplicates: boolean;
+};
+
+export type LibraryRescanResult = {
+  root: LibraryRootSummary;
+  collection: CollectionDetail;
+  addedItemCount: number;
+  createdProjectCount: number;
+  reusedProjectCount: number;
+  missingItemCount: number;
+  changedItemCount: number;
+  availableItemCount: number;
+};
+
+export type RelocationMismatchReason =
+  | "missing"
+  | "fingerprint_changed"
+  | "invalid_relative_path";
+
+export type LibraryRelocationMismatch = {
+  projectId: string;
+  relativePath: string;
+  reason: RelocationMismatchReason;
+};
+
+export type LibraryRootRelocationPreview = {
+  previewToken: string;
+  rootId: string;
+  currentRootPath: string;
+  newRootPath: string;
+  matchedItemCount: number;
+  mismatches: LibraryRelocationMismatch[];
+  expiresAtMs: number;
+};
+
+export type LibraryRootRelocationResult = {
+  root: LibraryRootSummary;
+  updatedItemCount: number;
+};
+
 export type MediaArtifactStatus =
   | "queued"
   | "running"

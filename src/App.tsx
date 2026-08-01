@@ -1,9 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { Dialog } from "./components/Dialog";
+import { LibraryFolderImportDialog } from "./components/LibraryFolderImportDialog";
+import { LibraryRecoveryDialog } from "./components/LibraryRecoveryDialog";
 import { LibraryScreen } from "./components/LibraryScreen";
 import { PlayerScreen } from "./features/playback/PlayerScreen";
 import { useLibraryController } from "./features/library/useLibraryController";
+import { openProjectMediaLocation } from "./features/library/libraryGateway";
+import {
+  useEpisodeNavigation,
+  type EpisodePlaybackContext,
+} from "./features/library/useEpisodeNavigation";
 import { PreparationScreen } from "./components/PreparationScreen";
 import { RemoteUrlDialog } from "./components/RemoteUrlDialog";
 import { SubtitleImportDialog } from "./components/SubtitleImportDialog";
@@ -14,6 +21,7 @@ import { DesktopShell } from "./features/shell/DesktopShell";
 import { useDesktopMediaDrop } from "./features/shell/useDesktopMediaDrop";
 import { useShellController } from "./features/shell/useShellController";
 import {
+  chooseLocalFolder,
   chooseLocalVideo,
   commandError,
   createLocalProject,
@@ -43,6 +51,7 @@ import type {
   TranslationTask,
   LibraryMediaSummary,
   LibrarySearchResult,
+  EpisodeReference,
 } from "./types";
 
 const activeTranscriptionStatuses = new Set<TranscriptionJob["status"]>([
@@ -68,6 +77,20 @@ export default function App() {
     addToCollection,
     removeFromCollection,
     changeWatchLater,
+    startFolderScan,
+    cancelFolderScan,
+    closeFolderImport,
+    setFolderImportTitle,
+    updateFolderImportItem,
+    setConfirmFingerprintDuplicates,
+    importScannedFolder,
+    inspectRootRescan,
+    inspectRootRelocation,
+    closeRecovery,
+    updateRecoveryItem,
+    setRecoveryConfirmation,
+    applyRescan,
+    applyRootRelocation,
   } = useLibraryController();
   const screen = shellController.state.activeView;
   const setScreen = shellController.setActiveView;
@@ -81,6 +104,8 @@ export default function App() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [libraryError, setLibraryError] = useState<string | null>(null);
   const [activeProject, setActiveProject] = useState<Project | null>(null);
+  const [episodeContext, setEpisodeContext] =
+    useState<EpisodePlaybackContext | null>(null);
   const [preparation, setPreparation] =
     useState<MediaPreparation | null>(null);
   const [preparationError, setPreparationError] = useState<string | null>(
@@ -104,6 +129,10 @@ export default function App() {
   const [deleteCandidate, setDeleteCandidate] = useState<Project | null>(null);
   const [busyMessage, setBusyMessage] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const episodeNavigation = useEpisodeNavigation(
+    episodeContext,
+    activeProject?.id ?? null,
+  );
 
   const refreshProjects = useCallback(async () => {
     try {
@@ -204,13 +233,20 @@ export default function App() {
   }, [projects, refreshLibrary]);
 
   const prepareAndOpen = useCallback(
-    async (project: Project, shouldForceProxy: boolean) => {
+    async (
+      project: Project,
+      shouldForceProxy: boolean,
+      nextEpisodeContext: EpisodePlaybackContext | null,
+    ) => {
       const token = operationTokenRef.current + 1;
       operationTokenRef.current = token;
       setActiveProject(project);
       setPreparation(null);
       setPreparationError(null);
       setForceProxy(shouldForceProxy);
+      if (!shouldForceProxy) {
+        setEpisodeContext(nextEpisodeContext);
+      }
       const preparationTimer = window.setTimeout(() => {
         if (operationTokenRef.current === token) {
           setScreen("preparing");
@@ -265,6 +301,7 @@ export default function App() {
     setPreparationError(null);
     setForceProxy(false);
     setSubtitleVersions([]);
+    setEpisodeContext(null);
     setSubtitleDialogOpen(false);
     setTranslationDialogOpen(false);
     setTranslationSegmentIds(undefined);
@@ -289,7 +326,7 @@ export default function App() {
         const project =
           existingProject ?? (await createLocalProject(mediaPath));
         setBusyMessage(null);
-        await prepareAndOpen(project, false);
+        await prepareAndOpen(project, false, null);
       } catch (error) {
         setBusyMessage(null);
         setLibraryError(commandError(error).message);
@@ -314,6 +351,42 @@ export default function App() {
       setLibraryError(commandError(error).message);
     }
   }, [importMediaPath]);
+
+  const importLocalFolder = useCallback(async () => {
+    if (!isDesktopApp) {
+      setToast("浏览器预览不会读取本地文件夹，请在桌面应用中体验剧集导入。");
+      return;
+    }
+    try {
+      const rootPath = await chooseLocalFolder();
+      if (!rootPath) {
+        return;
+      }
+      setLibraryError(null);
+      await startFolderScan(rootPath);
+    } catch (error) {
+      setLibraryError(commandError(error).message);
+    }
+  }, [startFolderScan]);
+
+  const relocateLibraryRoot = useCallback(
+    async (rootId: string) => {
+      if (!isDesktopApp) {
+        setToast("浏览器预览不会读取本地文件夹，请在桌面应用中检查根目录。");
+        return;
+      }
+      try {
+        const newRootPath = await chooseLocalFolder();
+        if (!newRootPath) {
+          return;
+        }
+        await inspectRootRelocation(rootId, newRootPath);
+      } catch (error) {
+        setLibraryError(commandError(error).message);
+      }
+    },
+    [inspectRootRelocation],
+  );
 
   const openRemoteUrlImport = useCallback(() => {
     setLibraryError(null);
@@ -345,10 +418,16 @@ export default function App() {
         !revisionDialogOpen &&
         !deliveryDialogOpen &&
         !remoteUrlDialogOpen &&
+        libraryState.folderImport.stage === "closed" &&
+        libraryState.recovery.stage === "closed" &&
         !busyMessage
       ) {
         event.preventDefault();
-        void importLocalVideo();
+        if (event.shiftKey) {
+          void importLocalFolder();
+        } else {
+          void importLocalVideo();
+        }
       }
     };
     window.addEventListener("keydown", handleOpenShortcut);
@@ -357,7 +436,10 @@ export default function App() {
     busyMessage,
     deleteCandidate,
     deliveryDialogOpen,
+    importLocalFolder,
     importLocalVideo,
+    libraryState.folderImport.stage,
+    libraryState.recovery.stage,
     remoteUrlDialogOpen,
     revisionDialogOpen,
     subtitleDialogOpen,
@@ -373,7 +455,7 @@ export default function App() {
       setBusyMessage("正在重新关联媒体…");
       const relinked = await relinkProjectMedia(project.id, mediaPath);
       setBusyMessage(null);
-      await prepareAndOpen(relinked, false);
+      await prepareAndOpen(relinked, false, null);
     } catch (error) {
       setBusyMessage(null);
       setLibraryError(commandError(error).message);
@@ -384,7 +466,16 @@ export default function App() {
     async (media: LibraryMediaSummary) => {
       try {
         const project = await getProject(media.projectId);
-        await prepareAndOpen(project, false);
+        await prepareAndOpen(
+          project,
+          false,
+          media.collectionId
+            ? {
+                collectionId: media.collectionId,
+                seasonNumber: media.seasonNumber,
+              }
+            : null,
+        );
       } catch (error) {
         setLibraryError(commandError(error).message);
       }
@@ -427,7 +518,18 @@ export default function App() {
         void openCollection(result.collectionId);
       } else if (result.projectId) {
         void getProject(result.projectId)
-          .then((project) => prepareAndOpen(project, false))
+          .then((project) =>
+            prepareAndOpen(
+              project,
+              false,
+              result.collectionId
+                ? {
+                    collectionId: result.collectionId,
+                    seasonNumber: result.seasonNumber,
+                  }
+                : null,
+            ),
+          )
           .catch((error: unknown) => setLibraryError(commandError(error).message));
       }
     },
@@ -437,6 +539,25 @@ export default function App() {
       setSearchQuery,
       selectLibrarySection,
     ],
+  );
+
+  const switchEpisode = useCallback(
+    async (episode: EpisodeReference) => {
+      if (!episodeContext) {
+        throw new Error("当前视频不属于可导航的剧集");
+      }
+      try {
+        const project = await getProject(episode.projectId);
+        await prepareAndOpen(project, false, {
+          collectionId: episodeContext.collectionId,
+          seasonNumber: episode.seasonNumber,
+        });
+      } catch (error) {
+        setToast(commandError(error).message);
+        throw error;
+      }
+    },
+    [episodeContext, prepareAndOpen],
   );
 
   const confirmDeleteProject = async () => {
@@ -730,6 +851,7 @@ export default function App() {
         onSearchQueryChange={setSearchQuery}
         onOpenSearchResult={openLibrarySearchResult}
         onOpenFile={() => void importLocalVideo()}
+        onOpenFolder={() => void importLocalFolder()}
         onOpenUrl={openRemoteUrlImport}
         onManageSubtitles={() => setSubtitleDialogOpen(true)}
         onManageTranslation={() => {
@@ -752,10 +874,18 @@ export default function App() {
             error={libraryError ?? libraryState.error}
             previewMode={!isDesktopApp}
             onImport={() => void importLocalVideo()}
+            onImportFolder={() => void importLocalFolder()}
             onImportUrl={openRemoteUrlImport}
+            onRescanRoot={(rootId) => void inspectRootRescan(rootId)}
+            onRelocateRoot={(rootId) => void relocateLibraryRoot(rootId)}
             onOpen={(media) => void openLibraryMedia(media)}
             onRelink={(media) => void relinkLibraryMedia(media)}
             onDelete={(media) => void deleteLibraryMedia(media)}
+            onOpenLocation={(media) =>
+              void openProjectMediaLocation(media.projectId).catch((error: unknown) =>
+                setLibraryError(commandError(error).message),
+              )
+            }
             onSelectSection={selectLibrarySection}
             onOpenCollection={(collectionId) =>
               void openCollection(collectionId)
@@ -776,7 +906,9 @@ export default function App() {
             project={activeProject}
             forceProxy={forceProxy}
             error={preparationError}
-            onRetry={() => void prepareAndOpen(activeProject, forceProxy)}
+            onRetry={() =>
+              void prepareAndOpen(activeProject, forceProxy, episodeContext)
+            }
             onBack={returnToLibrary}
           />
         ) : null}
@@ -790,14 +922,18 @@ export default function App() {
             currentTranslation={currentTranslation}
             drawerTab={shellController.state.drawerTab}
             contextMenu={shellController.state.contextMenu}
+            episodeNavigation={episodeNavigation.state}
             onBack={returnToLibrary}
             onCloseDrawer={shellController.closeDrawer}
             onSelectDrawer={shellController.selectDrawer}
             onOpenContextMenu={shellController.openContextMenu}
             onCloseContextMenu={shellController.closeContextMenu}
             onManageSubtitles={() => setSubtitleDialogOpen(true)}
-            onNeedProxy={() => void prepareAndOpen(activeProject, true)}
+            onNeedProxy={() =>
+              void prepareAndOpen(activeProject, true, episodeContext)
+            }
             onPersist={persistPlayback}
+            onSwitchEpisode={switchEpisode}
             onError={(message) => {
               setPreparationError(message);
               setForceProxy(true);
@@ -806,6 +942,29 @@ export default function App() {
           />
         ) : null}
       </DesktopShell>
+
+      {libraryState.folderImport.stage !== "closed" ? (
+        <LibraryFolderImportDialog
+          state={libraryState.folderImport}
+          onClose={closeFolderImport}
+          onCancelScan={cancelFolderScan}
+          onTitleChange={setFolderImportTitle}
+          onItemChange={updateFolderImportItem}
+          onConfirmFingerprintDuplicatesChange={setConfirmFingerprintDuplicates}
+          onImport={importScannedFolder}
+        />
+      ) : null}
+
+      {libraryState.recovery.stage !== "closed" ? (
+        <LibraryRecoveryDialog
+          state={libraryState.recovery}
+          onClose={closeRecovery}
+          onItemChange={updateRecoveryItem}
+          onConfirmationChange={setRecoveryConfirmation}
+          onApplyRescan={applyRescan}
+          onApplyRelocation={applyRootRelocation}
+        />
+      ) : null}
 
       {subtitleDialogOpen && activeProject && preparation ? (
         <SubtitleImportDialog
@@ -900,7 +1059,7 @@ export default function App() {
               ...current.filter((item) => item.id !== project.id),
             ]);
             setToast("远程媒体已保存为本地副本。");
-            void prepareAndOpen(project, false);
+            void prepareAndOpen(project, false, null);
           }}
         />
       ) : null}

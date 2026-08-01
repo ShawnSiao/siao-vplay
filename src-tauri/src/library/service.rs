@@ -134,6 +134,12 @@ impl LibraryService {
         LibraryRepository::new(&connection).get_collection_detail(collection_id)
     }
 
+    pub(crate) fn project_media_location(&self, project_id: &str) -> Result<String, LibraryError> {
+        validate_id("视频", project_id)?;
+        let connection = self.store.connect()?;
+        LibraryRepository::new(&connection).project_media_locator(project_id)
+    }
+
     pub(crate) fn list_collection_episodes(
         &self,
         collection_id: &str,
@@ -287,7 +293,7 @@ impl LibraryService {
     }
 }
 
-fn validate_title(value: &str) -> Result<String, LibraryError> {
+pub(super) fn validate_title(value: &str) -> Result<String, LibraryError> {
     let title = value.trim();
     if title.is_empty() {
         return Err(LibraryError::Validation("名称不能为空".to_owned()));
@@ -306,7 +312,10 @@ fn validate_id(label: &str, value: &str) -> Result<(), LibraryError> {
         .map_err(|_| LibraryError::Validation(format!("{label} ID 无效")))
 }
 
-fn validate_optional_number(label: &str, value: Option<i64>) -> Result<(), LibraryError> {
+pub(super) fn validate_optional_number(
+    label: &str,
+    value: Option<i64>,
+) -> Result<(), LibraryError> {
     if value.is_some_and(|number| number < 0) {
         return Err(LibraryError::Validation(format!("{label}不能小于 0")));
     }
@@ -320,7 +329,7 @@ fn escape_like_pattern(value: &str) -> String {
         .replace('_', "\\_")
 }
 
-fn now_ms() -> Result<i64, LibraryError> {
+pub(super) fn now_ms() -> Result<i64, LibraryError> {
     let duration = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_err(|error| LibraryError::Conflict(format!("系统时间早于 Unix 纪元：{error}")))?;

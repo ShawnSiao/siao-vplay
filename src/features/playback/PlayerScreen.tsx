@@ -1,7 +1,12 @@
-import { useRef } from "react";
+import { useCallback, useRef, useState } from "react";
 
 import { formatDuration } from "../../lib/format";
-import type { MediaPreparation, Project, SubtitleVersion } from "../../types";
+import type {
+  EpisodeReference,
+  MediaPreparation,
+  Project,
+  SubtitleVersion,
+} from "../../types";
 import { LearningPanel } from "../../components/LearningPanel";
 import { UnderstandingPanel } from "../../components/UnderstandingPanel";
 import type {
@@ -14,6 +19,8 @@ import {
 } from "./usePlaybackController";
 import { PlayerContextMenu } from "./PlayerContextMenu";
 import { PlayerDrawer } from "./PlayerDrawer";
+import { EpisodeDrawer } from "./EpisodeDrawer";
+import type { EpisodeNavigationState } from "../library/useEpisodeNavigation";
 
 type PlayerScreenProps = {
   project: Project;
@@ -22,6 +29,7 @@ type PlayerScreenProps = {
   currentTranslation: SubtitleVersion | null;
   drawerTab: ShellDrawerTab | null;
   contextMenu: ShellContextMenu | null;
+  episodeNavigation: EpisodeNavigationState;
   onBack: () => void;
   onCloseDrawer: () => void;
   onSelectDrawer: (tab: ShellDrawerTab) => void;
@@ -30,6 +38,7 @@ type PlayerScreenProps = {
   onManageSubtitles: () => void;
   onNeedProxy: (reason: string) => void;
   onPersist: (values: PlaybackValues) => Promise<void>;
+  onSwitchEpisode: (episode: EpisodeReference) => Promise<void>;
   onError: (message: string) => void;
 };
 
@@ -40,6 +49,7 @@ export function PlayerScreen({
   currentTranslation,
   drawerTab,
   contextMenu,
+  episodeNavigation,
   onBack,
   onCloseDrawer,
   onSelectDrawer,
@@ -48,14 +58,17 @@ export function PlayerScreen({
   onManageSubtitles,
   onNeedProxy,
   onPersist,
+  onSwitchEpisode,
   onError,
 }: PlayerScreenProps) {
   const stageRef = useRef<HTMLDivElement>(null);
+  const [switchingEpisode, setSwitchingEpisode] = useState(false);
   const {
     playerRef,
     videoRef,
     sourceUrl,
     playing,
+    ended,
     muted,
     fullscreen,
     positionMs,
@@ -82,6 +95,9 @@ export function PlayerScreen({
     changeVolume,
     changePlaybackRate,
     changeSubtitleMode,
+    persistBeforeSourceChange,
+    resumeUnmountPersist,
+    markCurrentStatePersistedForSourceChange,
   } = usePlaybackController({
     project,
     preparation,
@@ -96,6 +112,42 @@ export function PlayerScreen({
     onPersist,
     onError,
   });
+  const switchEpisode = useCallback(
+    async (episode: EpisodeReference, currentStateAlreadyPersisted = false) => {
+      if (switchingEpisode || episode.projectId === project.id) {
+        return;
+      }
+      setSwitchingEpisode(true);
+      try {
+        if (!currentStateAlreadyPersisted) {
+          await persistBeforeSourceChange();
+        }
+        await onSwitchEpisode(episode);
+      } catch {
+        resumeUnmountPersist();
+        setSwitchingEpisode(false);
+      }
+    }, [onSwitchEpisode, persistBeforeSourceChange, project.id, resumeUnmountPersist, switchingEpisode],
+  );
+
+  const handlePlaybackEnded = useCallback(() => {
+    const endedStateSaved = handleEnded();
+    const next = episodeNavigation.neighbors.next;
+    if (
+      episodeNavigation.detail?.summary.autoPlayNext &&
+      next &&
+      !switchingEpisode
+    ) {
+      void endedStateSaved
+        .then(async () => {
+          markCurrentStatePersistedForSourceChange();
+          await switchEpisode(next, true);
+        })
+        .catch(() => resumeUnmountPersist());
+    } else {
+      void endedStateSaved.catch(() => undefined);
+    }
+  }, [episodeNavigation.detail, episodeNavigation.neighbors.next, handleEnded, markCurrentStatePersistedForSourceChange, resumeUnmountPersist, switchEpisode, switchingEpisode]);
 
   return (
     <div
@@ -139,7 +191,7 @@ export function PlayerScreen({
               onTimeUpdate={handleTimeUpdate}
               onPlay={handlePlay}
               onPause={handlePause}
-              onEnded={handleEnded}
+              onEnded={handlePlaybackEnded}
               onError={() => requestProxy("media_element_error")}
             />
 
@@ -172,6 +224,23 @@ export function PlayerScreen({
                 ) : null}
               </div>
             ) : null}
+
+            {ended &&
+            episodeNavigation.neighbors.next &&
+            !episodeNavigation.detail?.summary.autoPlayNext ? (
+              <div className="next-episode-overlay" role="status">
+                <span>本集播放完毕</span>
+                <strong>{episodeNavigation.neighbors.next.displayTitle}</strong>
+                <button
+                  className="button primary"
+                  type="button"
+                  disabled={switchingEpisode}
+                  onClick={() => void switchEpisode(episodeNavigation.neighbors.next!)}
+                >
+                  {switchingEpisode ? "正在打开…" : "播放下一集"}
+                </button>
+              </div>
+            ) : null}
           </div>
 
           <div className="player-controls">
@@ -193,11 +262,15 @@ export function PlayerScreen({
             <div className="control-row">
               <div className="playback-buttons">
                 <button
-                  aria-label="上一集，将在剧集功能接通后启用"
+                  aria-label="上一集"
                   className="control-icon"
                   type="button"
-                  title="上一集 · Phase 7D 启用"
-                  disabled
+                  title="上一集"
+                  disabled={!episodeNavigation.neighbors.previous || switchingEpisode}
+                  onClick={() =>
+                    episodeNavigation.neighbors.previous &&
+                    void switchEpisode(episodeNavigation.neighbors.previous)
+                  }
                 >
                   ◀▮
                 </button>
@@ -211,11 +284,15 @@ export function PlayerScreen({
                   <strong>{playing ? "暂停" : "播放"}</strong>
                 </button>
                 <button
-                  aria-label="下一集，将在剧集功能接通后启用"
+                  aria-label="下一集"
                   className="control-icon"
                   type="button"
-                  title="下一集 · Phase 7D 启用"
-                  disabled
+                  title="下一集"
+                  disabled={!episodeNavigation.neighbors.next || switchingEpisode}
+                  onClick={() =>
+                    episodeNavigation.neighbors.next &&
+                    void switchEpisode(episodeNavigation.neighbors.next)
+                  }
                 >
                   ▮▶
                 </button>
@@ -300,10 +377,16 @@ export function PlayerScreen({
             onClose={onCloseDrawer}
           >
             {drawerTab === "episodes" ? (
-              <div className="player-drawer-empty">
-                <strong>尚未加入剧集</strong>
-                <p>剧集列表会在 Phase 7C 接入真实集合数据。</p>
-              </div>
+              <EpisodeDrawer
+                projectId={project.id}
+                detail={episodeNavigation.detail}
+                episodes={episodeNavigation.episodes}
+                neighbors={episodeNavigation.neighbors}
+                loading={episodeNavigation.loading}
+                error={episodeNavigation.error}
+                switching={switchingEpisode}
+                onSwitch={(episode) => void switchEpisode(episode)}
+              />
             ) : drawerTab === "understand" ? (
               <UnderstandingPanel
                 embedded
