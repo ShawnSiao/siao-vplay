@@ -2496,15 +2496,20 @@ h3 {
   display: grid;
   place-items: center;
   padding: 32px;
+  overflow: hidden;
   background: rgb(2 4 6 / 78%);
   backdrop-filter: blur(7px);
 }
 
 .dialog {
   position: relative;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 16px;
   width: min(560px, calc(100vw - 64px));
   max-height: calc(100vh - 64px);
-  overflow: auto;
+  max-height: calc(100dvh - 64px);
+  overflow: hidden;
   padding: 26px;
   border: 1px solid var(--border-default);
   border-radius: 14px;
@@ -2513,7 +2518,13 @@ h3 {
 }
 
 .dialog h2 {
+  margin-bottom: 0;
   font-size: 21px;
+}
+
+.dialog-header {
+  min-width: 0;
+  padding-right: 40px;
 }
 
 .dialog-close {
@@ -2533,8 +2544,13 @@ h3 {
 }
 
 .dialog-body {
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding-right: 4px;
   color: var(--text-secondary);
   line-height: 1.75;
+  scrollbar-gutter: stable;
 }
 
 .dialog-body p {
@@ -2543,7 +2559,6 @@ h3 {
 
 .dialog-actions {
   justify-content: flex-end;
-  margin-top: 20px;
   padding-top: 16px;
   border-top: 1px solid var(--border-subtle);
 }
@@ -4399,7 +4414,7 @@ h3 {
 }
 
 /* Dialog text must remain readable on high-density Windows displays. */
-.dialog > .eyebrow,
+.dialog-header > .eyebrow,
 .dialog-body small,
 .dialog-body em,
 .dialog-body dt {
@@ -4408,6 +4423,10 @@ h3 {
 
 .dialog-body,
 .dialog-body p,
+.dialog-body li,
+.dialog-body dd,
+.dialog-body label,
+.dialog-body strong,
 .dialog-body button,
 .dialog-body input,
 .dialog-body select,
@@ -4431,8 +4450,14 @@ h3 {
 .revision-segment-list button span,
 .revision-retranslate-bar > span,
 .revision-editor-heading strong,
+.revision-history-current span,
+.revision-history-list span,
 .revision-segment-editor .field > span,
 .revision-single-panel .field > span,
+.dialog-body .field > span,
+.scope-check,
+.translation-manual-steps > div > span,
+.translation-samples span,
 .transcription-task-head span:first-child,
 .transcription-summary dt {
   font-size: 12px;

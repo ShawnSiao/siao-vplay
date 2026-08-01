@@ -80,3 +80,40 @@ test("playback shortcuts ignore editable controls and drop feedback is explicit"
   await page.keyboard.press("]");
   await expect(speed).toHaveValue("1.25");
 });
+
+test("dialog keeps its frame fixed and scrolls only the content at 900px", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/e2e/dialog.html");
+
+  const dialog = page.getByRole("dialog", { name: "字幕导入检查" });
+  const body = dialog.locator(".dialog-body");
+  const heading = page.getByRole("heading", { name: "字幕导入检查" });
+  const actions = dialog.locator(".dialog-actions");
+  const before = {
+    heading: await heading.boundingBox(),
+    actions: await actions.boundingBox(),
+  };
+
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toHaveCSS("overflow", "hidden");
+  await expect(body).toHaveCSS("overflow", "auto");
+  expect(await dialog.evaluate((element) => element.scrollHeight)).toBe(
+    await dialog.evaluate((element) => element.clientHeight),
+  );
+  expect(await body.evaluate((element) => element.scrollHeight)).toBeGreaterThan(
+    await body.evaluate((element) => element.clientHeight),
+  );
+  expect((await dialog.boundingBox())?.height).toBeLessThanOrEqual(836);
+  await expect(dialog.locator(".eyebrow")).toHaveCSS("font-size", "12px");
+  await expect(body.locator("p").first()).toHaveCSS("font-size", "13px");
+  await expect(dialog.locator("small")).toHaveCSS("font-size", "12px");
+  await expect(dialog.locator("label")).toHaveCSS("font-size", "13px");
+
+  await body.evaluate((element) => {
+    element.scrollTop = element.scrollHeight;
+  });
+  expect(await heading.boundingBox()).toEqual(before.heading);
+  expect(await actions.boundingBox()).toEqual(before.actions);
+});
