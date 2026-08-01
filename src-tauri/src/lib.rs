@@ -3,6 +3,7 @@ mod burn;
 mod codex_runner;
 mod commands;
 mod delivery;
+mod desktop_frame;
 mod domain;
 mod external_handoff;
 mod learning;
@@ -57,6 +58,15 @@ fn get_app_status(
     app_status(data_directory, startup_media_path.0.clone())
 }
 
+#[tauri::command]
+fn set_main_window_media_title(
+    window: tauri::WebviewWindow,
+    media_title: Option<String>,
+) -> Result<(), String> {
+    desktop_frame::set_media_title(&window, media_title.as_deref())
+        .map_err(|error| format!("无法更新 SiaoVPlay 窗口标题：{error}"))
+}
+
 fn resolve_data_directory(app: &tauri::App) -> Result<PathBuf, Box<dyn std::error::Error>> {
     if let Some(data_directory) = std::env::var_os("SIAOVPLAY_DATA_DIR")
         .filter(|value| !value.is_empty())
@@ -80,6 +90,11 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
+            if let Some(window) = app.get_webview_window("main") {
+                desktop_frame::apply(&window);
+            } else {
+                eprintln!("SiaoVPlay: main window was unavailable during native frame setup");
+            }
             let data_directory = resolve_data_directory(app)?;
             let database_path = data_directory.join("projects").join("siaovplay.db");
             let store = ProjectStore::open(database_path)?;
@@ -95,6 +110,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             get_app_status,
+            set_main_window_media_title,
             commands::create_local_project,
             commands::inspect_remote_media_url,
             commands::import_remote_media_url,

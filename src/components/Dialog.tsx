@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useId, useLayoutEffect, useRef } from "react";
 
 type DialogProps = {
   title: string;
@@ -16,6 +16,12 @@ export function Dialog({
   actions,
 }: DialogProps) {
   const dialogRef = useRef<HTMLElement>(null);
+  const onCloseRef = useRef(onClose);
+  const titleId = useId();
+
+  useLayoutEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
 
   useEffect(() => {
     const previouslyFocused =
@@ -33,7 +39,9 @@ export function Dialog({
 
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
-        onClose();
+        event.preventDefault();
+        event.stopPropagation();
+        onCloseRef.current();
       } else if (event.key === "Tab") {
         const focusable = focusableElements();
         if (focusable.length === 0) {
@@ -60,14 +68,14 @@ export function Dialog({
         }
       }
     };
-    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keydown", onKeyDown, true);
     return () => {
-      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keydown", onKeyDown, true);
       if (previouslyFocused?.isConnected) {
         previouslyFocused.focus();
       }
     };
-  }, [onClose]);
+  }, []);
 
   return (
     <div
@@ -84,7 +92,7 @@ export function Dialog({
         className="dialog"
         role="dialog"
         aria-modal="true"
-        aria-labelledby="dialog-title"
+        aria-labelledby={titleId}
         tabIndex={-1}
       >
         <button
@@ -95,8 +103,10 @@ export function Dialog({
         >
           ×
         </button>
-        {eyebrow ? <p className="eyebrow">{eyebrow}</p> : null}
-        <h2 id="dialog-title">{title}</h2>
+        <header className="dialog-header">
+          {eyebrow ? <p className="eyebrow">{eyebrow}</p> : null}
+          <h2 id={titleId}>{title}</h2>
+        </header>
         <div className="dialog-body">{children}</div>
         {actions ? <footer className="dialog-actions">{actions}</footer> : null}
       </section>

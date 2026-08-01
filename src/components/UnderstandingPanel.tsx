@@ -32,6 +32,7 @@ type UnderstandingPanelProps = {
   translationVersion: SubtitleVersion | null;
   onPrepareSubtitles: () => void;
   onClose: () => void;
+  embedded?: boolean;
 };
 
 type HandoffKind = "codex" | "manual";
@@ -73,6 +74,7 @@ export function UnderstandingPanel({
   translationVersion,
   onPrepareSubtitles,
   onClose,
+  embedded = false,
 }: UnderstandingPanelProps) {
   const handledCompletionRef = useRef<string | null>(null);
   const initialCutoffRef = useRef(playbackCutoffMs);
@@ -365,9 +367,14 @@ export function UnderstandingPanel({
     task?.handoffKind === "codex" &&
     ["failed", "cancelled", "interrupted"].includes(task.status);
 
+  const PanelElement = embedded ? "section" : "aside";
+
   return (
-    <aside className="understanding-panel" aria-label="场景理解">
-      <header className="understanding-header">
+    <PanelElement
+      className={`understanding-panel ${embedded ? "embedded" : ""}`}
+      aria-label="场景理解"
+    >
+      {!embedded ? <header className="understanding-header">
         <div>
           <span>按需理解</span>
           <strong>当前场景</strong>
@@ -380,7 +387,7 @@ export function UnderstandingPanel({
         >
           ×
         </button>
-      </header>
+      </header> : null}
 
       <div className="understanding-scroll">
         <div className="spoiler-boundary">
@@ -682,6 +689,6 @@ export function UnderstandingPanel({
           </details>
         ) : null}
       </div>
-    </aside>
+    </PanelElement>
   );
 }
