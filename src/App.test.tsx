@@ -8,6 +8,8 @@ import type {
   ExplanationTask,
   LearningCard,
   LearningTask,
+  LibraryHome,
+  LibraryMediaSummary,
   MediaPreparation,
   Project,
   RemoteMediaPreview,
@@ -104,6 +106,20 @@ const desktopMocks = vi.hoisted(() => ({
   resumeSubtitleBurnJob: vi.fn(),
 }));
 
+const libraryGatewayMocks = vi.hoisted(() => ({
+  getLibraryHome: vi.fn(),
+  searchLibrary: vi.fn(),
+  createCollection: vi.fn(),
+  updateCollection: vi.fn(),
+  deleteCollection: vi.fn(),
+  getCollectionDetail: vi.fn(),
+  listCollectionEpisodes: vi.fn(),
+  addProjectToCollection: vi.fn(),
+  removeProjectFromCollection: vi.fn(),
+  getEpisodeNeighbors: vi.fn(),
+  setWatchLater: vi.fn(),
+}));
+
 vi.mock("./lib/desktop", () => ({
   ...desktopMocks,
   isDesktopApp: true,
@@ -112,6 +128,11 @@ vi.mock("./lib/desktop", () => ({
     message: error instanceof Error ? error.message : String(error),
   }),
   playbackUrl: (path: string) => `asset://localhost/${path}`,
+}));
+
+vi.mock("./features/library/libraryGateway", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./features/library/libraryGateway")>()),
+  ...libraryGatewayMocks,
 }));
 
 import App from "./App";
@@ -147,6 +168,44 @@ const project: Project = {
     updatedAtMs: 1_785_354_000_000,
   },
 };
+
+function mediaSummaryFor(value: Project = project): LibraryMediaSummary {
+  return {
+    projectId: value.id,
+    projectTitle: value.title,
+    displayName: value.mediaSource.displayName,
+    mediaLocator: value.mediaSource.locator,
+    mediaAvailable: value.status === "ready",
+    posterPath: value.mediaSource.posterPath,
+    positionMs: value.playbackState.positionMs,
+    durationMs: value.playbackState.durationMs,
+    completedAtMs: value.playbackState.completedAtMs,
+    lastOpenedAtMs: value.lastOpenedAtMs,
+    createdAtMs: value.createdAtMs,
+    originalSubtitleAvailable: false,
+    chineseTranslationAvailable: false,
+    collectionId: null,
+    collectionTitle: null,
+    seasonNumber: null,
+    episodeNumber: null,
+    absoluteOrder: null,
+    episodeTitle: null,
+    itemAvailability: null,
+  };
+}
+
+function libraryHomeFor(value: Project = project): LibraryHome {
+  const media = mediaSummaryFor(value);
+  return {
+    continueWatching: value.playbackState.positionMs > 0 ? [media] : [],
+    collections: [],
+    folders: [],
+    unclassified: [media],
+    totalProjectCount: 1,
+    collectionItemCount: 0,
+    unclassifiedCount: 1,
+  };
+}
 
 const preparation: MediaPreparation = {
   inspection: {
@@ -569,6 +628,25 @@ beforeEach(() => {
   });
   desktopMocks.setMainWindowMediaTitle.mockResolvedValue(undefined);
   desktopMocks.listProjects.mockResolvedValue([project]);
+  libraryGatewayMocks.getLibraryHome.mockResolvedValue(libraryHomeFor());
+  libraryGatewayMocks.searchLibrary.mockResolvedValue([]);
+  libraryGatewayMocks.createCollection.mockResolvedValue({
+    id: "10c4a3b9-75ac-4faf-8672-1c86c7a849cb",
+    kind: "manual",
+    title: "周末电影",
+    rootId: null,
+    systemKey: null,
+    posterPath: null,
+    sortMode: "manual",
+    autoPlayNext: false,
+    lastOpenedAtMs: null,
+    createdAtMs: 1_785_354_000_000,
+    updatedAtMs: 1_785_354_000_000,
+  });
+  libraryGatewayMocks.deleteCollection.mockResolvedValue(undefined);
+  libraryGatewayMocks.addProjectToCollection.mockResolvedValue(undefined);
+  libraryGatewayMocks.removeProjectFromCollection.mockResolvedValue(undefined);
+  libraryGatewayMocks.setWatchLater.mockResolvedValue(null);
   desktopMocks.getProject.mockResolvedValue(project);
   desktopMocks.chooseLocalVideo.mockResolvedValue(null);
   desktopMocks.chooseSubtitleFile.mockResolvedValue(null);
@@ -846,7 +924,7 @@ describe("App", () => {
     return screen.getByRole("menuitem", { name });
   }
 
-  it("uses a collapsible desktop shell and keeps folder import disabled", async () => {
+  it("uses a collapsible desktop shell with live library navigation", async () => {
     render(<App />);
 
     expect(
@@ -859,9 +937,9 @@ describe("App", () => {
     ).toBeDisabled();
     expect(
       screen.getByRole("button", {
-        name: "媒体库：稍后观看，将在 Phase 7C 启用",
+        name: "媒体库：稍后观看",
       }),
-    ).toBeDisabled();
+    ).toBeEnabled();
     expect(
       screen.getByRole("button", { name: "字幕，需要打开视频后使用" }),
     ).toBeDisabled();
@@ -869,8 +947,8 @@ describe("App", () => {
       screen.getByRole("button", { name: "更多命令，需要打开视频后使用" }),
     ).toBeDisabled();
     expect(
-      screen.getByRole("searchbox", { name: "搜索媒体库，将在 Phase 7C 启用" }),
-    ).toBeDisabled();
+      screen.getByRole("searchbox", { name: "搜索媒体库" }),
+    ).toBeEnabled();
     expect(screen.getByRole("button", { name: "设置，内容待定义" })).toBeDisabled();
     expect(screen.getByRole("contentinfo", { name: "媒体库状态" })).toHaveTextContent(
       "0 个剧集文件",
@@ -888,6 +966,17 @@ describe("App", () => {
   });
 
   it("shows a compact media library backed by real projects", async () => {
+    libraryGatewayMocks.getLibraryHome
+      .mockResolvedValueOnce(libraryHomeFor())
+      .mockResolvedValue(
+        libraryHomeFor({
+          ...project,
+          mediaSource: {
+            ...project.mediaSource,
+            posterPath: "W:\\SiaoVPlay\\app-data\\media-cache\\project\\poster.jpg",
+          },
+        }),
+      );
     render(<App />);
 
     expect(
@@ -900,9 +989,9 @@ describe("App", () => {
     ).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "未归类视频" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "剧集" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "查看全部 ›" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "查看全部 ›" })).toBeEnabled();
     expect(screen.getByRole("heading", { name: "最近加入" })).toBeInTheDocument();
-    expect(screen.getByText(/00:42 \/ 03:00/)).toBeInTheDocument();
+    expect(screen.getAllByText(/00:42 \/ 03:00/).length).toBeGreaterThan(0);
     expect(screen.getByText("1 个播放中内容")).toBeInTheDocument();
     expect(screen.queryByLabelText("媒体导入说明")).not.toBeInTheDocument();
     expect(await screen.findAllByText("雨站台")).not.toHaveLength(0);
@@ -940,6 +1029,50 @@ describe("App", () => {
         "雨站台",
       ),
     );
+  });
+
+  it("searches the real library gateway and opens a media result", async () => {
+    libraryGatewayMocks.searchLibrary.mockResolvedValue([
+      {
+        kind: "unclassified",
+        title: project.title,
+        subtitle: project.mediaSource.displayName,
+        collectionId: null,
+        projectId: project.id,
+        seasonNumber: null,
+        episodeNumber: null,
+      },
+    ]);
+    render(<App />);
+
+    fireEvent.change(screen.getByRole("searchbox", { name: "搜索媒体库" }), {
+      target: { value: "雨站台" },
+    });
+    const result = await screen.findByRole("option", { name: /雨站台/ });
+    fireEvent.click(result);
+
+    await waitFor(() =>
+      expect(libraryGatewayMocks.searchLibrary).toHaveBeenCalledWith("雨站台"),
+    );
+    await waitFor(() =>
+      expect(desktopMocks.prepareProjectMedia).toHaveBeenCalledWith(project.id, false),
+    );
+  });
+
+  it("creates a manual collection from the media library", async () => {
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "新建合集" }));
+    fireEvent.change(screen.getByLabelText("合集名称"), {
+      target: { value: "周末电影" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "创建合集" }));
+
+    await waitFor(() =>
+      expect(libraryGatewayMocks.createCollection).toHaveBeenCalledWith({
+        title: "周末电影",
+      }),
+    );
+    expect(screen.queryByRole("dialog", { name: "新建合集" })).not.toBeInTheDocument();
   });
 
   it("keeps optional drawers closed and preserves the mounted video", async () => {
@@ -1763,7 +1896,7 @@ describe("App", () => {
     fireEvent.click(await screen.findByRole("button", { name: "删除" }));
 
     expect(
-      screen.getByRole("heading", { name: "删除这个本地项目？" }),
+      await screen.findByRole("heading", { name: "删除这个本地项目？" }),
     ).toBeInTheDocument();
     expect(screen.getByText("源视频不会被删除")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "删除项目" }));

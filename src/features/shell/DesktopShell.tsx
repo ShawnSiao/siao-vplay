@@ -1,6 +1,11 @@
-import type { ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 
-import type { AppStatus, MediaRuntimeStatus } from "../../types";
+import type {
+  AppStatus,
+  LibrarySearchResult,
+  MediaRuntimeStatus,
+} from "../../types";
+import type { LibrarySection } from "../library/useLibraryController";
 import type { MediaDropFeedback } from "./useDesktopMediaDrop";
 import type { ShellDrawerTab, ShellView } from "./useShellController";
 
@@ -25,9 +30,16 @@ type DesktopShellProps = {
     watchLater: number | null;
     unclassified: number;
   };
+  librarySection: LibrarySection;
+  searchQuery: string;
+  searchResults: LibrarySearchResult[];
+  searchLoading: boolean;
   onToggleNavigation: () => void;
   onToggleDrawer: (tab: ShellDrawerTab) => void;
   onGoLibrary: () => void;
+  onSelectLibrarySection: (section: LibrarySection) => void;
+  onSearchQueryChange: (query: string) => void;
+  onOpenSearchResult: (result: LibrarySearchResult) => void;
   onOpenFile: () => void;
   onOpenUrl: () => void;
   onManageSubtitles: () => void;
@@ -51,9 +63,16 @@ export function DesktopShell({
   canReviseSubtitles,
   canDeliverSubtitles,
   libraryCounts,
+  librarySection,
+  searchQuery,
+  searchResults,
+  searchLoading,
   onToggleNavigation,
   onToggleDrawer,
   onGoLibrary,
+  onSelectLibrarySection,
+  onSearchQueryChange,
+  onOpenSearchResult,
   onOpenFile,
   onOpenUrl,
   onManageSubtitles,
@@ -62,12 +81,24 @@ export function DesktopShell({
   onDeliverSubtitles,
   children,
 }: DesktopShellProps) {
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const playerActive = activeView === "player";
   const runtimeLabel = previewMode
     ? "浏览器预览"
     : runtimeStatus?.available
       ? "本地媒体工具可用"
       : "正在检查媒体工具";
+
+  useEffect(() => {
+    const focusSearch = (event: KeyboardEvent) => {
+      if (event.ctrlKey && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        searchInputRef.current?.focus();
+      }
+    };
+    window.addEventListener("keydown", focusSearch);
+    return () => window.removeEventListener("keydown", focusSearch);
+  }, []);
 
   return (
     <div
@@ -249,18 +280,41 @@ export function DesktopShell({
           </div>
         ) : null}
         <div className="desktop-commandbar-secondary">
-          <label
-            className="shell-search shell-context-unavailable"
-            title="媒体库搜索将在 Phase 7C 启用"
-          >
-            <span aria-hidden="true">⌕</span>
-            <input
-              aria-label="搜索媒体库，将在 Phase 7C 启用"
-              type="search"
-              placeholder="搜索媒体库  Ctrl+K"
-              disabled
-            />
-          </label>
+          <div className="shell-search-wrap">
+            <label className="shell-search">
+              <span aria-hidden="true">⌕</span>
+              <input
+                ref={searchInputRef}
+                aria-label="搜索媒体库"
+                type="search"
+                placeholder="搜索媒体库  Ctrl+K"
+                value={searchQuery}
+                onChange={(event) => onSearchQueryChange(event.target.value)}
+              />
+            </label>
+            {searchQuery.trim() ? (
+              <div className="shell-search-results" role="listbox" aria-label="媒体库搜索结果">
+                {searchLoading ? (
+                  <span className="shell-search-message">正在搜索…</span>
+                ) : searchResults.length > 0 ? (
+                  searchResults.map((result, index) => (
+                    <button
+                      key={`${result.kind}-${result.collectionId ?? result.projectId}-${index}`}
+                      type="button"
+                      role="option"
+                      aria-selected="false"
+                      onClick={() => onOpenSearchResult(result)}
+                    >
+                      <strong>{result.title}</strong>
+                      <small>{result.subtitle ?? "本地媒体"}</small>
+                    </button>
+                  ))
+                ) : (
+                  <span className="shell-search-message">没有匹配内容</span>
+                )}
+              </div>
+            ) : null}
+          </div>
           <button
             aria-label="设置，内容待定义"
             className="shell-icon-command shell-context-unavailable"
@@ -282,10 +336,10 @@ export function DesktopShell({
           <nav>
             <button
               aria-label="媒体库：继续观看"
-              className={activeView === "library" ? "active" : ""}
+              className={activeView === "library" && librarySection === "home" ? "active" : ""}
               type="button"
               title="继续观看"
-              onClick={onGoLibrary}
+              onClick={() => onSelectLibrarySection("home")}
             >
               <span aria-hidden="true">▶</span>
               <span className="desktop-navigation-label">继续观看</span>
@@ -296,8 +350,9 @@ export function DesktopShell({
             <button
               aria-label="媒体库：剧集"
               type="button"
-              title="剧集将在 Phase 7C 启用"
-              disabled
+              title="剧集与合集"
+              className={activeView === "library" && librarySection === "series" ? "active" : ""}
+              onClick={() => onSelectLibrarySection("series")}
             >
               <span aria-hidden="true">▦</span>
               <span className="desktop-navigation-label">剧集</span>
@@ -318,10 +373,11 @@ export function DesktopShell({
               )}
             </button>
             <button
-              aria-label="媒体库：稍后观看，将在 Phase 7C 启用"
+              aria-label="媒体库：稍后观看"
               type="button"
-              title="稍后观看将在 Phase 7C 启用"
-              disabled
+              title="稍后观看"
+              className={activeView === "library" && librarySection === "watch_later" ? "active" : ""}
+              onClick={() => onSelectLibrarySection("watch_later")}
             >
               <span aria-hidden="true">◷</span>
               <span className="desktop-navigation-label">稍后观看</span>
@@ -335,7 +391,8 @@ export function DesktopShell({
               aria-label="媒体库：未归类视频"
               type="button"
               title="未归类视频"
-              onClick={onGoLibrary}
+              className={activeView === "library" && librarySection === "unclassified" ? "active" : ""}
+              onClick={() => onSelectLibrarySection("unclassified")}
             >
               <span aria-hidden="true">▸</span>
               <span className="desktop-navigation-label">未归类</span>

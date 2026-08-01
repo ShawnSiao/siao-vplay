@@ -2073,6 +2073,259 @@ mod tests {
         project_id
     }
 
+    struct V14BusinessFixture {
+        project_id: String,
+        original_version_id: String,
+        translation_version_id: String,
+        explanation_id: String,
+        dictionary_entry_id: String,
+        learning_card_id: String,
+    }
+
+    fn create_v14_business_database(database_path: &Path) -> V14BusinessFixture {
+        let project_id = create_v14_database(database_path);
+        let original_track_id = Uuid::new_v4().to_string();
+        let translation_track_id = Uuid::new_v4().to_string();
+        let original_version_id = Uuid::new_v4().to_string();
+        let translation_version_id = Uuid::new_v4().to_string();
+        let original_segment_id = Uuid::new_v4().to_string();
+        let translation_segment_id = Uuid::new_v4().to_string();
+        let explanation_task_id = Uuid::new_v4().to_string();
+        let explanation_id = Uuid::new_v4().to_string();
+        let learning_task_id = Uuid::new_v4().to_string();
+        let dictionary_entry_id = Uuid::new_v4().to_string();
+        let learning_card_id = Uuid::new_v4().to_string();
+        let media_sha256 = "a".repeat(64);
+        let material_sha256 = "b".repeat(64);
+        let source_sha256 = "c".repeat(64);
+        let screenshot_sha256 = "d".repeat(64);
+        let preflight_json = r#"{"status":"ready","segmentCount":1,"errorCount":0,"warningCount":0,"firstStartMs":40000,"lastEndMs":45000,"mediaDurationMs":180000,"coverageRatio":0.0278,"issues":[]}"#;
+        let mut connection = Connection::open(database_path).expect("v14 database should reopen");
+        connection
+            .execute_batch("PRAGMA foreign_keys = ON;")
+            .expect("foreign keys should enable");
+        let transaction = connection
+            .transaction()
+            .expect("business transaction should open");
+        transaction
+            .execute(
+                "UPDATE media_sources SET source_sha256 = ?2 WHERE project_id = ?1",
+                params![project_id, media_sha256],
+            )
+            .expect("media hash should be recorded");
+        transaction
+            .execute(
+                "UPDATE playback_states
+                 SET position_ms = 42000, duration_ms = 180000, subtitle_mode = 'bilingual'
+                 WHERE project_id = ?1",
+                params![project_id],
+            )
+            .expect("playback state should be recorded");
+
+        for (track_id, role, language_code) in [
+            (&original_track_id, "original", "ja"),
+            (&translation_track_id, "translation", "zh-cn"),
+        ] {
+            transaction
+                .execute(
+                    "INSERT INTO subtitle_tracks (
+                        id, project_id, role, language_code, created_at_ms, updated_at_ms
+                     ) VALUES (?1, ?2, ?3, ?4, 10, 10)",
+                    params![track_id, project_id, role, language_code],
+                )
+                .expect("subtitle track should insert");
+        }
+        for (version_id, track_id, source_kind, source_label, language_code) in [
+            (
+                &original_version_id,
+                &original_track_id,
+                "imported_file",
+                "v14 original.srt",
+                "ja",
+            ),
+            (
+                &translation_version_id,
+                &translation_track_id,
+                "agent_translation",
+                "v14 translation",
+                "zh-cn",
+            ),
+        ] {
+            transaction
+                .execute(
+                    "INSERT INTO subtitle_versions (
+                        id, track_id, project_id, version_number, status, source_kind,
+                        source_label, source_sha256, media_sha256, language_code,
+                        project_revision, preflight_json, created_at_ms
+                     ) VALUES (?1, ?2, ?3, 1, 'ready', ?4, ?5, ?6, ?7, ?8, 1, ?9, 10)",
+                    params![
+                        version_id,
+                        track_id,
+                        project_id,
+                        source_kind,
+                        source_label,
+                        source_sha256,
+                        media_sha256,
+                        language_code,
+                        preflight_json,
+                    ],
+                )
+                .expect("subtitle version should insert");
+        }
+        transaction
+            .execute(
+                "INSERT INTO subtitle_segments (
+                    id, version_id, ordinal, start_ms, end_ms, text
+                 ) VALUES (?1, ?2, 0, 40000, 45000, '待っていたの？')",
+                params![original_segment_id, original_version_id],
+            )
+            .expect("original segment should insert");
+        transaction
+            .execute(
+                "INSERT INTO subtitle_segments (
+                    id, version_id, ordinal, start_ms, end_ms, text
+                 ) VALUES (?1, ?2, 0, 40000, 45000, '你一直在等吗？')",
+                params![translation_segment_id, translation_version_id],
+            )
+            .expect("translation segment should insert");
+        transaction
+            .execute(
+                "UPDATE subtitle_tracks SET current_version_id = ?2 WHERE id = ?1",
+                params![original_track_id, original_version_id],
+            )
+            .expect("original current version should update");
+        transaction
+            .execute(
+                "UPDATE subtitle_tracks SET current_version_id = ?2 WHERE id = ?1",
+                params![translation_track_id, translation_version_id],
+            )
+            .expect("translation current version should update");
+
+        transaction
+            .execute(
+                "INSERT INTO explanation_tasks (
+                    id, project_id, handoff_kind, protocol_version, status, stage, progress,
+                    receiver_label, material_scope_json, source_version_id,
+                    translation_version_id, authorized_segment_ids_json, playback_cutoff_ms,
+                    scene_start_ms, expected_project_revision, expected_media_sha256,
+                    material_manifest_sha256, created_at_ms, updated_at_ms, completed_at_ms
+                 ) VALUES (
+                    ?1, ?2, 'manual', 'siaovplay-understanding-v1', 'completed', 'completed', 1.0,
+                    'v14 external agent', '{}', ?3, ?4, ?5, 45000, 40000, 1, ?6, ?7, 20, 20, 20
+                 )",
+                params![
+                    explanation_task_id,
+                    project_id,
+                    original_version_id,
+                    translation_version_id,
+                    format!("[\"{original_segment_id}\"]"),
+                    media_sha256,
+                    material_sha256,
+                ],
+            )
+            .expect("explanation task should insert");
+        transaction
+            .execute(
+                "INSERT INTO explanations (
+                    id, project_id, task_id, source_version_id, translation_version_id,
+                    playback_cutoff_ms, scene_start_ms, confirmed_facts_json,
+                    possible_interpretations_json, created_at_ms
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, 45000, 40000,
+                    '[\"人物正在车站等待\"]', '[\"语气带有惊讶\"]', 20)",
+                params![
+                    explanation_id,
+                    project_id,
+                    explanation_task_id,
+                    original_version_id,
+                    translation_version_id,
+                ],
+            )
+            .expect("explanation should insert");
+
+        transaction
+            .execute(
+                "INSERT INTO learning_tasks (
+                    id, project_id, handoff_kind, protocol_version, status, stage, progress,
+                    receiver_label, material_scope_json, source_version_id,
+                    translation_version_id, source_segment_id, selected_text, selection_kind,
+                    playback_position_ms, expected_project_revision, expected_media_sha256,
+                    material_manifest_sha256, created_at_ms, updated_at_ms, completed_at_ms
+                 ) VALUES (
+                    ?1, ?2, 'manual', 'siaovplay-learning-v1', 'completed', 'completed', 1.0,
+                    'v14 external agent', '{}', ?3, ?4, ?5, '待っていた', 'phrase',
+                    42000, 1, ?6, ?7, 30, 30, 30
+                 )",
+                params![
+                    learning_task_id,
+                    project_id,
+                    original_version_id,
+                    translation_version_id,
+                    original_segment_id,
+                    media_sha256,
+                    material_sha256,
+                ],
+            )
+            .expect("learning task should insert");
+        transaction
+            .execute(
+                "INSERT INTO dictionary_entries (
+                    id, project_id, task_id, source_version_id, translation_version_id,
+                    source_segment_id, selected_text, selection_kind, pronunciation,
+                    part_of_speech, contextual_meaning, usage_note, source_sentence,
+                    translated_sentence, language_code, playback_position_ms, created_at_ms
+                 ) VALUES (
+                    ?1, ?2, ?3, ?4, ?5, ?6, '待っていた', 'phrase', 'まっていた',
+                    '动词短语', '一直在等', '过去进行状态', '待っていたの？',
+                    '你一直在等吗？', 'ja', 42000, 30
+                 )",
+                params![
+                    dictionary_entry_id,
+                    project_id,
+                    learning_task_id,
+                    original_version_id,
+                    translation_version_id,
+                    original_segment_id,
+                ],
+            )
+            .expect("dictionary entry should insert");
+        transaction
+            .execute(
+                "INSERT INTO learning_cards (
+                    id, project_id, dictionary_entry_id, source_version_id,
+                    translation_version_id, source_segment_id, selected_text, selection_kind,
+                    pronunciation, part_of_speech, contextual_meaning, usage_note,
+                    source_sentence, translated_sentence, language_code, playback_position_ms,
+                    screenshot_path, screenshot_sha256, created_at_ms, updated_at_ms
+                 ) VALUES (
+                    ?1, ?2, ?3, ?4, ?5, ?6, '待っていた', 'phrase', 'まっていた',
+                    '动词短语', '一直在等', '过去进行状态', '待っていたの？',
+                    '你一直在等吗？', 'ja', 42000, 'v14-scene.png', ?7, 30, 30
+                 )",
+                params![
+                    learning_card_id,
+                    project_id,
+                    dictionary_entry_id,
+                    original_version_id,
+                    translation_version_id,
+                    original_segment_id,
+                    screenshot_sha256,
+                ],
+            )
+            .expect("learning card should insert");
+        transaction
+            .commit()
+            .expect("business fixture should commit");
+
+        V14BusinessFixture {
+            project_id,
+            original_version_id,
+            translation_version_id,
+            explanation_id,
+            dictionary_entry_id,
+            learning_card_id,
+        }
+    }
+
     fn table_exists(connection: &Connection, table: &str) -> bool {
         connection
             .query_row(
@@ -2468,6 +2721,90 @@ mod tests {
             "playback_states",
             "completed_at_ms"
         ));
+    }
+
+    #[test]
+    fn v14_business_data_remains_readable_and_unclassified_after_schema_15() {
+        let temporary = tempfile::tempdir().expect("temporary directory should be created");
+        let database_path = temporary.path().join("v14-business.sqlite3");
+        let fixture = create_v14_business_database(&database_path);
+
+        let store = ProjectStore::open(&database_path).expect("v14 business store should upgrade");
+        let project = store
+            .get_project(&fixture.project_id)
+            .expect("project should remain readable");
+        assert_eq!(project.playback_state.position_ms, 42_000);
+        assert_eq!(project.playback_state.duration_ms, Some(180_000));
+        assert_eq!(
+            project.playback_state.subtitle_mode,
+            SubtitleDisplayMode::Bilingual
+        );
+        assert_eq!(project.playback_state.completed_at_ms, None);
+
+        let versions = crate::subtitles::list_subtitle_versions(&store, &fixture.project_id)
+            .expect("subtitle versions should remain readable");
+        assert_eq!(versions.len(), 2);
+        let original = versions
+            .iter()
+            .find(|version| version.id == fixture.original_version_id)
+            .expect("original version should remain");
+        assert!(original.is_current);
+        assert_eq!(original.segments[0].text, "待っていたの？");
+        let translation = versions
+            .iter()
+            .find(|version| version.id == fixture.translation_version_id)
+            .expect("translation version should remain");
+        assert!(translation.is_current);
+        assert_eq!(translation.segments[0].text, "你一直在等吗？");
+
+        let explanations = crate::understanding::list_explanations(&store, &fixture.project_id)
+            .expect("explanations should remain readable");
+        assert_eq!(explanations.len(), 1);
+        assert_eq!(explanations[0].id, fixture.explanation_id);
+        assert_eq!(explanations[0].confirmed_facts, ["人物正在车站等待"]);
+        assert_eq!(explanations[0].possible_interpretations, ["语气带有惊讶"]);
+
+        let entries = crate::learning::list_dictionary_entries(&store, &fixture.project_id)
+            .expect("dictionary entries should remain readable");
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].id, fixture.dictionary_entry_id);
+        assert_eq!(entries[0].contextual_meaning, "一直在等");
+        assert_eq!(
+            entries[0].translated_sentence.as_deref(),
+            Some("你一直在等吗？")
+        );
+
+        let cards = crate::learning::list_learning_cards(&store, &fixture.project_id)
+            .expect("learning cards should remain readable");
+        assert_eq!(cards.len(), 1);
+        assert_eq!(cards[0].id, fixture.learning_card_id);
+        assert_eq!(cards[0].selected_text, "待っていた");
+        assert!(!cards[0].screenshot_available);
+
+        let home = crate::library::LibraryService::new(store.clone())
+            .get_home()
+            .expect("library home should load");
+        assert_eq!(home.total_project_count, 1);
+        assert_eq!(home.unclassified_count, 1);
+        assert_eq!(home.unclassified[0].project_id, fixture.project_id);
+        assert!(home.collections.is_empty());
+
+        let backup_path = library_migration::v14_backup_path(&database_path);
+        let backup = Connection::open(backup_path).expect("v14 backup should open");
+        for table in [
+            "subtitle_versions",
+            "subtitle_segments",
+            "explanations",
+            "dictionary_entries",
+            "learning_cards",
+        ] {
+            let count = backup
+                .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| {
+                    row.get::<_, i64>(0)
+                })
+                .expect("backup business data should be readable");
+            assert!(count > 0, "{table} should be present in the v14 backup");
+        }
     }
 
     #[test]
