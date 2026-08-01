@@ -353,6 +353,46 @@ h3 {
   background: var(--bg-app);
 }
 
+.desktop-drop-feedback {
+  position: fixed;
+  z-index: 80;
+  inset: 54px 10px 10px 62px;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 10px;
+  border: 2px dashed var(--brand);
+  border-radius: 6px;
+  color: var(--text-primary);
+  background: rgb(10 14 18 / 88%);
+  pointer-events: none;
+  backdrop-filter: blur(5px);
+}
+
+.desktop-drop-feedback > span {
+  display: grid;
+  width: 48px;
+  height: 48px;
+  place-items: center;
+  border-radius: 50%;
+  color: var(--text-on-accent);
+  background: var(--brand);
+  font-size: 24px;
+}
+
+.desktop-drop-feedback > strong {
+  font-size: 14px;
+}
+
+.desktop-drop-feedback.blocked {
+  border-color: var(--warning);
+}
+
+.desktop-drop-feedback.blocked > span {
+  color: #181107;
+  background: var(--warning);
+}
+
 .app-shell,
 .library-screen,
 .preparation-screen,
@@ -4527,6 +4567,50 @@ h3 {
   margin: 0;
   font-size: 12px;
   line-height: 1.6;
+}
+
+.player-context-menu {
+  position: fixed;
+  z-index: 90;
+  display: grid;
+  width: 196px;
+  padding: 5px;
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  background: #1a2027;
+  box-shadow: 0 14px 38px rgb(0 0 0 / 48%);
+}
+
+.player-context-menu button {
+  display: flex;
+  min-height: 34px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 4px;
+  color: var(--text-secondary);
+  background: transparent;
+  font-size: 12px;
+  text-align: left;
+}
+
+.player-context-menu button:hover,
+.player-context-menu button:focus-visible {
+  color: var(--text-primary);
+  background: var(--bg-control);
+}
+
+.player-context-menu button > span {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.context-menu-divider {
+  height: 1px;
+  margin: 4px;
+  background: var(--border-subtle);
 }
 
 @media (max-width: 1279px) {

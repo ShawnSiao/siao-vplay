@@ -1,12 +1,14 @@
 import type { ReactNode } from "react";
 
 import type { AppStatus, MediaRuntimeStatus } from "../../types";
+import type { MediaDropFeedback } from "./useDesktopMediaDrop";
 import type { ShellDrawerTab, ShellView } from "./useShellController";
 
 type DesktopShellProps = {
   activeView: ShellView;
   navigationCollapsed: boolean;
   drawerTab: ShellDrawerTab | null;
+  dropFeedback: MediaDropFeedback | null;
   appStatus: AppStatus | null;
   runtimeStatus: MediaRuntimeStatus | null;
   previewMode: boolean;
@@ -31,6 +33,7 @@ export function DesktopShell({
   activeView,
   navigationCollapsed,
   drawerTab,
+  dropFeedback,
   appStatus,
   runtimeStatus,
   previewMode,
@@ -269,6 +272,21 @@ export function DesktopShell({
           {children}
         </section>
       </div>
+      {dropFeedback ? (
+        <div
+          className={`desktop-drop-feedback ${dropFeedback.tone}`}
+          role="status"
+        >
+          <span aria-hidden="true">
+            {dropFeedback.tone === "ready"
+              ? "＋"
+              : dropFeedback.tone === "working"
+                ? "…"
+                : "!"}
+          </span>
+          <strong>{dropFeedback.message}</strong>
+        </div>
+      ) : null}
     </div>
   );
 }

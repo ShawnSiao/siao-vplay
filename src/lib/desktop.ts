@@ -1,6 +1,8 @@
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 
+import { supportedVideoExtensions } from "./mediaFiles";
+
 import type {
   AppStatus,
   DeleteProjectResult,
@@ -117,17 +119,7 @@ export async function chooseLocalVideo(): Promise<string | null> {
     filters: [
       {
         name: "视频文件",
-        extensions: [
-          "mp4",
-          "mkv",
-          "mov",
-          "webm",
-          "avi",
-          "m4v",
-          "ts",
-          "mts",
-          "m2ts",
-        ],
+        extensions: [...supportedVideoExtensions],
       },
     ],
   });

@@ -2,12 +2,13 @@ import { useCallback, useEffect, useReducer } from "react";
 
 export type ShellView = "library" | "preparing" | "player";
 export type ShellDrawerTab = "episodes" | "understand" | "learn";
+export type ShellContextMenu = { x: number; y: number };
 
 type ShellState = {
   activeView: ShellView;
   navigationCollapsed: boolean;
   drawerTab: ShellDrawerTab | null;
-  contextMenuOpen: boolean;
+  contextMenu: ShellContextMenu | null;
   windowMode: "windowed" | "fullscreen";
 };
 
@@ -16,7 +17,9 @@ type ShellAction =
   | { type: "set_navigation_collapsed"; collapsed: boolean }
   | { type: "toggle_navigation" }
   | { type: "toggle_drawer"; tab: ShellDrawerTab }
-  | { type: "close_drawer" };
+  | { type: "close_drawer" }
+  | { type: "open_context_menu"; position: ShellContextMenu }
+  | { type: "close_context_menu" };
 
 function shellReducer(state: ShellState, action: ShellAction): ShellState {
   switch (action.type) {
@@ -25,6 +28,7 @@ function shellReducer(state: ShellState, action: ShellAction): ShellState {
         ...state,
         activeView: action.view,
         drawerTab: action.view === "player" ? state.drawerTab : null,
+        contextMenu: null,
       };
     case "set_navigation_collapsed":
       return { ...state, navigationCollapsed: action.collapsed };
@@ -34,9 +38,14 @@ function shellReducer(state: ShellState, action: ShellAction): ShellState {
       return {
         ...state,
         drawerTab: state.drawerTab === action.tab ? null : action.tab,
+        contextMenu: null,
       };
     case "close_drawer":
       return { ...state, drawerTab: null };
+    case "open_context_menu":
+      return { ...state, contextMenu: action.position };
+    case "close_context_menu":
+      return { ...state, contextMenu: null };
   }
 }
 
@@ -45,7 +54,7 @@ export function useShellController(initialView: ShellView = "library") {
     activeView: initialView,
     navigationCollapsed: false,
     drawerTab: null,
-    contextMenuOpen: false,
+    contextMenu: null,
     windowMode: "windowed",
   });
 
@@ -77,6 +86,12 @@ export function useShellController(initialView: ShellView = "library") {
   const closeDrawer = useCallback(() => {
     dispatch({ type: "close_drawer" });
   }, []);
+  const openContextMenu = useCallback((position: ShellContextMenu) => {
+    dispatch({ type: "open_context_menu", position });
+  }, []);
+  const closeContextMenu = useCallback(() => {
+    dispatch({ type: "close_context_menu" });
+  }, []);
 
   return {
     state,
@@ -84,5 +99,7 @@ export function useShellController(initialView: ShellView = "library") {
     toggleNavigation,
     toggleDrawer,
     closeDrawer,
+    openContextMenu,
+    closeContextMenu,
   };
 }

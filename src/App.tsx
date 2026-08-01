@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { Dialog } from "./components/Dialog";
 import { LibraryScreen } from "./components/LibraryScreen";
-import { PlayerScreen } from "./components/PlayerScreen";
+import { PlayerScreen } from "./features/playback/PlayerScreen";
 import { PreparationScreen } from "./components/PreparationScreen";
 import { RemoteUrlDialog } from "./components/RemoteUrlDialog";
 import { SubtitleImportDialog } from "./components/SubtitleImportDialog";
@@ -10,6 +10,7 @@ import { SubtitleDeliveryDialog } from "./components/SubtitleDeliveryDialog";
 import { SubtitleRevisionDialog } from "./components/SubtitleRevisionDialog";
 import { TranslationDialog } from "./components/TranslationDialog";
 import { DesktopShell } from "./features/shell/DesktopShell";
+import { useDesktopMediaDrop } from "./features/shell/useDesktopMediaDrop";
 import { useShellController } from "./features/shell/useShellController";
 import {
   chooseLocalVideo,
@@ -600,6 +601,11 @@ export default function App() {
     subtitleVersions.find(
       (version) => version.role === "translation" && version.isCurrent,
     ) ?? null;
+  const dropFeedback = useDesktopMediaDrop({
+    enabled: isDesktopApp,
+    onImportMedia: importMediaPath,
+    onNotice: setToast,
+  });
 
   return (
     <div className="app-root">
@@ -607,6 +613,7 @@ export default function App() {
         activeView={screen}
         navigationCollapsed={shellController.state.navigationCollapsed}
         drawerTab={shellController.state.drawerTab}
+        dropFeedback={dropFeedback}
         appStatus={appStatus}
         runtimeStatus={runtimeStatus}
         previewMode={!isDesktopApp}
@@ -660,8 +667,11 @@ export default function App() {
             currentSubtitle={currentSubtitle}
             currentTranslation={currentTranslation}
             drawerTab={shellController.state.drawerTab}
+            contextMenu={shellController.state.contextMenu}
             onBack={returnToLibrary}
             onCloseDrawer={shellController.closeDrawer}
+            onOpenContextMenu={shellController.openContextMenu}
+            onCloseContextMenu={shellController.closeContextMenu}
             onManageSubtitles={() => setSubtitleDialogOpen(true)}
             onNeedProxy={() => void prepareAndOpen(activeProject, true)}
             onPersist={persistPlayback}

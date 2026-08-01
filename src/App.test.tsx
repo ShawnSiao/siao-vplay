@@ -925,6 +925,44 @@ describe("App", () => {
     expect(screen.getByLabelText("视频画面，单击播放或暂停")).toBe(video);
   });
 
+  it("supports desktop playback shortcuts and a scoped context menu", async () => {
+    Object.defineProperty(HTMLElement.prototype, "requestFullscreen", {
+      configurable: true,
+      value: vi.fn().mockResolvedValue(undefined),
+    });
+    const requestFullscreen = vi
+      .spyOn(HTMLElement.prototype, "requestFullscreen")
+      .mockResolvedValue(undefined);
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "继续观看" }));
+
+    const video = await screen.findByLabelText("视频画面，单击播放或暂停");
+    fireEvent.contextMenu(video, { clientX: 320, clientY: 220 });
+    expect(
+      screen.getByRole("menu", { name: "播放器右键菜单" }),
+    ).toBeInTheDocument();
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(
+      screen.queryByRole("menu", { name: "播放器右键菜单" }),
+    ).not.toBeInTheDocument();
+
+    fireEvent.keyDown(window, { key: "m" });
+    expect(video).toHaveProperty("muted", true);
+    fireEvent.keyDown(window, { key: "]" });
+    expect(video).toHaveProperty("playbackRate", 1.25);
+
+    const speed = screen.getByRole("combobox");
+    fireEvent.keyDown(speed, { key: "[" });
+    expect(video).toHaveProperty("playbackRate", 1.25);
+
+    fireEvent.keyDown(window, { key: "f" });
+    expect(requestFullscreen).toHaveBeenCalledTimes(1);
+    fireEvent.doubleClick(video);
+    expect(requestFullscreen).toHaveBeenCalledTimes(2);
+    requestFullscreen.mockRestore();
+    Reflect.deleteProperty(HTMLElement.prototype, "requestFullscreen");
+  });
+
   it("toggles playback from the video surface and keeps the button label in sync", async () => {
     let paused = true;
     const pausedState = vi
