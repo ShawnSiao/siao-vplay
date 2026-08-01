@@ -1,15 +1,18 @@
-use std::path::Path;
+use std::{path::Path, process::Command};
 
 use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::{commands::CommandError, store::ProjectStore};
 
 use super::{
-    AddProjectToCollectionInput, Collection, CollectionDetail, ConfirmLibraryImportInput,
-    CreateCollectionInput, EpisodeNeighbors, LibraryError, LibraryHome, LibraryImportResult,
-    LibraryImportService, LibraryPreviewStore, LibraryScanPhase, LibraryScanPreview,
-    LibraryScanProgress, LibraryScanService, LibraryService, MediaSummary, ScanLibraryFolderInput,
-    SearchResult, UpdateCollectionInput,
+    AddProjectToCollectionInput, ApplyLibraryRescanInput, ApplyLibraryRootRelocationInput,
+    Collection, CollectionDetail, ConfirmLibraryImportInput, CreateCollectionInput,
+    EpisodeNeighbors, InspectLibraryRootRelocationInput, LibraryError, LibraryHome,
+    LibraryImportResult, LibraryImportService, LibraryPreviewStore, LibraryRecoveryService,
+    LibraryRecoveryStore, LibraryRescanPreview, LibraryRescanResult, LibraryRootRelocationPreview,
+    LibraryRootRelocationResult, LibraryScanPhase, LibraryScanPreview, LibraryScanProgress,
+    LibraryScanService, LibraryService, MediaSummary, ScanLibraryFolderInput, SearchResult,
+    UpdateCollectionInput,
 };
 
 const LIBRARY_SCAN_PROGRESS_EVENT: &str = "library-scan-progress";
@@ -197,6 +200,103 @@ pub(crate) async fn confirm_library_import(
         .await
         .map_err(|error| LibraryError::Conflict(format!("媒体库导入任务无法完成：{error}")))?
         .map_err(CommandError::from)
+}
+
+#[tauri::command]
+pub(crate) async fn inspect_library_rescan(
+    store: State<'_, ProjectStore>,
+    recovery_store: State<'_, LibraryRecoveryStore>,
+    root_id: String,
+) -> Result<LibraryRescanPreview, CommandError> {
+    let service =
+        LibraryRecoveryService::new(store.inner().clone(), recovery_store.inner().clone());
+    tauri::async_runtime::spawn_blocking(move || service.inspect_rescan(&root_id))
+        .await
+        .map_err(|error| LibraryError::Conflict(format!("重新扫描检查任务无法完成：{error}")))?
+        .map_err(CommandError::from)
+}
+
+#[tauri::command]
+pub(crate) async fn apply_library_rescan(
+    store: State<'_, ProjectStore>,
+    recovery_store: State<'_, LibraryRecoveryStore>,
+    input: ApplyLibraryRescanInput,
+) -> Result<LibraryRescanResult, CommandError> {
+    let service =
+        LibraryRecoveryService::new(store.inner().clone(), recovery_store.inner().clone());
+    tauri::async_runtime::spawn_blocking(move || service.apply_rescan(input))
+        .await
+        .map_err(|error| LibraryError::Conflict(format!("重新扫描应用任务无法完成：{error}")))?
+        .map_err(CommandError::from)
+}
+
+#[tauri::command]
+pub(crate) async fn inspect_library_root_relocation(
+    store: State<'_, ProjectStore>,
+    recovery_store: State<'_, LibraryRecoveryStore>,
+    input: InspectLibraryRootRelocationInput,
+) -> Result<LibraryRootRelocationPreview, CommandError> {
+    let service =
+        LibraryRecoveryService::new(store.inner().clone(), recovery_store.inner().clone());
+    tauri::async_runtime::spawn_blocking(move || {
+        service.inspect_relocation(&input.root_id, &input.new_root_path)
+    })
+    .await
+    .map_err(|error| LibraryError::Conflict(format!("根目录重定位检查任务无法完成：{error}")))?
+    .map_err(CommandError::from)
+}
+
+#[tauri::command]
+pub(crate) async fn apply_library_root_relocation(
+    store: State<'_, ProjectStore>,
+    recovery_store: State<'_, LibraryRecoveryStore>,
+    input: ApplyLibraryRootRelocationInput,
+) -> Result<LibraryRootRelocationResult, CommandError> {
+    let service =
+        LibraryRecoveryService::new(store.inner().clone(), recovery_store.inner().clone());
+    tauri::async_runtime::spawn_blocking(move || service.apply_relocation(input))
+        .await
+        .map_err(|error| LibraryError::Conflict(format!("根目录重定位任务无法完成：{error}")))?
+        .map_err(CommandError::from)
+}
+
+#[tauri::command]
+pub(crate) fn open_project_media_location(
+    store: State<'_, ProjectStore>,
+    project_id: String,
+) -> Result<(), CommandError> {
+    let locator = LibraryService::new(store.inner().clone())
+        .project_media_location(&project_id)
+        .map_err(CommandError::from)?;
+    let path = Path::new(&locator);
+    if !path.is_file() {
+        return Err(CommandError::from(LibraryError::Conflict(
+            "媒体文件当前不可用，请先重新扫描或重新定位".to_owned(),
+        )));
+    }
+    reveal_media(path).map_err(LibraryError::FileSystem)?;
+    Ok(())
+}
+
+#[cfg(windows)]
+fn reveal_media(path: &Path) -> std::io::Result<()> {
+    Command::new("explorer.exe")
+        .arg(format!("/select,{}", path.to_string_lossy()))
+        .spawn()
+        .map(|_| ())
+}
+
+#[cfg(target_os = "macos")]
+fn reveal_media(path: &Path) -> std::io::Result<()> {
+    Command::new("open").arg("-R").arg(path).spawn().map(|_| ())
+}
+
+#[cfg(all(not(windows), not(target_os = "macos")))]
+fn reveal_media(path: &Path) -> std::io::Result<()> {
+    Command::new("xdg-open")
+        .arg(path.parent().unwrap_or(path))
+        .spawn()
+        .map(|_| ())
 }
 
 fn emit_scan_outcome(app: &AppHandle, scan_id: String, phase: LibraryScanPhase, message: String) {

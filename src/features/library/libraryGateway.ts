@@ -3,6 +3,7 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
 import { isDesktopApp } from "../../lib/desktop";
 import type {
+  ApplyLibraryRescanInput,
   CollectionDetail,
   ConfirmLibraryImportInput,
   CollectionSortMode,
@@ -14,6 +15,10 @@ import type {
   LibraryScanPreview,
   LibraryScanProgress,
   LibraryImportResult,
+  LibraryRescanPreview,
+  LibraryRescanResult,
+  LibraryRootRelocationPreview,
+  LibraryRootRelocationResult,
   LibrarySearchResult,
 } from "../../types";
 
@@ -156,6 +161,40 @@ export async function confirmLibraryImport(
   input: ConfirmLibraryImportInput,
 ): Promise<LibraryImportResult> {
   return invoke<LibraryImportResult>("confirm_library_import", { input });
+}
+
+export async function inspectLibraryRescan(
+  rootId: string,
+): Promise<LibraryRescanPreview> {
+  return invoke<LibraryRescanPreview>("inspect_library_rescan", { rootId });
+}
+
+export async function applyLibraryRescan(
+  input: ApplyLibraryRescanInput,
+): Promise<LibraryRescanResult> {
+  return invoke<LibraryRescanResult>("apply_library_rescan", { input });
+}
+
+export async function inspectLibraryRootRelocation(
+  rootId: string,
+  newRootPath: string,
+): Promise<LibraryRootRelocationPreview> {
+  return invoke<LibraryRootRelocationPreview>(
+    "inspect_library_root_relocation",
+    { input: { rootId, newRootPath } },
+  );
+}
+
+export async function applyLibraryRootRelocation(
+  previewToken: string,
+): Promise<LibraryRootRelocationResult> {
+  return invoke<LibraryRootRelocationResult>("apply_library_root_relocation", {
+    input: { previewToken },
+  });
+}
+
+export async function openProjectMediaLocation(projectId: string): Promise<void> {
+  return invoke<void>("open_project_media_location", { projectId });
 }
 
 export function toCollectionSummary(collection: LibraryCollection): CollectionSummary {

@@ -49,7 +49,7 @@ test("media home uses a compact responsive desktop shell", async ({ page }) => {
     "1 个剧集文件",
   );
   await expect(page.getByRole("contentinfo", { name: "媒体库状态" })).toContainText(
-    "0 个授权文件夹",
+    "1 个授权文件夹",
   );
   await expect(page.locator(".library-item-list")).toBeVisible();
   await expect(page.locator(".project-card")).toHaveCount(0);
@@ -74,6 +74,29 @@ test("media home uses a compact responsive desktop shell", async ({ page }) => {
   );
   await expect(page.locator(".desktop-navigation-section")).toBeHidden();
   await expect(page.locator(".desktop-navigation-note")).toBeHidden();
+});
+
+test("folder recovery requires confirmation and blocks unsafe relocation", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/e2e/library.html");
+  await page.getByRole("button", { name: "媒体库：文件夹" }).click();
+  await expect(page.getByRole("heading", { name: "授权文件夹", level: 1 })).toBeVisible();
+  await expect(page.getByText("W:\\Series\\Rain")).toBeVisible();
+
+  await page.getByRole("button", { name: "重新扫描 Rain" }).click();
+  const rescan = page.getByRole("dialog", { name: "确认重新扫描结果" });
+  await expect(rescan).toContainText("根目录当前离线");
+  const applyRescan = rescan.getByRole("button", { name: "应用扫描结果" });
+  await expect(applyRescan).toBeDisabled();
+  await rescan.getByRole("checkbox", { name: /确认将根目录与全部单集标记为离线/ }).check();
+  await expect(applyRescan).toBeEnabled();
+  await applyRescan.click();
+  await expect(rescan).toHaveCount(0);
+
+  await page.getByRole("button", { name: "重新定位 Rain" }).click();
+  const relocation = page.getByRole("dialog", { name: "确认根目录重定位" });
+  await expect(relocation).toContainText("新目录缺少文件");
+  await expect(relocation.getByRole("button", { name: "更新根目录" })).toBeDisabled();
 });
 
 test("drawers and context menu preserve the mounted video", async ({ page }) => {

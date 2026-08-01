@@ -2,9 +2,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { Dialog } from "./components/Dialog";
 import { LibraryFolderImportDialog } from "./components/LibraryFolderImportDialog";
+import { LibraryRecoveryDialog } from "./components/LibraryRecoveryDialog";
 import { LibraryScreen } from "./components/LibraryScreen";
 import { PlayerScreen } from "./features/playback/PlayerScreen";
 import { useLibraryController } from "./features/library/useLibraryController";
+import { openProjectMediaLocation } from "./features/library/libraryGateway";
 import {
   useEpisodeNavigation,
   type EpisodePlaybackContext,
@@ -82,6 +84,13 @@ export default function App() {
     updateFolderImportItem,
     setConfirmFingerprintDuplicates,
     importScannedFolder,
+    inspectRootRescan,
+    inspectRootRelocation,
+    closeRecovery,
+    updateRecoveryItem,
+    setRecoveryConfirmation,
+    applyRescan,
+    applyRootRelocation,
   } = useLibraryController();
   const screen = shellController.state.activeView;
   const setScreen = shellController.setActiveView;
@@ -359,6 +368,25 @@ export default function App() {
       setLibraryError(commandError(error).message);
     }
   }, [startFolderScan]);
+
+  const relocateLibraryRoot = useCallback(
+    async (rootId: string) => {
+      if (!isDesktopApp) {
+        setToast("浏览器预览不会读取本地文件夹，请在桌面应用中检查根目录。");
+        return;
+      }
+      try {
+        const newRootPath = await chooseLocalFolder();
+        if (!newRootPath) {
+          return;
+        }
+        await inspectRootRelocation(rootId, newRootPath);
+      } catch (error) {
+        setLibraryError(commandError(error).message);
+      }
+    },
+    [inspectRootRelocation],
+  );
 
   const openRemoteUrlImport = useCallback(() => {
     setLibraryError(null);
@@ -839,9 +867,16 @@ export default function App() {
             onImport={() => void importLocalVideo()}
             onImportFolder={() => void importLocalFolder()}
             onImportUrl={openRemoteUrlImport}
+            onRescanRoot={(rootId) => void inspectRootRescan(rootId)}
+            onRelocateRoot={(rootId) => void relocateLibraryRoot(rootId)}
             onOpen={(media) => void openLibraryMedia(media)}
             onRelink={(media) => void relinkLibraryMedia(media)}
             onDelete={(media) => void deleteLibraryMedia(media)}
+            onOpenLocation={(media) =>
+              void openProjectMediaLocation(media.projectId).catch((error: unknown) =>
+                setLibraryError(commandError(error).message),
+              )
+            }
             onSelectSection={selectLibrarySection}
             onOpenCollection={(collectionId) =>
               void openCollection(collectionId)
@@ -908,6 +943,17 @@ export default function App() {
           onItemChange={updateFolderImportItem}
           onConfirmFingerprintDuplicatesChange={setConfirmFingerprintDuplicates}
           onImport={importScannedFolder}
+        />
+      ) : null}
+
+      {libraryState.recovery.stage !== "closed" ? (
+        <LibraryRecoveryDialog
+          state={libraryState.recovery}
+          onClose={closeRecovery}
+          onItemChange={updateRecoveryItem}
+          onConfirmationChange={setRecoveryConfirmation}
+          onApplyRescan={applyRescan}
+          onApplyRelocation={applyRootRelocation}
         />
       ) : null}
 

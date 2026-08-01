@@ -134,6 +134,12 @@ impl LibraryService {
         LibraryRepository::new(&connection).get_collection_detail(collection_id)
     }
 
+    pub(crate) fn project_media_location(&self, project_id: &str) -> Result<String, LibraryError> {
+        validate_id("视频", project_id)?;
+        let connection = self.store.connect()?;
+        LibraryRepository::new(&connection).project_media_locator(project_id)
+    }
+
     pub(crate) fn list_collection_episodes(
         &self,
         collection_id: &str,

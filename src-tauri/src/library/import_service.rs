@@ -24,14 +24,14 @@ pub(crate) struct LibraryImportService {
     preview_store: LibraryPreviewStore,
 }
 
-struct PreparedImportItem {
-    candidate: LibraryScanCandidate,
-    input: ConfirmLibraryItemInput,
-    display_title: String,
-    file: RevalidatedCandidateFile,
-    path_key: String,
-    relative_path_key: String,
-    display_name: String,
+pub(super) struct PreparedImportItem {
+    pub(super) candidate: LibraryScanCandidate,
+    pub(super) input: ConfirmLibraryItemInput,
+    pub(super) display_title: String,
+    pub(super) file: RevalidatedCandidateFile,
+    pub(super) path_key: String,
+    pub(super) relative_path_key: String,
+    pub(super) display_name: String,
 }
 
 struct ExistingProjectAtPath {
@@ -243,7 +243,7 @@ impl LibraryImportService {
     }
 }
 
-fn prepare_items(
+pub(super) fn prepare_items(
     preview: &super::LibraryScanPreview,
     input: &ConfirmLibraryImportInput,
     canonical_root: &Path,
@@ -339,7 +339,7 @@ fn prepare_items(
     Ok(prepared)
 }
 
-fn path_key(path: &Path) -> String {
+pub(super) fn path_key(path: &Path) -> String {
     let value = path.to_string_lossy().replace('/', "\\");
     #[cfg(windows)]
     {
@@ -351,7 +351,7 @@ fn path_key(path: &Path) -> String {
     }
 }
 
-fn relative_path_key(path: &str) -> String {
+pub(super) fn relative_path_key(path: &str) -> String {
     path.replace('\\', "/").to_lowercase()
 }
 

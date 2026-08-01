@@ -354,6 +354,257 @@ impl<'connection> LibraryRepository<'connection> {
             .map_err(Into::into)
     }
 
+    pub(crate) fn get_root(&self, root_id: &str) -> Result<LibraryRootRecord, LibraryError> {
+        self.connection
+            .query_row(
+                "SELECT path, path_key, display_name
+                 FROM library_roots WHERE id = ?1",
+                params![root_id],
+                |row| {
+                    Ok(LibraryRootRecord {
+                        path: row.get(0)?,
+                        path_key: row.get(1)?,
+                        display_name: row.get(2)?,
+                    })
+                },
+            )
+            .optional()?
+            .ok_or_else(|| LibraryError::Validation(format!("未找到媒体库根目录：{root_id}")))
+    }
+
+    pub(crate) fn get_root_summary(
+        &self,
+        root_id: &str,
+    ) -> Result<LibraryRootSummary, LibraryError> {
+        self.connection
+            .query_row(
+                "SELECT
+                    lr.id, lr.path, lr.display_name, lr.availability,
+                    lr.last_scanned_at_ms, COUNT(DISTINCT ci.project_id)
+                 FROM library_roots lr
+                 LEFT JOIN collections c ON c.root_id = lr.id
+                 LEFT JOIN collection_items ci ON ci.collection_id = c.id
+                 WHERE lr.id = ?1
+                 GROUP BY lr.id",
+                params![root_id],
+                |row| {
+                    Ok(LibraryRootSummary {
+                        id: row.get(0)?,
+                        path: row.get(1)?,
+                        display_name: row.get(2)?,
+                        availability: row.get(3)?,
+                        last_scanned_at_ms: row.get(4)?,
+                        item_count: row.get(5)?,
+                    })
+                },
+            )
+            .optional()?
+            .ok_or_else(|| LibraryError::Validation(format!("未找到媒体库根目录：{root_id}")))
+    }
+
+    pub(crate) fn root_collection_id(&self, root_id: &str) -> Result<String, LibraryError> {
+        let mut statement = self.connection.prepare(
+            "SELECT id FROM collections
+             WHERE root_id = ?1 AND system_key IS NULL
+             ORDER BY created_at_ms, id",
+        )?;
+        let ids = statement
+            .query_map(params![root_id], |row| row.get::<_, String>(0))?
+            .collect::<Result<Vec<_>, _>>()?;
+        match ids.as_slice() {
+            [collection_id] => Ok(collection_id.clone()),
+            [] => Err(LibraryError::Conflict(
+                "授权根目录没有可恢复的剧集集合".to_owned(),
+            )),
+            _ => Err(LibraryError::Conflict(
+                "授权根目录关联多个集合，当前不能自动决定新文件归属".to_owned(),
+            )),
+        }
+    }
+
+    pub(crate) fn list_root_items(
+        &self,
+        root_id: &str,
+    ) -> Result<Vec<RootMembershipRecord>, LibraryError> {
+        let mut statement = self.connection.prepare(
+            "SELECT
+                c.id, ci.project_id, ci.relative_path, ci.relative_path_key,
+                ci.display_title, ci.availability, ci.quick_fingerprint,
+                EXISTS(
+                    SELECT 1
+                    FROM collection_items other_ci
+                    JOIN collections other_c ON other_c.id = other_ci.collection_id
+                    WHERE other_ci.project_id = ci.project_id
+                      AND other_c.root_id IS NOT NULL
+                      AND other_c.root_id != ?1
+                )
+             FROM collections c
+             JOIN collection_items ci ON ci.collection_id = c.id
+             JOIN media_sources m ON m.project_id = ci.project_id AND m.is_primary = 1
+             WHERE c.root_id = ?1
+             ORDER BY c.id, ci.absolute_order, ci.project_id",
+        )?;
+        statement
+            .query_map(params![root_id], |row| {
+                Ok(RootMembershipRecord {
+                    collection_id: row.get(0)?,
+                    project_id: row.get(1)?,
+                    relative_path: row.get(2)?,
+                    relative_path_key: row.get(3)?,
+                    display_title: row.get(4)?,
+                    availability: row.get(5)?,
+                    quick_fingerprint: row.get(6)?,
+                    shared_with_other_root: row.get::<_, i64>(7)? != 0,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(Into::into)
+    }
+
+    pub(crate) fn root_path_key_exists_elsewhere(
+        &self,
+        root_id: &str,
+        path_key: &str,
+    ) -> Result<bool, LibraryError> {
+        self.connection
+            .query_row(
+                "SELECT EXISTS(
+                    SELECT 1 FROM library_roots WHERE id != ?1 AND path_key = ?2
+                 )",
+                params![root_id, path_key],
+                |row| row.get(0),
+            )
+            .map_err(Into::into)
+    }
+
+    pub(crate) fn update_root_scan_state(
+        &self,
+        root_id: &str,
+        availability: &str,
+        timestamp: i64,
+    ) -> Result<(), LibraryError> {
+        let changed = self.connection.execute(
+            "UPDATE library_roots
+             SET availability = ?2, last_scanned_at_ms = ?3, updated_at_ms = ?3
+             WHERE id = ?1",
+            params![root_id, availability, timestamp],
+        )?;
+        if changed == 0 {
+            return Err(LibraryError::Validation(format!(
+                "未找到媒体库根目录：{root_id}"
+            )));
+        }
+        Ok(())
+    }
+
+    pub(crate) fn update_root_items_availability(
+        &self,
+        root_id: &str,
+        availability: ItemAvailability,
+        timestamp: i64,
+    ) -> Result<usize, LibraryError> {
+        self.connection
+            .execute(
+                "UPDATE collection_items
+                 SET availability = ?2, updated_at_ms = ?3
+                 WHERE collection_id IN (
+                    SELECT id FROM collections WHERE root_id = ?1
+                 )",
+                params![root_id, availability.as_database_value(), timestamp],
+            )
+            .map_err(Into::into)
+    }
+
+    pub(crate) fn update_membership_scan_state(
+        &self,
+        collection_id: &str,
+        project_id: &str,
+        availability: ItemAvailability,
+        source_size_bytes: Option<i64>,
+        source_modified_at_ms: Option<i64>,
+        timestamp: i64,
+    ) -> Result<(), LibraryError> {
+        let changed = self.connection.execute(
+            "UPDATE collection_items
+             SET availability = ?3,
+                 source_size_bytes = COALESCE(?4, source_size_bytes),
+                 source_modified_at_ms = COALESCE(?5, source_modified_at_ms),
+                 updated_at_ms = ?6
+             WHERE collection_id = ?1 AND project_id = ?2",
+            params![
+                collection_id,
+                project_id,
+                availability.as_database_value(),
+                source_size_bytes,
+                source_modified_at_ms,
+                timestamp,
+            ],
+        )?;
+        if changed == 0 {
+            return Err(LibraryError::MembershipNotFound {
+                collection_id: collection_id.to_owned(),
+                project_id: project_id.to_owned(),
+            });
+        }
+        Ok(())
+    }
+
+    pub(crate) fn relocate_root(
+        &self,
+        root_id: &str,
+        new_path: &str,
+        new_path_key: &str,
+        display_name: &str,
+        timestamp: i64,
+    ) -> Result<(), LibraryError> {
+        let changed = self.connection.execute(
+            "UPDATE library_roots
+             SET path = ?2, path_key = ?3, display_name = ?4,
+                 availability = 'available', last_scanned_at_ms = ?5, updated_at_ms = ?5
+             WHERE id = ?1",
+            params![root_id, new_path, new_path_key, display_name, timestamp],
+        )?;
+        if changed == 0 {
+            return Err(LibraryError::Validation(format!(
+                "未找到媒体库根目录：{root_id}"
+            )));
+        }
+        Ok(())
+    }
+
+    pub(crate) fn relocate_membership_media(
+        &self,
+        item: &RootMembershipRecord,
+        locator: &str,
+        display_name: &str,
+        source_size_bytes: i64,
+        source_modified_at_ms: Option<i64>,
+        timestamp: i64,
+    ) -> Result<(), LibraryError> {
+        self.connection.execute(
+            "UPDATE media_sources
+             SET locator = ?2, display_name = ?3, source_size_bytes = ?4,
+                 source_modified_at_ms = ?5, updated_at_ms = ?6
+             WHERE project_id = ?1 AND is_primary = 1",
+            params![
+                item.project_id,
+                locator,
+                display_name,
+                source_size_bytes,
+                source_modified_at_ms,
+                timestamp,
+            ],
+        )?;
+        self.update_membership_scan_state(
+            &item.collection_id,
+            &item.project_id,
+            ItemAvailability::Available,
+            Some(source_size_bytes),
+            source_modified_at_ms,
+            timestamp,
+        )
+    }
+
     pub(crate) fn list_continue_watching(
         &self,
         limit: i64,
@@ -574,6 +825,22 @@ impl<'connection> LibraryRepository<'connection> {
             })
     }
 
+    pub(crate) fn project_media_locator(&self, project_id: &str) -> Result<String, LibraryError> {
+        self.connection
+            .query_row(
+                "SELECT locator FROM media_sources
+                 WHERE project_id = ?1 AND is_primary = 1 AND kind = 'local_file'",
+                params![project_id],
+                |row| row.get(0),
+            )
+            .optional()?
+            .ok_or_else(|| {
+                LibraryError::Store(crate::store::StoreError::ProjectNotFound(
+                    project_id.to_owned(),
+                ))
+            })
+    }
+
     pub(crate) fn membership_exists(
         &self,
         collection_id: &str,
@@ -676,6 +943,24 @@ pub(crate) struct NewLibraryRoot<'value> {
     pub(crate) path_key: &'value str,
     pub(crate) display_name: &'value str,
     pub(crate) timestamp: i64,
+}
+
+pub(crate) struct LibraryRootRecord {
+    pub(crate) path: String,
+    pub(crate) path_key: String,
+    pub(crate) display_name: String,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct RootMembershipRecord {
+    pub(crate) collection_id: String,
+    pub(crate) project_id: String,
+    pub(crate) relative_path: Option<String>,
+    pub(crate) relative_path_key: Option<String>,
+    pub(crate) display_title: String,
+    pub(crate) availability: String,
+    pub(crate) quick_fingerprint: Option<String>,
+    pub(crate) shared_with_other_root: bool,
 }
 
 pub(crate) struct ExistingMediaLocator {

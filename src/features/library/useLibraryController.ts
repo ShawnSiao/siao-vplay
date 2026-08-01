@@ -10,12 +10,19 @@ import type {
   LibraryHome,
   LibraryImportResult,
   LibraryMediaSummary,
+  LibraryRescanPreview,
+  LibraryRescanResult,
+  LibraryRootRelocationPreview,
+  LibraryRootRelocationResult,
+  LibraryScanCandidate,
   LibraryScanPreview,
   LibraryScanProgress,
   LibrarySearchResult,
 } from "../../types";
 import {
   addProjectToCollection,
+  applyLibraryRescan,
+  applyLibraryRootRelocation,
   cancelLibraryScan,
   confirmLibraryImport,
   createCollection,
@@ -23,6 +30,8 @@ import {
   emptyLibraryHome,
   getCollectionDetail,
   getLibraryHome,
+  inspectLibraryRescan,
+  inspectLibraryRootRelocation,
   listCollectionEpisodes,
   listenLibraryScanProgress,
   removeProjectFromCollection,
@@ -81,6 +90,37 @@ const emptyFolderImport: LibraryFolderImportState = {
   error: null,
 };
 
+export type LibraryRecoveryState = {
+  stage:
+    | "closed"
+    | "inspecting_rescan"
+    | "rescan_preview"
+    | "inspecting_relocation"
+    | "relocation_preview"
+    | "applying"
+    | "error";
+  rootId: string | null;
+  rescanPreview: LibraryRescanPreview | null;
+  relocationPreview: LibraryRootRelocationPreview | null;
+  newItems: LibraryImportDraftItem[];
+  confirmMissing: boolean;
+  confirmChanged: boolean;
+  confirmFingerprintDuplicates: boolean;
+  error: string | null;
+};
+
+const emptyRecovery: LibraryRecoveryState = {
+  stage: "closed",
+  rootId: null,
+  rescanPreview: null,
+  relocationPreview: null,
+  newItems: [],
+  confirmMissing: false,
+  confirmChanged: false,
+  confirmFingerprintDuplicates: false,
+  error: null,
+};
+
 type LibraryState = {
   home: LibraryHome;
   loading: boolean;
@@ -96,6 +136,7 @@ type LibraryState = {
   mutationPending: boolean;
   refreshSequence: number;
   folderImport: LibraryFolderImportState;
+  recovery: LibraryRecoveryState;
 };
 
 type LibraryAction =
@@ -152,7 +193,42 @@ type LibraryAction =
       importedRootName: string;
     }
   | { type: "scan_failed"; message: string }
-  | { type: "scan_closed" };
+  | { type: "scan_closed" }
+  | {
+      type: "recovery_started";
+      stage: "inspecting_rescan" | "inspecting_relocation";
+      rootId: string;
+    }
+  | {
+      type: "rescan_preview";
+      preview: LibraryRescanPreview;
+      items: LibraryImportDraftItem[];
+    }
+  | { type: "relocation_preview"; preview: LibraryRootRelocationPreview }
+  | {
+      type: "recovery_item_changed";
+      candidateId: string;
+      values: Partial<
+        Pick<
+          LibraryImportDraftItem,
+          | "displayTitle"
+          | "seasonNumber"
+          | "episodeNumber"
+          | "absoluteOrder"
+          | "confirmed"
+        >
+      >;
+    }
+  | {
+      type: "recovery_confirmation_changed";
+      field: "confirmMissing" | "confirmChanged" | "confirmFingerprintDuplicates";
+      checked: boolean;
+    }
+  | { type: "recovery_applying" }
+  | { type: "recovery_failed"; message: string }
+  | { type: "rescan_succeeded"; result: LibraryRescanResult }
+  | { type: "relocation_succeeded"; result: LibraryRootRelocationResult }
+  | { type: "recovery_closed" };
 
 const initialState: LibraryState = {
   home: emptyLibraryHome,
@@ -169,6 +245,7 @@ const initialState: LibraryState = {
   mutationPending: false,
   refreshSequence: 0,
   folderImport: emptyFolderImport,
+  recovery: emptyRecovery,
 };
 
 function libraryReducer(state: LibraryState, action: LibraryAction): LibraryState {
@@ -422,11 +499,119 @@ function libraryReducer(state: LibraryState, action: LibraryAction): LibraryStat
       };
     case "scan_closed":
       return { ...state, folderImport: emptyFolderImport };
+    case "recovery_started":
+      return {
+        ...state,
+        recovery: {
+          ...emptyRecovery,
+          stage: action.stage,
+          rootId: action.rootId,
+        },
+      };
+    case "rescan_preview":
+      return {
+        ...state,
+        recovery: {
+          ...state.recovery,
+          stage: "rescan_preview",
+          rescanPreview: action.preview,
+          newItems: action.items,
+          error: null,
+        },
+      };
+    case "relocation_preview":
+      return {
+        ...state,
+        recovery: {
+          ...state.recovery,
+          stage: "relocation_preview",
+          relocationPreview: action.preview,
+          error: null,
+        },
+      };
+    case "recovery_item_changed":
+      return {
+        ...state,
+        recovery: {
+          ...state.recovery,
+          newItems: state.recovery.newItems.map((item) =>
+            item.candidateId === action.candidateId
+              ? { ...item, ...action.values }
+              : item,
+          ),
+        },
+      };
+    case "recovery_confirmation_changed":
+      return {
+        ...state,
+        recovery: { ...state.recovery, [action.field]: action.checked },
+      };
+    case "recovery_applying":
+      return {
+        ...state,
+        recovery: { ...state.recovery, stage: "applying", error: null },
+      };
+    case "recovery_failed":
+      return {
+        ...state,
+        recovery: {
+          ...state.recovery,
+          stage: state.recovery.rescanPreview
+            ? "rescan_preview"
+            : state.recovery.relocationPreview
+              ? "relocation_preview"
+              : "error",
+          error: action.message,
+        },
+      };
+    case "rescan_succeeded": {
+      const added = action.result.addedItemCount;
+      return {
+        ...state,
+        recovery: emptyRecovery,
+        currentCollection:
+          state.currentCollection?.summary.id === action.result.collection.summary.id
+            ? action.result.collection
+            : state.currentCollection,
+        home: {
+          ...state.home,
+          folders: [
+            action.result.root,
+            ...state.home.folders.filter((root) => root.id !== action.result.root.id),
+          ],
+          collections: [
+            action.result.collection.summary,
+            ...state.home.collections.filter(
+              (collection) => collection.id !== action.result.collection.summary.id,
+            ),
+          ],
+          totalProjectCount:
+            state.home.totalProjectCount + action.result.createdProjectCount,
+          collectionItemCount: state.home.collectionItemCount + added,
+        },
+      };
+    }
+    case "relocation_succeeded":
+      return {
+        ...state,
+        recovery: emptyRecovery,
+        home: {
+          ...state.home,
+          folders: [
+            action.result.root,
+            ...state.home.folders.filter((root) => root.id !== action.result.root.id),
+          ],
+        },
+      };
+    case "recovery_closed":
+      return { ...state, recovery: emptyRecovery };
   }
 }
 
-function draftItems(preview: LibraryScanPreview): LibraryImportDraftItem[] {
-  return preview.candidates.map((candidate) => ({
+function draftCandidateItems(
+  candidates: LibraryScanCandidate[],
+): LibraryImportDraftItem[] {
+  return candidates.map((candidate) => ({
     candidateId: candidate.candidateId,
     relativePath: candidate.relativePath,
     recognition: candidate.recognition,
@@ -442,6 +627,10 @@ function draftItems(preview: LibraryScanPreview): LibraryImportDraftItem[] {
     absoluteOrder: candidate.absoluteOrder,
     confirmed: false,
   }));
+}
+
+function draftItems(preview: LibraryScanPreview): LibraryImportDraftItem[] {
+  return draftCandidateItems(preview.candidates);
 }
 
 export function importItemNeedsConfirmation(item: LibraryImportDraftItem): boolean {
@@ -460,6 +649,7 @@ export function useLibraryController() {
   const collectionRequestSequence = useRef(0);
   const searchRequestSequence = useRef(0);
   const scanRequestSequence = useRef(0);
+  const recoveryRequestSequence = useRef(0);
   const activeScanIdRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -786,6 +976,128 @@ export function useLibraryController() {
     }
   }, [refresh, state.folderImport]);
 
+  const inspectRootRescan = useCallback(async (rootId: string) => {
+    const sequence = recoveryRequestSequence.current + 1;
+    recoveryRequestSequence.current = sequence;
+    dispatch({ type: "recovery_started", stage: "inspecting_rescan", rootId });
+    try {
+      const preview = await inspectLibraryRescan(rootId);
+      if (recoveryRequestSequence.current === sequence) {
+        dispatch({
+          type: "rescan_preview",
+          preview,
+          items: draftCandidateItems(preview.newCandidates),
+        });
+      }
+      return preview;
+    } catch (error) {
+      if (recoveryRequestSequence.current === sequence) {
+        dispatch({ type: "recovery_failed", message: commandError(error).message });
+      }
+      return null;
+    }
+  }, []);
+
+  const inspectRootRelocation = useCallback(
+    async (rootId: string, newRootPath: string) => {
+      const sequence = recoveryRequestSequence.current + 1;
+      recoveryRequestSequence.current = sequence;
+      dispatch({ type: "recovery_started", stage: "inspecting_relocation", rootId });
+      try {
+        const preview = await inspectLibraryRootRelocation(rootId, newRootPath);
+        if (recoveryRequestSequence.current === sequence) {
+          dispatch({ type: "relocation_preview", preview });
+        }
+        return preview;
+      } catch (error) {
+        if (recoveryRequestSequence.current === sequence) {
+          dispatch({ type: "recovery_failed", message: commandError(error).message });
+        }
+        return null;
+      }
+    },
+    [],
+  );
+
+  const closeRecovery = useCallback(() => {
+    recoveryRequestSequence.current += 1;
+    dispatch({ type: "recovery_closed" });
+  }, []);
+
+  const updateRecoveryItem = useCallback(
+    (
+      candidateId: string,
+      values: Partial<
+        Pick<
+          LibraryImportDraftItem,
+          | "displayTitle"
+          | "seasonNumber"
+          | "episodeNumber"
+          | "absoluteOrder"
+          | "confirmed"
+        >
+      >,
+    ) => dispatch({ type: "recovery_item_changed", candidateId, values }),
+    [],
+  );
+
+  const setRecoveryConfirmation = useCallback(
+    (
+      field: "confirmMissing" | "confirmChanged" | "confirmFingerprintDuplicates",
+      checked: boolean,
+    ) => dispatch({ type: "recovery_confirmation_changed", field, checked }),
+    [],
+  );
+
+  const applyRescan = useCallback(async () => {
+    const snapshot = state.recovery;
+    if (!snapshot.rescanPreview || snapshot.stage !== "rescan_preview") {
+      return null;
+    }
+    dispatch({ type: "recovery_applying" });
+    try {
+      const result = await applyLibraryRescan({
+        previewToken: snapshot.rescanPreview.previewToken,
+        newItems: snapshot.newItems.map((item) => ({
+          candidateId: item.candidateId,
+          displayTitle: item.displayTitle,
+          seasonNumber: item.seasonNumber,
+          episodeNumber: item.episodeNumber,
+          absoluteOrder: item.absoluteOrder,
+          confirmed: item.confirmed,
+        })),
+        confirmMissing: snapshot.confirmMissing,
+        confirmChanged: snapshot.confirmChanged,
+        confirmFingerprintDuplicates: snapshot.confirmFingerprintDuplicates,
+      });
+      dispatch({ type: "rescan_succeeded", result });
+      void refresh();
+      return result;
+    } catch (error) {
+      dispatch({ type: "recovery_failed", message: commandError(error).message });
+      return null;
+    }
+  }, [refresh, state.recovery]);
+
+  const applyRootRelocation = useCallback(async () => {
+    const snapshot = state.recovery;
+    if (!snapshot.relocationPreview || snapshot.stage !== "relocation_preview") {
+      return null;
+    }
+    dispatch({ type: "recovery_applying" });
+    try {
+      const result = await applyLibraryRootRelocation(
+        snapshot.relocationPreview.previewToken,
+      );
+      dispatch({ type: "relocation_succeeded", result });
+      void refresh();
+      return result;
+    } catch (error) {
+      dispatch({ type: "recovery_failed", message: commandError(error).message });
+      return null;
+    }
+  }, [refresh, state.recovery]);
+
   return {
     state,
     refresh,
@@ -807,5 +1119,12 @@ export function useLibraryController() {
     updateFolderImportItem,
     setConfirmFingerprintDuplicates,
     importScannedFolder,
+    inspectRootRescan,
+    inspectRootRelocation,
+    closeRecovery,
+    updateRecoveryItem,
+    setRecoveryConfirmation,
+    applyRescan,
+    applyRootRelocation,
   };
 }

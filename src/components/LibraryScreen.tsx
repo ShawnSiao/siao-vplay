@@ -25,9 +25,12 @@ type LibraryScreenProps = {
   onImport: () => void;
   onImportFolder: () => void;
   onImportUrl: () => void;
+  onRescanRoot: (rootId: string) => void;
+  onRelocateRoot: (rootId: string) => void;
   onOpen: (media: LibraryMediaSummary) => void;
   onRelink: (media: LibraryMediaSummary) => void;
   onDelete: (media: LibraryMediaSummary) => void;
+  onOpenLocation: (media: LibraryMediaSummary) => void;
   onSelectSection: (section: LibrarySection) => void;
   onOpenCollection: (collectionId: string) => void;
   onCloseCollection: () => void;
@@ -60,16 +63,26 @@ function mediaProgress(media: LibraryMediaSummary): number {
 }
 
 function MediaStatus({ media }: { media: LibraryMediaSummary }) {
-  const unavailable = !media.mediaAvailable || media.itemAvailability === "missing";
+  const unavailable =
+    !media.mediaAvailable ||
+    (media.itemAvailability !== null && media.itemAvailability !== "available");
+  const status =
+    media.itemAvailability === "changed"
+      ? "内容已变化"
+      : media.itemAvailability === "root_offline"
+        ? "根目录离线"
+        : media.itemAvailability === "missing"
+          ? "文件缺失"
+          : !media.mediaAvailable
+            ? "需要重新定位"
+            : media.completedAtMs
+              ? "已看"
+              : media.positionMs > 0
+                ? "观看中"
+                : "可以观看";
   return (
     <span className={`library-item-status ${unavailable ? "warning" : "ready"}`}>
-      {unavailable
-        ? "需要重新定位"
-        : media.completedAtMs
-          ? "已看"
-          : media.positionMs > 0
-            ? "观看中"
-            : "可以观看"}
+      {status}
     </span>
   );
 }
@@ -82,6 +95,7 @@ function MediaRow({
   onOpen,
   onRelink,
   onDelete,
+  onOpenLocation,
   onAddToCollection,
   onRemoveFromCollection,
   onSetWatchLater,
@@ -93,12 +107,15 @@ function MediaRow({
   onOpen: (media: LibraryMediaSummary) => void;
   onRelink: (media: LibraryMediaSummary) => void;
   onDelete: (media: LibraryMediaSummary) => void;
+  onOpenLocation: (media: LibraryMediaSummary) => void;
   onAddToCollection: (collectionId: string, projectId: string) => Promise<unknown>;
   onRemoveFromCollection: (collectionId: string, projectId: string) => Promise<unknown>;
   onSetWatchLater: (projectId: string, enabled: boolean) => Promise<unknown>;
 }) {
   const [selectedCollection, setSelectedCollection] = useState("");
-  const needsRelink = !media.mediaAvailable || media.itemAvailability === "missing";
+  const needsRelink =
+    !media.mediaAvailable ||
+    (media.itemAvailability !== null && media.itemAvailability !== "available");
   const progress = mediaProgress(media);
   const watchLater = collections.find((item) => item.systemKey === "watch_later");
   const isWatchLater = collectionContext === watchLater?.id;
@@ -187,6 +204,14 @@ function MediaRow({
             取消稍后观看
           </button>
         ) : null}
+        <button
+          className="button quiet small"
+          type="button"
+          disabled={!media.mediaAvailable}
+          onClick={() => onOpenLocation(media)}
+        >
+          位置
+        </button>
         {!collectionContext ? (
           <button className="button quiet small" type="button" onClick={() => onDelete(media)}>
             删除
@@ -293,9 +318,12 @@ export function LibraryScreen(props: LibraryScreenProps) {
     onImport,
     onImportFolder,
     onImportUrl,
+    onRescanRoot,
+    onRelocateRoot,
     onOpen,
     onRelink,
     onDelete,
+    onOpenLocation,
     onSelectSection,
     onOpenCollection,
     onCloseCollection,
@@ -451,6 +479,7 @@ export function LibraryScreen(props: LibraryScreenProps) {
                       onOpen={onOpen}
                       onRelink={onRelink}
                       onDelete={onDelete}
+                      onOpenLocation={onOpenLocation}
                       onAddToCollection={onAddToCollection}
                       onRemoveFromCollection={onRemoveFromCollection}
                       onSetWatchLater={onSetWatchLater}
@@ -530,6 +559,10 @@ export function LibraryScreen(props: LibraryScreenProps) {
                         {folder.availability === "available" ? "可用" : "离线"}
                       </span>
                       <small>{folder.lastScannedAtMs ? `上次扫描 ${formatRecentTime(folder.lastScannedAtMs)}` : "尚未扫描"}</small>
+                      <span className="library-folder-actions">
+                        <button type="button" onClick={() => onRescanRoot(folder.id)} aria-label={`重新扫描 ${folder.displayName}`}>重新扫描</button>
+                        <button type="button" onClick={() => onRelocateRoot(folder.id)} aria-label={`重新定位 ${folder.displayName}`}>重新定位</button>
+                      </span>
                     </article>
                   ))}
                 </div>
@@ -584,6 +617,7 @@ export function LibraryScreen(props: LibraryScreenProps) {
                       onOpen={onOpen}
                       onRelink={onRelink}
                       onDelete={onDelete}
+                      onOpenLocation={onOpenLocation}
                       onAddToCollection={onAddToCollection}
                       onRemoveFromCollection={onRemoveFromCollection}
                       onSetWatchLater={onSetWatchLater}

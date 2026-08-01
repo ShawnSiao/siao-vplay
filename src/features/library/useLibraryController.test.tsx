@@ -6,6 +6,9 @@ import type {
   LibraryCollection,
   LibraryHome,
   LibraryImportResult,
+  LibraryRescanPreview,
+  LibraryRescanResult,
+  LibraryRootRelocationPreview,
   LibraryScanPreview,
   LibrarySearchResult,
 } from "../../types";
@@ -26,6 +29,10 @@ const gatewayMocks = vi.hoisted(() => ({
   cancelLibraryScan: vi.fn(),
   listenLibraryScanProgress: vi.fn(),
   confirmLibraryImport: vi.fn(),
+  inspectLibraryRescan: vi.fn(),
+  applyLibraryRescan: vi.fn(),
+  inspectLibraryRootRelocation: vi.fn(),
+  applyLibraryRootRelocation: vi.fn(),
 }));
 
 vi.mock("../../lib/desktop", async (importOriginal) => ({
@@ -313,5 +320,119 @@ describe("useLibraryController", () => {
       });
       await backgroundRefresh.promise;
     });
+  });
+
+  it("applies a confirmed rescan locally before refreshing the library", async () => {
+    const root = {
+      id: importedDetail.summary.rootId!,
+      path: scanPreview.rootPath,
+      displayName: "Rain",
+      availability: "available" as const,
+      lastScannedAtMs: 10,
+      itemCount: 1,
+    };
+    const initialHome = {
+      ...libraryHome(1),
+      collections: [importedDetail.summary],
+      folders: [root],
+      collectionItemCount: 1,
+      unclassifiedCount: 0,
+    };
+    const backgroundRefresh = deferred<LibraryHome>();
+    gatewayMocks.getLibraryHome
+      .mockResolvedValueOnce(initialHome)
+      .mockImplementationOnce(() => backgroundRefresh.promise);
+    const preview: LibraryRescanPreview = {
+      previewToken: "70000000-0000-4000-8000-000000000001",
+      rootId: root.id,
+      rootPath: root.path,
+      rootDisplayName: root.displayName,
+      collectionId: importedDetail.summary.id,
+      rootOffline: false,
+      newCandidates: [{
+        ...scanPreview.candidates[0],
+        candidateId: "70000000-0000-4000-8000-000000000002",
+        relativePath: "Rain.S01E02.mp4",
+        episodeNumber: 2,
+        absoluteOrder: 1,
+      }],
+      missingItems: [],
+      changedItems: [],
+      availableItemCount: 1,
+      ignoredCount: 0,
+      expiresAtMs: 1_900_000_000_000,
+    };
+    const rescanResult: LibraryRescanResult = {
+      root: { ...root, itemCount: 2, lastScannedAtMs: 20 },
+      collection: {
+        ...importedDetail,
+        summary: { ...importedDetail.summary, itemCount: 2 },
+      },
+      addedItemCount: 1,
+      createdProjectCount: 1,
+      reusedProjectCount: 0,
+      missingItemCount: 0,
+      changedItemCount: 0,
+      availableItemCount: 1,
+    };
+    gatewayMocks.inspectLibraryRescan.mockResolvedValue(preview);
+    gatewayMocks.applyLibraryRescan.mockResolvedValue(rescanResult);
+    const { result } = renderHook(() => useLibraryController());
+    await waitFor(() => expect(result.current.state.loading).toBe(false));
+
+    await act(async () => {
+      await result.current.inspectRootRescan(root.id);
+    });
+    expect(result.current.state.recovery.stage).toBe("rescan_preview");
+    await act(async () => {
+      await result.current.applyRescan();
+    });
+
+    expect(gatewayMocks.applyLibraryRescan).toHaveBeenCalledWith(
+      expect.objectContaining({
+        previewToken: preview.previewToken,
+        newItems: [expect.objectContaining({ episodeNumber: 2 })],
+      }),
+    );
+    expect(result.current.state.recovery.stage).toBe("closed");
+    expect(result.current.state.home.totalProjectCount).toBe(2);
+    expect(result.current.state.home.collectionItemCount).toBe(2);
+    expect(result.current.state.home.folders[0].itemCount).toBe(2);
+    await act(async () => {
+      backgroundRefresh.resolve({
+        ...initialHome,
+        totalProjectCount: 2,
+        collectionItemCount: 2,
+        folders: [rescanResult.root],
+        collections: [rescanResult.collection.summary],
+      });
+      await backgroundRefresh.promise;
+    });
+  });
+
+  it("ignores a relocation inspection after its dialog is closed", async () => {
+    gatewayMocks.getLibraryHome.mockResolvedValue(libraryHome(0));
+    const pending = deferred<LibraryRootRelocationPreview>();
+    gatewayMocks.inspectLibraryRootRelocation.mockImplementation(() => pending.promise);
+    const { result } = renderHook(() => useLibraryController());
+    await waitFor(() => expect(result.current.state.loading).toBe(false));
+    let inspection: Promise<unknown>;
+    act(() => {
+      inspection = result.current.inspectRootRelocation("root", "W:\\Moved");
+    });
+    act(() => result.current.closeRecovery());
+    await act(async () => {
+      pending.resolve({
+        previewToken: "70000000-0000-4000-8000-000000000003",
+        rootId: "root",
+        currentRootPath: "W:\\Old",
+        newRootPath: "W:\\Moved",
+        matchedItemCount: 1,
+        mismatches: [],
+        expiresAtMs: 1_900_000_000_000,
+      });
+      await inspection!;
+    });
+    expect(result.current.state.recovery.stage).toBe("closed");
   });
 });

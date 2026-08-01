@@ -244,6 +244,74 @@ export type LibraryImportResult = {
   reusedProjectCount: number;
 };
 
+export type LibraryRecoveryItem = {
+  collectionId: string;
+  projectId: string;
+  relativePath: string;
+  displayTitle: string;
+  previousAvailability: LibraryItemAvailability;
+};
+
+export type LibraryRescanPreview = {
+  previewToken: string;
+  rootId: string;
+  rootPath: string;
+  rootDisplayName: string;
+  collectionId: string;
+  rootOffline: boolean;
+  newCandidates: LibraryScanCandidate[];
+  missingItems: LibraryRecoveryItem[];
+  changedItems: LibraryRecoveryItem[];
+  availableItemCount: number;
+  ignoredCount: number;
+  expiresAtMs: number;
+};
+
+export type ApplyLibraryRescanInput = {
+  previewToken: string;
+  newItems: ConfirmLibraryItemInput[];
+  confirmMissing: boolean;
+  confirmChanged: boolean;
+  confirmFingerprintDuplicates: boolean;
+};
+
+export type LibraryRescanResult = {
+  root: LibraryRootSummary;
+  collection: CollectionDetail;
+  addedItemCount: number;
+  createdProjectCount: number;
+  reusedProjectCount: number;
+  missingItemCount: number;
+  changedItemCount: number;
+  availableItemCount: number;
+};
+
+export type RelocationMismatchReason =
+  | "missing"
+  | "fingerprint_changed"
+  | "invalid_relative_path";
+
+export type LibraryRelocationMismatch = {
+  projectId: string;
+  relativePath: string;
+  reason: RelocationMismatchReason;
+};
+
+export type LibraryRootRelocationPreview = {
+  previewToken: string;
+  rootId: string;
+  currentRootPath: string;
+  newRootPath: string;
+  matchedItemCount: number;
+  mismatches: LibraryRelocationMismatch[];
+  expiresAtMs: number;
+};
+
+export type LibraryRootRelocationResult = {
+  root: LibraryRootSummary;
+  updatedItemCount: number;
+};
+
 export type MediaArtifactStatus =
   | "queued"
   | "running"

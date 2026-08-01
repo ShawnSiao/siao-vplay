@@ -4826,7 +4826,7 @@ h3 {
 
 .library-folder-row {
   display: grid;
-  grid-template-columns: 38px minmax(260px, 1fr) auto auto minmax(130px, auto);
+  grid-template-columns: 38px minmax(240px, 1fr) auto auto minmax(120px, auto) auto;
   gap: 14px;
   align-items: center;
   min-height: 64px;
@@ -4851,6 +4851,112 @@ h3 {
 .library-folder-title small {
   overflow: hidden;
   color: var(--text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.library-folder-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.library-folder-actions button {
+  min-height: 30px;
+  padding: 0 9px;
+  border: 1px solid var(--border-default);
+  border-radius: 4px;
+  color: var(--text-secondary);
+  background: var(--bg-control);
+  font-size: 12px;
+}
+
+.library-folder-actions button:hover {
+  color: var(--text-primary);
+  border-color: var(--border-strong);
+}
+
+.library-recovery-dialog {
+  display: grid;
+  gap: 14px;
+  min-width: min(880px, 78vw);
+}
+
+.library-recovery-path {
+  overflow: hidden;
+  margin: 0;
+  color: var(--text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.library-recovery-section {
+  display: grid;
+  gap: 8px;
+}
+
+.library-recovery-section h3,
+.library-recovery-section p {
+  margin: 0;
+}
+
+.library-recovery-items {
+  display: grid;
+  gap: 5px;
+  max-height: 150px;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  list-style: none;
+}
+
+.library-recovery-items li {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 7px 9px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+  background: var(--bg-panel);
+}
+
+.library-recovery-items li span {
+  color: var(--warning);
+  font-size: 12px;
+}
+
+.library-recovery-confirmations {
+  display: grid;
+  gap: 7px;
+}
+
+.library-recovery-confirmations label {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  font-size: 13px;
+}
+
+.library-relocation-paths {
+  display: grid;
+  gap: 8px;
+}
+
+.library-relocation-paths > div {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  gap: 10px;
+  padding: 9px 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+  background: var(--bg-panel);
+}
+
+.library-relocation-paths span {
+  color: var(--text-muted);
+}
+
+.library-relocation-paths strong {
+  overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -4967,10 +5073,10 @@ h3 {
   }
 
   .library-folder-row {
-    grid-template-columns: 34px minmax(220px, 1fr) auto auto;
+    grid-template-columns: 34px minmax(220px, 1fr) auto auto auto;
   }
 
-  .library-folder-row > small:last-child {
+  .library-folder-row > small {
     display: none;
   }
 }
