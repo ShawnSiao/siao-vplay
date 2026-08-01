@@ -61,6 +61,7 @@ impl From<StoreError> for CommandError {
             StoreError::UnsupportedSchema { .. } => "unsupported_schema",
             StoreError::FileSystem(_) => "filesystem_error",
             StoreError::Database(_)
+            | StoreError::LibraryMigration(_)
             | StoreError::InvalidMediaSourceKind(_)
             | StoreError::InvalidMediaArtifactStatus(_)
             | StoreError::InvalidSubtitleDisplayMode(_) => "database_error",
@@ -111,6 +112,7 @@ impl From<SubtitleError> for CommandError {
             }
             SubtitleError::Store(
                 StoreError::Database(_)
+                | StoreError::LibraryMigration(_)
                 | StoreError::InvalidMediaSourceKind(_)
                 | StoreError::InvalidMediaArtifactStatus(_)
                 | StoreError::InvalidSubtitleDisplayMode(_),

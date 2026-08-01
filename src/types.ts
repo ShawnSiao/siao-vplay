@@ -25,6 +25,7 @@ export type MediaSource = {
 export type PlaybackState = {
   positionMs: number;
   durationMs: number | null;
+  completedAtMs: number | null;
   volume: number;
   playbackRate: number;
   subtitleMode: SubtitleDisplayMode;

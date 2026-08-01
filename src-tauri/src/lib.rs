@@ -7,6 +7,7 @@ mod desktop_frame;
 mod domain;
 mod external_handoff;
 mod learning;
+mod library;
 mod media;
 mod remote_media;
 mod store;

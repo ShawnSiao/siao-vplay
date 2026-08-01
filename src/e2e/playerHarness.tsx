@@ -35,6 +35,7 @@ const project: Project = {
   playbackState: {
     positionMs: 15_000,
     durationMs: 120_000,
+    completedAtMs: null,
     volume: 0.8,
     playbackRate: 1,
     subtitleMode: "original",

@@ -13,8 +13,9 @@ use crate::domain::{
     MediaSourceKind, PlaybackState, Project, ProjectStatus, RelinkProjectMediaInput,
     SubtitleDisplayMode, UpdatePlaybackStateInput,
 };
+use crate::library::migration::{self as library_migration, MigrationError};
 
-const CURRENT_SCHEMA_VERSION: i64 = 14;
+const CURRENT_SCHEMA_VERSION: i64 = 15;
 
 #[derive(Clone, Debug)]
 pub(crate) struct RemoteImportProvenance {
@@ -37,6 +38,8 @@ pub enum StoreError {
     Database(#[from] rusqlite::Error),
     #[error("文件系统错误：{0}")]
     FileSystem(#[from] std::io::Error),
+    #[error(transparent)]
+    LibraryMigration(#[from] MigrationError),
     #[error("找不到项目：{0}")]
     ProjectNotFound(String),
     #[error("输入无效：{0}")]
@@ -65,7 +68,7 @@ impl ProjectStore {
 
         let store = Self { database_path };
         let mut connection = store.connect()?;
-        Self::migrate(&mut connection)?;
+        Self::migrate(&mut connection, &store.database_path)?;
         Ok(store)
     }
 
@@ -305,6 +308,11 @@ impl ProjectStore {
             "UPDATE playback_states
              SET position_ms = ?2,
                  duration_ms = ?3,
+                 completed_at_ms = CASE
+                     WHEN completed_at_ms IS NOT NULL THEN completed_at_ms
+                     WHEN ?3 IS NOT NULL AND ?3 > 0 AND ?2 * 10 >= ?3 * 9 THEN ?7
+                     ELSE NULL
+                 END,
                  volume = ?4,
                  playback_rate = ?5,
                  subtitle_mode = ?6,
@@ -755,7 +763,7 @@ impl ProjectStore {
         Ok(connection)
     }
 
-    fn migrate(connection: &mut Connection) -> Result<(), StoreError> {
+    fn migrate(connection: &mut Connection, database_path: &Path) -> Result<(), StoreError> {
         connection.execute_batch(
             "CREATE TABLE IF NOT EXISTS schema_migrations (
                 version INTEGER PRIMARY KEY,
@@ -767,6 +775,7 @@ impl ProjectStore {
             [],
             |row| row.get(0),
         )?;
+        let existing_database = current_version > 0;
         if current_version > CURRENT_SCHEMA_VERSION {
             return Err(StoreError::UnsupportedSchema {
                 found: current_version,
@@ -911,6 +920,20 @@ impl ProjectStore {
                 "INSERT INTO schema_migrations (version, applied_at_ms) VALUES (14, ?1)",
                 params![now_ms()?],
             )?;
+            transaction.commit()?;
+            current_version = 14;
+        }
+        if current_version < 15 {
+            if existing_database {
+                library_migration::create_v14_backup(connection, database_path)?;
+            }
+            let transaction = connection.transaction()?;
+            library_migration::apply_schema_15(&transaction)?;
+            transaction.execute(
+                "INSERT INTO schema_migrations (version, applied_at_ms) VALUES (15, ?1)",
+                params![now_ms()?],
+            )?;
+            library_migration::ensure_foreign_keys(&transaction)?;
             transaction.commit()?;
         }
         Ok(())
@@ -1691,6 +1714,7 @@ impl ProjectStore {
                     m.updated_at_ms,
                     s.position_ms,
                     s.duration_ms,
+                    s.completed_at_ms,
                     s.volume,
                     s.playback_rate,
                     s.subtitle_mode,
@@ -1722,10 +1746,11 @@ impl ProjectStore {
                         row.get::<_, i64>(15)?,
                         row.get::<_, i64>(16)?,
                         row.get::<_, Option<i64>>(17)?,
-                        row.get::<_, f64>(18)?,
+                        row.get::<_, Option<i64>>(18)?,
                         row.get::<_, f64>(19)?,
-                        row.get::<_, String>(20)?,
-                        row.get::<_, i64>(21)?,
+                        row.get::<_, f64>(20)?,
+                        row.get::<_, String>(21)?,
+                        row.get::<_, i64>(22)?,
                     ))
                 },
             )
@@ -1742,8 +1767,8 @@ impl ProjectStore {
         } else {
             ProjectStatus::NeedsRelink
         };
-        let subtitle_mode = SubtitleDisplayMode::from_database_value(&row.20)
-            .ok_or_else(|| StoreError::InvalidSubtitleDisplayMode(row.20.clone()))?;
+        let subtitle_mode = SubtitleDisplayMode::from_database_value(&row.21)
+            .ok_or_else(|| StoreError::InvalidSubtitleDisplayMode(row.21.clone()))?;
 
         Ok(Project {
             id: row.0,
@@ -1769,10 +1794,11 @@ impl ProjectStore {
             playback_state: PlaybackState {
                 position_ms: row.16,
                 duration_ms: row.17,
-                volume: row.18,
-                playback_rate: row.19,
+                completed_at_ms: row.18,
+                volume: row.19,
+                playback_rate: row.20,
                 subtitle_mode,
-                updated_at_ms: row.21,
+                updated_at_ms: row.22,
             },
         })
     }
@@ -1976,12 +2002,111 @@ mod tests {
         }
     }
 
+    fn apply_schema_through_14(transaction: &Transaction<'_>) {
+        ProjectStore::apply_migration_1(transaction).expect("v1 should apply");
+        ProjectStore::apply_migration_2(transaction).expect("v2 should apply");
+        ProjectStore::apply_migration_3(transaction).expect("v3 should apply");
+        ProjectStore::apply_migration_4(transaction).expect("v4 should apply");
+        ProjectStore::apply_migration_5(transaction).expect("v5 should apply");
+        ProjectStore::apply_migration_6(transaction).expect("v6 should apply");
+        ProjectStore::apply_migration_7(transaction).expect("v7 should apply");
+        ProjectStore::apply_migration_8(transaction).expect("v8 should apply");
+        ProjectStore::apply_migration_9(transaction).expect("v9 should apply");
+        ProjectStore::apply_migration_10(transaction).expect("v10 should apply");
+        ProjectStore::apply_migration_11(transaction).expect("v11 should apply");
+        ProjectStore::apply_migration_12(transaction).expect("v12 should apply");
+        ProjectStore::apply_migration_13(transaction).expect("v13 should apply");
+        ProjectStore::apply_migration_14(transaction).expect("v14 should apply");
+        for version in 1..=14 {
+            transaction
+                .execute(
+                    "INSERT INTO schema_migrations (version, applied_at_ms)
+                     VALUES (?1, 0)",
+                    params![version],
+                )
+                .expect("migration should be recorded");
+        }
+    }
+
+    fn create_v14_database(database_path: &Path) -> String {
+        let project_id = Uuid::new_v4().to_string();
+        let media_id = Uuid::new_v4().to_string();
+        let mut connection = Connection::open(database_path).expect("v14 database should open");
+        connection
+            .execute_batch(
+                "PRAGMA foreign_keys = ON;
+                 CREATE TABLE schema_migrations (
+                    version INTEGER PRIMARY KEY,
+                    applied_at_ms INTEGER NOT NULL
+                 );",
+            )
+            .expect("migration table should be created");
+        let transaction = connection.transaction().expect("transaction should open");
+        apply_schema_through_14(&transaction);
+        transaction
+            .execute(
+                "INSERT INTO projects (
+                    id, title, revision, created_at_ms, updated_at_ms, last_opened_at_ms
+                 ) VALUES (?1, 'v14 project', 1, 1, 1, 1)",
+                params![project_id],
+            )
+            .expect("v14 project should be inserted");
+        transaction
+            .execute(
+                "INSERT INTO media_sources (
+                    id, project_id, kind, locator, display_name, is_primary,
+                    created_at_ms, updated_at_ms
+                 ) VALUES (?1, ?2, 'local_file', 'episode.mp4', 'episode.mp4', 1, 1, 1)",
+                params![media_id, project_id],
+            )
+            .expect("v14 media should be inserted");
+        transaction
+            .execute(
+                "INSERT INTO playback_states (
+                    project_id, position_ms, duration_ms, volume, playback_rate,
+                    subtitle_mode, updated_at_ms
+                 ) VALUES (?1, 500, 1000, 0.8, 1.0, 'bilingual', 1)",
+                params![project_id],
+            )
+            .expect("v14 playback should be inserted");
+        transaction.commit().expect("v14 fixture should commit");
+        project_id
+    }
+
+    fn table_exists(connection: &Connection, table: &str) -> bool {
+        connection
+            .query_row(
+                "SELECT EXISTS(
+                    SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?1
+                 )",
+                params![table],
+                |row| row.get::<_, bool>(0),
+            )
+            .expect("table existence should be readable")
+    }
+
+    fn column_exists(connection: &Connection, table: &str, column: &str) -> bool {
+        connection
+            .prepare(&format!("PRAGMA table_info({table})"))
+            .expect("table info should prepare")
+            .query_map([], |row| row.get::<_, String>(1))
+            .expect("table info should query")
+            .collect::<Result<Vec<_>, _>>()
+            .expect("table columns should load")
+            .iter()
+            .any(|name| name == column)
+    }
+
     #[test]
     fn migrates_new_database_and_persists_playback_after_reopen() {
         let fixture = Fixture::new();
         assert_eq!(
             fixture.store.schema_version().expect("schema version"),
             CURRENT_SCHEMA_VERSION
+        );
+        assert!(
+            !library_migration::v14_backup_path(fixture.store.database_path()).exists(),
+            "a new empty database should not create a legacy backup"
         );
         let media_path = fixture.media_file("episode-01.mp4");
         let project = fixture.create_project(&media_path);
@@ -2005,11 +2130,63 @@ mod tests {
             .expect("project should be restored");
         assert_eq!(restored.playback_state.position_ms, 75_000);
         assert_eq!(restored.playback_state.duration_ms, Some(120_000));
+        assert_eq!(restored.playback_state.completed_at_ms, None);
         assert_eq!(restored.playback_state.volume, 0.7);
         assert_eq!(restored.playback_state.playback_rate, 1.25);
         assert_eq!(
             restored.playback_state.subtitle_mode,
             SubtitleDisplayMode::Bilingual
+        );
+    }
+
+    #[test]
+    fn records_completion_at_ninety_percent_and_never_clears_it_implicitly() {
+        let fixture = Fixture::new();
+        let project = fixture.create_project(&fixture.media_file("completion.mp4"));
+
+        let before_threshold = fixture
+            .store
+            .update_playback_state(UpdatePlaybackStateInput {
+                project_id: project.id.clone(),
+                position_ms: 89_999,
+                duration_ms: Some(100_000),
+                volume: 1.0,
+                playback_rate: 1.0,
+                subtitle_mode: SubtitleDisplayMode::Original,
+            })
+            .expect("playback below threshold should save");
+        assert_eq!(before_threshold.playback_state.completed_at_ms, None);
+
+        let completed = fixture
+            .store
+            .update_playback_state(UpdatePlaybackStateInput {
+                project_id: project.id.clone(),
+                position_ms: 90_000,
+                duration_ms: Some(100_000),
+                volume: 1.0,
+                playback_rate: 1.0,
+                subtitle_mode: SubtitleDisplayMode::Original,
+            })
+            .expect("playback at threshold should save");
+        let completed_at_ms = completed
+            .playback_state
+            .completed_at_ms
+            .expect("completion should be recorded");
+
+        let replayed = fixture
+            .store
+            .update_playback_state(UpdatePlaybackStateInput {
+                project_id: project.id,
+                position_ms: 0,
+                duration_ms: Some(100_000),
+                volume: 1.0,
+                playback_rate: 1.0,
+                subtitle_mode: SubtitleDisplayMode::Original,
+            })
+            .expect("replay position should save");
+        assert_eq!(
+            replayed.playback_state.completed_at_ms,
+            Some(completed_at_ms)
         );
     }
 
@@ -2247,6 +2424,248 @@ mod tests {
                 supported: CURRENT_SCHEMA_VERSION
             })
         ));
+    }
+
+    #[test]
+    fn migrates_v14_with_a_verified_backup_and_preserves_existing_projects() {
+        let temp_dir = tempfile::tempdir().expect("temporary directory should be created");
+        let database_path = temp_dir.path().join("v14.sqlite3");
+        let project_id = create_v14_database(&database_path);
+
+        let store = ProjectStore::open(&database_path).expect("v14 store should upgrade");
+        assert_eq!(store.schema_version().expect("schema version"), 15);
+        let project = store
+            .get_project(&project_id)
+            .expect("v14 project should remain readable");
+        assert_eq!(project.title, "v14 project");
+        assert_eq!(project.playback_state.position_ms, 500);
+        assert_eq!(project.playback_state.completed_at_ms, None);
+
+        let connection = store.connect().expect("upgraded database should reopen");
+        for table in ["library_roots", "collections", "collection_items"] {
+            assert!(table_exists(&connection, table), "{table} should exist");
+        }
+        assert!(column_exists(
+            &connection,
+            "playback_states",
+            "completed_at_ms"
+        ));
+
+        let backup_path = library_migration::v14_backup_path(&database_path);
+        assert!(backup_path.is_file());
+        let backup = Connection::open(&backup_path).expect("backup should open");
+        let backup_version = backup
+            .query_row(
+                "SELECT COALESCE(MAX(version), 0) FROM schema_migrations",
+                [],
+                |row| row.get::<_, i64>(0),
+            )
+            .expect("backup schema version should load");
+        assert_eq!(backup_version, 14);
+        assert!(!table_exists(&backup, "library_roots"));
+        assert!(!column_exists(
+            &backup,
+            "playback_states",
+            "completed_at_ms"
+        ));
+    }
+
+    #[test]
+    fn aborts_schema_15_when_the_v14_backup_cannot_be_created() {
+        let temp_dir = tempfile::tempdir().expect("temporary directory should be created");
+        let database_path = temp_dir.path().join("backup-failure.sqlite3");
+        create_v14_database(&database_path);
+        let backup_path = library_migration::v14_backup_path(&database_path);
+        fs::create_dir(&backup_path).expect("blocking backup directory should be created");
+
+        let result = ProjectStore::open(&database_path);
+        assert!(matches!(
+            result,
+            Err(StoreError::LibraryMigration(MigrationError::InvalidBackup(
+                _
+            )))
+        ));
+
+        let connection = Connection::open(&database_path).expect("v14 database should reopen");
+        let version = connection
+            .query_row(
+                "SELECT COALESCE(MAX(version), 0) FROM schema_migrations",
+                [],
+                |row| row.get::<_, i64>(0),
+            )
+            .expect("schema version should remain readable");
+        assert_eq!(version, 14);
+        assert!(!table_exists(&connection, "library_roots"));
+        assert!(!column_exists(
+            &connection,
+            "playback_states",
+            "completed_at_ms"
+        ));
+    }
+
+    #[test]
+    fn rolls_back_schema_15_when_foreign_key_check_fails() {
+        let temp_dir = tempfile::tempdir().expect("temporary directory should be created");
+        let database_path = temp_dir.path().join("foreign-key-failure.sqlite3");
+        create_v14_database(&database_path);
+        let connection = Connection::open(&database_path).expect("v14 database should reopen");
+        connection
+            .execute_batch("PRAGMA foreign_keys = OFF;")
+            .expect("foreign keys should disable for corrupted fixture");
+        connection
+            .execute(
+                "INSERT INTO media_sources (
+                    id, project_id, kind, locator, display_name, is_primary,
+                    created_at_ms, updated_at_ms
+                 ) VALUES (?1, 'missing-project', 'local_file', 'missing.mp4',
+                    'missing.mp4', 0, 1, 1)",
+                params![Uuid::new_v4().to_string()],
+            )
+            .expect("corrupted foreign key fixture should be inserted");
+        drop(connection);
+
+        let result = ProjectStore::open(&database_path);
+        assert!(matches!(
+            result,
+            Err(StoreError::LibraryMigration(
+                MigrationError::ForeignKeyViolation(_)
+            ))
+        ));
+
+        let connection = Connection::open(&database_path).expect("database should reopen");
+        let version = connection
+            .query_row(
+                "SELECT COALESCE(MAX(version), 0) FROM schema_migrations",
+                [],
+                |row| row.get::<_, i64>(0),
+            )
+            .expect("schema version should remain readable");
+        assert_eq!(version, 14);
+        assert!(!table_exists(&connection, "library_roots"));
+        assert!(!column_exists(
+            &connection,
+            "playback_states",
+            "completed_at_ms"
+        ));
+    }
+
+    #[test]
+    fn collection_relationships_use_the_intended_cascade_boundaries() {
+        let fixture = Fixture::new();
+        let project = fixture.create_project(&fixture.media_file("cascade.mp4"));
+        let connection = fixture.store.connect().expect("database should connect");
+        let root_id = Uuid::new_v4().to_string();
+        let collection_id = Uuid::new_v4().to_string();
+        connection
+            .execute(
+                "INSERT INTO library_roots (
+                    id, path, path_key, display_name, created_at_ms, updated_at_ms
+                 ) VALUES (?1, 'W:\\Series', 'w:\\series', 'Series', 1, 1)",
+                params![root_id],
+            )
+            .expect("library root should insert");
+
+        let insert_collection = |id: &str| {
+            connection
+                .execute(
+                    "INSERT INTO collections (
+                        id, kind, title, root_id, created_at_ms, updated_at_ms
+                     ) VALUES (?1, 'series', 'Series', ?2, 1, 1)",
+                    params![id, root_id],
+                )
+                .expect("collection should insert");
+            connection
+                .execute(
+                    "INSERT INTO collection_items (
+                        collection_id, project_id, season_number, episode_number,
+                        absolute_order, display_title, relative_path, relative_path_key,
+                        created_at_ms, updated_at_ms
+                     ) VALUES (?1, ?2, 1, 1, 1, 'Episode 1', 'S01E01.mp4',
+                        's01e01.mp4', 1, 1)",
+                    params![id, project.id],
+                )
+                .expect("collection item should insert");
+        };
+
+        insert_collection(&collection_id);
+        let auto_play_next = connection
+            .query_row(
+                "SELECT auto_play_next FROM collections WHERE id = ?1",
+                params![collection_id],
+                |row| row.get::<_, i64>(0),
+            )
+            .expect("auto play default should load");
+        assert_eq!(auto_play_next, 0);
+
+        connection
+            .execute(
+                "DELETE FROM collections WHERE id = ?1",
+                params![collection_id],
+            )
+            .expect("collection should delete");
+        assert_eq!(
+            connection
+                .query_row(
+                    "SELECT COUNT(*) FROM projects WHERE id = ?1",
+                    params![project.id],
+                    |row| row.get::<_, i64>(0),
+                )
+                .expect("project count should load"),
+            1
+        );
+
+        let second_collection_id = Uuid::new_v4().to_string();
+        insert_collection(&second_collection_id);
+        connection
+            .execute(
+                "DELETE FROM collection_items
+                 WHERE collection_id = ?1 AND project_id = ?2",
+                params![second_collection_id, project.id],
+            )
+            .expect("membership should delete");
+        assert_eq!(
+            connection
+                .query_row(
+                    "SELECT COUNT(*) FROM projects WHERE id = ?1",
+                    params![project.id],
+                    |row| row.get::<_, i64>(0),
+                )
+                .expect("project count should load"),
+            1
+        );
+
+        connection
+            .execute(
+                "INSERT INTO collection_items (
+                    collection_id, project_id, absolute_order, display_title,
+                    created_at_ms, updated_at_ms
+                 ) VALUES (?1, ?2, 1, 'Episode 1', 1, 1)",
+                params![second_collection_id, project.id],
+            )
+            .expect("membership should reinsert");
+        connection
+            .execute("DELETE FROM projects WHERE id = ?1", params![project.id])
+            .expect("project should delete");
+        assert_eq!(
+            connection
+                .query_row(
+                    "SELECT COUNT(*) FROM collection_items WHERE collection_id = ?1",
+                    params![second_collection_id],
+                    |row| row.get::<_, i64>(0),
+                )
+                .expect("membership count should load"),
+            0
+        );
+        assert_eq!(
+            connection
+                .query_row(
+                    "SELECT COUNT(*) FROM collections WHERE id = ?1",
+                    params![second_collection_id],
+                    |row| row.get::<_, i64>(0),
+                )
+                .expect("collection count should load"),
+            1
+        );
     }
 
     #[test]
