@@ -639,9 +639,10 @@ export default function App() {
           continueWatching: projects.filter(
             (project) => project.playbackState.positionMs > 0,
           ).length,
-          series: null,
-          folders: null,
-          watchLater: null,
+          episodeFiles: 0,
+          series: 0,
+          folders: 0,
+          watchLater: 0,
           unclassified: projects.length,
         }}
         onToggleNavigation={shellController.toggleNavigation}

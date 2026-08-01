@@ -43,6 +43,26 @@ test("media home uses a compact responsive desktop shell", async ({ page }) => {
       name: "媒体库：稍后观看，将在 Phase 7C 启用",
     }),
   ).toBeDisabled();
+  await expect(
+    page.getByRole("button", { name: "字幕，需要打开视频后使用" }),
+  ).toBeDisabled();
+  await expect(
+    page.getByRole("button", { name: "更多命令，需要打开视频后使用" }),
+  ).toBeDisabled();
+  await expect(
+    page.getByRole("searchbox", { name: "搜索媒体库，将在 Phase 7C 启用" }),
+  ).toBeDisabled();
+  await expect(page.getByRole("button", { name: "设置，内容待定义" })).toBeDisabled();
+  await expect(page.getByRole("contentinfo", { name: "媒体库状态" })).toHaveCSS(
+    "height",
+    "26px",
+  );
+  await expect(page.getByRole("contentinfo", { name: "媒体库状态" })).toContainText(
+    "0 个剧集文件",
+  );
+  await expect(page.getByRole("contentinfo", { name: "媒体库状态" })).toContainText(
+    "0 个授权文件夹",
+  );
   await expect(page.locator(".library-item-list")).toBeVisible();
   await expect(page.locator(".project-card")).toHaveCount(0);
 
@@ -51,6 +71,8 @@ test("media home uses a compact responsive desktop shell", async ({ page }) => {
     "width",
     "52px",
   );
+  await expect(page.locator(".desktop-navigation-section")).toBeHidden();
+  await expect(page.locator(".desktop-navigation-note")).toBeHidden();
 });
 
 test("drawers and context menu preserve the mounted video", async ({ page }) => {

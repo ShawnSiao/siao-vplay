@@ -66,9 +66,10 @@ export function LibraryHarness() {
       canDeliverSubtitles={false}
       libraryCounts={{
         continueWatching: 1,
-        series: null,
-        folders: null,
-        watchLater: null,
+        episodeFiles: 0,
+        series: 0,
+        folders: 0,
+        watchLater: 0,
         unclassified: 1,
       }}
       onToggleNavigation={() => undefined}

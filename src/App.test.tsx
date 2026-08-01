@@ -861,6 +861,22 @@ describe("App", () => {
         name: "媒体库：稍后观看，将在 Phase 7C 启用",
       }),
     ).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "字幕，需要打开视频后使用" }),
+    ).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "更多命令，需要打开视频后使用" }),
+    ).toBeDisabled();
+    expect(
+      screen.getByRole("searchbox", { name: "搜索媒体库，将在 Phase 7C 启用" }),
+    ).toBeDisabled();
+    expect(screen.getByRole("button", { name: "设置，内容待定义" })).toBeDisabled();
+    expect(screen.getByRole("contentinfo", { name: "媒体库状态" })).toHaveTextContent(
+      "0 个剧集文件",
+    );
+    expect(screen.getByRole("contentinfo", { name: "媒体库状态" })).toHaveTextContent(
+      "0 个授权文件夹",
+    );
     fireEvent.click(
       screen.getByRole("button", { name: "折叠媒体库导航" }),
     );

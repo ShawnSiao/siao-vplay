@@ -19,6 +19,7 @@ type DesktopShellProps = {
   canDeliverSubtitles: boolean;
   libraryCounts: {
     continueWatching: number;
+    episodeFiles: number;
     series: number | null;
     folders: number | null;
     watchLater: number | null;
@@ -133,9 +134,9 @@ export function DesktopShell({
             <span aria-hidden="true">↗</span>
             <span>打开 URL</span>
           </button>
+          <span className="shell-command-divider" aria-hidden="true" />
           {playerActive ? (
             <>
-              <span className="shell-command-divider" aria-hidden="true" />
               <button
                 aria-label={
                   currentSubtitleCount === null
@@ -218,13 +219,58 @@ export function DesktopShell({
                 </>
               ) : null}
             </>
-          ) : null}
+          ) : (
+            <>
+              <button
+                aria-label="字幕，需要打开视频后使用"
+                className="shell-command shell-context-unavailable"
+                type="button"
+                title="打开视频后管理字幕"
+                disabled
+              >
+                <span aria-hidden="true">CC</span>
+                <span>字幕</span>
+              </button>
+              <button
+                aria-label="更多命令，需要打开视频后使用"
+                className="shell-icon-command shell-context-unavailable"
+                type="button"
+                title="打开视频后使用更多字幕与交付命令"
+                disabled
+              >
+                •••
+              </button>
+            </>
+          )}
         </div>
         {playerActive && drawerTab ? (
           <div className="desktop-commandbar-context" title={mediaTitle ?? undefined}>
             {mediaTitle}
           </div>
         ) : null}
+        <div className="desktop-commandbar-secondary">
+          <label
+            className="shell-search shell-context-unavailable"
+            title="媒体库搜索将在 Phase 7C 启用"
+          >
+            <span aria-hidden="true">⌕</span>
+            <input
+              aria-label="搜索媒体库，将在 Phase 7C 启用"
+              type="search"
+              placeholder="搜索媒体库  Ctrl+K"
+              disabled
+            />
+          </label>
+          <button
+            aria-label="设置，内容待定义"
+            className="shell-icon-command shell-context-unavailable"
+            type="button"
+            title="设置内容待定义"
+            disabled
+          >
+            ⚙
+          </button>
+        </div>
       </header>
 
       <div className="desktop-workspace">
@@ -316,6 +362,24 @@ export function DesktopShell({
           {children}
         </section>
       </div>
+      <footer className="desktop-statusbar" aria-label="媒体库状态">
+        <div>
+          <span>
+            {playerActive
+              ? currentSubtitleCount === null
+                ? "字幕未准备"
+                : currentTranslationCount === null
+                  ? "原文字幕已就绪"
+                  : "原文字幕与简体中文翻译已就绪"
+              : "媒体库就绪"}
+          </span>
+          <span>本地优先 · 不上传视频</span>
+        </div>
+        <div>
+          <span>{libraryCounts.episodeFiles} 个剧集文件</span>
+          <span>{libraryCounts.folders ?? 0} 个授权文件夹</span>
+        </div>
+      </footer>
       {dropFeedback ? (
         <div
           className={`desktop-drop-feedback ${dropFeedback.tone}`}
