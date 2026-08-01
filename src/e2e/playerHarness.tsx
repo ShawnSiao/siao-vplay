@@ -8,7 +8,13 @@ import type {
   ShellContextMenu,
   ShellDrawerTab,
 } from "../features/shell/useShellController";
-import type { MediaPreparation, Project } from "../types";
+import type {
+  CollectionDetail,
+  EpisodeReference,
+  LibraryMediaSummary,
+  MediaPreparation,
+  Project,
+} from "../types";
 import "../styles.css";
 
 const project: Project = {
@@ -90,6 +96,64 @@ const preparation: MediaPreparation = {
   reusedProxy: false,
 };
 
+const collectionDetail: CollectionDetail = {
+  summary: {
+    id: "e2e-series",
+    kind: "series",
+    title: "雨夜列车",
+    rootId: "e2e-root",
+    systemKey: null,
+    posterPath: null,
+    sortMode: "episode",
+    autoPlayNext: false,
+    lastOpenedAtMs: 1,
+    createdAtMs: 1,
+    updatedAtMs: 1,
+    itemCount: 2,
+    seasonCount: 1,
+    watchedCount: 0,
+    totalDurationMs: 240_000,
+  },
+  seasons: [{ seasonNumber: 1, episodeCount: 2, watchedCount: 0, totalDurationMs: 240_000 }],
+};
+
+function episodeSummary(
+  projectId: string,
+  episodeNumber: number,
+  title: string,
+): LibraryMediaSummary {
+  return {
+    projectId,
+    projectTitle: title,
+    displayName: `${String(episodeNumber).padStart(2, "0")}.mp4`,
+    mediaLocator: `${String(episodeNumber).padStart(2, "0")}.mp4`,
+    mediaAvailable: true,
+    posterPath: null,
+    positionMs: projectId === project.id ? 15_000 : 0,
+    durationMs: 120_000,
+    completedAtMs: null,
+    lastOpenedAtMs: 1,
+    createdAtMs: 1,
+    originalSubtitleAvailable: true,
+    chineseTranslationAvailable: false,
+    collectionId: collectionDetail.summary.id,
+    collectionTitle: collectionDetail.summary.title,
+    seasonNumber: 1,
+    episodeNumber,
+    absoluteOrder: episodeNumber - 1,
+    episodeTitle: title,
+    itemAvailability: "available",
+  };
+}
+
+const nextEpisode: EpisodeReference = {
+  projectId: "e2e-project-next",
+  displayTitle: "驶入雨幕",
+  seasonNumber: 1,
+  episodeNumber: 2,
+  absoluteOrder: 1,
+};
+
 function requestedDropFeedback(): MediaDropFeedback | null {
   const drop = new URLSearchParams(window.location.search).get("drop");
   return drop === "ready"
@@ -151,6 +215,7 @@ export function PlayerHarness() {
       onSearchQueryChange={() => undefined}
       onOpenSearchResult={() => undefined}
       onOpenFile={() => undefined}
+      onOpenFolder={() => undefined}
       onOpenUrl={() => undefined}
       onManageSubtitles={() => undefined}
       onManageTranslation={() => undefined}
@@ -164,6 +229,16 @@ export function PlayerHarness() {
         currentTranslation={null}
         drawerTab={drawerTab}
         contextMenu={contextMenu}
+        episodeNavigation={{
+          detail: collectionDetail,
+          episodes: [
+            episodeSummary(project.id, 1, "站台相遇"),
+            episodeSummary(nextEpisode.projectId, 2, nextEpisode.displayTitle),
+          ],
+          neighbors: { previous: null, next: nextEpisode },
+          loading: false,
+          error: null,
+        }}
         onBack={() => undefined}
         onCloseDrawer={() => setDrawerTab(null)}
         onSelectDrawer={setDrawerTab}
@@ -172,6 +247,7 @@ export function PlayerHarness() {
         onManageSubtitles={() => undefined}
         onNeedProxy={() => undefined}
         onPersist={async () => undefined}
+        onSwitchEpisode={async () => undefined}
         onError={() => undefined}
       />
     </DesktopShell>

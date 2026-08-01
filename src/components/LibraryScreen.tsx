@@ -23,6 +23,7 @@ type LibraryScreenProps = {
   error: string | null;
   previewMode: boolean;
   onImport: () => void;
+  onImportFolder: () => void;
   onImportUrl: () => void;
   onOpen: (media: LibraryMediaSummary) => void;
   onRelink: (media: LibraryMediaSummary) => void;
@@ -290,6 +291,7 @@ export function LibraryScreen(props: LibraryScreenProps) {
     error,
     previewMode,
     onImport,
+    onImportFolder,
     onImportUrl,
     onOpen,
     onRelink,
@@ -317,6 +319,7 @@ export function LibraryScreen(props: LibraryScreenProps) {
   const visibleCollections = section === "watch_later" ? (watchLater ? [watchLater] : []) : collections;
   const showHome = section === "home" && currentCollection === null;
   const showCollections = (section === "series" || section === "watch_later") && currentCollection === null;
+  const showFolders = section === "folders" && currentCollection === null;
   const showUnclassified = (section === "unclassified" || section === "home") && currentCollection === null;
   const latestContinue = home.continueWatching[0] ?? null;
 
@@ -326,7 +329,7 @@ export function LibraryScreen(props: LibraryScreenProps) {
         <main className="library-content">
           <header className="library-header">
             <div>
-              <h1>{currentCollection?.summary.title ?? (section === "series" ? "剧集与合集" : section === "watch_later" ? "稍后观看" : section === "unclassified" ? "未归类视频" : "媒体库")}</h1>
+              <h1>{currentCollection?.summary.title ?? (section === "series" ? "剧集与合集" : section === "folders" ? "授权文件夹" : section === "watch_later" ? "稍后观看" : section === "unclassified" ? "未归类视频" : "媒体库")}</h1>
               <p>
                 {currentCollection
                   ? `${currentCollection.summary.itemCount} 集 · 自动连播${currentCollection.summary.autoPlayNext ? "已开启" : "关闭"}`
@@ -378,11 +381,10 @@ export function LibraryScreen(props: LibraryScreenProps) {
               ) : (
                 <>
                   <button
-                    aria-label="打开文件夹，将在 Phase 7D 启用"
-                    className="button unavailable"
+                    aria-label="打开剧集文件夹"
+                    className="button primary"
                     type="button"
-                    title="文件夹扫描将在 Phase 7D 启用"
-                    disabled
+                    onClick={onImportFolder}
                   >
                     打开文件夹
                   </button>
@@ -485,7 +487,7 @@ export function LibraryScreen(props: LibraryScreenProps) {
                   ))}
                 </div>
               ) : (
-                <div className="library-series-empty"><strong>尚未建立剧集或合集</strong><p>新建手动合集，或在 Phase 7D 从文件夹识别剧集。</p></div>
+                <div className="library-series-empty"><strong>尚未建立剧集或合集</strong><p>打开本地剧集文件夹，先预检识别结果再确认导入。</p></div>
               )}
             </section>
           ) : null}
@@ -501,6 +503,42 @@ export function LibraryScreen(props: LibraryScreenProps) {
                 </div>
               ) : (
                 <div className="library-series-empty"><strong>{section === "watch_later" ? "还没有稍后观看的视频" : "尚未建立合集"}</strong><p>{section === "watch_later" ? "可从未归类视频或播放器中加入。" : "使用右上角「新建合集」开始整理。"}</p></div>
+              )}
+            </section>
+          ) : null}
+
+          {showFolders ? (
+            <section className="project-section" aria-labelledby="folders-title">
+              <div className="section-heading">
+                <div>
+                  <h2 id="folders-title">授权文件夹</h2>
+                  <p>只保存根目录和相对路径，不复制或修改视频。</p>
+                </div>
+                <span>{home.folders.length} 个</span>
+              </div>
+              {home.folders.length ? (
+                <div className="library-folder-list">
+                  {home.folders.map((folder) => (
+                    <article className="library-folder-row" key={folder.id}>
+                      <span className="library-folder-icon" aria-hidden="true">▰</span>
+                      <span className="library-folder-title">
+                        <strong>{folder.displayName}</strong>
+                        <small title={folder.path}>{folder.path}</small>
+                      </span>
+                      <span>{folder.itemCount} 集</span>
+                      <span className={`library-item-status ${folder.availability === "available" ? "ready" : "warning"}`}>
+                        {folder.availability === "available" ? "可用" : "离线"}
+                      </span>
+                      <small>{folder.lastScannedAtMs ? `上次扫描 ${formatRecentTime(folder.lastScannedAtMs)}` : "尚未扫描"}</small>
+                    </article>
+                  ))}
+                </div>
+              ) : (
+                <div className="library-series-empty">
+                  <strong>还没有授权文件夹</strong>
+                  <p>选择本地剧集目录后，会先预检识别结果，再由用户确认导入。</p>
+                  <button className="button primary" type="button" onClick={onImportFolder}>打开文件夹</button>
+                </div>
               )}
             </section>
           ) : null}

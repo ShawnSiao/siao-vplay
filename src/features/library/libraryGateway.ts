@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
 import { isDesktopApp } from "../../lib/desktop";
 import type {
@@ -11,6 +12,7 @@ import type {
   LibraryHome,
   LibraryMediaSummary,
   LibraryScanPreview,
+  LibraryScanProgress,
   LibraryImportResult,
   LibrarySearchResult,
 } from "../../types";
@@ -137,6 +139,17 @@ export async function scanLibraryFolder(
 
 export async function cancelLibraryScan(scanId: string): Promise<void> {
   await invoke("cancel_library_scan", { scanId });
+}
+
+export async function listenLibraryScanProgress(
+  onProgress: (progress: LibraryScanProgress) => void,
+): Promise<UnlistenFn> {
+  if (!isDesktopApp) {
+    return () => undefined;
+  }
+  return listen<LibraryScanProgress>("library-scan-progress", (event) => {
+    onProgress(event.payload);
+  });
 }
 
 export async function confirmLibraryImport(

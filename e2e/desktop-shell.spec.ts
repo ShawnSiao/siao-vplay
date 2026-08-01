@@ -8,23 +8,11 @@ test("media home uses a compact responsive desktop shell", async ({ page }) => {
     "height",
     "44px",
   );
-  await expect(
-    page.getByRole("button", {
-      name: "打开文件夹，文件夹与剧集导入将在 Phase 7D 启用",
-    }),
-  ).toBeDisabled();
-  await expect(
-    page.getByRole("button", {
-      name: "打开文件夹，文件夹与剧集导入将在 Phase 7D 启用",
-    }),
-  ).toHaveCSS("opacity", "0.78");
-  await expect(
-    page.getByRole("button", {
-      name: "打开文件夹，文件夹与剧集导入将在 Phase 7D 启用",
-    }),
-  ).toHaveCSS(
+  const openFolder = page.getByRole("button", { name: "打开剧集文件夹" }).first();
+  await expect(openFolder).toBeEnabled();
+  await expect(openFolder).toHaveCSS(
     "background-image",
-    "linear-gradient(rgba(195, 241, 135, 0.72), rgba(169, 220, 105, 0.68))",
+    "linear-gradient(rgb(195, 241, 135), rgb(169, 220, 105))",
   );
   await expect(
     page.getByRole("heading", { name: "专注观看，需要时再理解。" }),
@@ -66,6 +54,19 @@ test("media home uses a compact responsive desktop shell", async ({ page }) => {
   await expect(page.locator(".library-item-list")).toBeVisible();
   await expect(page.locator(".project-card")).toHaveCount(0);
 
+  await openFolder.click();
+  const importDialog = page.getByRole("dialog", { name: "确认剧集识别结果" });
+  await expect(importDialog).toBeVisible();
+  await expect(importDialog).toContainText("1待导入");
+  await expect(importDialog).toContainText("1待确认");
+  const importButton = importDialog.getByRole("button", { name: "导入 1 集" });
+  await expect(importButton).toBeDisabled();
+  await importDialog.getByLabel("Special.mp4 集号").fill("2");
+  await importDialog.getByRole("checkbox", { name: "确认 Special.mp4" }).check();
+  await expect(importButton).toBeEnabled();
+  await importButton.click();
+  await expect(importDialog).toHaveCount(0);
+
   await page.setViewportSize({ width: 1100, height: 720 });
   await expect(page.getByRole("complementary", { name: "媒体库导航" })).toHaveCSS(
     "width",
@@ -92,7 +93,7 @@ test("drawers and context menu preserve the mounted video", async ({ page }) => 
   ).toHaveCount(0);
   await expect(page.locator(".media-pills")).toHaveCount(0);
   await expect(page.getByRole("button", { name: /上一集/ })).toBeDisabled();
-  await expect(page.getByRole("button", { name: /下一集/ })).toBeDisabled();
+  await expect(page.getByRole("button", { name: /下一集/ })).toBeEnabled();
   await expect(page.getByRole("button", { name: "进入全屏" })).toBeVisible();
 
   await page.getByRole("button", { name: "剧集", exact: true }).click();
@@ -103,6 +104,9 @@ test("drawers and context menu preserve the mounted video", async ({ page }) => 
     "aria-selected",
     "true",
   );
+  await expect(episodesDrawer).toContainText("雨夜列车");
+  await expect(episodesDrawer.getByLabel("当前季剧集")).toContainText("正在播放");
+  await expect(episodesDrawer.getByLabel("当前季剧集")).toContainText("未观看");
   await episodesDrawer.getByRole("tab", { name: "理解" }).click();
   await expect(episodesDrawer.getByRole("tab", { name: "理解" })).toHaveAttribute(
     "aria-selected",

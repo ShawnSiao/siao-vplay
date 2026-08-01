@@ -41,6 +41,7 @@ type DesktopShellProps = {
   onSearchQueryChange: (query: string) => void;
   onOpenSearchResult: (result: LibrarySearchResult) => void;
   onOpenFile: () => void;
+  onOpenFolder: () => void;
   onOpenUrl: () => void;
   onManageSubtitles: () => void;
   onManageTranslation: () => void;
@@ -74,6 +75,7 @@ export function DesktopShell({
   onSearchQueryChange,
   onOpenSearchResult,
   onOpenFile,
+  onOpenFolder,
   onOpenUrl,
   onManageSubtitles,
   onManageTranslation,
@@ -141,20 +143,15 @@ export function DesktopShell({
             <span aria-hidden="true">＋</span>
             <span>打开文件</span>
           </button>
-          <span
-            className="shell-disabled-command"
-            title="文件夹与剧集导入将在 Phase 7D 启用"
+          <button
+            aria-label="打开剧集文件夹"
+            className="shell-command shell-command-primary"
+            type="button"
+            onClick={onOpenFolder}
           >
-            <button
-              aria-label="打开文件夹，文件夹与剧集导入将在 Phase 7D 启用"
-              className="shell-command shell-command-primary shell-command-unavailable"
-              type="button"
-              disabled
-            >
-              <span aria-hidden="true">▰</span>
-              <span>打开文件夹</span>
-            </button>
-          </span>
+            <span aria-hidden="true">▰</span>
+            <span>打开文件夹</span>
+          </button>
           <button
             aria-label="粘贴视频 URL"
             className="shell-command"
@@ -363,8 +360,9 @@ export function DesktopShell({
             <button
               aria-label="媒体库：文件夹"
               type="button"
-              title="文件夹将在 Phase 7D 启用"
-              disabled
+              title="授权文件夹"
+              className={activeView === "library" && librarySection === "folders" ? "active" : ""}
+              onClick={() => onSelectLibrarySection("folders")}
             >
               <span aria-hidden="true">▰</span>
               <span className="desktop-navigation-label">文件夹</span>
@@ -410,7 +408,7 @@ export function DesktopShell({
               {runtimeLabel}
             </strong>
             <span>
-              文件夹与剧集导入将在后续阶段启用。
+              已授权 {libraryCounts.folders ?? 0} 个本地文件夹。
               {appStatus ? ` · v${appStatus.version}` : ""}
             </span>
           </div>

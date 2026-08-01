@@ -126,6 +126,18 @@ export async function chooseLocalVideo(): Promise<string | null> {
   return typeof selected === "string" ? selected : null;
 }
 
+export async function chooseLocalFolder(): Promise<string | null> {
+  if (!isDesktopApp) {
+    return null;
+  }
+  const selected = await open({
+    multiple: false,
+    directory: true,
+    title: "选择剧集文件夹",
+  });
+  return typeof selected === "string" ? selected : null;
+}
+
 export async function chooseSubtitleFile(): Promise<string | null> {
   if (!isDesktopApp) {
     return null;

@@ -28,6 +28,7 @@ const desktopMocks = vi.hoisted(() => ({
   setMainWindowMediaTitle: vi.fn(),
   listProjects: vi.fn(),
   getProject: vi.fn(),
+  chooseLocalFolder: vi.fn(),
   chooseLocalVideo: vi.fn(),
   chooseSubtitleFile: vi.fn(),
   createLocalProject: vi.fn(),
@@ -118,6 +119,10 @@ const libraryGatewayMocks = vi.hoisted(() => ({
   removeProjectFromCollection: vi.fn(),
   getEpisodeNeighbors: vi.fn(),
   setWatchLater: vi.fn(),
+  scanLibraryFolder: vi.fn(),
+  cancelLibraryScan: vi.fn(),
+  listenLibraryScanProgress: vi.fn(),
+  confirmLibraryImport: vi.fn(),
 }));
 
 vi.mock("./lib/desktop", () => ({
@@ -630,6 +635,7 @@ beforeEach(() => {
   desktopMocks.listProjects.mockResolvedValue([project]);
   libraryGatewayMocks.getLibraryHome.mockResolvedValue(libraryHomeFor());
   libraryGatewayMocks.searchLibrary.mockResolvedValue([]);
+  libraryGatewayMocks.listenLibraryScanProgress.mockResolvedValue(() => undefined);
   libraryGatewayMocks.createCollection.mockResolvedValue({
     id: "10c4a3b9-75ac-4faf-8672-1c86c7a849cb",
     kind: "manual",
@@ -648,6 +654,7 @@ beforeEach(() => {
   libraryGatewayMocks.removeProjectFromCollection.mockResolvedValue(undefined);
   libraryGatewayMocks.setWatchLater.mockResolvedValue(null);
   desktopMocks.getProject.mockResolvedValue(project);
+  desktopMocks.chooseLocalFolder.mockResolvedValue(null);
   desktopMocks.chooseLocalVideo.mockResolvedValue(null);
   desktopMocks.chooseSubtitleFile.mockResolvedValue(null);
   desktopMocks.createLocalProject.mockResolvedValue(project);
@@ -657,6 +664,7 @@ beforeEach(() => {
   desktopMocks.inspectYouTubeUrl.mockResolvedValue(youtubePreview);
   desktopMocks.importYouTubeUrl.mockResolvedValue(remoteProject);
   desktopMocks.cancelYouTubeImport.mockResolvedValue(true);
+  libraryGatewayMocks.cancelLibraryScan.mockResolvedValue(undefined);
   desktopMocks.ensureProjectPoster.mockResolvedValue({
     ...project,
     mediaSource: {
@@ -931,10 +939,11 @@ describe("App", () => {
       screen.getByRole("banner", { name: "应用命令栏" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", {
-        name: "打开文件夹，文件夹与剧集导入将在 Phase 7D 启用",
-      }),
-    ).toBeDisabled();
+      screen.getAllByRole("button", { name: "打开剧集文件夹" }),
+    ).toHaveLength(2);
+    for (const button of screen.getAllByRole("button", { name: "打开剧集文件夹" })) {
+      expect(button).toBeEnabled();
+    }
     expect(
       screen.getByRole("button", {
         name: "媒体库：稍后观看",
@@ -963,6 +972,88 @@ describe("App", () => {
       screen.getByRole("button", { name: "展开媒体库导航" }),
     ).toBeInTheDocument();
     expect(await screen.findAllByText("雨站台")).not.toHaveLength(0);
+  });
+
+  it("scans, previews, and confirms a real folder import workflow", async () => {
+    desktopMocks.chooseLocalFolder.mockResolvedValue("W:\\Series\\Rain");
+    libraryGatewayMocks.scanLibraryFolder.mockImplementation(async (input) => ({
+      scanId: input.scanId,
+      previewToken: "40000000-0000-4000-8000-000000000001",
+      rootPath: input.rootPath,
+      rootDisplayName: "Rain",
+      suggestedCollectionTitle: "Rain",
+      candidates: [
+        {
+          candidateId: "40000000-0000-4000-8000-000000000002",
+          relativePath: "Rain.S01E01.mp4",
+          displayTitle: "Rain",
+          seasonNumber: 1,
+          episodeNumber: 1,
+          absoluteOrder: 0,
+          recognition: "sxx_exx",
+          needsConfirmation: false,
+          confirmationReason: null,
+          sourceSizeBytes: 1_024,
+          sourceModifiedAtMs: 10,
+          quickFingerprint: "a".repeat(64),
+        },
+      ],
+      ignoredEntries: [],
+      ignoredCount: 0,
+      needsConfirmationCount: 0,
+      expiresAtMs: 1_900_000_000_000,
+    }));
+    const summary = {
+      id: "40000000-0000-4000-8000-000000000003",
+      kind: "series" as const,
+      title: "Rain",
+      rootId: "40000000-0000-4000-8000-000000000004",
+      systemKey: null,
+      posterPath: null,
+      sortMode: "episode" as const,
+      autoPlayNext: false,
+      lastOpenedAtMs: null,
+      createdAtMs: 10,
+      updatedAtMs: 10,
+      itemCount: 1,
+      seasonCount: 1,
+      watchedCount: 0,
+      totalDurationMs: null,
+    };
+    libraryGatewayMocks.confirmLibraryImport.mockResolvedValue({
+      rootId: summary.rootId,
+      collection: {
+        summary,
+        seasons: [
+          {
+            seasonNumber: 1,
+            episodeCount: 1,
+            watchedCount: 0,
+            totalDurationMs: null,
+          },
+        ],
+      },
+      importedItemCount: 1,
+      createdProjectCount: 1,
+      reusedProjectCount: 0,
+    });
+    libraryGatewayMocks.listCollectionEpisodes.mockResolvedValue([]);
+    render(<App />);
+
+    const commandbar = screen.getByRole("banner", { name: "应用命令栏" });
+    fireEvent.click(within(commandbar).getByRole("button", { name: "打开剧集文件夹" }));
+    expect(await screen.findByRole("heading", { name: "确认剧集识别结果" })).toBeInTheDocument();
+    expect(screen.getByText("Rain.S01E01.mp4")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "导入 1 集" }));
+
+    await waitFor(() => expect(libraryGatewayMocks.confirmLibraryImport).toHaveBeenCalledOnce());
+    expect(await screen.findByRole("heading", { name: "Rain" })).toBeInTheDocument();
+    expect(libraryGatewayMocks.confirmLibraryImport).toHaveBeenCalledWith(
+      expect.objectContaining({
+        collectionTitle: "Rain",
+        confirmFingerprintDuplicates: false,
+      }),
+    );
   });
 
   it("shows a compact media library backed by real projects", async () => {
@@ -1029,6 +1120,138 @@ describe("App", () => {
         "雨站台",
       ),
     );
+  });
+
+  it("persists the current episode before preparing the next one", async () => {
+    const collectionId = "60000000-0000-4000-8000-000000000001";
+    const rootId = "60000000-0000-4000-8000-000000000002";
+    const nextProject: Project = {
+      ...project,
+      id: "60000000-0000-4000-8000-000000000003",
+      title: "雨站台 · 第二集",
+      mediaSource: {
+        ...project.mediaSource,
+        id: "60000000-0000-4000-8000-000000000004",
+        locator: "W:\\Series\\Rain.S01E02.mp4",
+        displayName: "Rain.S01E02.mp4",
+      },
+      playbackState: { ...project.playbackState, positionMs: 0 },
+    };
+    const firstEpisode = {
+      ...mediaSummaryFor(),
+      collectionId,
+      collectionTitle: "Rain",
+      seasonNumber: 1,
+      episodeNumber: 1,
+      absoluteOrder: 0,
+      episodeTitle: "第一集",
+      itemAvailability: "available" as const,
+    };
+    const secondEpisode = {
+      ...mediaSummaryFor(nextProject),
+      collectionId,
+      collectionTitle: "Rain",
+      seasonNumber: 1,
+      episodeNumber: 2,
+      absoluteOrder: 1,
+      episodeTitle: "第二集",
+      itemAvailability: "available" as const,
+    };
+    const summary = {
+      id: collectionId,
+      kind: "series" as const,
+      title: "Rain",
+      rootId,
+      systemKey: null,
+      posterPath: null,
+      sortMode: "episode" as const,
+      autoPlayNext: false,
+      lastOpenedAtMs: null,
+      createdAtMs: 1,
+      updatedAtMs: 1,
+      itemCount: 2,
+      seasonCount: 1,
+      watchedCount: 0,
+      totalDurationMs: 360_000,
+    };
+    const detail = {
+      summary,
+      seasons: [
+        {
+          seasonNumber: 1,
+          episodeCount: 2,
+          watchedCount: 0,
+          totalDurationMs: 360_000,
+        },
+      ],
+    };
+    libraryGatewayMocks.getLibraryHome.mockResolvedValue({
+      ...libraryHomeFor(),
+      collections: [summary],
+      unclassified: [],
+      unclassifiedCount: 0,
+      collectionItemCount: 2,
+    });
+    libraryGatewayMocks.getCollectionDetail.mockResolvedValue(detail);
+    libraryGatewayMocks.listCollectionEpisodes.mockResolvedValue([
+      firstEpisode,
+      secondEpisode,
+    ]);
+    libraryGatewayMocks.getEpisodeNeighbors.mockResolvedValue({
+      previous: null,
+      next: {
+        projectId: nextProject.id,
+        displayTitle: "第二集",
+        seasonNumber: 1,
+        episodeNumber: 2,
+        absoluteOrder: 1,
+      },
+    });
+    desktopMocks.getProject.mockImplementation(async (projectId: string) =>
+      projectId === nextProject.id ? nextProject : project,
+    );
+    const order: string[] = [];
+    desktopMocks.updatePlaybackState.mockImplementation(async (projectId: string) => {
+      if (projectId === project.id) {
+        order.push("persist-current");
+      }
+      return projectId === nextProject.id ? nextProject : project;
+    });
+    desktopMocks.markProjectOpened.mockImplementation(async (projectId: string) => {
+      if (projectId === nextProject.id) {
+        order.push("mark-next-opened");
+        return nextProject;
+      }
+      return project;
+    });
+    desktopMocks.prepareProjectMedia.mockImplementation(async (projectId: string) => {
+      if (projectId === nextProject.id) {
+        order.push("prepare-next");
+      }
+      return {
+        ...preparation,
+        inspection: { ...preparation.inspection, projectId },
+        playbackPath:
+          projectId === nextProject.id
+            ? nextProject.mediaSource.locator
+            : preparation.playbackPath,
+      };
+    });
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "媒体库：剧集" }));
+    fireEvent.click(await screen.findByRole("button", { name: "打开合集 Rain" }));
+    fireEvent.click(await screen.findByRole("button", { name: "打开 雨站台" }));
+    const nextButton = await screen.findByRole("button", { name: "下一集" });
+    await waitFor(() => expect(nextButton).toBeEnabled());
+    fireEvent.click(nextButton);
+
+    await waitFor(() => expect(order).toContain("prepare-next"));
+    expect(order).toEqual([
+      "persist-current",
+      "mark-next-opened",
+      "prepare-next",
+    ]);
   });
 
   it("searches the real library gateway and opens a media result", async () => {
