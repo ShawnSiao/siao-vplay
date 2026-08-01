@@ -16,6 +16,7 @@ import {
   deleteProject,
   ensureProjectPoster,
   getAppStatus,
+  getTranscriptionJob,
   getProject,
   getMediaRuntimeStatus,
   isDesktopApp,
@@ -33,10 +34,18 @@ import type {
   MediaRuntimeStatus,
   Project,
   SubtitleVersion,
+  TranscriptionJob,
   TranslationTask,
 } from "./types";
 
 type Screen = "library" | "preparing" | "player";
+
+const activeTranscriptionStatuses = new Set<TranscriptionJob["status"]>([
+  "queued",
+  "extracting",
+  "transcribing",
+  "validating",
+]);
 
 export default function App() {
   const operationTokenRef = useRef(0);
@@ -61,6 +70,9 @@ export default function App() {
     [],
   );
   const [subtitleDialogOpen, setSubtitleDialogOpen] = useState(false);
+  const [trackedTranscriptionJobId, setTrackedTranscriptionJobId] = useState<
+    string | null
+  >(null);
   const [translationDialogOpen, setTranslationDialogOpen] = useState(false);
   const [translationSegmentIds, setTranslationSegmentIds] = useState<
     string[] | undefined
@@ -495,6 +507,75 @@ export default function App() {
     [mergeSubtitleVersion, refreshProjects],
   );
 
+  useEffect(() => {
+    if (
+      !trackedTranscriptionJobId ||
+      subtitleDialogOpen ||
+      !activeProjectId
+    ) {
+      return undefined;
+    }
+
+    let active = true;
+    let timer: number | undefined;
+    const poll = async () => {
+      try {
+        const job = await getTranscriptionJob(trackedTranscriptionJobId);
+        if (!active) {
+          return;
+        }
+        if (activeTranscriptionStatuses.has(job.status)) {
+          timer = window.setTimeout(() => void poll(), 900);
+          return;
+        }
+
+        setTrackedTranscriptionJobId(null);
+        if (
+          job.status !== "completed" ||
+          !job.subtitleVersionId ||
+          job.projectId !== activeProjectId
+        ) {
+          return;
+        }
+        const versions = await listSubtitleVersions(activeProjectId);
+        if (!active) {
+          return;
+        }
+        const version = versions.find(
+          (item) => item.id === job.subtitleVersionId,
+        );
+        if (!version) {
+          throw new Error("生成的字幕版本暂时无法读取");
+        }
+        if (!subtitleVersions.some((item) => item.id === version.id)) {
+          await handleSubtitleVersionCreated(
+            version,
+            `已生成 ${version.segments.length} 条原文字幕草稿，可以开始抽查。`,
+          );
+        }
+      } catch (error) {
+        if (active) {
+          setToast(commandError(error).message);
+          timer = window.setTimeout(() => void poll(), 1_500);
+        }
+      }
+    };
+
+    void poll();
+    return () => {
+      active = false;
+      if (timer !== undefined) {
+        window.clearTimeout(timer);
+      }
+    };
+  }, [
+    activeProjectId,
+    handleSubtitleVersionCreated,
+    subtitleDialogOpen,
+    subtitleVersions,
+    trackedTranscriptionJobId,
+  ]);
+
   return (
     <div className="app-shell">
       {screen === "library" ? (
@@ -567,6 +648,7 @@ export default function App() {
             ) ?? null
           }
           onClose={() => setSubtitleDialogOpen(false)}
+          onTranscriptionTracked={setTrackedTranscriptionJobId}
           onImported={(version) => {
             void handleSubtitleVersionCreated(
               version,

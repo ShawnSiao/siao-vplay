@@ -19,6 +19,7 @@ import type {
 type TranscriptionPanelProps = {
   projectId: string;
   currentVersion: SubtitleVersion | null;
+  onJobTracked: (jobId: string) => void;
   onVersionReady: (version: SubtitleVersion) => void;
 };
 
@@ -113,6 +114,7 @@ function userFacingError(error: unknown): string {
 export function TranscriptionPanel({
   projectId,
   currentVersion,
+  onJobTracked,
   onVersionReady,
 }: TranscriptionPanelProps) {
   const reportedVersionRef = useRef<string | null>(null);
@@ -176,6 +178,12 @@ export function TranscriptionPanel({
       active = false;
     };
   }, [currentVersion, projectId]);
+
+  useEffect(() => {
+    if (job && activeStatuses.has(job.status)) {
+      onJobTracked(job.id);
+    }
+  }, [job, onJobTracked]);
 
   useEffect(() => {
     if (!job || !activeStatuses.has(job.status)) {
@@ -389,7 +397,7 @@ export function TranscriptionPanel({
         <span className="status-dot"></span>
         <div>
           <strong>语音识别只在本机运行</strong>
-          <p>视频不会上传。英语、泰语、日语和韩语可直接识别，也可自动判断以中文讲解为主的混合教程。</p>
+          <p>视频不会上传。支持英、泰、日、韩，也可自动识别中文讲解为主的混合教程。</p>
         </div>
       </div>
 
@@ -422,8 +430,7 @@ export function TranscriptionPanel({
           ))}
         </select>
         <small>
-          中文讲解夹杂外语示例时可选自动识别；单一原声选择固定语言更稳定。
-          自动识别按视频主要语种生成字幕。
+          混合讲解选「自动识别」；单一原声选择固定语言更稳定。
         </small>
       </label>
 

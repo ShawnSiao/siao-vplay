@@ -34,6 +34,7 @@ type SubtitleImportDialogProps = {
   currentVersion: SubtitleVersion | null;
   onClose: () => void;
   onImported: (version: SubtitleVersion) => void;
+  onTranscriptionTracked: (jobId: string) => void;
 };
 
 const languageOptions = [
@@ -79,6 +80,7 @@ export function SubtitleImportDialog({
   currentVersion,
   onClose,
   onImported,
+  onTranscriptionTracked,
 }: SubtitleImportDialogProps) {
   const [workflow, setWorkflow] = useState<"import" | "transcribe">("import");
   const [selection, setSelection] = useState<SubtitleSelection | null>(null);
@@ -201,11 +203,7 @@ export function SubtitleImportDialog({
       eyebrow="导入已有字幕，或从视频原声生成"
       onClose={workflow === "import" && busy ? () => undefined : onClose}
       actions={
-        workflow === "transcribe" ? (
-          <button className="button quiet" type="button" onClick={onClose}>
-            关闭
-          </button>
-        ) : (
+        workflow === "transcribe" ? undefined : (
           <>
             <button
               className="button quiet"
@@ -288,13 +286,6 @@ export function SubtitleImportDialog({
             {currentVersion.versionNumber} ·{" "}
             {currentVersion.status === "draft" ? "草稿" : "已检查"}
           </small>
-          {workflow === "transcribe" ? (
-            <div className="subtitle-current-samples">
-              {currentVersion.segments.slice(0, 3).map((segment) => (
-                <p key={segment.id}>{segment.text}</p>
-              ))}
-            </div>
-          ) : null}
         </div>
       ) : workflow === "import" ? (
         <p className="dialog-copy">
@@ -466,6 +457,7 @@ export function SubtitleImportDialog({
         <TranscriptionPanel
           projectId={projectId}
           currentVersion={currentVersion}
+          onJobTracked={onTranscriptionTracked}
           onVersionReady={onImported}
         />
       )}

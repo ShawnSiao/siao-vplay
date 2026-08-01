@@ -872,6 +872,41 @@ describe("App", () => {
     expect(screen.getByText(/H264\s*\/ AAC/)).toBeInTheDocument();
   });
 
+  it("toggles playback from the video surface and keeps the button label in sync", async () => {
+    let paused = true;
+    const pausedState = vi
+      .spyOn(HTMLMediaElement.prototype, "paused", "get")
+      .mockImplementation(() => paused);
+    const play = vi
+      .spyOn(HTMLMediaElement.prototype, "play")
+      .mockImplementation(async function (this: HTMLMediaElement) {
+        paused = false;
+        fireEvent.play(this);
+      });
+    const pause = vi
+      .spyOn(HTMLMediaElement.prototype, "pause")
+      .mockImplementation(function (this: HTMLMediaElement) {
+        paused = true;
+        fireEvent.pause(this);
+      });
+
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "继续观看" }));
+    const video = await screen.findByLabelText("视频画面，单击播放或暂停");
+
+    fireEvent.click(video);
+    await waitFor(() => expect(play).toHaveBeenCalledTimes(1));
+    expect(screen.getByRole("button", { name: "暂停" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "暂停" }));
+    expect(pause).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("button", { name: "播放" })).toBeInTheDocument();
+
+    pausedState.mockRestore();
+    play.mockRestore();
+    pause.mockRestore();
+  });
+
   it("shows original, Chinese, and bilingual subtitles and persists the choice", async () => {
     const captionProject: Project = {
       ...project,
@@ -1659,6 +1694,46 @@ describe("App", () => {
     expect(await screen.findByText("任务已取消")).toBeInTheDocument();
     expect(
       screen.getByText("临时音频和识别文件已经清理。"),
+    ).toBeInTheDocument();
+  });
+
+  it("refreshes player subtitles when generation finishes after the dialog closes", async () => {
+    const completedJob: TranscriptionJob = {
+      ...transcriptionJob,
+      status: "completed",
+      stage: "completed",
+      progress: 1,
+      subtitleVersionId: subtitleVersion.id,
+      completedAtMs: 1_785_354_220_000,
+    };
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "继续观看" }));
+    fireEvent.click(await screen.findByRole("button", { name: "添加字幕" }));
+    fireEvent.click(screen.getByRole("tab", { name: "从视频生成" }));
+    fireEvent.change(await screen.findByLabelText(/视频原声语言/), {
+      target: { value: "ja" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "生成原文字幕" }));
+
+    await waitFor(() =>
+      expect(desktopMocks.startTranscription).toHaveBeenCalled(),
+    );
+    desktopMocks.getTranscriptionJob.mockResolvedValue(completedJob);
+    desktopMocks.listSubtitleVersions.mockResolvedValue([subtitleVersion]);
+
+    expect(screen.getAllByRole("button", { name: "关闭" })).toHaveLength(1);
+    fireEvent.click(screen.getByRole("button", { name: "关闭" }));
+
+    await waitFor(() =>
+      expect(desktopMocks.getTranscriptionJob).toHaveBeenCalledWith(
+        transcriptionJob.id,
+      ),
+    );
+    expect(
+      await screen.findByText("已生成 1 条原文字幕草稿，可以开始抽查。"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "原文字幕 · 1" }),
     ).toBeInTheDocument();
   });
 
