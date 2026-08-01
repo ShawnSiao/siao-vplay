@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 
 test("media home uses a compact responsive desktop shell", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.goto("/");
+  await page.goto("/e2e/library.html");
 
   await expect(page.getByRole("banner", { name: "应用命令栏" })).toHaveCSS(
     "height",
@@ -20,6 +20,9 @@ test("media home uses a compact responsive desktop shell", async ({ page }) => {
     "width",
     "220px",
   );
+  await expect(page.locator(".continue-item")).toHaveCount(1);
+  await expect(page.locator(".library-item-list")).toBeVisible();
+  await expect(page.locator(".project-card")).toHaveCount(0);
 
   await page.setViewportSize({ width: 1100, height: 720 });
   await expect(page.getByRole("complementary", { name: "媒体库导航" })).toHaveCSS(
@@ -39,11 +42,29 @@ test("drawers and context menu preserve the mounted video", async ({ page }) => 
   const stageWidth = await page.locator(".player-primary").evaluate(
     (element) => element.getBoundingClientRect().width,
   );
+  expect(stageWidth).toBeGreaterThan(1100);
+  await expect(
+    page.getByRole("complementary", { name: "媒体库导航" }),
+  ).toHaveCount(0);
+  await expect(page.locator(".media-pills")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /上一集/ })).toBeDisabled();
+  await expect(page.getByRole("button", { name: /下一集/ })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "进入全屏" })).toBeVisible();
 
   await page.getByRole("button", { name: "剧集", exact: true }).click();
-  const episodesDrawer = page.getByRole("complementary", { name: "剧集抽屉" });
+  const episodesDrawer = page.getByRole("complementary", { name: "当前内容抽屉" });
   await expect(episodesDrawer).toBeVisible();
   await expect(episodesDrawer).toHaveCSS("position", "absolute");
+  await expect(episodesDrawer.getByRole("tab", { name: "剧集" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  await episodesDrawer.getByRole("tab", { name: "理解" }).click();
+  await expect(episodesDrawer.getByRole("tab", { name: "理解" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  await expect(episodesDrawer.getByLabel("场景理解")).toBeVisible();
   await expect(video).toHaveAttribute("data-mount-token", "stable-video");
   expect(
     await page.locator(".player-primary").evaluate(
@@ -57,7 +78,25 @@ test("drawers and context menu preserve the mounted video", async ({ page }) => 
     clientX: 320,
     clientY: 220,
   });
-  await expect(page.getByRole("menu", { name: "播放器右键菜单" })).toBeVisible();
+  const contextMenu = page.getByRole("menu", { name: "播放器右键菜单" });
+  await expect(contextMenu).toBeVisible();
+  await expect(contextMenu.getByRole("menuitem").first()).toBeFocused();
+  await page.keyboard.press("ArrowDown");
+  await expect(contextMenu.getByRole("menuitem", { name: /静音/ })).toBeFocused();
+  await page.keyboard.press("End");
+  await expect(
+    contextMenu.getByRole("menuitem", { name: "返回媒体库" }),
+  ).toBeFocused();
+  await page.keyboard.press("Home");
+  await expect(contextMenu.getByRole("menuitem").first()).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(contextMenu).toHaveCount(0);
+  await expect(page.locator(".video-stage")).toBeFocused();
+
+  await page.locator(".video-stage").dispatchEvent("contextmenu", {
+    clientX: 320,
+    clientY: 220,
+  });
   await page.keyboard.press("Escape");
   await expect(page.getByRole("menu", { name: "播放器右键菜单" })).toHaveCount(0);
 });
@@ -69,7 +108,7 @@ test("playback shortcuts ignore editable controls and drop feedback is explicit"
 
   await expect(page.getByRole("status")).toContainText("松开以导入这个视频");
   const video = page.getByLabel("视频画面，单击播放或暂停");
-  const speed = page.getByRole("combobox");
+  const speed = page.getByRole("combobox", { name: "播放速度" });
   await speed.focus();
   await page.keyboard.press("m");
   await expect(video).toHaveJSProperty("muted", false);

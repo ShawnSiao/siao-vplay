@@ -1,4 +1,6 @@
-import { formatDuration, formatFileSize } from "../../lib/format";
+import { useRef } from "react";
+
+import { formatDuration } from "../../lib/format";
 import type { MediaPreparation, Project, SubtitleVersion } from "../../types";
 import { LearningPanel } from "../../components/LearningPanel";
 import { UnderstandingPanel } from "../../components/UnderstandingPanel";
@@ -10,6 +12,8 @@ import {
   usePlaybackController,
   type PlaybackValues,
 } from "./usePlaybackController";
+import { PlayerContextMenu } from "./PlayerContextMenu";
+import { PlayerDrawer } from "./PlayerDrawer";
 
 type PlayerScreenProps = {
   project: Project;
@@ -20,6 +24,7 @@ type PlayerScreenProps = {
   contextMenu: ShellContextMenu | null;
   onBack: () => void;
   onCloseDrawer: () => void;
+  onSelectDrawer: (tab: ShellDrawerTab) => void;
   onOpenContextMenu: (position: ShellContextMenu) => void;
   onCloseContextMenu: () => void;
   onManageSubtitles: () => void;
@@ -37,6 +42,7 @@ export function PlayerScreen({
   contextMenu,
   onBack,
   onCloseDrawer,
+  onSelectDrawer,
   onOpenContextMenu,
   onCloseContextMenu,
   onManageSubtitles,
@@ -44,12 +50,11 @@ export function PlayerScreen({
   onPersist,
   onError,
 }: PlayerScreenProps) {
+  const stageRef = useRef<HTMLDivElement>(null);
   const {
     playerRef,
     videoRef,
     sourceUrl,
-    videoStream,
-    audioStream,
     playing,
     muted,
     fullscreen,
@@ -103,6 +108,7 @@ export function PlayerScreen({
       >
         <main className="player-primary">
           <div
+            ref={stageRef}
             className="video-stage"
             tabIndex={0}
             onContextMenu={(event) => {
@@ -144,22 +150,6 @@ export function PlayerScreen({
                 <span>只有检测到有效视频尺寸后才会进入观看状态。</span>
               </div>
             ) : null}
-
-            <div className="media-pills">
-              <span>
-                {videoStream?.codecName.toUpperCase() ?? "视频"} /{" "}
-                {audioStream?.codecName.toUpperCase() ?? "无音轨"}
-              </span>
-              <span>
-                {videoStream
-                  ? `${videoStream.width} × ${videoStream.height}`
-                  : "分辨率未知"}
-              </span>
-              <span>
-                {formatFileSize(preparation.inspection.probe.sizeBytes)}
-              </span>
-              {preparation.reusedProxy ? <span>已复用播放版本</span> : null}
-            </div>
 
             {activeOriginal || activeTranslation ? (
               <div className="caption-stack" aria-live="off">
@@ -203,202 +193,161 @@ export function PlayerScreen({
             <div className="control-row">
               <div className="playback-buttons">
                 <button
-                  aria-keyshortcuts="ArrowLeft"
-                  className="control-button"
+                  aria-label="上一集，将在剧集功能接通后启用"
+                  className="control-icon"
                   type="button"
-                  onClick={() => seekTo(positionMs - 10_000)}
+                  title="上一集 · Phase 7D 启用"
+                  disabled
                 >
-                  −10
+                  ◀▮
                 </button>
                 <button
                   aria-keyshortcuts="Space"
-                  className="control-button play"
+                  className="play-button"
                   type="button"
                   onClick={() => void togglePlayback()}
                 >
-                  {playing ? "暂停" : "播放"}
+                  <span aria-hidden="true">{playing ? "Ⅱ" : "▶"}</span>
+                  <strong>{playing ? "暂停" : "播放"}</strong>
                 </button>
                 <button
-                  aria-keyshortcuts="ArrowRight"
-                  className="control-button"
+                  aria-label="下一集，将在剧集功能接通后启用"
+                  className="control-icon"
                   type="button"
-                  onClick={() => seekTo(positionMs + 10_000)}
+                  title="下一集 · Phase 7D 启用"
+                  disabled
                 >
-                  +10
+                  ▮▶
                 </button>
-                <span className="player-time">
-                  {formatDuration(positionMs)} /{" "}
-                  {formatDuration(durationMs)}
-                </span>
+              </div>
+              <span className="player-time">
+                {formatDuration(positionMs)} / {formatDuration(durationMs)}
+              </span>
+              <div className="volume-control">
+                <button
+                  aria-label={muted ? "取消静音" : "静音"}
+                  aria-keyshortcuts="M"
+                  className="control-icon"
+                  type="button"
+                  title={muted ? "取消静音" : "静音"}
+                  onClick={toggleMuted}
+                >
+                  {muted ? "×))" : "◖))"}
+                </button>
+                <input
+                  aria-label="音量"
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.05"
+                  value={muted ? 0 : volume}
+                  onChange={(event) => changeVolume(Number(event.target.value))}
+                />
+              </div>
+              <div className="now-playing" title={project.title}>
+                {project.title}
               </div>
               <div className="playback-options">
-                <div className="caption-mode" aria-label="字幕显示">
-                  {(
-                    [
-                      ["translation", "中文", Boolean(currentTranslation)],
-                      ["original", "原文", Boolean(currentSubtitle)],
-                      [
-                        "bilingual",
-                        "双语",
-                        Boolean(currentSubtitle && currentTranslation),
-                      ],
-                    ] as const
-                  ).map(([mode, label, available]) => (
-                    <button
-                      aria-label={`显示${label}字幕`}
-                      className={
-                        effectiveSubtitleMode === mode ? "active" : ""
-                      }
-                      disabled={!available}
-                      key={mode}
-                      type="button"
-                      onClick={() => changeSubtitleMode(mode)}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-                <label>
-                  <span>音量</span>
-                  <input
-                    type="range"
-                    min="0"
-                    max="1"
-                    step="0.05"
-                    value={volume}
-                    onChange={(event) =>
-                      changeVolume(Number(event.target.value))
-                    }
-                  />
-                </label>
-                <label>
-                  <span>速度</span>
-                  <select
-                    value={playbackRate}
-                    onChange={(event) =>
-                      changePlaybackRate(Number(event.target.value))
-                    }
+                <select
+                  aria-label="字幕显示"
+                  className="caption-select"
+                  value={effectiveSubtitleMode}
+                  onChange={(event) =>
+                    changeSubtitleMode(
+                      event.target.value as "translation" | "original" | "bilingual",
+                    )
+                  }
+                >
+                  <option value="translation" disabled={!currentTranslation}>中文字幕</option>
+                  <option value="original" disabled={!currentSubtitle}>原文字幕</option>
+                  <option
+                    value="bilingual"
+                    disabled={!currentSubtitle || !currentTranslation}
                   >
-                    {[0.5, 0.75, 1, 1.25, 1.5, 2].map((rate) => (
-                      <option key={rate} value={rate}>
-                        {rate}×
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                    双语字幕
+                  </option>
+                </select>
+                <select
+                  aria-label="播放速度"
+                  className="speed-select"
+                  value={playbackRate}
+                  onChange={(event) => changePlaybackRate(Number(event.target.value))}
+                >
+                  {[0.5, 0.75, 1, 1.25, 1.5, 2].map((rate) => (
+                    <option key={rate} value={rate}>{rate}×</option>
+                  ))}
+                </select>
+                <button
+                  aria-label={fullscreen ? "退出全屏" : "进入全屏"}
+                  aria-keyshortcuts="F"
+                  className="control-icon"
+                  type="button"
+                  title={fullscreen ? "退出全屏" : "全屏"}
+                  onClick={() => void toggleFullscreen()}
+                >
+                  ⛶
+                </button>
               </div>
             </div>
           </div>
         </main>
 
-        {drawerTab === "episodes" ? (
-          <aside className="player-drawer episode-drawer" aria-label="剧集抽屉">
-            <header className="player-drawer-header">
-              <div>
-                <span>剧集</span>
-                <strong>当前视频</strong>
+        {drawerTab ? (
+          <PlayerDrawer
+            activeTab={drawerTab}
+            mediaTitle={project.title}
+            onSelectTab={onSelectDrawer}
+            onClose={onCloseDrawer}
+          >
+            {drawerTab === "episodes" ? (
+              <div className="player-drawer-empty">
+                <strong>尚未加入剧集</strong>
+                <p>剧集列表会在 Phase 7C 接入真实集合数据。</p>
               </div>
-              <button
-                aria-label="关闭剧集抽屉"
-                type="button"
-                onClick={onCloseDrawer}
-              >
-                ×
-              </button>
-            </header>
-            <div className="player-drawer-empty">
-              <strong>尚未加入剧集</strong>
-              <p>剧集列表会在 Phase 7C 接入真实集合数据。</p>
-            </div>
-          </aside>
-        ) : drawerTab === "understand" ? (
-          <UnderstandingPanel
-            key={project.id}
-            projectId={project.id}
-            playbackCutoffMs={positionMs}
-            sourceVersion={currentSubtitle}
-            translationVersion={currentTranslation}
-            onPrepareSubtitles={onManageSubtitles}
-            onClose={onCloseDrawer}
-          />
-        ) : drawerTab === "learn" ? (
-          <LearningPanel
-            key={`${project.id}:${activeOriginal?.id ?? "no-line"}`}
-            projectId={project.id}
-            playbackPositionMs={positionMs}
-            sourceVersion={currentSubtitle}
-            translationVersion={currentTranslation}
-            sourceSegment={activeOriginal}
-            translationSegment={activeTranslation}
-            onPrepareSubtitles={onManageSubtitles}
-            onClose={onCloseDrawer}
-            onJump={seekTo}
-          />
+            ) : drawerTab === "understand" ? (
+              <UnderstandingPanel
+                embedded
+                key={project.id}
+                projectId={project.id}
+                playbackCutoffMs={positionMs}
+                sourceVersion={currentSubtitle}
+                translationVersion={currentTranslation}
+                onPrepareSubtitles={onManageSubtitles}
+                onClose={onCloseDrawer}
+              />
+            ) : (
+              <LearningPanel
+                embedded
+                key={`${project.id}:${activeOriginal?.id ?? "no-line"}`}
+                projectId={project.id}
+                playbackPositionMs={positionMs}
+                sourceVersion={currentSubtitle}
+                translationVersion={currentTranslation}
+                sourceSegment={activeOriginal}
+                translationSegment={activeTranslation}
+                onPrepareSubtitles={onManageSubtitles}
+                onClose={onCloseDrawer}
+                onJump={seekTo}
+              />
+            )}
+          </PlayerDrawer>
         ) : null}
       </div>
 
       {contextMenu ? (
-        <div
-          className="player-context-menu"
-          role="menu"
-          aria-label="播放器右键菜单"
-          style={{ left: contextMenu.x, top: contextMenu.y }}
-        >
-          <button
-            role="menuitem"
-            type="button"
-            onClick={() => {
-              onCloseContextMenu();
-              void togglePlayback();
-            }}
-          >
-            {playing ? "暂停" : "播放"}
-            <span>Space</span>
-          </button>
-          <button
-            role="menuitem"
-            type="button"
-            onClick={() => {
-              onCloseContextMenu();
-              toggleMuted();
-            }}
-          >
-            {muted ? "取消静音" : "静音"}
-            <span>M</span>
-          </button>
-          <button
-            role="menuitem"
-            type="button"
-            onClick={() => {
-              onCloseContextMenu();
-              void toggleFullscreen();
-            }}
-          >
-            {fullscreen ? "退出全屏" : "全屏"}
-            <span>F</span>
-          </button>
-          <span className="context-menu-divider" />
-          <button
-            role="menuitem"
-            type="button"
-            onClick={() => {
-              onCloseContextMenu();
-              onManageSubtitles();
-            }}
-          >
-            字幕设置
-          </button>
-          <button
-            role="menuitem"
-            type="button"
-            onClick={() => {
-              onCloseContextMenu();
-              onBack();
-            }}
-          >
-            返回媒体库
-          </button>
-        </div>
+        <PlayerContextMenu
+          position={contextMenu}
+          playing={playing}
+          muted={muted}
+          fullscreen={fullscreen}
+          returnFocusRef={stageRef}
+          onClose={onCloseContextMenu}
+          onTogglePlayback={() => void togglePlayback()}
+          onToggleMuted={toggleMuted}
+          onToggleFullscreen={() => void toggleFullscreen()}
+          onManageSubtitles={onManageSubtitles}
+          onBack={onBack}
+        />
       ) : null}
     </div>
   );

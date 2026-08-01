@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type {
@@ -838,6 +838,13 @@ beforeEach(() => {
 });
 
 describe("App", () => {
+  async function getOverflowCommand(name: string | RegExp) {
+    fireEvent.click(
+      await screen.findByLabelText("更多字幕与交付命令"),
+    );
+    return screen.getByRole("menuitem", { name });
+  }
+
   it("uses a collapsible desktop shell and keeps folder import disabled", async () => {
     render(<App />);
 
@@ -855,7 +862,7 @@ describe("App", () => {
     expect(
       screen.getByRole("button", { name: "展开媒体库导航" }),
     ).toBeInTheDocument();
-    expect(await screen.findByText("雨站台")).toBeInTheDocument();
+    expect(await screen.findAllByText("雨站台")).not.toHaveLength(0);
   });
 
   it("shows a compact media library backed by real projects", async () => {
@@ -871,7 +878,7 @@ describe("App", () => {
     ).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "未归类视频" })).toBeInTheDocument();
     expect(screen.queryByLabelText("媒体导入说明")).not.toBeInTheDocument();
-    expect(await screen.findByText("雨站台")).toBeInTheDocument();
+    expect(await screen.findAllByText("雨站台")).not.toHaveLength(0);
     expect(screen.getByText("本地媒体工具可用")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "打开文件" })).toBeEnabled();
     expect(screen.getByLabelText("观看进度 23%")).toBeInTheDocument();
@@ -899,7 +906,8 @@ describe("App", () => {
       project.id,
       false,
     );
-    expect(screen.getByText(/H264\s*\/ AAC/)).toBeInTheDocument();
+    expect(screen.queryByText(/H264\s*\/ AAC/)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "进入全屏" })).toBeInTheDocument();
     await waitFor(() =>
       expect(desktopMocks.setMainWindowMediaTitle).toHaveBeenLastCalledWith(
         "雨站台",
@@ -909,19 +917,22 @@ describe("App", () => {
 
   it("keeps optional drawers closed and preserves the mounted video", async () => {
     render(<App />);
-    fireEvent.click(await screen.findByRole("button", { name: "继续观看" }));
+    fireEvent.click(await screen.findByRole("button", { name: /继续播放/ }));
 
     const video = await screen.findByLabelText("视频画面，单击播放或暂停");
-    expect(screen.queryByLabelText("剧集抽屉")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("当前内容抽屉")).not.toBeInTheDocument();
 
     const episodesButton = screen.getByRole("button", { name: "剧集" });
     fireEvent.click(episodesButton);
-    expect(screen.getByLabelText("剧集抽屉")).toBeInTheDocument();
-    expect(episodesButton).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByLabelText("当前内容抽屉")).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "剧集" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
     expect(screen.getByLabelText("视频画面，单击播放或暂停")).toBe(video);
 
     fireEvent.keyDown(window, { key: "Escape" });
-    expect(screen.queryByLabelText("剧集抽屉")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("当前内容抽屉")).not.toBeInTheDocument();
     expect(screen.getByLabelText("视频画面，单击播放或暂停")).toBe(video);
   });
 
@@ -934,24 +945,30 @@ describe("App", () => {
       .spyOn(HTMLElement.prototype, "requestFullscreen")
       .mockResolvedValue(undefined);
     render(<App />);
-    fireEvent.click(await screen.findByRole("button", { name: "继续观看" }));
+    fireEvent.click(await screen.findByRole("button", { name: /继续播放/ }));
 
     const video = await screen.findByLabelText("视频画面，单击播放或暂停");
     fireEvent.contextMenu(video, { clientX: 320, clientY: 220 });
-    expect(
-      screen.getByRole("menu", { name: "播放器右键菜单" }),
-    ).toBeInTheDocument();
-    fireEvent.keyDown(window, { key: "Escape" });
+    const contextMenu = screen.getByRole("menu", { name: "播放器右键菜单" });
+    expect(contextMenu).toBeInTheDocument();
+    const menuItems = within(contextMenu).getAllByRole("menuitem");
+    expect(menuItems[0]).toHaveFocus();
+    fireEvent.keyDown(menuItems[0], { key: "ArrowDown" });
+    expect(menuItems[1]).toHaveFocus();
+    fireEvent.keyDown(menuItems[1], { key: "End" });
+    expect(menuItems.at(-1)).toHaveFocus();
+    fireEvent.keyDown(menuItems.at(-1)!, { key: "Escape" });
     expect(
       screen.queryByRole("menu", { name: "播放器右键菜单" }),
     ).not.toBeInTheDocument();
+    expect(video.closest(".video-stage")).toHaveFocus();
 
     fireEvent.keyDown(window, { key: "m" });
     expect(video).toHaveProperty("muted", true);
     fireEvent.keyDown(window, { key: "]" });
     expect(video).toHaveProperty("playbackRate", 1.25);
 
-    const speed = screen.getByRole("combobox");
+    const speed = screen.getByRole("combobox", { name: "播放速度" });
     fireEvent.keyDown(speed, { key: "[" });
     expect(video).toHaveProperty("playbackRate", 1.25);
 
@@ -982,7 +999,7 @@ describe("App", () => {
       });
 
     render(<App />);
-    fireEvent.click(await screen.findByRole("button", { name: "继续观看" }));
+    fireEvent.click(await screen.findByRole("button", { name: /继续播放/ }));
     const video = await screen.findByLabelText("视频画面，单击播放或暂停");
 
     fireEvent.click(video);
@@ -1023,10 +1040,12 @@ describe("App", () => {
     );
 
     render(<App />);
-    fireEvent.click(await screen.findByRole("button", { name: "继续观看" }));
+    fireEvent.click(await screen.findByRole("button", { name: /继续播放/ }));
 
     expect(await screen.findByText("明天在车站前见吧。")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "显示原文字幕" }));
+    fireEvent.change(screen.getByRole("combobox", { name: "字幕显示" }), {
+      target: { value: "original" },
+    });
     expect(await screen.findByText("待っていたの？")).toBeInTheDocument();
     await waitFor(() =>
       expect(desktopMocks.updatePlaybackState).toHaveBeenLastCalledWith(
@@ -1035,7 +1054,9 @@ describe("App", () => {
       ),
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "显示双语字幕" }));
+    fireEvent.change(screen.getByRole("combobox", { name: "字幕显示" }), {
+      target: { value: "bilingual" },
+    });
     expect(screen.getByText("待っていたの？")).toBeInTheDocument();
     expect(screen.getByText("明天在车站前见吧。")).toBeInTheDocument();
     await waitFor(() =>
@@ -1056,10 +1077,8 @@ describe("App", () => {
     );
     render(<App />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "继续观看" }));
-    fireEvent.click(
-      await screen.findByRole("button", { name: "导出字幕与视频" }),
-    );
+    fireEvent.click(await screen.findByRole("button", { name: /继续播放/ }));
+    fireEvent.click(await getOverflowCommand(/导出字幕与视频/));
 
     expect(screen.getByRole("button", { name: "关闭" })).toHaveFocus();
     fireEvent.click(screen.getByRole("button", { name: "双语" }));
@@ -1109,10 +1128,8 @@ describe("App", () => {
     );
     render(<App />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "继续观看" }));
-    fireEvent.click(
-      await screen.findByRole("button", { name: "导出字幕与视频" }),
-    );
+    fireEvent.click(await screen.findByRole("button", { name: /继续播放/ }));
+    fireEvent.click(await getOverflowCommand(/导出字幕与视频/));
     fireEvent.click(screen.getByRole("button", { name: /烧录视频/ }));
     fireEvent.click(
       screen.getByRole("checkbox", {
@@ -1169,10 +1186,8 @@ describe("App", () => {
     desktopMocks.resumeSubtitleBurnJob.mockResolvedValue(burnJob);
     render(<App />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "继续观看" }));
-    fireEvent.click(
-      await screen.findByRole("button", { name: "导出字幕与视频" }),
-    );
+    fireEvent.click(await screen.findByRole("button", { name: /继续播放/ }));
+    fireEvent.click(await getOverflowCommand(/导出字幕与视频/));
     fireEvent.click(await screen.findByRole("button", { name: /最近一次烧录/ }));
     expect(
       await screen.findByRole("heading", { name: "上次任务已中断" }),
@@ -1196,7 +1211,7 @@ describe("App", () => {
     ]);
 
     render(<App />);
-    fireEvent.click(await screen.findByRole("button", { name: "继续观看" }));
+    fireEvent.click(await screen.findByRole("button", { name: /继续播放/ }));
 
     expect(screen.queryByLabelText("场景理解")).not.toBeInTheDocument();
     fireEvent.click(await screen.findByRole("button", { name: "理解" }));
@@ -1230,7 +1245,7 @@ describe("App", () => {
 
   it("keeps understanding and learning available before subtitles exist", async () => {
     render(<App />);
-    fireEvent.click(await screen.findByRole("button", { name: "继续观看" }));
+    fireEvent.click(await screen.findByRole("button", { name: /继续播放/ }));
 
     const understandButton = await screen.findByRole("button", {
       name: "理解",
@@ -1251,7 +1266,7 @@ describe("App", () => {
     ).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "关闭" }));
 
-    fireEvent.click(learnButton);
+    fireEvent.click(screen.getByRole("tab", { name: "学习" }));
     expect(
       await screen.findByText("词义查询只使用真实原文字幕和已有的简体中文字幕。"),
     ).toBeInTheDocument();
@@ -1280,7 +1295,7 @@ describe("App", () => {
     );
 
     render(<App />);
-    fireEvent.click(await screen.findByRole("button", { name: "继续观看" }));
+    fireEvent.click(await screen.findByRole("button", { name: /继续播放/ }));
     fireEvent.click(await screen.findByRole("button", { name: "理解" }));
     fireEvent.click(await screen.findByRole("button", { name: /复制提示词/ }));
     fireEvent.click(
@@ -1341,7 +1356,7 @@ describe("App", () => {
     ]);
 
     render(<App />);
-    fireEvent.click(await screen.findByRole("button", { name: "继续观看" }));
+    fireEvent.click(await screen.findByRole("button", { name: /继续播放/ }));
 
     expect(screen.queryByLabelText("语言学习")).not.toBeInTheDocument();
     fireEvent.click(await screen.findByRole("button", { name: "学习" }));
@@ -1400,7 +1415,7 @@ describe("App", () => {
     desktopMocks.chooseLearningExportDirectory.mockResolvedValue("W:\\exports");
 
     render(<App />);
-    fireEvent.click(await screen.findByRole("button", { name: "继续观看" }));
+    fireEvent.click(await screen.findByRole("button", { name: /继续播放/ }));
     fireEvent.click(await screen.findByRole("button", { name: "学习" }));
     fireEvent.click(await screen.findByRole("button", { name: /复制提示词/ }));
     fireEvent.click(screen.getByRole("button", { name: "确认范围并查询" }));
@@ -1528,7 +1543,7 @@ describe("App", () => {
       .mockResolvedValue([]);
 
     render(<App />);
-    fireEvent.click(await screen.findByRole("button", { name: "继续观看" }));
+    fireEvent.click(await screen.findByRole("button", { name: /继续播放/ }));
     fireEvent.click(await screen.findByRole("button", { name: "学习" }));
 
     expect(await screen.findByText("等待其他 Agent 返回")).toBeInTheDocument();
@@ -1562,7 +1577,7 @@ describe("App", () => {
     desktopMocks.listLearningCards.mockResolvedValue([learningCard]);
 
     render(<App />);
-    fireEvent.click(await screen.findByRole("button", { name: "继续观看" }));
+    fireEvent.click(await screen.findByRole("button", { name: /继续播放/ }));
     fireEvent.click(await screen.findByRole("button", { name: "学习" }));
 
     expect(
@@ -1576,12 +1591,31 @@ describe("App", () => {
 
   it("opens the local import dialog with Ctrl+O", async () => {
     render(<App />);
-    await screen.findByText("雨站台");
+    await screen.findAllByText("雨站台");
 
     fireEvent.keyDown(window, { key: "o", ctrlKey: true });
 
     await waitFor(() =>
       expect(desktopMocks.chooseLocalVideo).toHaveBeenCalled(),
+    );
+  });
+
+  it("keeps Ctrl+O available in the player without bypassing a modal", async () => {
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: /继续播放/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "添加字幕" }));
+    expect(
+      await screen.findByRole("heading", { name: "准备原文字幕" }),
+    ).toBeInTheDocument();
+
+    desktopMocks.chooseLocalVideo.mockClear();
+    fireEvent.keyDown(window, { key: "o", ctrlKey: true });
+    expect(desktopMocks.chooseLocalVideo).not.toHaveBeenCalled();
+
+    fireEvent.keyDown(window, { key: "Escape" });
+    fireEvent.keyDown(window, { key: "o", ctrlKey: true });
+    await waitFor(() =>
+      expect(desktopMocks.chooseLocalVideo).toHaveBeenCalledOnce(),
     );
   });
 
@@ -1720,7 +1754,7 @@ describe("App", () => {
       "W:\\media\\rain-platform.ja.srt",
     );
     render(<App />);
-    fireEvent.click(await screen.findByRole("button", { name: "继续观看" }));
+    fireEvent.click(await screen.findByRole("button", { name: /继续播放/ }));
     fireEvent.click(await screen.findByRole("button", { name: "添加字幕" }));
 
     fireEvent.click(screen.getByRole("button", { name: /选择字幕文件/ }));
@@ -1757,7 +1791,7 @@ describe("App", () => {
 
   it("starts and cancels local Japanese subtitle generation", async () => {
     render(<App />);
-    fireEvent.click(await screen.findByRole("button", { name: "继续观看" }));
+    fireEvent.click(await screen.findByRole("button", { name: /继续播放/ }));
     fireEvent.click(await screen.findByRole("button", { name: "添加字幕" }));
     fireEvent.click(screen.getByRole("tab", { name: "从视频生成" }));
 
@@ -1798,7 +1832,7 @@ describe("App", () => {
       completedAtMs: 1_785_354_220_000,
     };
     render(<App />);
-    fireEvent.click(await screen.findByRole("button", { name: "继续观看" }));
+    fireEvent.click(await screen.findByRole("button", { name: /继续播放/ }));
     fireEvent.click(await screen.findByRole("button", { name: "添加字幕" }));
     fireEvent.click(screen.getByRole("tab", { name: "从视频生成" }));
     fireEvent.change(await screen.findByLabelText(/视频原声语言/), {
@@ -1849,7 +1883,7 @@ describe("App", () => {
     desktopMocks.getTranscriptionJob.mockResolvedValue(completedJob);
 
     render(<App />);
-    fireEvent.click(await screen.findByRole("button", { name: "继续观看" }));
+    fireEvent.click(await screen.findByRole("button", { name: /继续播放/ }));
     fireEvent.click(await screen.findByRole("button", { name: "添加字幕" }));
     fireEvent.click(screen.getByRole("tab", { name: "从视频生成" }));
     fireEvent.change(await screen.findByLabelText(/视频原声语言/), {
@@ -1882,7 +1916,7 @@ describe("App", () => {
 
   it("offers automatic language detection for mixed-language tutorials", async () => {
     render(<App />);
-    fireEvent.click(await screen.findByRole("button", { name: "继续观看" }));
+    fireEvent.click(await screen.findByRole("button", { name: /继续播放/ }));
     fireEvent.click(await screen.findByRole("button", { name: "添加字幕" }));
     fireEvent.click(screen.getByRole("tab", { name: "从视频生成" }));
 
@@ -1926,7 +1960,7 @@ describe("App", () => {
       },
     });
     render(<App />);
-    fireEvent.click(await screen.findByRole("button", { name: "继续观看" }));
+    fireEvent.click(await screen.findByRole("button", { name: /继续播放/ }));
     fireEvent.click(await screen.findByRole("button", { name: "添加字幕" }));
     fireEvent.click(screen.getByRole("button", { name: /内嵌字幕轨 2/ }));
     expect(
@@ -1948,10 +1982,8 @@ describe("App", () => {
 
   it("routes Chinese subtitle generation to original subtitle preparation first", async () => {
     render(<App />);
-    fireEvent.click(await screen.findByRole("button", { name: "继续观看" }));
-    fireEvent.click(
-      await screen.findByRole("button", { name: "生成中文字幕" }),
-    );
+    fireEvent.click(await screen.findByRole("button", { name: /继续播放/ }));
+    fireEvent.click(await getOverflowCommand(/中文字幕/));
 
     expect(
       await screen.findByRole("heading", { name: "先准备原文字幕" }),
@@ -1965,10 +1997,8 @@ describe("App", () => {
   it("discloses the Codex material scope before starting and supports cancellation", async () => {
     desktopMocks.listSubtitleVersions.mockResolvedValue([subtitleVersion]);
     render(<App />);
-    fireEvent.click(await screen.findByRole("button", { name: "继续观看" }));
-    fireEvent.click(
-      await screen.findByRole("button", { name: "生成中文字幕" }),
-    );
+    fireEvent.click(await screen.findByRole("button", { name: /继续播放/ }));
+    fireEvent.click(await getOverflowCommand(/中文字幕/));
 
     expect(await screen.findByText("将发送给本机 Codex")).toBeInTheDocument();
     expect(
@@ -2012,10 +2042,8 @@ describe("App", () => {
       "W:\\SiaoVPlay\\handoff\\result.json",
     );
     render(<App />);
-    fireEvent.click(await screen.findByRole("button", { name: "继续观看" }));
-    fireEvent.click(
-      await screen.findByRole("button", { name: "生成中文字幕" }),
-    );
+    fireEvent.click(await screen.findByRole("button", { name: /继续播放/ }));
+    fireEvent.click(await getOverflowCommand(/中文字幕/));
     fireEvent.click(
       await screen.findByRole("button", { name: /复制任务提示词/ }),
     );
@@ -2063,10 +2091,8 @@ describe("App", () => {
       completedTranslationTask,
     ]);
     render(<App />);
-    fireEvent.click(await screen.findByRole("button", { name: "继续观看" }));
-    fireEvent.click(
-      await screen.findByRole("button", { name: "中文字幕 · 1" }),
-    );
+    fireEvent.click(await screen.findByRole("button", { name: /继续播放/ }));
+    fireEvent.click(await getOverflowCommand(/中文字幕/));
 
     expect(
       await screen.findByText("翻译完成，可以开始抽查"),
@@ -2093,10 +2119,8 @@ describe("App", () => {
       },
     ]);
     render(<App />);
-    fireEvent.click(await screen.findByRole("button", { name: "继续观看" }));
-    fireEvent.click(
-      await screen.findByRole("button", { name: "生成中文字幕" }),
-    );
+    fireEvent.click(await screen.findByRole("button", { name: /继续播放/ }));
+    fireEvent.click(await getOverflowCommand(/中文字幕/));
 
     expect(await screen.findByText("处理已中断")).toBeInTheDocument();
     expect(
@@ -2131,8 +2155,8 @@ describe("App", () => {
       ],
     });
     render(<App />);
-    fireEvent.click(await screen.findByRole("button", { name: "继续观看" }));
-    fireEvent.click(await screen.findByRole("button", { name: "修正字幕" }));
+    fireEvent.click(await screen.findByRole("button", { name: /继续播放/ }));
+    fireEvent.click(await getOverflowCommand(/修正字幕/));
 
     const editor = await screen.findByRole("textbox", { name: "原文字幕" });
     fireEvent.change(editor, {
@@ -2171,8 +2195,8 @@ describe("App", () => {
       parentVersionId: subtitleVersion.id,
     });
     render(<App />);
-    fireEvent.click(await screen.findByRole("button", { name: "继续观看" }));
-    fireEvent.click(await screen.findByRole("button", { name: "修正字幕" }));
+    fireEvent.click(await screen.findByRole("button", { name: /继续播放/ }));
+    fireEvent.click(await getOverflowCommand(/修正字幕/));
     fireEvent.click(await screen.findByRole("button", { name: "全局替换" }));
     fireEvent.change(screen.getByRole("textbox", { name: "查找" }), {
       target: { value: "駅前" },
@@ -2217,8 +2241,8 @@ describe("App", () => {
       isCurrent: true,
     });
     render(<App />);
-    fireEvent.click(await screen.findByRole("button", { name: "继续观看" }));
-    fireEvent.click(await screen.findByRole("button", { name: "修正字幕" }));
+    fireEvent.click(await screen.findByRole("button", { name: /继续播放/ }));
+    fireEvent.click(await getOverflowCommand(/修正字幕/));
     fireEvent.click(await screen.findByRole("button", { name: "历史版本" }));
     fireEvent.click(
       await screen.findByRole("button", { name: "恢复为新版本" }),
@@ -2278,8 +2302,8 @@ describe("App", () => {
       baseTranslationVersionId: translationWithSelection.id,
     });
     render(<App />);
-    fireEvent.click(await screen.findByRole("button", { name: "继续观看" }));
-    fireEvent.click(await screen.findByRole("button", { name: "修正字幕" }));
+    fireEvent.click(await screen.findByRole("button", { name: /继续播放/ }));
+    fireEvent.click(await getOverflowCommand(/修正字幕/));
     fireEvent.click(await screen.findByRole("tab", { name: /原文字幕/ }));
     fireEvent.click(
       screen.getByRole("checkbox", { name: "选择第 0 条字幕重译" }),

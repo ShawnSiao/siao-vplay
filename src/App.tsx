@@ -325,10 +325,14 @@ export default function App() {
   useEffect(() => {
     const handleOpenShortcut = (event: KeyboardEvent) => {
       if (
-        screen === "library" &&
         event.ctrlKey &&
         event.key.toLowerCase() === "o" &&
         !deleteCandidate &&
+        !subtitleDialogOpen &&
+        !translationDialogOpen &&
+        !revisionDialogOpen &&
+        !deliveryDialogOpen &&
+        !remoteUrlDialogOpen &&
         !busyMessage
       ) {
         event.preventDefault();
@@ -337,7 +341,16 @@ export default function App() {
     };
     window.addEventListener("keydown", handleOpenShortcut);
     return () => window.removeEventListener("keydown", handleOpenShortcut);
-  }, [busyMessage, deleteCandidate, importLocalVideo, screen]);
+  }, [
+    busyMessage,
+    deleteCandidate,
+    deliveryDialogOpen,
+    importLocalVideo,
+    remoteUrlDialogOpen,
+    revisionDialogOpen,
+    subtitleDialogOpen,
+    translationDialogOpen,
+  ]);
 
   const relinkProject = async (project: Project) => {
     try {
@@ -670,6 +683,7 @@ export default function App() {
             contextMenu={shellController.state.contextMenu}
             onBack={returnToLibrary}
             onCloseDrawer={shellController.closeDrawer}
+            onSelectDrawer={shellController.selectDrawer}
             onOpenContextMenu={shellController.openContextMenu}
             onCloseContextMenu={shellController.closeContextMenu}
             onManageSubtitles={() => setSubtitleDialogOpen(true)}

@@ -17,6 +17,7 @@ type ShellAction =
   | { type: "set_navigation_collapsed"; collapsed: boolean }
   | { type: "toggle_navigation" }
   | { type: "toggle_drawer"; tab: ShellDrawerTab }
+  | { type: "select_drawer"; tab: ShellDrawerTab }
   | { type: "close_drawer" }
   | { type: "open_context_menu"; position: ShellContextMenu }
   | { type: "close_context_menu" };
@@ -40,6 +41,8 @@ function shellReducer(state: ShellState, action: ShellAction): ShellState {
         drawerTab: state.drawerTab === action.tab ? null : action.tab,
         contextMenu: null,
       };
+    case "select_drawer":
+      return { ...state, drawerTab: action.tab, contextMenu: null };
     case "close_drawer":
       return { ...state, drawerTab: null };
     case "open_context_menu":
@@ -83,6 +86,9 @@ export function useShellController(initialView: ShellView = "library") {
   const toggleDrawer = useCallback((tab: ShellDrawerTab) => {
     dispatch({ type: "toggle_drawer", tab });
   }, []);
+  const selectDrawer = useCallback((tab: ShellDrawerTab) => {
+    dispatch({ type: "select_drawer", tab });
+  }, []);
   const closeDrawer = useCallback(() => {
     dispatch({ type: "close_drawer" });
   }, []);
@@ -98,6 +104,7 @@ export function useShellController(initialView: ShellView = "library") {
     setActiveView,
     toggleNavigation,
     toggleDrawer,
+    selectDrawer,
     closeDrawer,
     openContextMenu,
     closeContextMenu,

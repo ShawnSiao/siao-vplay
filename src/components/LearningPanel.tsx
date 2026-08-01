@@ -42,6 +42,7 @@ type LearningPanelProps = {
   translationSegment: SubtitleSegment | null;
   onPrepareSubtitles: () => void;
   onClose: () => void;
+  embedded?: boolean;
   onJump: (positionMs: number) => void;
 };
 
@@ -139,6 +140,7 @@ export function LearningPanel({
   translationSegment,
   onPrepareSubtitles,
   onClose,
+  embedded = false,
   onJump,
 }: LearningPanelProps) {
   const handledCompletionRef = useRef<string | null>(null);
@@ -531,9 +533,14 @@ export function LearningPanel({
     ? cards.some((card) => card.dictionaryEntryId === entry.id)
     : false;
 
+  const PanelElement = embedded ? "section" : "aside";
+
   return (
-    <aside className="learning-panel" aria-label="语言学习">
-      <header className="learning-header">
+    <PanelElement
+      className={`learning-panel ${embedded ? "embedded" : ""}`}
+      aria-label="语言学习"
+    >
+      {!embedded ? <header className="learning-header">
         <div>
           <span>随看随学</span>
           <strong>当前台词</strong>
@@ -546,7 +553,7 @@ export function LearningPanel({
         >
           ×
         </button>
-      </header>
+      </header> : null}
 
       <div className="learning-scroll">
         {error ? (
@@ -926,6 +933,6 @@ export function LearningPanel({
           </>
         )}
       </div>
-    </aside>
+    </PanelElement>
   );
 }

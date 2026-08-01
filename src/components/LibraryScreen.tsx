@@ -18,7 +18,7 @@ type LibraryScreenProps = {
   onDelete: (project: Project) => void;
 };
 
-function ProjectCard({
+function LibraryItemRow({
   project,
   onOpen,
   onRelink,
@@ -30,7 +30,6 @@ function ProjectCard({
   onDelete: (project: Project) => void;
 }) {
   const needsRelink = project.status === "needs_relink";
-  const posterPath = project.mediaSource.posterPath;
   const progress =
     project.playbackState.durationMs && project.playbackState.durationMs > 0
       ? Math.round(
@@ -47,77 +46,54 @@ function ProjectCard({
       : 0;
 
   return (
-    <article className="project-card">
+    <article className="library-item-row">
       <button
-        className={`project-poster ${posterPath ? "poster-has-image" : ""}`}
+        className="library-item-open"
         type="button"
         onClick={() => (needsRelink ? onRelink(project) : onOpen(project))}
         aria-label={`${needsRelink ? "重新定位" : "打开"} ${project.title}`}
       >
-        {posterPath ? (
-          <img
-            className="poster-image"
-            src={playbackUrl(posterPath)}
-            alt=""
-          />
-        ) : (
-          <span className="poster-extension">
-            {fileExtension(project.mediaSource.displayName)}
-          </span>
-        )}
-        <span className="poster-status">
-          {needsRelink
-            ? "媒体文件已移动"
-            : project.mediaSource.originUrl
-              ? "URL 视频副本"
-              : "本地视频"}
+        <span className="library-file-kind">
+          {fileExtension(project.mediaSource.displayName)}
         </span>
-        <span className="poster-duration">
-          {formatDuration(project.playbackState.durationMs)}
+        <span className="library-item-title">
+          <strong>{project.title}</strong>
+          <small title={project.mediaSource.displayName}>
+            {project.mediaSource.displayName}
+          </small>
         </span>
       </button>
-      <div className="project-card-body">
-        <div className="project-card-heading">
-          <div>
-            <h3>{project.title}</h3>
-            <p title={project.mediaSource.displayName}>
-              {project.mediaSource.displayName}
-            </p>
-          </div>
-          <span className={`status-pill ${needsRelink ? "warning" : "ready"}`}>
-            {needsRelink ? "需要重新定位" : "可以观看"}
-          </span>
-        </div>
+      <div className="library-item-progress">
         <div className="watch-progress" aria-label={`观看进度 ${progress}%`}>
-          <span style={{ width: `${progress}%` }}></span>
+          <span style={{ width: `${progress}%` }} />
         </div>
-        <footer className="project-card-footer">
-          <span>
-            {project.playbackState.positionMs > 0
-              ? `看到 ${formatDuration(project.playbackState.positionMs)}`
-              : `${formatRecentTime(project.lastOpenedAtMs)} 打开`}
-          </span>
-          <div className="card-actions">
-            <button
-              className="button quiet small"
-              type="button"
-              onClick={() => onDelete(project)}
-            >
-              删除
-            </button>
-            <button
-              className={`button small ${needsRelink ? "" : "primary"}`}
-              type="button"
-              onClick={() => (needsRelink ? onRelink(project) : onOpen(project))}
-            >
-              {needsRelink
-                ? "重新定位"
-                : project.playbackState.positionMs > 0
-                  ? "继续观看"
-                  : "开始观看"}
-            </button>
-          </div>
-        </footer>
+        <span>
+          {project.playbackState.positionMs > 0
+            ? `看到 ${formatDuration(project.playbackState.positionMs)}`
+            : "未观看"}
+        </span>
+      </div>
+      <span className={`library-item-status ${needsRelink ? "warning" : "ready"}`}>
+        {needsRelink ? "需要重新定位" : "可以观看"}
+      </span>
+      <span className="library-item-recent">
+        {formatRecentTime(project.lastOpenedAtMs)}
+      </span>
+      <div className="library-item-actions">
+        <button
+          className="button quiet small"
+          type="button"
+          onClick={() => onDelete(project)}
+        >
+          删除
+        </button>
+        <button
+          className={`button small ${needsRelink ? "" : "primary"}`}
+          type="button"
+          onClick={() => (needsRelink ? onRelink(project) : onOpen(project))}
+        >
+          {needsRelink ? "重新定位" : project.playbackState.positionMs > 0 ? "继续" : "播放"}
+        </button>
       </div>
     </article>
   );
@@ -159,9 +135,10 @@ function ContinueWatchingItem({
         )}
       </span>
       <span className="continue-item-copy">
-        <strong>继续 · {project.title}</strong>
+        <small className="continue-kicker">继续观看</small>
+        <strong>{project.title}</strong>
         <small>
-          看到 {formatDuration(project.playbackState.positionMs)} · 共 {formatDuration(durationMs)}
+          {project.mediaSource.displayName} · 看到 {formatDuration(project.playbackState.positionMs)}
         </small>
         <span
           className="watch-progress"
@@ -170,7 +147,9 @@ function ContinueWatchingItem({
           <span style={{ width: `${progress}%` }} />
         </span>
       </span>
-      <span className="continue-play" aria-hidden="true">▶</span>
+      <span className="continue-action">
+        从 {formatDuration(project.playbackState.positionMs)} 继续
+      </span>
     </button>
   );
 }
@@ -278,9 +257,9 @@ export function LibraryScreen({
                 </div>
               </div>
             ) : (
-              <div className="project-grid">
+              <div className="library-item-list">
                 {projects.map((project) => (
-                  <ProjectCard
+                  <LibraryItemRow
                     key={project.id}
                     project={project}
                     onOpen={onOpen}

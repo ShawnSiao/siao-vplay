@@ -150,6 +150,7 @@ export function PlayerHarness() {
         contextMenu={contextMenu}
         onBack={() => undefined}
         onCloseDrawer={() => setDrawerTab(null)}
+        onSelectDrawer={setDrawerTab}
         onOpenContextMenu={setContextMenu}
         onCloseContextMenu={() => setContextMenu(null)}
         onManageSubtitles={() => undefined}
