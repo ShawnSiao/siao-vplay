@@ -172,6 +172,55 @@ test("drawers and context menu preserve the mounted video", async ({ page }) => 
   await expect(page.getByRole("menu", { name: "播放器右键菜单" })).toHaveCount(0);
 });
 
+test("keeps the progress bar and playback controls outside the video surface", async ({
+  page,
+}) => {
+  for (const viewport of [
+    { width: 960, height: 640 },
+    { width: 1280, height: 720 },
+    { width: 1440, height: 900 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await page.goto("/e2e/player.html");
+
+    const geometry = await page.evaluate(() => {
+      const rect = (selector: string) => {
+        const element = document.querySelector<HTMLElement>(selector);
+        if (!element) {
+          throw new Error(`missing ${selector}`);
+        }
+        const box = element.getBoundingClientRect();
+        return {
+          top: box.top,
+          right: box.right,
+          bottom: box.bottom,
+          left: box.left,
+          width: box.width,
+          height: box.height,
+        };
+      };
+      return {
+        stage: rect(".video-stage"),
+        video: rect(".video-stage video"),
+        controls: rect(".player-controls"),
+        seek: rect(".seek-control"),
+        primary: rect(".player-primary"),
+        viewport: { width: window.innerWidth, height: window.innerHeight },
+        documentHeight: document.documentElement.scrollHeight,
+      };
+    });
+
+    expect(geometry.controls.top).toBeGreaterThanOrEqual(geometry.stage.bottom - 1);
+    expect(geometry.seek.top).toBeGreaterThanOrEqual(geometry.stage.bottom - 1);
+    expect(geometry.controls.bottom).toBeLessThanOrEqual(geometry.primary.bottom + 1);
+    expect(geometry.video.top).toBeGreaterThanOrEqual(geometry.stage.top);
+    expect(geometry.video.bottom).toBeLessThanOrEqual(geometry.stage.bottom + 1);
+    expect(geometry.video.right).toBeLessThanOrEqual(geometry.stage.right + 1);
+    expect(geometry.video.left).toBeGreaterThanOrEqual(geometry.stage.left - 1);
+    expect(geometry.documentHeight).toBeLessThanOrEqual(geometry.viewport.height);
+  }
+});
+
 test("playback shortcuts ignore editable controls and drop feedback is explicit", async ({
   page,
 }) => {
