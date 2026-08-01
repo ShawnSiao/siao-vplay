@@ -838,6 +838,26 @@ beforeEach(() => {
 });
 
 describe("App", () => {
+  it("uses a collapsible desktop shell and keeps folder import disabled", async () => {
+    render(<App />);
+
+    expect(
+      screen.getByRole("banner", { name: "应用命令栏" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", {
+        name: "打开文件夹，文件夹与剧集导入将在 Phase 7D 启用",
+      }),
+    ).toBeDisabled();
+    fireEvent.click(
+      screen.getByRole("button", { name: "折叠媒体库导航" }),
+    );
+    expect(
+      screen.getByRole("button", { name: "展开媒体库导航" }),
+    ).toBeInTheDocument();
+    expect(await screen.findByText("雨站台")).toBeInTheDocument();
+  });
+
   it("shows the approved local project library", async () => {
     render(<App />);
 

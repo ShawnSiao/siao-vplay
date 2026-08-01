@@ -9,6 +9,8 @@ import { SubtitleImportDialog } from "./components/SubtitleImportDialog";
 import { SubtitleDeliveryDialog } from "./components/SubtitleDeliveryDialog";
 import { SubtitleRevisionDialog } from "./components/SubtitleRevisionDialog";
 import { TranslationDialog } from "./components/TranslationDialog";
+import { DesktopShell } from "./features/shell/DesktopShell";
+import { useShellController } from "./features/shell/useShellController";
 import {
   chooseLocalVideo,
   commandError,
@@ -39,8 +41,6 @@ import type {
   TranslationTask,
 } from "./types";
 
-type Screen = "library" | "preparing" | "player";
-
 const activeTranscriptionStatuses = new Set<TranscriptionJob["status"]>([
   "queued",
   "extracting",
@@ -49,11 +49,13 @@ const activeTranscriptionStatuses = new Set<TranscriptionJob["status"]>([
 ]);
 
 export default function App() {
+  const shellController = useShellController();
+  const screen = shellController.state.activeView;
+  const setScreen = shellController.setActiveView;
   const operationTokenRef = useRef(0);
   const startupMediaHandledRef = useRef(false);
   const posterJobsRef = useRef(new Set<string>());
   const externalResultScanRef = useRef(false);
-  const [screen, setScreen] = useState<Screen>("library");
   const [appStatus, setAppStatus] = useState<AppStatus | null>(null);
   const [runtimeStatus, setRuntimeStatus] =
     useState<MediaRuntimeStatus | null>(null);
@@ -240,7 +242,7 @@ export default function App() {
         setPreparationError(commandError(error).message);
       }
     },
-    [refreshProjects],
+    [refreshProjects, setScreen],
   );
 
   const returnToLibrary = useCallback(() => {
@@ -256,7 +258,7 @@ export default function App() {
     setRevisionDialogOpen(false);
     setRemoteUrlDialogOpen(false);
     void refreshProjects();
-  }, [refreshProjects]);
+  }, [refreshProjects, setScreen]);
 
   const importMediaPath = useCallback(
     async (mediaPath: string) => {
@@ -590,67 +592,83 @@ export default function App() {
     trackedTranscriptionJobId,
   ]);
 
+  const currentSubtitle =
+    subtitleVersions.find(
+      (version) => version.role === "original" && version.isCurrent,
+    ) ?? null;
+  const currentTranslation =
+    subtitleVersions.find(
+      (version) => version.role === "translation" && version.isCurrent,
+    ) ?? null;
+
   return (
-    <div className="app-shell">
-      {screen === "library" ? (
-        <LibraryScreen
-          appStatus={appStatus}
-          runtimeStatus={runtimeStatus}
-          projects={projects}
-          loading={libraryLoading}
-          error={libraryError}
-          previewMode={!isDesktopApp}
-          onImport={() => void importLocalVideo()}
-          onImportUrl={openRemoteUrlImport}
-          onOpen={(project) => void prepareAndOpen(project, false)}
-          onRelink={(project) => void relinkProject(project)}
-          onDelete={setDeleteCandidate}
-        />
-      ) : null}
+    <div className="app-root">
+      <DesktopShell
+        activeView={screen}
+        navigationCollapsed={shellController.state.navigationCollapsed}
+        appStatus={appStatus}
+        runtimeStatus={runtimeStatus}
+        previewMode={!isDesktopApp}
+        mediaTitle={screen === "library" ? null : activeProject?.title ?? null}
+        currentSubtitleCount={currentSubtitle?.segments.length ?? null}
+        currentTranslationCount={currentTranslation?.segments.length ?? null}
+        canReviseSubtitles={Boolean(currentSubtitle)}
+        canDeliverSubtitles={Boolean(currentSubtitle || currentTranslation)}
+        onToggleNavigation={shellController.toggleNavigation}
+        onGoLibrary={returnToLibrary}
+        onOpenFile={() => void importLocalVideo()}
+        onOpenUrl={openRemoteUrlImport}
+        onManageSubtitles={() => setSubtitleDialogOpen(true)}
+        onManageTranslation={() => {
+          setTranslationSegmentIds(undefined);
+          setTranslationDialogOpen(true);
+        }}
+        onReviseSubtitles={() => setRevisionDialogOpen(true)}
+        onDeliverSubtitles={() => setDeliveryDialogOpen(true)}
+      >
+        {screen === "library" ? (
+          <LibraryScreen
+            projects={projects}
+            loading={libraryLoading}
+            error={libraryError}
+            previewMode={!isDesktopApp}
+            onImport={() => void importLocalVideo()}
+            onImportUrl={openRemoteUrlImport}
+            onOpen={(project) => void prepareAndOpen(project, false)}
+            onRelink={(project) => void relinkProject(project)}
+            onDelete={setDeleteCandidate}
+          />
+        ) : null}
 
-      {screen === "preparing" && activeProject ? (
-        <PreparationScreen
-          project={activeProject}
-          forceProxy={forceProxy}
-          error={preparationError}
-          onRetry={() => void prepareAndOpen(activeProject, forceProxy)}
-          onBack={returnToLibrary}
-        />
-      ) : null}
+        {screen === "preparing" && activeProject ? (
+          <PreparationScreen
+            project={activeProject}
+            forceProxy={forceProxy}
+            error={preparationError}
+            onRetry={() => void prepareAndOpen(activeProject, forceProxy)}
+            onBack={returnToLibrary}
+          />
+        ) : null}
 
-      {screen === "player" && activeProject && preparation ? (
-        <PlayerScreen
-          key={preparation.playbackPath}
-          project={activeProject}
-          preparation={preparation}
-          currentSubtitle={
-            subtitleVersions.find(
-              (version) => version.role === "original" && version.isCurrent,
-            ) ?? null
-          }
-          currentTranslation={
-            subtitleVersions.find(
-              (version) =>
-                version.role === "translation" && version.isCurrent,
-            ) ?? null
-          }
-          onBack={returnToLibrary}
-          onManageSubtitles={() => setSubtitleDialogOpen(true)}
-          onManageTranslation={() => {
-            setTranslationSegmentIds(undefined);
-            setTranslationDialogOpen(true);
-          }}
-          onReviseSubtitles={() => setRevisionDialogOpen(true)}
-          onDeliverSubtitles={() => setDeliveryDialogOpen(true)}
-          onNeedProxy={() => void prepareAndOpen(activeProject, true)}
-          onPersist={persistPlayback}
-          onError={(message) => {
-            setPreparationError(message);
-            setForceProxy(true);
-            setScreen("preparing");
-          }}
-        />
-      ) : null}
+        {screen === "player" && activeProject && preparation ? (
+          <PlayerScreen
+            key={preparation.playbackPath}
+            project={activeProject}
+            preparation={preparation}
+            currentSubtitle={currentSubtitle}
+            currentTranslation={currentTranslation}
+            onBack={returnToLibrary}
+            onManageSubtitles={() => setSubtitleDialogOpen(true)}
+            onNeedProxy={() => void prepareAndOpen(activeProject, true)}
+            onPersist={persistPlayback}
+            onError={(message) => {
+              setPreparationError(message);
+              setForceProxy(true);
+              setScreen("preparing");
+            }}
+          />
+        ) : null}
+      </DesktopShell>
 
       {subtitleDialogOpen && activeProject && preparation ? (
         <SubtitleImportDialog

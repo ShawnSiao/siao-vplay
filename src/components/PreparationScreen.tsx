@@ -17,18 +17,6 @@ export function PreparationScreen({
 }: PreparationScreenProps) {
   return (
     <div className="preparation-screen" data-screen-label="准备本地视频">
-      <header className="titlebar">
-        <div className="brand-lockup">
-          <span className="brand-mark" aria-hidden="true">
-            V
-          </span>
-          <span className="brand-name">SiaoVPlay</span>
-        </div>
-        <span className="titlebar-context">{project.title}</span>
-        <button className="button quiet small" type="button" onClick={onBack}>
-          返回项目库
-        </button>
-      </header>
       <main className="preparation-content">
         <section className="preparation-card" aria-live="polite">
           <p className="eyebrow">{error ? "需要处理" : "正在准备播放"}</p>

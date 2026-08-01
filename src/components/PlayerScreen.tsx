@@ -27,9 +27,6 @@ type PlayerScreenProps = {
   currentTranslation: SubtitleVersion | null;
   onBack: () => void;
   onManageSubtitles: () => void;
-  onManageTranslation: () => void;
-  onReviseSubtitles: () => void;
-  onDeliverSubtitles: () => void;
   onNeedProxy: (reason: string) => void;
   onPersist: (values: PlaybackValues) => Promise<void>;
   onError: (message: string) => void;
@@ -42,9 +39,6 @@ export function PlayerScreen({
   currentTranslation,
   onBack,
   onManageSubtitles,
-  onManageTranslation,
-  onReviseSubtitles,
-  onDeliverSubtitles,
   onNeedProxy,
   onPersist,
   onError,
@@ -343,22 +337,7 @@ export function PlayerScreen({
 
   return (
     <div className="player-screen" data-screen-label="本地播放器">
-      <header className="player-toolbar">
-        <div className="player-toolbar-start">
-          <button className="button quiet small" type="button" onClick={onBack}>
-            返回
-          </button>
-          <div className="player-title">
-            <strong>{project.title}</strong>
-            <small>
-              {sourceIsProxy ? "兼容播放版本" : "正在播放原片"} ·{" "}
-              {videoStream?.codecName.toUpperCase() ?? "视频"}
-              {audioStream
-                ? ` / ${audioStream.codecName.toUpperCase()}`
-                : " / 无音轨"}
-            </small>
-          </div>
-        </div>
+      <header className="player-panel-tabs" aria-label="播放器侧栏">
         <div className="player-mode">
           <button
             className={panelMode === "watch" ? "active" : ""}
@@ -380,53 +359,6 @@ export function PlayerScreen({
             onClick={() => setPanelMode("learn")}
           >
             学习
-          </button>
-        </div>
-        <div className="player-toolbar-end">
-          <button
-            className="button quiet small"
-            type="button"
-            onClick={onManageSubtitles}
-          >
-            {currentSubtitle
-              ? `原文字幕 · ${currentSubtitle.segments.length}`
-              : "添加字幕"}
-          </button>
-          <button
-            className="button quiet small translation-toolbar-button"
-            type="button"
-            onClick={onManageTranslation}
-          >
-            {currentTranslation
-              ? `中文字幕 · ${currentTranslation.segments.length}`
-              : "生成中文字幕"}
-          </button>
-          <button
-            className="button quiet small"
-            type="button"
-            disabled={!currentSubtitle}
-            onClick={onReviseSubtitles}
-          >
-            修正字幕
-          </button>
-          <button
-            aria-label="导出字幕与视频"
-            className="button quiet small"
-            type="button"
-            disabled={!currentSubtitle && !currentTranslation}
-            onClick={onDeliverSubtitles}
-          >
-            导出
-          </button>
-          <span className={`status-pill ${videoReady ? "ready" : "warning"}`}>
-            {videoReady ? "画面已确认" : "正在确认画面"}
-          </span>
-          <button
-            className="button quiet small"
-            type="button"
-            onClick={() => void document.documentElement.requestFullscreen()}
-          >
-            全屏
           </button>
         </div>
       </header>
@@ -471,6 +403,10 @@ export function PlayerScreen({
           ) : null}
 
           <div className="media-pills">
+            <span>
+              {videoStream?.codecName.toUpperCase() ?? "视频"} /{" "}
+              {audioStream?.codecName.toUpperCase() ?? "无音轨"}
+            </span>
             <span>
               {videoStream
                 ? `${videoStream.width} × ${videoStream.height}`

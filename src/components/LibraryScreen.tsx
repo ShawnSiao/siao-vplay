@@ -1,4 +1,4 @@
-import type { AppStatus, MediaRuntimeStatus, Project } from "../types";
+import type { Project } from "../types";
 import { playbackUrl } from "../lib/desktop";
 import {
   fileExtension,
@@ -7,8 +7,6 @@ import {
 } from "../lib/format";
 
 type LibraryScreenProps = {
-  appStatus: AppStatus | null;
-  runtimeStatus: MediaRuntimeStatus | null;
   projects: Project[];
   loading: boolean;
   error: string | null;
@@ -126,8 +124,6 @@ function ProjectCard({
 }
 
 export function LibraryScreen({
-  appStatus,
-  runtimeStatus,
   projects,
   loading,
   error,
@@ -140,33 +136,6 @@ export function LibraryScreen({
 }: LibraryScreenProps) {
   return (
     <div className="library-screen" data-screen-label="本地项目库">
-      <header className="titlebar">
-        <div className="brand-lockup" aria-label="SiaoVPlay">
-          <span className="brand-mark" aria-hidden="true">
-            V
-          </span>
-          <span className="brand-name">SiaoVPlay</span>
-        </div>
-        <div className="titlebar-status">
-          {previewMode ? (
-            <span className="status-pill warning">浏览器界面预览</span>
-          ) : (
-            <span
-              className={`status-pill ${
-                runtimeStatus?.available ? "ready" : "warning"
-              }`}
-            >
-              {runtimeStatus?.available
-                ? "本地媒体工具可用"
-                : "正在检查媒体工具"}
-            </span>
-          )}
-          <span className="version-label">
-            {appStatus ? `v${appStatus.version}` : "正在连接"}
-          </span>
-        </div>
-      </header>
-
       <div className="library-scroll">
         <main className="library-content">
         <header className="library-header">
