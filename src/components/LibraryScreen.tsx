@@ -123,6 +123,58 @@ function ProjectCard({
   );
 }
 
+function ContinueWatchingItem({
+  project,
+  onOpen,
+}: {
+  project: Project;
+  onOpen: (project: Project) => void;
+}) {
+  const posterPath = project.mediaSource.posterPath;
+  const durationMs = project.playbackState.durationMs ?? 0;
+  const progress =
+    durationMs > 0
+      ? Math.round(
+          Math.max(
+            0,
+            Math.min(100, (project.playbackState.positionMs / durationMs) * 100),
+          ),
+        )
+      : 0;
+
+  return (
+    <button
+      className="continue-item"
+      type="button"
+      aria-label={`继续播放 ${project.title}`}
+      onClick={() => onOpen(project)}
+    >
+      <span className="continue-thumbnail">
+        {posterPath ? (
+          <img className="poster-image" src={playbackUrl(posterPath)} alt="" />
+        ) : (
+          <span className="poster-extension">
+            {fileExtension(project.mediaSource.displayName)}
+          </span>
+        )}
+      </span>
+      <span className="continue-item-copy">
+        <strong>继续 · {project.title}</strong>
+        <small>
+          看到 {formatDuration(project.playbackState.positionMs)} · 共 {formatDuration(durationMs)}
+        </small>
+        <span
+          className="watch-progress"
+          aria-label={`继续观看进度 ${progress}%`}
+        >
+          <span style={{ width: `${progress}%` }} />
+        </span>
+      </span>
+      <span className="continue-play" aria-hidden="true">▶</span>
+    </button>
+  );
+}
+
 export function LibraryScreen({
   projects,
   loading,
@@ -134,119 +186,111 @@ export function LibraryScreen({
   onRelink,
   onDelete,
 }: LibraryScreenProps) {
+  const continueWatching = [...projects]
+    .filter((project) => project.playbackState.positionMs > 0)
+    .sort((left, right) => right.lastOpenedAtMs - left.lastOpenedAtMs)
+    .slice(0, 4);
+
   return (
-    <div className="library-screen" data-screen-label="本地项目库">
+    <div className="library-screen" data-screen-label="媒体库">
       <div className="library-scroll">
         <main className="library-content">
-        <header className="library-header">
-          <div>
-            <p className="eyebrow">本地优先的跨语言播放器</p>
-            <h1>专注观看，需要时再理解。</h1>
-            <p className="lead">
-            从本地视频或公开媒体 URL 建立观影项目。播放位置和远程媒体副本保存在本机。
-            </p>
-          </div>
-          <div className="library-import-actions">
-            <button
-              className="button import-button"
-              type="button"
-              onClick={onImportUrl}
-            >
-              粘贴视频 URL
-            </button>
-            <button
-              aria-keyshortcuts="Control+O"
-              autoFocus={projects.length === 0}
-              className="button primary import-button"
-              type="button"
-              onClick={onImport}
-            >
-              导入本地视频
-            </button>
-          </div>
-        </header>
-
-        <section className="import-strip" aria-label="媒体导入说明">
-          <div>
-            <span className="step-number">01</span>
-            <span>
-              <strong>选择本地视频或 URL</strong>
-              <small>
-                支持常见本地格式、公开 HTTPS 直链、点播 M3U8 和 YouTube 公开单视频。
-              </small>
-            </span>
-          </div>
-          <div>
-            <span className="step-number">02</span>
-            <span>
-              <strong>自动检查播放能力</strong>
-              <small>不兼容的编码会生成独立播放版本，不改动原片。</small>
-            </span>
-          </div>
-          <div>
-            <span className="step-number">03</span>
-            <span>
-              <strong>从上次位置继续</strong>
-              <small>项目、播放位置和媒体关系可在重启后恢复。</small>
-            </span>
-          </div>
-        </section>
-
-        <section className="project-section" aria-labelledby="projects-title">
-          <div className="section-heading">
+          <header className="library-header">
             <div>
-              <p className="eyebrow">最近观看</p>
-              <h2 id="projects-title">本地项目</h2>
+              <h1>媒体库</h1>
+              <p>本地视频、观看进度和字幕资料都保存在当前设备。</p>
             </div>
-            <span>{projects.length} 个项目</span>
-          </div>
+            <span className="library-count">{projects.length} 个视频</span>
+          </header>
 
-          {error ? (
-            <div className="notice danger" role="alert">
-              <strong>项目库暂时无法读取</strong>
-              <p>{error}</p>
-            </div>
+          {continueWatching.length > 0 ? (
+            <section
+              className="project-section continue-section"
+              aria-labelledby="continue-title"
+            >
+              <div className="section-heading">
+                <h2 id="continue-title">继续观看</h2>
+                <span>按最近打开排序</span>
+              </div>
+              <div className="continue-grid">
+                {continueWatching.map((project) => (
+                  <ContinueWatchingItem
+                    key={project.id}
+                    project={project}
+                    onOpen={onOpen}
+                  />
+                ))}
+              </div>
+            </section>
           ) : null}
 
-          {loading ? (
-            <div className="project-loading" aria-live="polite">
-              <span className="spinner"></span>
-              <span>正在读取本地项目…</span>
-            </div>
-          ) : projects.length === 0 ? (
-            <div className="empty-library">
-              <div className="empty-glyph" aria-hidden="true">
-                ▶
+          <section className="project-section" aria-labelledby="projects-title">
+            <div className="section-heading">
+              <div>
+                <h2 id="projects-title">未归类视频</h2>
+                <p>剧集与合集功能接通前，现有视频统一显示在这里。</p>
               </div>
-              <h3>{previewMode ? "桌面应用会在这里显示真实项目" : "还没有本地项目"}</h3>
-              <p>
-                {previewMode
-                  ? "当前页面只用于检查界面，不会读取浏览器中的本地文件。"
-                  : "导入一段拥有处理权利的视频，SiaoVPlay 会先检查是否可以稳定播放。"}
-              </p>
-              <button
-                aria-keyshortcuts="Control+O"
-                className="button primary"
-                type="button"
-                onClick={onImport}
-              >
-                选择第一个视频
-              </button>
+              <span>{projects.length} 个视频</span>
             </div>
-          ) : (
-            <div className="project-grid">
-              {projects.map((project) => (
-                <ProjectCard
-                  key={project.id}
-                  project={project}
-                  onOpen={onOpen}
-                  onRelink={onRelink}
-                  onDelete={onDelete}
-                />
-              ))}
-            </div>
-          )}
-        </section>
+
+            {error ? (
+              <div className="notice danger" role="alert">
+                <strong>媒体库暂时无法读取</strong>
+                <p>{error}</p>
+              </div>
+            ) : null}
+
+            {loading ? (
+              <div className="project-loading" aria-live="polite">
+                <span className="spinner"></span>
+                <span>正在读取本地视频…</span>
+              </div>
+            ) : projects.length === 0 ? (
+              <div className="empty-library">
+                <div className="empty-glyph" aria-hidden="true">
+                  ▶
+                </div>
+                <h3>
+                  {previewMode ? "桌面应用会显示真实视频" : "还没有本地视频"}
+                </h3>
+                <p>
+                  {previewMode
+                    ? "当前页面只用于检查界面，不会读取浏览器中的本地文件。"
+                    : "可从命令栏打开本地视频或公开媒体 URL。SiaoVPlay 不会修改源视频。"}
+                </p>
+                <div className="empty-library-actions">
+                  <button
+                    className="button"
+                    type="button"
+                    onClick={onImportUrl}
+                  >
+                    打开 URL
+                  </button>
+                  <button
+                    aria-keyshortcuts="Control+O"
+                    autoFocus
+                    className="button primary"
+                    type="button"
+                    onClick={onImport}
+                  >
+                    打开视频
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="project-grid">
+                {projects.map((project) => (
+                  <ProjectCard
+                    key={project.id}
+                    project={project}
+                    onOpen={onOpen}
+                    onRelink={onRelink}
+                    onDelete={onDelete}
+                  />
+                ))}
+              </div>
+            )}
+          </section>
         </main>
       </div>
     </div>

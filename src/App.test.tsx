@@ -858,17 +858,22 @@ describe("App", () => {
     expect(await screen.findByText("雨站台")).toBeInTheDocument();
   });
 
-  it("shows the approved local project library", async () => {
+  it("shows a compact media library backed by real projects", async () => {
     render(<App />);
 
     expect(
       screen.getByRole("heading", {
-        name: "专注观看，需要时再理解。",
+        name: "媒体库",
       }),
     ).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: "继续观看" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "未归类视频" })).toBeInTheDocument();
+    expect(screen.queryByLabelText("媒体导入说明")).not.toBeInTheDocument();
     expect(await screen.findByText("雨站台")).toBeInTheDocument();
     expect(screen.getByText("本地媒体工具可用")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "导入本地视频" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "打开文件" })).toBeEnabled();
     expect(screen.getByLabelText("观看进度 23%")).toBeInTheDocument();
     await waitFor(() =>
       expect(desktopMocks.ensureProjectPoster).toHaveBeenCalledWith(project.id),
@@ -883,7 +888,10 @@ describe("App", () => {
 
   it("prepares a project before opening the player", async () => {
     render(<App />);
-    fireEvent.click(await screen.findByRole("button", { name: "继续观看" }));
+    const [openProject] = await screen.findAllByRole("button", {
+      name: "打开 雨站台",
+    });
+    fireEvent.click(openProject);
 
     expect(await screen.findByText("正在确认视频画面")).toBeInTheDocument();
     expect(desktopMocks.markProjectOpened).toHaveBeenCalledWith(project.id);

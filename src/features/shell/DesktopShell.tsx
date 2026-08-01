@@ -107,9 +107,10 @@ export function DesktopShell({
             </button>
           </span>
           <button
-            aria-label="打开 URL"
+            aria-label="粘贴视频 URL"
             className="shell-command"
             type="button"
+            title="打开 URL"
             onClick={onOpenUrl}
           >
             <span aria-hidden="true">↗</span>
