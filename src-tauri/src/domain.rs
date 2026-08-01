@@ -49,6 +49,7 @@ pub struct MediaSource {
 pub struct PlaybackState {
     pub position_ms: i64,
     pub duration_ms: Option<i64>,
+    pub completed_at_ms: Option<i64>,
     pub volume: f64,
     pub playback_rate: f64,
     pub subtitle_mode: SubtitleDisplayMode,
