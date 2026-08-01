@@ -73,6 +73,15 @@ export async function getAppStatus(): Promise<AppStatus> {
   return invoke<AppStatus>("get_app_status");
 }
 
+export async function setMainWindowMediaTitle(
+  mediaTitle: string | null,
+): Promise<void> {
+  if (!isDesktopApp) {
+    return;
+  }
+  await invoke("set_main_window_media_title", { mediaTitle });
+}
+
 export async function getMediaRuntimeStatus(): Promise<MediaRuntimeStatus> {
   if (!isDesktopApp) {
     return {

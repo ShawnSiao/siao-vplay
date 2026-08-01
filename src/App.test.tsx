@@ -23,6 +23,7 @@ import type {
 const desktopMocks = vi.hoisted(() => ({
   getAppStatus: vi.fn(),
   getMediaRuntimeStatus: vi.fn(),
+  setMainWindowMediaTitle: vi.fn(),
   listProjects: vi.fn(),
   getProject: vi.fn(),
   chooseLocalVideo: vi.fn(),
@@ -565,6 +566,7 @@ beforeEach(() => {
     version: "ffmpeg 8.1.1",
     errorMessage: null,
   });
+  desktopMocks.setMainWindowMediaTitle.mockResolvedValue(undefined);
   desktopMocks.listProjects.mockResolvedValue([project]);
   desktopMocks.getProject.mockResolvedValue(project);
   desktopMocks.chooseLocalVideo.mockResolvedValue(null);
@@ -870,6 +872,11 @@ describe("App", () => {
       false,
     );
     expect(screen.getByText(/H264\s*\/ AAC/)).toBeInTheDocument();
+    await waitFor(() =>
+      expect(desktopMocks.setMainWindowMediaTitle).toHaveBeenLastCalledWith(
+        "雨站台",
+      ),
+    );
   });
 
   it("toggles playback from the video surface and keeps the button label in sync", async () => {

@@ -26,6 +26,7 @@ import {
   prepareProjectMedia,
   reconcileExternalAgentResults,
   relinkProjectMedia,
+  setMainWindowMediaTitle,
   updatePlaybackState,
 } from "./lib/desktop";
 import type {
@@ -142,6 +143,14 @@ export default function App() {
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    const mediaTitle =
+      screen === "library" ? null : (activeProject?.title ?? null);
+    void setMainWindowMediaTitle(mediaTitle).catch((error: unknown) => {
+      console.warn("Unable to update the native SiaoVPlay window title", error);
+    });
+  }, [activeProject?.title, screen]);
 
   useEffect(() => {
     if (!toast) {
