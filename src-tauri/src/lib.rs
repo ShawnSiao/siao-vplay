@@ -107,6 +107,7 @@ pub fn run() {
             burn::recover_subtitle_burn_jobs(&store)?;
             app.manage(store);
             app.manage(StartupMediaPath(resolve_startup_media_path()));
+            app.manage(library::LibraryPreviewStore::default());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -131,6 +132,8 @@ pub fn run() {
             library::commands::remove_project_from_collection,
             library::commands::get_episode_neighbors,
             library::commands::set_watch_later,
+            library::commands::scan_library_folder,
+            library::commands::cancel_library_scan,
             commands::get_project,
             commands::mark_project_opened,
             commands::update_playback_state,

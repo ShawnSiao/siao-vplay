@@ -152,6 +152,74 @@ export type LibrarySearchResult = {
   episodeNumber: number | null;
 };
 
+export type EpisodeRecognition =
+  | "sxx_exx"
+  | "season_x_episode"
+  | "chinese_episode"
+  | "numeric_prefix"
+  | "season_directory"
+  | "unresolved"
+  | "conflict";
+
+export type LibraryScanCandidate = {
+  candidateId: string;
+  relativePath: string;
+  displayTitle: string;
+  seasonNumber: number | null;
+  episodeNumber: number | null;
+  absoluteOrder: number;
+  recognition: EpisodeRecognition;
+  needsConfirmation: boolean;
+  confirmationReason: string | null;
+  sourceSizeBytes: number;
+  sourceModifiedAtMs: number | null;
+  quickFingerprint: string;
+};
+
+export type IgnoredLibraryEntry = {
+  relativePath: string;
+  reason:
+    | "hidden"
+    | "system"
+    | "reparse_point"
+    | "ignored_name"
+    | "temporary"
+    | "unsupported_extension"
+    | "outside_root"
+    | "unreadable";
+};
+
+export type LibraryScanPhase =
+  | "scanning"
+  | "fingerprinting"
+  | "completed"
+  | "cancelled"
+  | "failed";
+
+export type LibraryScanProgress = {
+  scanId: string;
+  phase: LibraryScanPhase;
+  scannedDirectories: number;
+  scannedFiles: number;
+  candidateFiles: number;
+  ignoredEntries: number;
+  currentRelativePath: string | null;
+  message: string | null;
+};
+
+export type LibraryScanPreview = {
+  scanId: string;
+  previewToken: string;
+  rootPath: string;
+  rootDisplayName: string;
+  suggestedCollectionTitle: string;
+  candidates: LibraryScanCandidate[];
+  ignoredEntries: IgnoredLibraryEntry[];
+  ignoredCount: number;
+  needsConfirmationCount: number;
+  expiresAtMs: number;
+};
+
 export type MediaArtifactStatus =
   | "queued"
   | "running"

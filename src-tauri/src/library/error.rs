@@ -26,4 +26,10 @@ pub(crate) enum LibraryError {
     Conflict(String),
     #[error("媒体库数据库中的值无效：{0}")]
     InvalidData(String),
+    #[error("媒体库文件系统错误：{0}")]
+    FileSystem(#[from] std::io::Error),
+    #[error("媒体库扫描已取消：{0}")]
+    ScanCancelled(String),
+    #[error("媒体库扫描不存在或已经结束：{0}")]
+    ScanNotFound(String),
 }

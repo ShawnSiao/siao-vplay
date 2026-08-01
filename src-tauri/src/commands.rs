@@ -84,8 +84,12 @@ impl From<LibraryError> for CommandError {
             LibraryError::CollectionNotFound(_) => "collection_not_found",
             LibraryError::MembershipNotFound { .. } => "membership_not_found",
             LibraryError::MembershipExists { .. } | LibraryError::Conflict(_) => "library_conflict",
+            LibraryError::ScanCancelled(_) => "library_scan_cancelled",
+            LibraryError::ScanNotFound(_) => "library_scan_not_found",
             LibraryError::Store(StoreError::UnsupportedSchema { .. }) => "unsupported_schema",
-            LibraryError::Store(StoreError::FileSystem(_)) => "filesystem_error",
+            LibraryError::Store(StoreError::FileSystem(_)) | LibraryError::FileSystem(_) => {
+                "filesystem_error"
+            }
             LibraryError::Store(_) | LibraryError::Database(_) | LibraryError::InvalidData(_) => {
                 "database_error"
             }

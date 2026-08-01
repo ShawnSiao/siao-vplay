@@ -9,6 +9,7 @@ import type {
   LibraryCollection,
   LibraryHome,
   LibraryMediaSummary,
+  LibraryScanPreview,
   LibrarySearchResult,
 } from "../../types";
 
@@ -30,6 +31,11 @@ export type AddProjectToCollectionInput = {
   episodeNumber?: number;
   absoluteOrder?: number;
   displayTitle?: string;
+};
+
+export type ScanLibraryFolderInput = {
+  scanId: string;
+  rootPath: string;
 };
 
 export const emptyLibraryHome: LibraryHome = {
@@ -119,6 +125,16 @@ export async function setWatchLater(
   enabled: boolean,
 ): Promise<CollectionDetail | null> {
   return invoke<CollectionDetail | null>("set_watch_later", { projectId, enabled });
+}
+
+export async function scanLibraryFolder(
+  input: ScanLibraryFolderInput,
+): Promise<LibraryScanPreview> {
+  return invoke<LibraryScanPreview>("scan_library_folder", { input });
+}
+
+export async function cancelLibraryScan(scanId: string): Promise<void> {
+  await invoke("cancel_library_scan", { scanId });
 }
 
 export function toCollectionSummary(collection: LibraryCollection): CollectionSummary {
