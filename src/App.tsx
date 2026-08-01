@@ -606,6 +606,7 @@ export default function App() {
       <DesktopShell
         activeView={screen}
         navigationCollapsed={shellController.state.navigationCollapsed}
+        drawerTab={shellController.state.drawerTab}
         appStatus={appStatus}
         runtimeStatus={runtimeStatus}
         previewMode={!isDesktopApp}
@@ -615,6 +616,7 @@ export default function App() {
         canReviseSubtitles={Boolean(currentSubtitle)}
         canDeliverSubtitles={Boolean(currentSubtitle || currentTranslation)}
         onToggleNavigation={shellController.toggleNavigation}
+        onToggleDrawer={shellController.toggleDrawer}
         onGoLibrary={returnToLibrary}
         onOpenFile={() => void importLocalVideo()}
         onOpenUrl={openRemoteUrlImport}
@@ -657,7 +659,9 @@ export default function App() {
             preparation={preparation}
             currentSubtitle={currentSubtitle}
             currentTranslation={currentTranslation}
+            drawerTab={shellController.state.drawerTab}
             onBack={returnToLibrary}
+            onCloseDrawer={shellController.closeDrawer}
             onManageSubtitles={() => setSubtitleDialogOpen(true)}
             onNeedProxy={() => void prepareAndOpen(activeProject, true)}
             onPersist={persistPlayback}

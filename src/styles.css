@@ -215,6 +215,35 @@ h3 {
   background: var(--border-subtle);
 }
 
+.shell-drawer-command {
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  color: var(--text-muted);
+  background: transparent;
+  font-size: 12px;
+}
+
+.shell-drawer-command:hover,
+.shell-drawer-command.active {
+  border-color: var(--border-subtle);
+  color: var(--text-primary);
+  background: var(--bg-control);
+}
+
+.shell-drawer-command.understand.active {
+  border-color: var(--agent-border);
+  color: var(--agent);
+  background: var(--agent-soft);
+}
+
+.shell-drawer-command.learn.active {
+  border-color: rgb(130 191 255 / 34%);
+  color: var(--learning);
+  background: rgb(130 191 255 / 10%);
+}
+
 .shell-disabled-command {
   display: inline-flex;
 }
@@ -1002,8 +1031,7 @@ h3 {
 }
 
 .player-screen {
-  display: grid;
-  grid-template-rows: 40px minmax(0, 1fr);
+  display: block;
   background: var(--bg-video);
 }
 
@@ -1116,14 +1144,24 @@ h3 {
 }
 
 .player-workspace {
+  position: relative;
   display: grid;
+  height: 100%;
   min-width: 0;
   min-height: 0;
   grid-template-columns: minmax(0, 1fr);
 }
 
-.player-workspace.with-understanding {
-  grid-template-columns: minmax(0, 1fr) 370px;
+.player-workspace.with-drawer {
+  grid-template-columns: minmax(0, 1fr) 360px;
+}
+
+.player-primary {
+  display: grid;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  grid-template-rows: minmax(0, 1fr) 64px;
 }
 
 .video-stage {
@@ -1185,7 +1223,7 @@ h3 {
   position: absolute;
   z-index: 4;
   right: 9%;
-  bottom: 118px;
+  bottom: 28px;
   left: 9%;
   display: grid;
   justify-items: center;
@@ -1217,18 +1255,14 @@ h3 {
 }
 
 .player-controls {
-  position: absolute;
-  z-index: 4;
-  right: 18px;
-  bottom: 14px;
-  left: 18px;
+  position: relative;
+  z-index: 5;
   display: grid;
-  gap: 9px;
-  padding: 12px;
-  border: 1px solid rgb(255 255 255 / 7%);
-  border-radius: 10px;
-  background: rgb(7 9 11 / 72%);
-  backdrop-filter: blur(12px);
+  grid-template-rows: 4px minmax(0, 1fr);
+  gap: 3px;
+  padding: 0 10px 5px;
+  border-top: 1px solid var(--border-subtle);
+  background: #101419;
 }
 
 .seek-control {
@@ -1245,7 +1279,7 @@ h3 {
 
 .control-button {
   min-width: 44px;
-  height: 40px;
+  height: 36px;
   border: 1px solid rgb(255 255 255 / 8%);
   border-radius: 7px;
   color: #fff;
@@ -1257,7 +1291,7 @@ h3 {
 }
 
 .control-button.play {
-  min-width: 68px;
+  min-width: 62px;
   border-color: var(--brand);
   color: var(--text-on-accent);
   background: var(--brand);
@@ -4413,22 +4447,99 @@ h3 {
   }
 }
 
-@media (max-width: 1280px) {
+@media (max-width: 1279px) {
   .library-content {
     width: calc(100% - 40px);
-    padding-top: 34px;
+    padding-top: 22px;
   }
 
-  .import-strip > div {
-    padding: 16px;
+  .player-workspace.with-drawer {
+    grid-template-columns: minmax(0, 1fr);
   }
+}
 
-  .player-toolbar {
-    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-  }
+.player-drawer {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border-left: 1px solid var(--border-subtle);
+  background: var(--bg-panel);
+}
 
-  .player-workspace.with-understanding {
-    grid-template-columns: minmax(0, 1fr) 350px;
+.player-drawer-header {
+  display: flex;
+  min-height: 64px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px 14px 11px 16px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.player-drawer-header > div {
+  display: grid;
+  gap: 3px;
+}
+
+.player-drawer-header span {
+  color: var(--brand);
+  font-size: 10px;
+  font-weight: 760;
+  letter-spacing: 0.08em;
+}
+
+.player-drawer-header strong {
+  font-size: 16px;
+}
+
+.player-drawer-header button {
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: 5px;
+  color: var(--text-muted);
+  background: transparent;
+  font-size: 20px;
+}
+
+.player-drawer-header button:hover {
+  color: var(--text-primary);
+  background: var(--bg-control);
+}
+
+.player-drawer-empty {
+  display: grid;
+  min-height: 260px;
+  place-content: center;
+  gap: 6px;
+  padding: 24px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.player-drawer-empty strong {
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+.player-drawer-empty p {
+  max-width: 260px;
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+@media (max-width: 1279px) {
+  .player-workspace > .player-drawer,
+  .player-workspace > .understanding-panel,
+  .player-workspace > .learning-panel {
+    position: absolute;
+    z-index: 7;
+    top: 0;
+    right: 0;
+    bottom: 64px;
+    width: min(360px, calc(100% - 52px));
+    box-shadow: -18px 0 42px rgb(0 0 0 / 38%);
   }
 }
 

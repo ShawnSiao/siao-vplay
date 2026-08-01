@@ -14,16 +14,29 @@ type ShellState = {
 type ShellAction =
   | { type: "set_view"; view: ShellView }
   | { type: "set_navigation_collapsed"; collapsed: boolean }
-  | { type: "toggle_navigation" };
+  | { type: "toggle_navigation" }
+  | { type: "toggle_drawer"; tab: ShellDrawerTab }
+  | { type: "close_drawer" };
 
 function shellReducer(state: ShellState, action: ShellAction): ShellState {
   switch (action.type) {
     case "set_view":
-      return { ...state, activeView: action.view };
+      return {
+        ...state,
+        activeView: action.view,
+        drawerTab: action.view === "player" ? state.drawerTab : null,
+      };
     case "set_navigation_collapsed":
       return { ...state, navigationCollapsed: action.collapsed };
     case "toggle_navigation":
       return { ...state, navigationCollapsed: !state.navigationCollapsed };
+    case "toggle_drawer":
+      return {
+        ...state,
+        drawerTab: state.drawerTab === action.tab ? null : action.tab,
+      };
+    case "close_drawer":
+      return { ...state, drawerTab: null };
   }
 }
 
@@ -58,6 +71,18 @@ export function useShellController(initialView: ShellView = "library") {
   const toggleNavigation = useCallback(() => {
     dispatch({ type: "toggle_navigation" });
   }, []);
+  const toggleDrawer = useCallback((tab: ShellDrawerTab) => {
+    dispatch({ type: "toggle_drawer", tab });
+  }, []);
+  const closeDrawer = useCallback(() => {
+    dispatch({ type: "close_drawer" });
+  }, []);
 
-  return { state, setActiveView, toggleNavigation };
+  return {
+    state,
+    setActiveView,
+    toggleNavigation,
+    toggleDrawer,
+    closeDrawer,
+  };
 }

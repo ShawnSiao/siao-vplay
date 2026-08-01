@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { formatDuration, formatFileSize } from "../lib/format";
 import { playbackUrl } from "../lib/desktop";
+import type { ShellDrawerTab } from "../features/shell/useShellController";
 import type {
   MediaPreparation,
   Project,
@@ -25,7 +26,9 @@ type PlayerScreenProps = {
   preparation: MediaPreparation;
   currentSubtitle: SubtitleVersion | null;
   currentTranslation: SubtitleVersion | null;
+  drawerTab: ShellDrawerTab | null;
   onBack: () => void;
+  onCloseDrawer: () => void;
   onManageSubtitles: () => void;
   onNeedProxy: (reason: string) => void;
   onPersist: (values: PlaybackValues) => Promise<void>;
@@ -37,7 +40,9 @@ export function PlayerScreen({
   preparation,
   currentSubtitle,
   currentTranslation,
+  drawerTab,
   onBack,
+  onCloseDrawer,
   onManageSubtitles,
   onNeedProxy,
   onPersist,
@@ -66,9 +71,6 @@ export function PlayerScreen({
     project.playbackState.subtitleMode,
   );
   const [videoReady, setVideoReady] = useState(false);
-  const [panelMode, setPanelMode] = useState<
-    "watch" | "understand" | "learn"
-  >("watch");
   const persistFunctionRef = useRef<
     (video: HTMLVideoElement | null) => Promise<void>
   >(async () => undefined);
@@ -217,9 +219,10 @@ export function PlayerScreen({
 
   useEffect(() => {
     const handleKeyboard = (event: KeyboardEvent) => {
-      const target = event.target as HTMLElement | null;
+      const target = event.target;
       if (
-        target?.closest(
+        target instanceof Element &&
+        target.closest(
           "input, select, textarea, button, a, [contenteditable='true']",
         )
       ) {
@@ -236,8 +239,8 @@ export function PlayerScreen({
         seekTo(positionMs + 10_000);
       } else if (event.key === "Escape") {
         event.preventDefault();
-        if (panelMode !== "watch") {
-          setPanelMode("watch");
+        if (drawerTab) {
+          onCloseDrawer();
         } else {
           onBack();
         }
@@ -245,7 +248,7 @@ export function PlayerScreen({
     };
     window.addEventListener("keydown", handleKeyboard);
     return () => window.removeEventListener("keydown", handleKeyboard);
-  }, [onBack, panelMode, positionMs, seekTo, togglePlayback]);
+  }, [drawerTab, onBack, onCloseDrawer, positionMs, seekTo, togglePlayback]);
 
   const beginPerformanceCheck = () => {
     const video = videoRef.current;
@@ -337,108 +340,86 @@ export function PlayerScreen({
 
   return (
     <div className="player-screen" data-screen-label="本地播放器">
-      <header className="player-panel-tabs" aria-label="播放器侧栏">
-        <div className="player-mode">
-          <button
-            className={panelMode === "watch" ? "active" : ""}
-            type="button"
-            onClick={() => setPanelMode("watch")}
-          >
-            观影
-          </button>
-          <button
-            className={panelMode === "understand" ? "active" : ""}
-            type="button"
-            onClick={() => setPanelMode("understand")}
-          >
-            理解
-          </button>
-          <button
-            className={panelMode === "learn" ? "active learning-active" : ""}
-            type="button"
-            onClick={() => setPanelMode("learn")}
-          >
-            学习
-          </button>
-        </div>
-      </header>
-
       <div
-        className={`player-workspace ${
-          panelMode !== "watch" ? "with-understanding" : ""
-        }`}
+        className={`player-workspace ${drawerTab ? "with-drawer" : ""}`}
       >
-        <main className="video-stage">
-          <video
-            ref={videoRef}
-            key={sourceUrl}
-            src={sourceUrl}
-            preload="metadata"
-            aria-label="视频画面，单击播放或暂停"
-            onClick={() => void togglePlayback()}
-            onLoadedMetadata={handleLoadedMetadata}
-            onLoadedData={handleLoadedData}
-            onTimeUpdate={handleTimeUpdate}
-            onPlay={() => {
-              setPlaying(true);
-              beginPerformanceCheck();
-            }}
-            onPause={() => {
-              setPlaying(false);
-              void persistCurrentState(videoRef.current).catch(() => undefined);
-            }}
-            onEnded={() => {
-              setPlaying(false);
-              void persistCurrentState(videoRef.current).catch(() => undefined);
-            }}
-            onError={() => requestProxy("media_element_error")}
-          ></video>
+        <main className="player-primary">
+          <div className="video-stage">
+            <video
+              ref={videoRef}
+              key={sourceUrl}
+              src={sourceUrl}
+              preload="metadata"
+              aria-label="视频画面，单击播放或暂停"
+              onClick={() => void togglePlayback()}
+              onLoadedMetadata={handleLoadedMetadata}
+              onLoadedData={handleLoadedData}
+              onTimeUpdate={handleTimeUpdate}
+              onPlay={() => {
+                setPlaying(true);
+                beginPerformanceCheck();
+              }}
+              onPause={() => {
+                setPlaying(false);
+                void persistCurrentState(videoRef.current).catch(
+                  () => undefined,
+                );
+              }}
+              onEnded={() => {
+                setPlaying(false);
+                void persistCurrentState(videoRef.current).catch(
+                  () => undefined,
+                );
+              }}
+              onError={() => requestProxy("media_element_error")}
+            ></video>
 
-          {!videoReady ? (
-            <div className="video-loading" aria-live="polite">
-              <span className="spinner large"></span>
-              <strong>正在确认视频画面</strong>
-              <span>只有检测到有效视频尺寸后才会进入观看状态。</span>
+            {!videoReady ? (
+              <div className="video-loading" aria-live="polite">
+                <span className="spinner large"></span>
+                <strong>正在确认视频画面</strong>
+                <span>只有检测到有效视频尺寸后才会进入观看状态。</span>
+              </div>
+            ) : null}
+
+            <div className="media-pills">
+              <span>
+                {videoStream?.codecName.toUpperCase() ?? "视频"} /{" "}
+                {audioStream?.codecName.toUpperCase() ?? "无音轨"}
+              </span>
+              <span>
+                {videoStream
+                  ? `${videoStream.width} × ${videoStream.height}`
+                  : "分辨率未知"}
+              </span>
+              <span>
+                {formatFileSize(preparation.inspection.probe.sizeBytes)}
+              </span>
+              {preparation.reusedProxy ? <span>已复用播放版本</span> : null}
             </div>
-          ) : null}
 
-          <div className="media-pills">
-            <span>
-              {videoStream?.codecName.toUpperCase() ?? "视频"} /{" "}
-              {audioStream?.codecName.toUpperCase() ?? "无音轨"}
-            </span>
-            <span>
-              {videoStream
-                ? `${videoStream.width} × ${videoStream.height}`
-                : "分辨率未知"}
-            </span>
-            <span>
-              {formatFileSize(preparation.inspection.probe.sizeBytes)}
-            </span>
-            {preparation.reusedProxy ? <span>已复用播放版本</span> : null}
+            {activeOriginal || activeTranslation ? (
+              <div className="caption-stack" aria-live="off">
+                {(effectiveSubtitleMode === "original" ||
+                  effectiveSubtitleMode === "bilingual") &&
+                activeOriginal ? (
+                  <p
+                    className="caption-line original"
+                    lang={currentSubtitle?.languageCode}
+                  >
+                    {activeOriginal.text}
+                  </p>
+                ) : null}
+                {(effectiveSubtitleMode === "translation" ||
+                  effectiveSubtitleMode === "bilingual") &&
+                activeTranslation ? (
+                  <p className="caption-line translation" lang="zh-CN">
+                    {activeTranslation.text}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
           </div>
-
-          {activeOriginal || activeTranslation ? (
-            <div className="caption-stack" aria-live="off">
-              {(effectiveSubtitleMode === "original" ||
-                effectiveSubtitleMode === "bilingual") &&
-              activeOriginal ? (
-                <p
-                  className="caption-line original"
-                  lang={currentSubtitle?.languageCode}
-                >
-                  {activeOriginal.text}
-                </p>
-              ) : null}
-              {(effectiveSubtitleMode === "translation" ||
-                effectiveSubtitleMode === "bilingual") &&
-              activeTranslation ? (
-                <p className="caption-line translation" lang="zh-CN">
-                  {activeTranslation.text}
-                </p>
-              ) : null}
-            </div>
-          ) : null}
 
           <div className="player-controls">
             <input
@@ -538,7 +519,27 @@ export function PlayerScreen({
             </div>
           </div>
         </main>
-        {panelMode === "understand" ? (
+        {drawerTab === "episodes" ? (
+          <aside className="player-drawer episode-drawer" aria-label="剧集抽屉">
+            <header className="player-drawer-header">
+              <div>
+                <span>剧集</span>
+                <strong>当前视频</strong>
+              </div>
+              <button
+                aria-label="关闭剧集抽屉"
+                type="button"
+                onClick={onCloseDrawer}
+              >
+                ×
+              </button>
+            </header>
+            <div className="player-drawer-empty">
+              <strong>尚未加入剧集</strong>
+              <p>剧集列表会在 Phase 7C 接入真实集合数据。</p>
+            </div>
+          </aside>
+        ) : drawerTab === "understand" ? (
           <UnderstandingPanel
             key={project.id}
             projectId={project.id}
@@ -546,9 +547,9 @@ export function PlayerScreen({
             sourceVersion={currentSubtitle}
             translationVersion={currentTranslation}
             onPrepareSubtitles={onManageSubtitles}
-            onClose={() => setPanelMode("watch")}
+            onClose={onCloseDrawer}
           />
-        ) : panelMode === "learn" ? (
+        ) : drawerTab === "learn" ? (
           <LearningPanel
             key={`${project.id}:${activeOriginal?.id ?? "no-line"}`}
             projectId={project.id}
@@ -558,7 +559,7 @@ export function PlayerScreen({
             sourceSegment={activeOriginal}
             translationSegment={activeTranslation}
             onPrepareSubtitles={onManageSubtitles}
-            onClose={() => setPanelMode("watch")}
+            onClose={onCloseDrawer}
             onJump={seekTo}
           />
         ) : null}

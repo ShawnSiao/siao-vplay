@@ -907,6 +907,24 @@ describe("App", () => {
     );
   });
 
+  it("keeps optional drawers closed and preserves the mounted video", async () => {
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "继续观看" }));
+
+    const video = await screen.findByLabelText("视频画面，单击播放或暂停");
+    expect(screen.queryByLabelText("剧集抽屉")).not.toBeInTheDocument();
+
+    const episodesButton = screen.getByRole("button", { name: "剧集" });
+    fireEvent.click(episodesButton);
+    expect(screen.getByLabelText("剧集抽屉")).toBeInTheDocument();
+    expect(episodesButton).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByLabelText("视频画面，单击播放或暂停")).toBe(video);
+
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.queryByLabelText("剧集抽屉")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("视频画面，单击播放或暂停")).toBe(video);
+  });
+
   it("toggles playback from the video surface and keeps the button label in sync", async () => {
     let paused = true;
     const pausedState = vi

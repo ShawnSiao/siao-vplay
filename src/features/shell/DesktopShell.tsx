@@ -1,11 +1,12 @@
 import type { ReactNode } from "react";
 
 import type { AppStatus, MediaRuntimeStatus } from "../../types";
-import type { ShellView } from "./useShellController";
+import type { ShellDrawerTab, ShellView } from "./useShellController";
 
 type DesktopShellProps = {
   activeView: ShellView;
   navigationCollapsed: boolean;
+  drawerTab: ShellDrawerTab | null;
   appStatus: AppStatus | null;
   runtimeStatus: MediaRuntimeStatus | null;
   previewMode: boolean;
@@ -15,6 +16,7 @@ type DesktopShellProps = {
   canReviseSubtitles: boolean;
   canDeliverSubtitles: boolean;
   onToggleNavigation: () => void;
+  onToggleDrawer: (tab: ShellDrawerTab) => void;
   onGoLibrary: () => void;
   onOpenFile: () => void;
   onOpenUrl: () => void;
@@ -28,6 +30,7 @@ type DesktopShellProps = {
 export function DesktopShell({
   activeView,
   navigationCollapsed,
+  drawerTab,
   appStatus,
   runtimeStatus,
   previewMode,
@@ -37,6 +40,7 @@ export function DesktopShell({
   canReviseSubtitles,
   canDeliverSubtitles,
   onToggleNavigation,
+  onToggleDrawer,
   onGoLibrary,
   onOpenFile,
   onOpenUrl,
@@ -173,6 +177,26 @@ export function DesktopShell({
               >
                 ⇩
               </button>
+              <span className="shell-command-divider" aria-hidden="true" />
+              {(
+                [
+                  ["episodes", "剧集"],
+                  ["understand", "理解"],
+                  ["learn", "学习"],
+                ] as const
+              ).map(([tab, label]) => (
+                <button
+                  aria-pressed={drawerTab === tab}
+                  className={`shell-drawer-command ${tab} ${
+                    drawerTab === tab ? "active" : ""
+                  }`}
+                  key={tab}
+                  type="button"
+                  onClick={() => onToggleDrawer(tab)}
+                >
+                  {label}
+                </button>
+              ))}
             </>
           ) : null}
         </div>
@@ -209,11 +233,21 @@ export function DesktopShell({
               <span aria-hidden="true">▶</span>
               <span className="desktop-navigation-label">继续观看</span>
             </button>
-            <button type="button" title="剧集将在 Phase 7C 启用" disabled>
+            <button
+              aria-label="媒体库：剧集"
+              type="button"
+              title="剧集将在 Phase 7C 启用"
+              disabled
+            >
               <span aria-hidden="true">▦</span>
               <span className="desktop-navigation-label">剧集</span>
             </button>
-            <button type="button" title="文件夹将在 Phase 7D 启用" disabled>
+            <button
+              aria-label="媒体库：文件夹"
+              type="button"
+              title="文件夹将在 Phase 7D 启用"
+              disabled
+            >
               <span aria-hidden="true">▱</span>
               <span className="desktop-navigation-label">文件夹</span>
             </button>
