@@ -44,7 +44,7 @@ export const isDesktopApp = "__TAURI_INTERNALS__" in window;
 
 const browserStatus: AppStatus = {
   appName: "SiaoVPlay",
-  version: "0.1.0",
+  version: "0.2.0",
   platform: "browser-preview",
   dataDirectory: "仅桌面应用可用",
   startupMediaPath: null,

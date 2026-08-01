@@ -1,6 +1,6 @@
 [package]
 name = "siao-vplay"
-version = "0.1.0"
+version = "0.2.0"
 description = "Windows local-first cross-language intelligent video player"
 authors = ["ShawnSiao"]
 edition = "2024"
