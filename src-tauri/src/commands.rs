@@ -86,6 +86,8 @@ impl From<LibraryError> for CommandError {
             LibraryError::MembershipExists { .. } | LibraryError::Conflict(_) => "library_conflict",
             LibraryError::ScanCancelled(_) => "library_scan_cancelled",
             LibraryError::ScanNotFound(_) => "library_scan_not_found",
+            LibraryError::PreviewNotFound(_) => "library_preview_not_found",
+            LibraryError::PreviewExpired(_) => "library_preview_expired",
             LibraryError::Store(StoreError::UnsupportedSchema { .. }) => "unsupported_schema",
             LibraryError::Store(StoreError::FileSystem(_)) | LibraryError::FileSystem(_) => {
                 "filesystem_error"

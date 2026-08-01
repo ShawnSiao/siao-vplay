@@ -34,6 +34,18 @@ struct PreviewEntry {
     expires_at: Instant,
 }
 
+#[derive(Debug)]
+pub(super) struct PreviewLease {
+    token: String,
+    entry: PreviewEntry,
+}
+
+impl PreviewLease {
+    pub(super) fn preview(&self) -> &LibraryScanPreview {
+        &self.entry.preview
+    }
+}
+
 impl Default for LibraryPreviewStore {
     fn default() -> Self {
         Self {
@@ -143,6 +155,33 @@ impl LibraryPreviewStore {
         Ok(())
     }
 
+    pub(super) fn take_preview(&self, token: &str) -> Result<PreviewLease, LibraryError> {
+        validate_preview_token(token)?;
+        let mut state = self.lock()?;
+        let entry = state
+            .completed_previews
+            .remove(token)
+            .ok_or_else(|| LibraryError::PreviewNotFound(token.to_owned()))?;
+        if entry.expires_at <= Instant::now() {
+            return Err(LibraryError::PreviewExpired(token.to_owned()));
+        }
+        prune_expired(&mut state);
+        Ok(PreviewLease {
+            token: token.to_owned(),
+            entry,
+        })
+    }
+
+    pub(super) fn restore_preview(&self, lease: PreviewLease) {
+        if lease.entry.expires_at <= Instant::now() {
+            return;
+        }
+        if let Ok(mut state) = self.inner.lock() {
+            prune_expired(&mut state);
+            state.completed_previews.insert(lease.token, lease.entry);
+        }
+    }
+
     fn lock(&self) -> Result<std::sync::MutexGuard<'_, PreviewState>, LibraryError> {
         self.inner
             .lock()
@@ -150,7 +189,7 @@ impl LibraryPreviewStore {
     }
 
     #[cfg(test)]
-    fn with_ttl(ttl: Duration) -> Self {
+    pub(super) fn with_ttl(ttl: Duration) -> Self {
         Self {
             inner: Arc::new(Mutex::new(PreviewState::default())),
             ttl,
@@ -180,6 +219,12 @@ fn validate_scan_id(scan_id: &str) -> Result<(), LibraryError> {
     Uuid::parse_str(scan_id)
         .map(|_| ())
         .map_err(|_| LibraryError::Validation("扫描任务 ID 无效".to_owned()))
+}
+
+fn validate_preview_token(token: &str) -> Result<(), LibraryError> {
+    Uuid::parse_str(token)
+        .map(|_| ())
+        .map_err(|_| LibraryError::Validation("扫描预览令牌无效".to_owned()))
 }
 
 fn prune_expired(state: &mut PreviewState) {
@@ -263,7 +308,20 @@ mod tests {
             store.first_completed_scan_id().as_deref(),
             Some(scan_id.as_str())
         );
+        let token = store
+            .inner
+            .lock()
+            .expect("preview state lock")
+            .completed_previews
+            .keys()
+            .next()
+            .expect("preview token")
+            .clone();
         thread::sleep(Duration::from_millis(5));
+        assert!(matches!(
+            store.take_preview(&token),
+            Err(LibraryError::PreviewExpired(_))
+        ));
         assert_eq!(store.completed_preview_count(), 0);
     }
 }

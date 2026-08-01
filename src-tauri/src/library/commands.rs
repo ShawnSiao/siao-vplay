@@ -5,10 +5,11 @@ use tauri::{AppHandle, Emitter, Manager, State};
 use crate::{commands::CommandError, store::ProjectStore};
 
 use super::{
-    AddProjectToCollectionInput, Collection, CollectionDetail, CreateCollectionInput,
-    EpisodeNeighbors, LibraryError, LibraryHome, LibraryPreviewStore, LibraryScanPhase,
-    LibraryScanPreview, LibraryScanProgress, LibraryScanService, LibraryService, MediaSummary,
-    ScanLibraryFolderInput, SearchResult, UpdateCollectionInput,
+    AddProjectToCollectionInput, Collection, CollectionDetail, ConfirmLibraryImportInput,
+    CreateCollectionInput, EpisodeNeighbors, LibraryError, LibraryHome, LibraryImportResult,
+    LibraryImportService, LibraryPreviewStore, LibraryScanPhase, LibraryScanPreview,
+    LibraryScanProgress, LibraryScanService, LibraryService, MediaSummary, ScanLibraryFolderInput,
+    SearchResult, UpdateCollectionInput,
 };
 
 const LIBRARY_SCAN_PROGRESS_EVENT: &str = "library-scan-progress";
@@ -182,6 +183,19 @@ pub(crate) fn cancel_library_scan(
 ) -> Result<(), CommandError> {
     LibraryScanService::new(preview_store.inner().clone())
         .cancel(&scan_id)
+        .map_err(CommandError::from)
+}
+
+#[tauri::command]
+pub(crate) async fn confirm_library_import(
+    store: State<'_, ProjectStore>,
+    preview_store: State<'_, LibraryPreviewStore>,
+    input: ConfirmLibraryImportInput,
+) -> Result<LibraryImportResult, CommandError> {
+    let service = LibraryImportService::new(store.inner().clone(), preview_store.inner().clone());
+    tauri::async_runtime::spawn_blocking(move || service.confirm_import(input))
+        .await
+        .map_err(|error| LibraryError::Conflict(format!("媒体库导入任务无法完成：{error}")))?
         .map_err(CommandError::from)
 }
 

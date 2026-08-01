@@ -1,5 +1,6 @@
 pub(crate) mod commands;
 mod error;
+mod import_service;
 pub(crate) mod migration;
 mod model;
 mod preview_store;
@@ -9,6 +10,7 @@ mod scanner;
 mod service;
 
 pub(crate) use error::LibraryError;
+pub(crate) use import_service::LibraryImportService;
 pub(crate) use model::*;
 pub(crate) use preview_store::LibraryPreviewStore;
 pub(crate) use scan_service::LibraryScanService;

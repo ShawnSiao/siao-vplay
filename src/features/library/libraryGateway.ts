@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { isDesktopApp } from "../../lib/desktop";
 import type {
   CollectionDetail,
+  ConfirmLibraryImportInput,
   CollectionSortMode,
   CollectionSummary,
   EpisodeNeighbors,
@@ -10,6 +11,7 @@ import type {
   LibraryHome,
   LibraryMediaSummary,
   LibraryScanPreview,
+  LibraryImportResult,
   LibrarySearchResult,
 } from "../../types";
 
@@ -135,6 +137,12 @@ export async function scanLibraryFolder(
 
 export async function cancelLibraryScan(scanId: string): Promise<void> {
   await invoke("cancel_library_scan", { scanId });
+}
+
+export async function confirmLibraryImport(
+  input: ConfirmLibraryImportInput,
+): Promise<LibraryImportResult> {
+  return invoke<LibraryImportResult>("confirm_library_import", { input });
 }
 
 export function toCollectionSummary(collection: LibraryCollection): CollectionSummary {

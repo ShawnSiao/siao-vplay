@@ -220,6 +220,30 @@ export type LibraryScanPreview = {
   expiresAtMs: number;
 };
 
+export type ConfirmLibraryItemInput = {
+  candidateId: string;
+  displayTitle: string;
+  seasonNumber: number | null;
+  episodeNumber: number | null;
+  absoluteOrder: number;
+  confirmed: boolean;
+};
+
+export type ConfirmLibraryImportInput = {
+  previewToken: string;
+  collectionTitle: string;
+  items: ConfirmLibraryItemInput[];
+  confirmFingerprintDuplicates: boolean;
+};
+
+export type LibraryImportResult = {
+  rootId: string;
+  collection: CollectionDetail;
+  importedItemCount: number;
+  createdProjectCount: number;
+  reusedProjectCount: number;
+};
+
 export type MediaArtifactStatus =
   | "queued"
   | "running"

@@ -40,6 +40,146 @@ impl<'connection> LibraryRepository<'connection> {
         Ok(())
     }
 
+    pub(crate) fn insert_library_root(
+        &self,
+        root: &NewLibraryRoot<'_>,
+    ) -> Result<(), LibraryError> {
+        self.connection.execute(
+            "INSERT INTO library_roots (
+                id, path, path_key, display_name, scan_policy, availability,
+                last_scanned_at_ms, created_at_ms, updated_at_ms
+             ) VALUES (?1, ?2, ?3, ?4, 'manual', 'available', ?5, ?5, ?5)",
+            params![
+                root.id,
+                root.path,
+                root.path_key,
+                root.display_name,
+                root.timestamp,
+            ],
+        )?;
+        Ok(())
+    }
+
+    pub(crate) fn root_exists_by_path_key(&self, path_key: &str) -> Result<bool, LibraryError> {
+        self.connection
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM library_roots WHERE path_key = ?1)",
+                params![path_key],
+                |row| row.get(0),
+            )
+            .map_err(Into::into)
+    }
+
+    pub(crate) fn list_primary_media_locators(
+        &self,
+    ) -> Result<Vec<ExistingMediaLocator>, LibraryError> {
+        let mut statement = self.connection.prepare(
+            "SELECT project_id, locator, source_size_bytes, source_modified_at_ms
+             FROM media_sources
+             WHERE kind = 'local_file' AND is_primary = 1
+             ORDER BY project_id",
+        )?;
+        statement
+            .query_map([], |row| {
+                Ok(ExistingMediaLocator {
+                    project_id: row.get(0)?,
+                    locator: row.get(1)?,
+                    source_size_bytes: row.get(2)?,
+                    source_modified_at_ms: row.get(3)?,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(Into::into)
+    }
+
+    pub(crate) fn list_existing_fingerprints(
+        &self,
+    ) -> Result<Vec<ExistingFingerprint>, LibraryError> {
+        let mut statement = self.connection.prepare(
+            "SELECT ci.quick_fingerprint, m.locator
+             FROM collection_items ci
+             JOIN media_sources m ON m.project_id = ci.project_id AND m.is_primary = 1
+             WHERE ci.quick_fingerprint IS NOT NULL
+             ORDER BY ci.quick_fingerprint, m.locator",
+        )?;
+        statement
+            .query_map([], |row| {
+                Ok(ExistingFingerprint {
+                    quick_fingerprint: row.get(0)?,
+                    locator: row.get(1)?,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(Into::into)
+    }
+
+    pub(crate) fn insert_imported_project(
+        &self,
+        project: &NewImportedProject<'_>,
+    ) -> Result<(), LibraryError> {
+        self.connection.execute(
+            "INSERT INTO projects (
+                id, title, revision, created_at_ms, updated_at_ms, last_opened_at_ms
+             ) VALUES (?1, ?2, 1, ?3, ?3, ?3)",
+            params![project.project_id, project.title, project.timestamp],
+        )?;
+        self.connection.execute(
+            "INSERT INTO media_sources (
+                id, project_id, kind, locator, display_name, is_primary,
+                source_size_bytes, source_modified_at_ms, created_at_ms, updated_at_ms
+             ) VALUES (?1, ?2, 'local_file', ?3, ?4, 1, ?5, ?6, ?7, ?7)",
+            params![
+                project.media_source_id,
+                project.project_id,
+                project.locator,
+                project.display_name,
+                project.source_size_bytes,
+                project.source_modified_at_ms,
+                project.timestamp,
+            ],
+        )?;
+        self.connection.execute(
+            "INSERT INTO playback_states (
+                project_id, position_ms, duration_ms, volume, playback_rate,
+                subtitle_mode, updated_at_ms, completed_at_ms
+             ) VALUES (?1, 0, NULL, 1.0, 1.0, 'translation', ?2, NULL)",
+            params![project.project_id, project.timestamp],
+        )?;
+        Ok(())
+    }
+
+    pub(crate) fn insert_imported_membership(
+        &self,
+        membership: &NewImportedMembership<'_>,
+    ) -> Result<(), LibraryError> {
+        self.connection.execute(
+            "INSERT INTO collection_items (
+                collection_id, project_id, season_number, episode_number,
+                absolute_order, display_title, relative_path, relative_path_key,
+                availability, source_size_bytes, source_modified_at_ms,
+                quick_fingerprint, created_at_ms, updated_at_ms
+             ) VALUES (
+                ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8,
+                'available', ?9, ?10, ?11, ?12, ?12
+             )",
+            params![
+                membership.collection_id,
+                membership.project_id,
+                membership.season_number,
+                membership.episode_number,
+                membership.absolute_order,
+                membership.display_title,
+                membership.relative_path,
+                membership.relative_path_key,
+                membership.source_size_bytes,
+                membership.source_modified_at_ms,
+                membership.quick_fingerprint,
+                membership.timestamp,
+            ],
+        )?;
+        Ok(())
+    }
+
     pub(crate) fn update_collection(&self, collection: &Collection) -> Result<(), LibraryError> {
         let changed = self.connection.execute(
             "UPDATE collections
@@ -528,6 +668,52 @@ pub(crate) struct NewMembership<'value> {
     pub(crate) episode_number: Option<i64>,
     pub(crate) absolute_order: i64,
     pub(crate) display_title: &'value str,
+}
+
+pub(crate) struct NewLibraryRoot<'value> {
+    pub(crate) id: &'value str,
+    pub(crate) path: &'value str,
+    pub(crate) path_key: &'value str,
+    pub(crate) display_name: &'value str,
+    pub(crate) timestamp: i64,
+}
+
+pub(crate) struct ExistingMediaLocator {
+    pub(crate) project_id: String,
+    pub(crate) locator: String,
+    pub(crate) source_size_bytes: Option<i64>,
+    pub(crate) source_modified_at_ms: Option<i64>,
+}
+
+pub(crate) struct ExistingFingerprint {
+    pub(crate) quick_fingerprint: String,
+    pub(crate) locator: String,
+}
+
+pub(crate) struct NewImportedProject<'value> {
+    pub(crate) project_id: &'value str,
+    pub(crate) media_source_id: &'value str,
+    pub(crate) title: &'value str,
+    pub(crate) locator: &'value str,
+    pub(crate) display_name: &'value str,
+    pub(crate) source_size_bytes: i64,
+    pub(crate) source_modified_at_ms: Option<i64>,
+    pub(crate) timestamp: i64,
+}
+
+pub(crate) struct NewImportedMembership<'value> {
+    pub(crate) collection_id: &'value str,
+    pub(crate) project_id: &'value str,
+    pub(crate) season_number: Option<i64>,
+    pub(crate) episode_number: Option<i64>,
+    pub(crate) absolute_order: i64,
+    pub(crate) display_title: &'value str,
+    pub(crate) relative_path: &'value str,
+    pub(crate) relative_path_key: &'value str,
+    pub(crate) source_size_bytes: i64,
+    pub(crate) source_modified_at_ms: Option<i64>,
+    pub(crate) quick_fingerprint: &'value str,
+    pub(crate) timestamp: i64,
 }
 
 fn map_collection(row: &Row<'_>) -> rusqlite::Result<Collection> {

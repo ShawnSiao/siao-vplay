@@ -1,5 +1,6 @@
 use std::{
     cmp::Ordering,
+    collections::HashMap,
     fs::{self, File, Metadata},
     io::{Read, Seek, SeekFrom},
     path::{Path, PathBuf},
@@ -70,6 +71,13 @@ pub(super) struct ScannedLibraryFolder {
     pub ignored_count: u64,
 }
 
+#[derive(Debug)]
+pub(super) struct RevalidatedCandidateFile {
+    pub canonical_path: PathBuf,
+    pub source_size_bytes: u64,
+    pub source_modified_at_ms: Option<i64>,
+}
+
 #[derive(Default)]
 struct ProgressCounters {
     scanned_directories: u64,
@@ -101,23 +109,7 @@ pub(super) fn scan_library_folder<F>(
 where
     F: FnMut(LibraryScanProgress),
 {
-    let requested_root = PathBuf::from(root_path.trim());
-    if root_path.trim().is_empty() {
-        return Err(LibraryError::Validation("媒体库文件夹不能为空".to_owned()));
-    }
-    let requested_metadata = fs::symlink_metadata(&requested_root)?;
-    if !requested_metadata.is_dir() {
-        return Err(LibraryError::Validation(
-            "媒体库路径必须是现有文件夹".to_owned(),
-        ));
-    }
-    if is_reparse_or_symlink(&requested_metadata) {
-        return Err(LibraryError::Validation(
-            "不能将符号链接或重解析点直接授权为媒体库根目录".to_owned(),
-        ));
-    }
-
-    let canonical_root = dunce::canonicalize(&requested_root)?;
+    let canonical_root = canonicalize_authorized_root(root_path)?;
     let root_display_name = canonical_root
         .file_name()
         .and_then(|value| value.to_str())
@@ -306,6 +298,7 @@ where
     }
 
     candidates.sort_by(|left, right| natural_cmp(&left.relative_path, &right.relative_path));
+    mark_duplicate_fingerprints(&mut candidates);
     for (index, candidate) in candidates.iter_mut().enumerate() {
         candidate.absolute_order = i64::try_from(index)
             .map_err(|_| LibraryError::Conflict("扫描结果数量超出支持范围".to_owned()))?;
@@ -325,6 +318,86 @@ where
         candidates,
         ignored_entries,
         ignored_count: counters.ignored_entries,
+    })
+}
+
+pub(super) fn canonicalize_authorized_root(root_path: &str) -> Result<PathBuf, LibraryError> {
+    let root_path = root_path.trim();
+    if root_path.is_empty() {
+        return Err(LibraryError::Validation("媒体库文件夹不能为空".to_owned()));
+    }
+    let requested_root = PathBuf::from(root_path);
+    let requested_metadata = fs::symlink_metadata(&requested_root)?;
+    if !requested_metadata.is_dir() {
+        return Err(LibraryError::Validation(
+            "媒体库路径必须是现有文件夹".to_owned(),
+        ));
+    }
+    if is_reparse_or_symlink(&requested_metadata) {
+        return Err(LibraryError::Validation(
+            "不能将符号链接或重解析点直接授权为媒体库根目录".to_owned(),
+        ));
+    }
+    dunce::canonicalize(requested_root).map_err(Into::into)
+}
+
+pub(super) fn revalidate_candidate(
+    root: &Path,
+    candidate: &LibraryScanCandidate,
+) -> Result<RevalidatedCandidateFile, LibraryError> {
+    let relative = Path::new(&candidate.relative_path);
+    if relative.is_absolute()
+        || relative.components().any(|component| {
+            matches!(
+                component,
+                std::path::Component::ParentDir | std::path::Component::Prefix(_)
+            )
+        })
+    {
+        return Err(LibraryError::Validation(format!(
+            "扫描结果包含不安全的相对路径：{}",
+            candidate.relative_path
+        )));
+    }
+    let joined = root.join(relative);
+    let metadata = fs::symlink_metadata(&joined)?;
+    if !metadata.is_file() || is_reparse_or_symlink(&metadata) {
+        return Err(LibraryError::Conflict(format!(
+            "扫描后的文件已经不可用：{}",
+            candidate.relative_path
+        )));
+    }
+    let canonical_path = dunce::canonicalize(&joined)?;
+    if !canonical_path.starts_with(root) {
+        return Err(LibraryError::Validation(format!(
+            "扫描后的文件已经移出授权目录：{}",
+            candidate.relative_path
+        )));
+    }
+    if metadata.len() != candidate.source_size_bytes
+        || modified_at_ms(&metadata) != candidate.source_modified_at_ms
+    {
+        return Err(LibraryError::Conflict(format!(
+            "扫描后的文件元数据已经变化：{}",
+            candidate.relative_path
+        )));
+    }
+    let cancelled = AtomicBool::new(false);
+    let fingerprint = quick_fingerprint(&canonical_path, &metadata, &cancelled)?;
+    let metadata_after = fs::metadata(&canonical_path)?;
+    if metadata.len() != metadata_after.len()
+        || modified_at_ms(&metadata) != modified_at_ms(&metadata_after)
+        || fingerprint != candidate.quick_fingerprint
+    {
+        return Err(LibraryError::Conflict(format!(
+            "扫描后的文件内容已经变化：{}",
+            candidate.relative_path
+        )));
+    }
+    Ok(RevalidatedCandidateFile {
+        canonical_path,
+        source_size_bytes: metadata.len(),
+        source_modified_at_ms: modified_at_ms(&metadata),
     })
 }
 
@@ -537,7 +610,29 @@ fn quick_fingerprint(
         file.seek(SeekFrom::Start(size - FINGERPRINT_CHUNK_BYTES))?;
         hash_bytes(&mut file, FINGERPRINT_CHUNK_BYTES, cancelled, &mut hasher)?;
     }
-    Ok(format!("sha256-size-edges-v1:{:x}", hasher.finalize()))
+    Ok(format!("{:x}", hasher.finalize()))
+}
+
+fn mark_duplicate_fingerprints(candidates: &mut [LibraryScanCandidate]) {
+    let mut indexes_by_fingerprint = HashMap::<String, Vec<usize>>::new();
+    for (index, candidate) in candidates.iter().enumerate() {
+        indexes_by_fingerprint
+            .entry(candidate.quick_fingerprint.clone())
+            .or_default()
+            .push(index);
+    }
+    for indexes in indexes_by_fingerprint
+        .values()
+        .filter(|indexes| indexes.len() > 1)
+    {
+        for index in indexes {
+            let candidate = &mut candidates[*index];
+            candidate.needs_confirmation = true;
+            if candidate.confirmation_reason.is_none() {
+                candidate.confirmation_reason = Some("存在内容指纹相同但路径不同的视频".to_owned());
+            }
+        }
+    }
 }
 
 fn hash_bytes(
@@ -776,7 +871,7 @@ mod tests {
             ),
         ];
         for (relative, _, _, _) in cases {
-            media(root.path(), relative, b"video");
+            media(root.path(), relative, relative.as_bytes());
         }
         media(root.path(), "Show.S01E02.1x03.mp4", b"conflict");
         media(
@@ -832,6 +927,8 @@ mod tests {
         media(root.path(), "sample.mp4", b"sample");
         media(root.path(), "05.part", b"temporary");
         media(root.path(), "notes.txt", b"notes");
+        media(root.path(), "06 - duplicate.mp4", b"same-content");
+        media(root.path(), "07 - duplicate.mp4", b"same-content");
 
         let result = scan(root.path());
         assert_eq!(
@@ -840,7 +937,13 @@ mod tests {
                 .iter()
                 .map(|candidate| candidate.relative_path.as_str())
                 .collect::<Vec<_>>(),
-            ["01 - first.mp4", "2 - second.mp4", "10 - finale.mp4"]
+            [
+                "01 - first.mp4",
+                "2 - second.mp4",
+                "06 - duplicate.mp4",
+                "07 - duplicate.mp4",
+                "10 - finale.mp4"
+            ]
         );
         assert_eq!(
             result
@@ -848,7 +951,7 @@ mod tests {
                 .iter()
                 .map(|candidate| candidate.absolute_order)
                 .collect::<Vec<_>>(),
-            [0, 1, 2]
+            [0, 1, 2, 3, 4]
         );
         assert_eq!(result.ignored_count, 5);
         assert!(result.ignored_entries.iter().any(|entry| {
@@ -857,6 +960,13 @@ mod tests {
         assert!(result.ignored_entries.iter().any(|entry| {
             entry.relative_path == "extras" && entry.reason == IgnoredEntryReason::IgnoredName
         }));
+        assert!(
+            result
+                .candidates
+                .iter()
+                .filter(|candidate| candidate.relative_path.contains("duplicate"))
+                .all(|candidate| candidate.needs_confirmation)
+        );
     }
 
     #[test]

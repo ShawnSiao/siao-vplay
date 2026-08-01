@@ -344,3 +344,35 @@ pub(crate) struct LibraryScanPreview {
     pub needs_confirmation_count: u64,
     pub expires_at_ms: i64,
 }
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ConfirmLibraryItemInput {
+    pub candidate_id: String,
+    pub display_title: String,
+    pub season_number: Option<i64>,
+    pub episode_number: Option<i64>,
+    pub absolute_order: i64,
+    #[serde(default)]
+    pub confirmed: bool,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ConfirmLibraryImportInput {
+    pub preview_token: String,
+    pub collection_title: String,
+    pub items: Vec<ConfirmLibraryItemInput>,
+    #[serde(default)]
+    pub confirm_fingerprint_duplicates: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct LibraryImportResult {
+    pub root_id: String,
+    pub collection: CollectionDetail,
+    pub imported_item_count: u64,
+    pub created_project_count: u64,
+    pub reused_project_count: u64,
+}

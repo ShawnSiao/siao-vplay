@@ -134,6 +134,7 @@ pub fn run() {
             library::commands::set_watch_later,
             library::commands::scan_library_folder,
             library::commands::cancel_library_scan,
+            library::commands::confirm_library_import,
             commands::get_project,
             commands::mark_project_opened,
             commands::update_playback_state,

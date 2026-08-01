@@ -32,4 +32,8 @@ pub(crate) enum LibraryError {
     ScanCancelled(String),
     #[error("媒体库扫描不存在或已经结束：{0}")]
     ScanNotFound(String),
+    #[error("媒体库预览不存在或已经使用：{0}")]
+    PreviewNotFound(String),
+    #[error("媒体库预览已经过期：{0}")]
+    PreviewExpired(String),
 }
