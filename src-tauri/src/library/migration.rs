@@ -200,6 +200,62 @@ pub(crate) fn apply_schema_15(transaction: &Transaction<'_>) -> Result<(), Migra
     Ok(())
 }
 
+pub(crate) fn apply_schema_16(transaction: &Transaction<'_>) -> Result<(), MigrationError> {
+    transaction.execute_batch(
+        "CREATE TABLE library_root_items (
+            root_id TEXT NOT NULL REFERENCES library_roots(id) ON DELETE CASCADE,
+            project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+            season_number INTEGER
+                CHECK (season_number IS NULL OR season_number >= 0),
+            episode_number INTEGER
+                CHECK (episode_number IS NULL OR episode_number >= 0),
+            absolute_order INTEGER NOT NULL CHECK (absolute_order >= 0),
+            display_title TEXT NOT NULL CHECK (length(trim(display_title)) > 0),
+            relative_path TEXT,
+            relative_path_key TEXT,
+            availability TEXT NOT NULL DEFAULT 'available'
+                CHECK (availability IN ('available', 'missing', 'root_offline', 'changed')),
+            source_size_bytes INTEGER
+                CHECK (source_size_bytes IS NULL OR source_size_bytes >= 0),
+            source_modified_at_ms INTEGER
+                CHECK (source_modified_at_ms IS NULL OR source_modified_at_ms >= 0),
+            quick_fingerprint TEXT
+                CHECK (quick_fingerprint IS NULL OR length(quick_fingerprint) = 64),
+            created_at_ms INTEGER NOT NULL CHECK (created_at_ms >= 0),
+            updated_at_ms INTEGER NOT NULL CHECK (updated_at_ms >= 0),
+            PRIMARY KEY (root_id, project_id),
+            CHECK (
+                (relative_path IS NULL AND relative_path_key IS NULL)
+                OR (relative_path IS NOT NULL AND relative_path_key IS NOT NULL)
+            )
+         );
+
+         CREATE UNIQUE INDEX library_root_items_relative_path
+         ON library_root_items(root_id, relative_path_key)
+         WHERE relative_path_key IS NOT NULL;
+
+         CREATE INDEX library_root_items_project
+         ON library_root_items(project_id, root_id);
+
+         INSERT OR IGNORE INTO library_root_items (
+             root_id, project_id, season_number, episode_number, absolute_order,
+             display_title, relative_path, relative_path_key, availability,
+             source_size_bytes, source_modified_at_ms, quick_fingerprint,
+             created_at_ms, updated_at_ms
+         )
+         SELECT
+             c.root_id, ci.project_id, ci.season_number, ci.episode_number,
+             ci.absolute_order, ci.display_title, ci.relative_path,
+             ci.relative_path_key, ci.availability, ci.source_size_bytes,
+             ci.source_modified_at_ms, ci.quick_fingerprint,
+             ci.created_at_ms, ci.updated_at_ms
+         FROM collections c
+         JOIN collection_items ci ON ci.collection_id = c.id
+         WHERE c.root_id IS NOT NULL;",
+    )?;
+    Ok(())
+}
+
 pub(crate) fn ensure_foreign_keys(transaction: &Transaction<'_>) -> Result<(), MigrationError> {
     let violation = {
         let mut statement = transaction.prepare("PRAGMA foreign_key_check")?;

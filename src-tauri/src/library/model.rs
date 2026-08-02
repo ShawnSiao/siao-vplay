@@ -127,8 +127,36 @@ pub(crate) struct LibraryRootSummary {
     pub path: String,
     pub display_name: String,
     pub availability: String,
+    pub status: LibraryRootStatus,
     pub last_scanned_at_ms: Option<i64>,
     pub item_count: i64,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum LibraryRootStatus {
+    Linked,
+    Orphaned,
+    Ambiguous,
+}
+
+impl LibraryRootStatus {
+    pub(crate) fn from_collection_count(count: i64) -> Self {
+        match count {
+            0 => Self::Orphaned,
+            1 => Self::Linked,
+            _ => Self::Ambiguous,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct LibraryCollectionDeletionResult {
+    pub collection_id: String,
+    pub root_id: Option<String>,
+    pub preserved_project_count: i64,
+    pub root_status: Option<LibraryRootStatus>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]

@@ -7,12 +7,12 @@ use crate::{commands::CommandError, store::ProjectStore};
 use super::{
     AddProjectToCollectionInput, ApplyLibraryRescanInput, ApplyLibraryRootRelocationInput,
     Collection, CollectionDetail, ConfirmLibraryImportInput, CreateCollectionInput,
-    EpisodeNeighbors, InspectLibraryRootRelocationInput, LibraryError, LibraryHome,
-    LibraryImportResult, LibraryImportService, LibraryPreviewStore, LibraryRecoveryService,
-    LibraryRecoveryStore, LibraryRescanPreview, LibraryRescanResult, LibraryRootRelocationPreview,
-    LibraryRootRelocationResult, LibraryScanPhase, LibraryScanPreview, LibraryScanProgress,
-    LibraryScanService, LibraryService, MediaSummary, ScanLibraryFolderInput, SearchResult,
-    UpdateCollectionInput,
+    EpisodeNeighbors, InspectLibraryRootRelocationInput, LibraryCollectionDeletionResult,
+    LibraryError, LibraryHome, LibraryImportResult, LibraryImportService, LibraryPreviewStore,
+    LibraryRecoveryService, LibraryRecoveryStore, LibraryRescanPreview, LibraryRescanResult,
+    LibraryRootRelocationPreview, LibraryRootRelocationResult, LibraryScanPhase,
+    LibraryScanPreview, LibraryScanProgress, LibraryScanService, LibraryService, MediaSummary,
+    ScanLibraryFolderInput, SearchResult, UpdateCollectionInput,
 };
 
 const LIBRARY_SCAN_PROGRESS_EVENT: &str = "library-scan-progress";
@@ -63,7 +63,7 @@ pub(crate) fn update_collection(
 pub(crate) fn delete_collection(
     store: State<'_, ProjectStore>,
     collection_id: String,
-) -> Result<(), CommandError> {
+) -> Result<LibraryCollectionDeletionResult, CommandError> {
     LibraryService::new(store.inner().clone())
         .delete_collection(&collection_id)
         .map_err(Into::into)
