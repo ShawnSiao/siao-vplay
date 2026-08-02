@@ -23,6 +23,7 @@ import type {
   MediaRuntimeStatus,
   Project,
   RemoteMediaPreview,
+  RuntimeCatalog,
   SubtitleGlobalReplacement,
   SubtitleBurnJob,
   SubtitleBurnMode,
@@ -95,6 +96,53 @@ export async function getMediaRuntimeStatus(): Promise<MediaRuntimeStatus> {
     };
   }
   return invoke<MediaRuntimeStatus>("get_media_runtime_status");
+}
+
+export async function getRuntimeCatalog(): Promise<RuntimeCatalog> {
+  if (!isDesktopApp) {
+    return {
+      settings: {
+        storageRoot: null,
+        preferredModel: "small",
+      },
+      components: [],
+    };
+  }
+  return invoke<RuntimeCatalog>("get_runtime_catalog");
+}
+
+export async function chooseRuntimeStorageRoot(): Promise<string | null> {
+  if (!isDesktopApp) {
+    return null;
+  }
+  const selected = await open({
+    multiple: false,
+    directory: true,
+    title: "选择运行时与模型存储目录",
+  });
+  return typeof selected === "string" ? selected : null;
+}
+
+export async function setRuntimeStorageRoot(path: string): Promise<RuntimeCatalog> {
+  return invoke<RuntimeCatalog>("set_runtime_storage_root", {
+    input: { path },
+  });
+}
+
+export async function setPreferredModel(
+  modelKind: "small" | "base",
+): Promise<RuntimeCatalog> {
+  return invoke<RuntimeCatalog>("set_preferred_model", {
+    input: { modelKind },
+  });
+}
+
+export async function downloadRuntimeComponent(
+  componentId: string,
+): Promise<RuntimeCatalog> {
+  return invoke<RuntimeCatalog>("download_runtime_component", {
+    input: { componentId },
+  });
 }
 
 export async function listProjects(): Promise<Project[]> {

@@ -10,6 +10,7 @@ mod learning;
 mod library;
 mod media;
 mod remote_media;
+mod runtime;
 mod store;
 mod subtitles;
 mod transcription;
@@ -97,6 +98,7 @@ pub fn run() {
                 eprintln!("SiaoVPlay: main window was unavailable during native frame setup");
             }
             let data_directory = resolve_data_directory(app)?;
+            runtime::initialize(&data_directory)?;
             let database_path = data_directory.join("projects").join("siaovplay.db");
             let store = ProjectStore::open(database_path)?;
             store.recover_running_media_artifacts()?;
@@ -138,6 +140,9 @@ pub fn run() {
             library::commands::confirm_library_import,
             library::commands::inspect_library_rescan,
             library::commands::apply_library_rescan,
+            library::commands::inspect_library_root_rebuild,
+            library::commands::apply_library_root_rebuild,
+            library::commands::revoke_library_root,
             library::commands::inspect_library_root_relocation,
             library::commands::apply_library_root_relocation,
             library::commands::open_project_media_location,
@@ -147,6 +152,10 @@ pub fn run() {
             commands::relink_project_media,
             commands::delete_project,
             commands::get_media_runtime_status,
+            commands::get_runtime_catalog,
+            commands::set_runtime_storage_root,
+            commands::set_preferred_model,
+            commands::download_runtime_component,
             commands::inspect_project_media,
             commands::prepare_project_media,
             commands::ensure_project_poster,

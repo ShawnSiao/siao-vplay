@@ -47,6 +47,7 @@ type DesktopShellProps = {
   onManageTranslation: () => void;
   onReviseSubtitles: () => void;
   onDeliverSubtitles: () => void;
+  onOpenSettings: () => void;
   children: ReactNode;
 };
 
@@ -81,6 +82,7 @@ export function DesktopShell({
   onManageTranslation,
   onReviseSubtitles,
   onDeliverSubtitles,
+  onOpenSettings,
   children,
 }: DesktopShellProps) {
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -315,11 +317,11 @@ export function DesktopShell({
             ) : null}
           </div>
           <button
-            aria-label="设置，内容待定义"
-            className="shell-icon-command shell-context-unavailable"
+            aria-label="设置"
+            className="shell-icon-command"
             type="button"
-            title="设置内容待定义"
-            disabled
+            title="运行时与模型设置"
+            onClick={onOpenSettings}
           >
             ⚙
           </button>

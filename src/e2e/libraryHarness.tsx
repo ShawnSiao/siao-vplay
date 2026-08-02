@@ -69,6 +69,14 @@ const mediaSummary: LibraryMediaSummary = {
   itemAvailability: null,
 };
 
+const unclassifiedItems = Array.from({ length: 12 }, (_, index) => ({
+  ...mediaSummary,
+  projectId: `e2e-library-project-${index + 1}`,
+  projectTitle: `雨站台 ${index + 1}`,
+  displayName: `rain-platform-${index + 1}.mp4`,
+  mediaLocator: `W:\\Videos\\rain-platform-${index + 1}.mp4`,
+}));
+
 const libraryHome: LibraryHome = {
   continueWatching: [mediaSummary],
   collections: [
@@ -95,13 +103,15 @@ const libraryHome: LibraryHome = {
     path: "W:\\Series\\Rain",
     displayName: "Rain",
     availability: "available",
+    status: "linked",
     lastScannedAtMs: Date.now(),
     itemCount: 3,
   }],
-  unclassified: [mediaSummary],
-  totalProjectCount: 1,
+  unclassified: unclassifiedItems,
+  recentlyAdded: [mediaSummary],
+  totalProjectCount: unclassifiedItems.length,
   collectionItemCount: 0,
-  unclassifiedCount: 1,
+  unclassifiedCount: unclassifiedItems.length,
 };
 
 const unresolvedItem: LibraryImportDraftItem = {
@@ -175,9 +185,12 @@ const offlineRecovery: LibraryRecoveryState = {
     expiresAtMs: 1_900_000_000_000,
   },
   relocationPreview: null,
+  rebuildPreview: null,
   newItems: [],
+  rebuildCollectionTitle: "",
   confirmMissing: false,
   confirmChanged: false,
+  confirmUncertainMatches: false,
   confirmFingerprintDuplicates: false,
   error: null,
 };
@@ -239,6 +252,7 @@ export function LibraryHarness() {
       onManageTranslation={() => undefined}
       onReviseSubtitles={() => undefined}
       onDeliverSubtitles={() => undefined}
+      onOpenSettings={() => undefined}
     >
       <LibraryScreen
         home={libraryHome}
@@ -273,6 +287,8 @@ export function LibraryHarness() {
             expiresAtMs: 1_900_000_000_000,
           },
         })}
+        onRebuildRoot={() => undefined}
+        onRevokeRoot={() => undefined}
         onOpen={() => undefined}
         onRelink={() => undefined}
         onDelete={() => undefined}
@@ -283,7 +299,7 @@ export function LibraryHarness() {
         onSelectSeason={() => undefined}
         onCreateCollection={async () => undefined}
         onUpdateCollection={async () => undefined}
-        onDeleteCollection={async () => undefined}
+        onDeleteCollection={async () => null}
         onAddToCollection={async () => undefined}
         onRemoveFromCollection={async () => undefined}
         onSetWatchLater={async () => undefined}
@@ -317,7 +333,9 @@ export function LibraryHarness() {
           onConfirmationChange={(field, checked) =>
             setRecovery((current) => current ? { ...current, [field]: checked } : current)
           }
+          onRebuildTitleChange={() => undefined}
           onApplyRescan={async () => setRecovery(null)}
+          onApplyRebuild={async () => setRecovery(null)}
           onApplyRelocation={async () => setRecovery(null)}
         />
       ) : null}

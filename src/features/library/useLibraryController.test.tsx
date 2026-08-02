@@ -53,6 +53,7 @@ function libraryHome(totalProjectCount: number): LibraryHome {
     collections: [],
     folders: [],
     unclassified: [],
+    recentlyAdded: [],
     totalProjectCount,
     collectionItemCount: 0,
     unclassifiedCount: totalProjectCount,
@@ -328,6 +329,7 @@ describe("useLibraryController", () => {
       path: scanPreview.rootPath,
       displayName: "Rain",
       availability: "available" as const,
+      status: "linked" as const,
       lastScannedAtMs: 10,
       itemCount: 1,
     };

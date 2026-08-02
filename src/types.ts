@@ -80,9 +80,12 @@ export type LibraryRootSummary = {
   path: string;
   displayName: string;
   availability: "available" | "offline";
+  status: LibraryRootStatus;
   lastScannedAtMs: number | null;
   itemCount: number;
 };
+
+export type LibraryRootStatus = "linked" | "orphaned" | "ambiguous";
 
 export type LibraryMediaSummary = {
   projectId: string;
@@ -112,6 +115,7 @@ export type LibraryHome = {
   collections: CollectionSummary[];
   folders: LibraryRootSummary[];
   unclassified: LibraryMediaSummary[];
+  recentlyAdded: LibraryMediaSummary[];
   totalProjectCount: number;
   collectionItemCount: number;
   unclassifiedCount: number;
@@ -312,6 +316,81 @@ export type LibraryRootRelocationResult = {
   updatedItemCount: number;
 };
 
+export type LibraryCollectionDeletionResult = {
+  collectionId: string;
+  rootId: string | null;
+  preservedProjectCount: number;
+  rootStatus: LibraryRootStatus | null;
+};
+
+export type LibraryRootRebuildMatchKind =
+  | "matched"
+  | "missing"
+  | "changed"
+  | "needs_confirmation";
+
+export type LibraryRootRebuildItem = {
+  projectId: string;
+  candidateId: string | null;
+  relativePath: string;
+  displayTitle: string;
+  seasonNumber: number | null;
+  episodeNumber: number | null;
+  absoluteOrder: number;
+  previousAvailability: LibraryItemAvailability;
+  matchKind: LibraryRootRebuildMatchKind;
+  reason: string | null;
+};
+
+export type LibraryRootRebuildPreview = {
+  previewToken: string;
+  rootId: string;
+  currentRootPath: string;
+  rootPath: string;
+  rootDisplayName: string;
+  suggestedCollectionTitle: string;
+  rootOffline: boolean;
+  newCandidates: LibraryScanCandidate[];
+  matchedItems: LibraryRootRebuildItem[];
+  missingItems: LibraryRootRebuildItem[];
+  changedItems: LibraryRootRebuildItem[];
+  uncertainItems: LibraryRootRebuildItem[];
+  ignoredCount: number;
+  expiresAtMs: number;
+};
+
+export type InspectLibraryRootRebuildInput = {
+  rootId: string;
+  newRootPath: string | null;
+};
+
+export type ApplyLibraryRootRebuildInput = {
+  previewToken: string;
+  collectionTitle: string;
+  newItems: ConfirmLibraryItemInput[];
+  confirmMissing: boolean;
+  confirmChanged: boolean;
+  confirmUncertainMatches: boolean;
+  confirmFingerprintDuplicates: boolean;
+};
+
+export type LibraryRootRebuildResult = {
+  root: LibraryRootSummary;
+  collection: CollectionDetail;
+  restoredItemCount: number;
+  addedItemCount: number;
+  createdProjectCount: number;
+  reusedProjectCount: number;
+  missingItemCount: number;
+  changedItemCount: number;
+};
+
+export type LibraryRootRevokeResult = {
+  rootId: string;
+  detachedCollectionCount: number;
+  preservedProjectCount: number;
+};
+
 export type MediaArtifactStatus =
   | "queued"
   | "running"
@@ -403,6 +482,32 @@ export type MediaRuntimeStatus = {
   ffprobePath: string | null;
   version: string | null;
   errorMessage: string | null;
+};
+
+export type RuntimeSettings = {
+  storageRoot: string | null;
+  preferredModel: "small" | "base";
+};
+
+export type RuntimeComponent = {
+  id: string;
+  title: string;
+  componentKind: "bundled" | "download";
+  version: string;
+  available: boolean;
+  installedPath: string | null;
+  expectedSizeBytes: number;
+  installedSizeBytes: number | null;
+  expectedSha256: string;
+  sourceUrl: string;
+  sourcePage: string;
+  license: string;
+  errorMessage: string | null;
+};
+
+export type RuntimeCatalog = {
+  settings: RuntimeSettings;
+  components: RuntimeComponent[];
 };
 
 export type DeleteProjectResult = {

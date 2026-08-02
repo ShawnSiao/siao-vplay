@@ -221,6 +221,7 @@ export function PlayerHarness() {
       onManageTranslation={() => undefined}
       onReviseSubtitles={() => undefined}
       onDeliverSubtitles={() => undefined}
+      onOpenSettings={() => undefined}
     >
       <PlayerScreen
         project={project}

@@ -4,12 +4,14 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { isDesktopApp } from "../../lib/desktop";
 import type {
   ApplyLibraryRescanInput,
+  ApplyLibraryRootRebuildInput,
   CollectionDetail,
   ConfirmLibraryImportInput,
   CollectionSortMode,
   CollectionSummary,
   EpisodeNeighbors,
   LibraryCollection,
+  LibraryCollectionDeletionResult,
   LibraryHome,
   LibraryMediaSummary,
   LibraryScanPreview,
@@ -17,8 +19,12 @@ import type {
   LibraryImportResult,
   LibraryRescanPreview,
   LibraryRescanResult,
+  LibraryRootRebuildPreview,
+  LibraryRootRebuildResult,
+  LibraryRootRevokeResult,
   LibraryRootRelocationPreview,
   LibraryRootRelocationResult,
+  InspectLibraryRootRebuildInput,
   LibrarySearchResult,
 } from "../../types";
 
@@ -52,6 +58,7 @@ export const emptyLibraryHome: LibraryHome = {
   collections: [],
   folders: [],
   unclassified: [],
+  recentlyAdded: [],
   totalProjectCount: 0,
   collectionItemCount: 0,
   unclassifiedCount: 0,
@@ -83,8 +90,10 @@ export async function updateCollection(
   return invoke<LibraryCollection>("update_collection", { input });
 }
 
-export async function deleteCollection(collectionId: string): Promise<void> {
-  await invoke("delete_collection", { collectionId });
+export async function deleteCollection(
+  collectionId: string,
+): Promise<LibraryCollectionDeletionResult> {
+  return invoke<LibraryCollectionDeletionResult>("delete_collection", { collectionId });
 }
 
 export async function getCollectionDetail(
@@ -173,6 +182,24 @@ export async function applyLibraryRescan(
   input: ApplyLibraryRescanInput,
 ): Promise<LibraryRescanResult> {
   return invoke<LibraryRescanResult>("apply_library_rescan", { input });
+}
+
+export async function inspectLibraryRootRebuild(
+  input: InspectLibraryRootRebuildInput,
+): Promise<LibraryRootRebuildPreview> {
+  return invoke<LibraryRootRebuildPreview>("inspect_library_root_rebuild", { input });
+}
+
+export async function applyLibraryRootRebuild(
+  input: ApplyLibraryRootRebuildInput,
+): Promise<LibraryRootRebuildResult> {
+  return invoke<LibraryRootRebuildResult>("apply_library_root_rebuild", { input });
+}
+
+export async function revokeLibraryRoot(
+  rootId: string,
+): Promise<LibraryRootRevokeResult> {
+  return invoke<LibraryRootRevokeResult>("revoke_library_root", { rootId });
 }
 
 export async function inspectLibraryRootRelocation(

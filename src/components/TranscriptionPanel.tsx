@@ -5,6 +5,7 @@ import {
   commandError,
   getTranscriptionJob,
   getTranscriptionRuntimeStatus,
+  getRuntimeCatalog,
   listSubtitleVersions,
   listTranscriptionJobs,
   resumeTranscriptionJob,
@@ -136,8 +137,9 @@ export function TranscriptionPanel({
     void Promise.all([
       getTranscriptionRuntimeStatus(),
       listTranscriptionJobs(projectId),
+      getRuntimeCatalog().catch(() => null),
     ])
-      .then(([status, jobs]) => {
+      .then(([status, jobs, catalog]) => {
         if (!active) {
           return;
         }
@@ -162,6 +164,8 @@ export function TranscriptionPanel({
               : "",
           );
           setModelKind(unfinished.modelKind);
+        } else if (catalog) {
+          setModelKind(catalog.settings.preferredModel);
         }
       })
       .catch((cause: unknown) => {

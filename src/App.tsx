@@ -13,6 +13,7 @@ import {
 } from "./features/library/useEpisodeNavigation";
 import { PreparationScreen } from "./components/PreparationScreen";
 import { RemoteUrlDialog } from "./components/RemoteUrlDialog";
+import { RuntimeSettingsDialog } from "./components/RuntimeSettingsDialog";
 import { SubtitleImportDialog } from "./components/SubtitleImportDialog";
 import { SubtitleDeliveryDialog } from "./components/SubtitleDeliveryDialog";
 import { SubtitleRevisionDialog } from "./components/SubtitleRevisionDialog";
@@ -31,6 +32,7 @@ import {
   getTranscriptionJob,
   getProject,
   getMediaRuntimeStatus,
+  getRuntimeCatalog,
   isDesktopApp,
   listProjects,
   listSubtitleVersions,
@@ -46,6 +48,7 @@ import type {
   MediaPreparation,
   MediaRuntimeStatus,
   Project,
+  RuntimeCatalog,
   SubtitleVersion,
   TranscriptionJob,
   TranslationTask,
@@ -85,12 +88,16 @@ export default function App() {
     setConfirmFingerprintDuplicates,
     importScannedFolder,
     inspectRootRescan,
+    inspectRootRebuild,
     inspectRootRelocation,
     closeRecovery,
     updateRecoveryItem,
     setRecoveryConfirmation,
+    setRebuildCollectionTitle,
     applyRescan,
+    applyRebuild,
     applyRootRelocation,
+    revokeRoot,
   } = useLibraryController();
   const screen = shellController.state.activeView;
   const setScreen = shellController.setActiveView;
@@ -101,6 +108,9 @@ export default function App() {
   const [appStatus, setAppStatus] = useState<AppStatus | null>(null);
   const [runtimeStatus, setRuntimeStatus] =
     useState<MediaRuntimeStatus | null>(null);
+  const [runtimeCatalog, setRuntimeCatalog] =
+    useState<RuntimeCatalog | null>(null);
+  const [runtimeCatalogLoading, setRuntimeCatalogLoading] = useState(false);
   const [projects, setProjects] = useState<Project[]>([]);
   const [libraryError, setLibraryError] = useState<string | null>(null);
   const [activeProject, setActiveProject] = useState<Project | null>(null);
@@ -129,10 +139,34 @@ export default function App() {
   const [deleteCandidate, setDeleteCandidate] = useState<Project | null>(null);
   const [busyMessage, setBusyMessage] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [runtimeSettingsOpen, setRuntimeSettingsOpen] = useState(false);
   const episodeNavigation = useEpisodeNavigation(
     episodeContext,
     activeProject?.id ?? null,
   );
+
+  const refreshRuntimeCatalog = useCallback(async () => {
+    setRuntimeCatalogLoading(true);
+    try {
+      setRuntimeCatalog(await getRuntimeCatalog());
+    } catch (error) {
+      setToast(commandError(error).message);
+    } finally {
+      setRuntimeCatalogLoading(false);
+    }
+  }, []);
+
+  const openRuntimeSettings = useCallback(() => {
+    setRuntimeSettingsOpen(true);
+    void refreshRuntimeCatalog();
+  }, [refreshRuntimeCatalog]);
+
+  const handleRuntimeCatalogChange = useCallback((catalog: RuntimeCatalog) => {
+    setRuntimeCatalog(catalog);
+    void getMediaRuntimeStatus()
+      .then(setRuntimeStatus)
+      .catch((error: unknown) => setToast(commandError(error).message));
+  }, []);
 
   const refreshProjects = useCallback(async () => {
     try {
@@ -386,6 +420,28 @@ export default function App() {
       }
     },
     [inspectRootRelocation],
+  );
+
+  const rebuildLibraryRoot = useCallback(
+    async (rootId: string, needsNewLocation: boolean) => {
+      if (!isDesktopApp) {
+        setToast("浏览器预览不会读取本地文件夹，请在桌面应用中重建剧集。");
+        return;
+      }
+      try {
+        let newRootPath: string | null = null;
+        if (needsNewLocation) {
+          newRootPath = await chooseLocalFolder();
+          if (!newRootPath) {
+            return;
+          }
+        }
+        await inspectRootRebuild(rootId, newRootPath);
+      } catch (error) {
+        setLibraryError(commandError(error).message);
+      }
+    },
+    [inspectRootRebuild],
   );
 
   const openRemoteUrlImport = useCallback(() => {
@@ -860,6 +916,7 @@ export default function App() {
         }}
         onReviseSubtitles={() => setRevisionDialogOpen(true)}
         onDeliverSubtitles={() => setDeliveryDialogOpen(true)}
+        onOpenSettings={openRuntimeSettings}
       >
         {screen === "library" ? (
           <LibraryScreen
@@ -878,6 +935,10 @@ export default function App() {
             onImportUrl={openRemoteUrlImport}
             onRescanRoot={(rootId) => void inspectRootRescan(rootId)}
             onRelocateRoot={(rootId) => void relocateLibraryRoot(rootId)}
+            onRebuildRoot={(rootId, needsNewLocation) =>
+              void rebuildLibraryRoot(rootId, needsNewLocation)
+            }
+            onRevokeRoot={(rootId) => void revokeRoot(rootId)}
             onOpen={(media) => void openLibraryMedia(media)}
             onRelink={(media) => void relinkLibraryMedia(media)}
             onDelete={(media) => void deleteLibraryMedia(media)}
@@ -943,6 +1004,17 @@ export default function App() {
         ) : null}
       </DesktopShell>
 
+      {runtimeSettingsOpen ? (
+        <RuntimeSettingsDialog
+          catalog={runtimeCatalog}
+          loading={runtimeCatalogLoading}
+          previewMode={!isDesktopApp}
+          onClose={() => setRuntimeSettingsOpen(false)}
+          onCatalogChange={handleRuntimeCatalogChange}
+          onError={setToast}
+        />
+      ) : null}
+
       {libraryState.folderImport.stage !== "closed" ? (
         <LibraryFolderImportDialog
           state={libraryState.folderImport}
@@ -961,7 +1033,9 @@ export default function App() {
           onClose={closeRecovery}
           onItemChange={updateRecoveryItem}
           onConfirmationChange={setRecoveryConfirmation}
+          onRebuildTitleChange={setRebuildCollectionTitle}
           onApplyRescan={applyRescan}
+          onApplyRebuild={applyRebuild}
           onApplyRelocation={applyRootRelocation}
         />
       ) : null}

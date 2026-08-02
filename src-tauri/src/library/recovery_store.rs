@@ -6,7 +6,9 @@ use std::{
 
 use uuid::Uuid;
 
-use super::{LibraryError, LibraryRescanPreview, LibraryRootRelocationPreview};
+use super::{
+    LibraryError, LibraryRescanPreview, LibraryRootRebuildPreview, LibraryRootRelocationPreview,
+};
 
 const RECOVERY_PREVIEW_TTL: Duration = Duration::from_secs(30 * 60);
 const MAX_RECOVERY_PREVIEWS: usize = 8;
@@ -27,6 +29,7 @@ struct RecoveryEntry {
 #[derive(Debug)]
 enum RecoveryPreview {
     Rescan(LibraryRescanPreview),
+    Rebuild(LibraryRootRebuildPreview),
     Relocation(LibraryRootRelocationPreview),
 }
 
@@ -40,7 +43,7 @@ impl RecoveryLease {
     pub(super) fn rescan(&self) -> Result<&LibraryRescanPreview, LibraryError> {
         match &self.entry.preview {
             RecoveryPreview::Rescan(preview) => Ok(preview),
-            RecoveryPreview::Relocation(_) => Err(LibraryError::Conflict(
+            _ => Err(LibraryError::Conflict(
                 "恢复预览类型与重新扫描操作不一致".to_owned(),
             )),
         }
@@ -49,8 +52,17 @@ impl RecoveryLease {
     pub(super) fn relocation(&self) -> Result<&LibraryRootRelocationPreview, LibraryError> {
         match &self.entry.preview {
             RecoveryPreview::Relocation(preview) => Ok(preview),
-            RecoveryPreview::Rescan(_) => Err(LibraryError::Conflict(
+            _ => Err(LibraryError::Conflict(
                 "恢复预览类型与根目录重定位操作不一致".to_owned(),
+            )),
+        }
+    }
+
+    pub(super) fn rebuild(&self) -> Result<&LibraryRootRebuildPreview, LibraryError> {
+        match &self.entry.preview {
+            RecoveryPreview::Rebuild(preview) => Ok(preview),
+            _ => Err(LibraryError::Conflict(
+                "恢复预览类型与剧集重建操作不一致".to_owned(),
             )),
         }
     }
@@ -85,6 +97,17 @@ impl LibraryRecoveryStore {
         preview.preview_token.clone_from(&token);
         preview.expires_at_ms = expires_at_ms;
         self.insert(token, RecoveryPreview::Relocation(preview.clone()))?;
+        Ok(preview)
+    }
+
+    pub(super) fn store_rebuild(
+        &self,
+        mut preview: LibraryRootRebuildPreview,
+    ) -> Result<LibraryRootRebuildPreview, LibraryError> {
+        let (token, expires_at_ms) = self.next_identity()?;
+        preview.preview_token.clone_from(&token);
+        preview.expires_at_ms = expires_at_ms;
+        self.insert(token, RecoveryPreview::Rebuild(preview.clone()))?;
         Ok(preview)
     }
 

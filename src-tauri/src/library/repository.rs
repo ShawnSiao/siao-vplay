@@ -4,8 +4,8 @@ use rusqlite::{Connection, OptionalExtension, Row, params};
 
 use super::{
     Collection, CollectionDetail, CollectionKind, CollectionSortMode, CollectionSummary,
-    EpisodeReference, ItemAvailability, LibraryError, LibraryRootSummary, MediaSummary,
-    SearchResult, SearchResultKind, SeasonSummary,
+    EpisodeReference, ItemAvailability, LibraryError, LibraryRootStatus, LibraryRootSummary,
+    MediaSummary, SearchResult, SearchResultKind, SeasonSummary,
 };
 
 pub(crate) struct LibraryRepository<'connection> {
@@ -74,7 +74,7 @@ impl<'connection> LibraryRepository<'connection> {
         &self,
     ) -> Result<Vec<ExistingMediaLocator>, LibraryError> {
         let mut statement = self.connection.prepare(
-            "SELECT project_id, locator, source_size_bytes, source_modified_at_ms
+            "SELECT project_id, locator, display_name, source_size_bytes, source_modified_at_ms
              FROM media_sources
              WHERE kind = 'local_file' AND is_primary = 1
              ORDER BY project_id",
@@ -84,8 +84,9 @@ impl<'connection> LibraryRepository<'connection> {
                 Ok(ExistingMediaLocator {
                     project_id: row.get(0)?,
                     locator: row.get(1)?,
-                    source_size_bytes: row.get(2)?,
-                    source_modified_at_ms: row.get(3)?,
+                    display_name: row.get(2)?,
+                    source_size_bytes: row.get(3)?,
+                    source_modified_at_ms: row.get(4)?,
                 })
             })?
             .collect::<Result<Vec<_>, _>>()
@@ -96,11 +97,19 @@ impl<'connection> LibraryRepository<'connection> {
         &self,
     ) -> Result<Vec<ExistingFingerprint>, LibraryError> {
         let mut statement = self.connection.prepare(
-            "SELECT ci.quick_fingerprint, m.locator
-             FROM collection_items ci
-             JOIN media_sources m ON m.project_id = ci.project_id AND m.is_primary = 1
-             WHERE ci.quick_fingerprint IS NOT NULL
-             ORDER BY ci.quick_fingerprint, m.locator",
+            "SELECT quick_fingerprint, locator
+             FROM (
+                SELECT ci.quick_fingerprint, m.locator
+                FROM collection_items ci
+                JOIN media_sources m ON m.project_id = ci.project_id AND m.is_primary = 1
+                WHERE ci.quick_fingerprint IS NOT NULL
+                UNION
+                SELECT lri.quick_fingerprint, m.locator
+                FROM library_root_items lri
+                JOIN media_sources m ON m.project_id = lri.project_id AND m.is_primary = 1
+                WHERE lri.quick_fingerprint IS NOT NULL
+             )
+             ORDER BY quick_fingerprint, locator",
         )?;
         statement
             .query_map([], |row| {
@@ -177,6 +186,90 @@ impl<'connection> LibraryRepository<'connection> {
                 membership.timestamp,
             ],
         )?;
+        self.connection.execute(
+            "INSERT INTO library_root_items (
+                root_id, project_id, season_number, episode_number, absolute_order,
+                display_title, relative_path, relative_path_key, availability,
+                source_size_bytes, source_modified_at_ms, quick_fingerprint,
+                created_at_ms, updated_at_ms
+             )
+             SELECT
+                c.root_id, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 'available',
+                ?9, ?10, ?11, ?12, ?12
+             FROM collections c
+             WHERE c.id = ?1 AND c.root_id IS NOT NULL
+             ON CONFLICT(root_id, project_id) DO UPDATE SET
+                season_number = excluded.season_number,
+                episode_number = excluded.episode_number,
+                absolute_order = excluded.absolute_order,
+                display_title = excluded.display_title,
+                relative_path = excluded.relative_path,
+                relative_path_key = excluded.relative_path_key,
+                availability = excluded.availability,
+                source_size_bytes = excluded.source_size_bytes,
+                source_modified_at_ms = excluded.source_modified_at_ms,
+                quick_fingerprint = excluded.quick_fingerprint,
+                updated_at_ms = excluded.updated_at_ms",
+            params![
+                membership.collection_id,
+                membership.project_id,
+                membership.season_number,
+                membership.episode_number,
+                membership.absolute_order,
+                membership.display_title,
+                membership.relative_path,
+                membership.relative_path_key,
+                membership.source_size_bytes,
+                membership.source_modified_at_ms,
+                membership.quick_fingerprint,
+                membership.timestamp,
+            ],
+        )?;
+        Ok(())
+    }
+
+    pub(crate) fn insert_root_membership(
+        &self,
+        membership: &NewRootMembership<'_>,
+    ) -> Result<(), LibraryError> {
+        self.connection.execute(
+            "INSERT INTO collection_items (
+                collection_id, project_id, season_number, episode_number,
+                absolute_order, display_title, relative_path, relative_path_key,
+                availability, source_size_bytes, source_modified_at_ms,
+                quick_fingerprint, created_at_ms, updated_at_ms
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?13)",
+            params![
+                membership.collection_id,
+                membership.project_id,
+                membership.season_number,
+                membership.episode_number,
+                membership.absolute_order,
+                membership.display_title,
+                membership.relative_path,
+                membership.relative_path_key,
+                membership.availability,
+                membership.source_size_bytes,
+                membership.source_modified_at_ms,
+                membership.quick_fingerprint,
+                membership.timestamp,
+            ],
+        )?;
+        self.upsert_root_item(&NewRootItem {
+            root_id: membership.root_id,
+            project_id: membership.project_id,
+            season_number: membership.season_number,
+            episode_number: membership.episode_number,
+            absolute_order: membership.absolute_order,
+            display_title: membership.display_title,
+            relative_path: membership.relative_path,
+            relative_path_key: membership.relative_path_key,
+            availability: membership.availability,
+            source_size_bytes: membership.source_size_bytes,
+            source_modified_at_ms: membership.source_modified_at_ms,
+            quick_fingerprint: membership.quick_fingerprint,
+            timestamp: membership.timestamp,
+        })?;
         Ok(())
     }
 
@@ -212,6 +305,52 @@ impl<'connection> LibraryRepository<'connection> {
         if changed == 0 {
             return Err(LibraryError::CollectionNotFound(collection_id.to_owned()));
         }
+        Ok(())
+    }
+
+    pub(crate) fn collection_item_count(&self, collection_id: &str) -> Result<i64, LibraryError> {
+        self.connection
+            .query_row(
+                "SELECT COUNT(*) FROM collection_items WHERE collection_id = ?1",
+                params![collection_id],
+                |row| row.get(0),
+            )
+            .map_err(Into::into)
+    }
+
+    pub(crate) fn snapshot_collection_to_root(
+        &self,
+        root_id: &str,
+        collection_id: &str,
+    ) -> Result<(), LibraryError> {
+        self.connection.execute(
+            "INSERT INTO library_root_items (
+                root_id, project_id, season_number, episode_number, absolute_order,
+                display_title, relative_path, relative_path_key, availability,
+                source_size_bytes, source_modified_at_ms, quick_fingerprint,
+                created_at_ms, updated_at_ms
+             )
+             SELECT
+                ?1, project_id, season_number, episode_number, absolute_order,
+                display_title, relative_path, relative_path_key, availability,
+                source_size_bytes, source_modified_at_ms, quick_fingerprint,
+                created_at_ms, updated_at_ms
+             FROM collection_items
+             WHERE collection_id = ?2
+             ON CONFLICT(root_id, project_id) DO UPDATE SET
+                season_number = excluded.season_number,
+                episode_number = excluded.episode_number,
+                absolute_order = excluded.absolute_order,
+                display_title = excluded.display_title,
+                relative_path = excluded.relative_path,
+                relative_path_key = excluded.relative_path_key,
+                availability = excluded.availability,
+                source_size_bytes = excluded.source_size_bytes,
+                source_modified_at_ms = excluded.source_modified_at_ms,
+                quick_fingerprint = excluded.quick_fingerprint,
+                updated_at_ms = excluded.updated_at_ms",
+            params![root_id, collection_id],
+        )?;
         Ok(())
     }
 
@@ -332,7 +471,11 @@ impl<'connection> LibraryRepository<'connection> {
         let mut statement = self.connection.prepare(
             "SELECT
                 lr.id, lr.path, lr.display_name, lr.availability,
-                lr.last_scanned_at_ms, COUNT(DISTINCT ci.project_id)
+                lr.last_scanned_at_ms,
+                (SELECT COUNT(DISTINCT root_item.project_id)
+                 FROM library_root_items root_item
+                 WHERE root_item.root_id = lr.id),
+                COUNT(DISTINCT CASE WHEN c.system_key IS NULL THEN c.id END)
              FROM library_roots lr
              LEFT JOIN collections c ON c.root_id = lr.id
              LEFT JOIN collection_items ci ON ci.collection_id = c.id
@@ -341,13 +484,19 @@ impl<'connection> LibraryRepository<'connection> {
         )?;
         statement
             .query_map([], |row| {
+                let path: String = row.get(1)?;
                 Ok(LibraryRootSummary {
                     id: row.get(0)?,
-                    path: row.get(1)?,
+                    path: path.clone(),
                     display_name: row.get(2)?,
-                    availability: row.get(3)?,
+                    availability: if Path::new(&path).is_dir() {
+                        "available".to_owned()
+                    } else {
+                        "offline".to_owned()
+                    },
                     last_scanned_at_ms: row.get(4)?,
                     item_count: row.get(5)?,
+                    status: LibraryRootStatus::from_collection_count(row.get(6)?),
                 })
             })?
             .collect::<Result<Vec<_>, _>>()
@@ -380,7 +529,11 @@ impl<'connection> LibraryRepository<'connection> {
             .query_row(
                 "SELECT
                     lr.id, lr.path, lr.display_name, lr.availability,
-                    lr.last_scanned_at_ms, COUNT(DISTINCT ci.project_id)
+                    lr.last_scanned_at_ms,
+                    (SELECT COUNT(DISTINCT root_item.project_id)
+                     FROM library_root_items root_item
+                     WHERE root_item.root_id = lr.id),
+                    COUNT(DISTINCT CASE WHEN c.system_key IS NULL THEN c.id END)
                  FROM library_roots lr
                  LEFT JOIN collections c ON c.root_id = lr.id
                  LEFT JOIN collection_items ci ON ci.collection_id = c.id
@@ -388,18 +541,35 @@ impl<'connection> LibraryRepository<'connection> {
                  GROUP BY lr.id",
                 params![root_id],
                 |row| {
+                    let path: String = row.get(1)?;
                     Ok(LibraryRootSummary {
                         id: row.get(0)?,
-                        path: row.get(1)?,
+                        path: path.clone(),
                         display_name: row.get(2)?,
-                        availability: row.get(3)?,
+                        availability: if Path::new(&path).is_dir() {
+                            "available".to_owned()
+                        } else {
+                            "offline".to_owned()
+                        },
                         last_scanned_at_ms: row.get(4)?,
                         item_count: row.get(5)?,
+                        status: LibraryRootStatus::from_collection_count(row.get(6)?),
                     })
                 },
             )
             .optional()?
             .ok_or_else(|| LibraryError::Validation(format!("未找到媒体库根目录：{root_id}")))
+    }
+
+    pub(crate) fn root_status(&self, root_id: &str) -> Result<LibraryRootStatus, LibraryError> {
+        let collection_count = self.connection.query_row(
+            "SELECT COUNT(DISTINCT id)
+                 FROM collections
+                 WHERE root_id = ?1 AND system_key IS NULL",
+            params![root_id],
+            |row| row.get(0),
+        )?;
+        Ok(LibraryRootStatus::from_collection_count(collection_count))
     }
 
     pub(crate) fn root_collection_id(&self, root_id: &str) -> Result<String, LibraryError> {
@@ -414,10 +584,10 @@ impl<'connection> LibraryRepository<'connection> {
         match ids.as_slice() {
             [collection_id] => Ok(collection_id.clone()),
             [] => Err(LibraryError::Conflict(
-                "授权根目录没有可恢复的剧集集合".to_owned(),
+                "该文件夹当前没有关联剧集，不能执行「扫描更新」。请使用「重建剧集」。".to_owned(),
             )),
             _ => Err(LibraryError::Conflict(
-                "授权根目录关联多个集合，当前不能自动决定新文件归属".to_owned(),
+                "该文件夹关联多个剧集，暂不支持自动决定归属，请手动整理。".to_owned(),
             )),
         }
     }
@@ -459,6 +629,85 @@ impl<'connection> LibraryRepository<'connection> {
             })?
             .collect::<Result<Vec<_>, _>>()
             .map_err(Into::into)
+    }
+
+    pub(crate) fn list_root_manifest_items(
+        &self,
+        root_id: &str,
+    ) -> Result<Vec<LibraryRootItemRecord>, LibraryError> {
+        let mut statement = self.connection.prepare(
+            "SELECT
+                project_id, season_number, episode_number, absolute_order,
+                display_title, relative_path, availability,
+                source_size_bytes, source_modified_at_ms, quick_fingerprint
+             FROM library_root_items
+             WHERE root_id = ?1
+             ORDER BY absolute_order, project_id",
+        )?;
+        statement
+            .query_map(params![root_id], |row| {
+                Ok(LibraryRootItemRecord {
+                    project_id: row.get(0)?,
+                    season_number: row.get(1)?,
+                    episode_number: row.get(2)?,
+                    absolute_order: row.get(3)?,
+                    display_title: row.get(4)?,
+                    relative_path: row.get(5)?,
+                    availability: row.get(6)?,
+                    source_size_bytes: row.get(7)?,
+                    source_modified_at_ms: row.get(8)?,
+                    quick_fingerprint: row.get(9)?,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(Into::into)
+    }
+
+    pub(crate) fn upsert_root_item(&self, item: &NewRootItem<'_>) -> Result<(), LibraryError> {
+        self.connection.execute(
+            "INSERT INTO library_root_items (
+                root_id, project_id, season_number, episode_number, absolute_order,
+                display_title, relative_path, relative_path_key, availability,
+                source_size_bytes, source_modified_at_ms, quick_fingerprint,
+                created_at_ms, updated_at_ms
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?13)
+             ON CONFLICT(root_id, project_id) DO UPDATE SET
+                season_number = excluded.season_number,
+                episode_number = excluded.episode_number,
+                absolute_order = excluded.absolute_order,
+                display_title = excluded.display_title,
+                relative_path = excluded.relative_path,
+                relative_path_key = excluded.relative_path_key,
+                availability = excluded.availability,
+                source_size_bytes = excluded.source_size_bytes,
+                source_modified_at_ms = excluded.source_modified_at_ms,
+                quick_fingerprint = excluded.quick_fingerprint,
+                updated_at_ms = excluded.updated_at_ms",
+            params![
+                item.root_id,
+                item.project_id,
+                item.season_number,
+                item.episode_number,
+                item.absolute_order,
+                item.display_title,
+                item.relative_path,
+                item.relative_path_key,
+                item.availability,
+                item.source_size_bytes,
+                item.source_modified_at_ms,
+                item.quick_fingerprint,
+                item.timestamp,
+            ],
+        )?;
+        Ok(())
+    }
+
+    pub(crate) fn clear_root_manifest(&self, root_id: &str) -> Result<(), LibraryError> {
+        self.connection.execute(
+            "DELETE FROM library_root_items WHERE root_id = ?1",
+            params![root_id],
+        )?;
+        Ok(())
     }
 
     pub(crate) fn root_path_key_exists_elsewhere(
@@ -503,16 +752,21 @@ impl<'connection> LibraryRepository<'connection> {
         availability: ItemAvailability,
         timestamp: i64,
     ) -> Result<usize, LibraryError> {
-        self.connection
-            .execute(
-                "UPDATE collection_items
-                 SET availability = ?2, updated_at_ms = ?3
-                 WHERE collection_id IN (
-                    SELECT id FROM collections WHERE root_id = ?1
-                 )",
-                params![root_id, availability.as_database_value(), timestamp],
-            )
-            .map_err(Into::into)
+        let changed = self.connection.execute(
+            "UPDATE collection_items
+             SET availability = ?2, updated_at_ms = ?3
+             WHERE collection_id IN (
+                SELECT id FROM collections WHERE root_id = ?1
+             )",
+            params![root_id, availability.as_database_value(), timestamp],
+        )?;
+        self.connection.execute(
+            "UPDATE library_root_items
+             SET availability = ?2, updated_at_ms = ?3
+             WHERE root_id = ?1",
+            params![root_id, availability.as_database_value(), timestamp],
+        )?;
+        Ok(changed)
     }
 
     pub(crate) fn update_membership_scan_state(
@@ -546,6 +800,25 @@ impl<'connection> LibraryRepository<'connection> {
                 project_id: project_id.to_owned(),
             });
         }
+        self.connection.execute(
+            "UPDATE library_root_items
+             SET availability = ?3,
+                 source_size_bytes = COALESCE(?4, source_size_bytes),
+                 source_modified_at_ms = COALESCE(?5, source_modified_at_ms),
+                 updated_at_ms = ?6
+             WHERE root_id IN (
+                SELECT root_id FROM collections WHERE id = ?1 AND root_id IS NOT NULL
+             )
+               AND project_id = ?2",
+            params![
+                collection_id,
+                project_id,
+                availability.as_database_value(),
+                source_size_bytes,
+                source_modified_at_ms,
+                timestamp,
+            ],
+        )?;
         Ok(())
     }
 
@@ -603,6 +876,77 @@ impl<'connection> LibraryRepository<'connection> {
             source_modified_at_ms,
             timestamp,
         )
+    }
+
+    pub(crate) fn update_primary_media_source(
+        &self,
+        project_id: &str,
+        locator: &str,
+        display_name: &str,
+        source_size_bytes: i64,
+        source_modified_at_ms: Option<i64>,
+        timestamp: i64,
+    ) -> Result<(), LibraryError> {
+        let changed = self.connection.execute(
+            "UPDATE media_sources
+             SET locator = ?2, display_name = ?3, source_size_bytes = ?4,
+                 source_modified_at_ms = ?5, updated_at_ms = ?6
+             WHERE project_id = ?1 AND is_primary = 1",
+            params![
+                project_id,
+                locator,
+                display_name,
+                source_size_bytes,
+                source_modified_at_ms,
+                timestamp,
+            ],
+        )?;
+        if changed == 0 {
+            return Err(LibraryError::Store(
+                crate::store::StoreError::ProjectNotFound(project_id.to_owned()),
+            ));
+        }
+        Ok(())
+    }
+
+    pub(crate) fn count_root_projects(&self, root_id: &str) -> Result<i64, LibraryError> {
+        self.connection
+            .query_row(
+                "SELECT COUNT(DISTINCT ci.project_id)
+                 FROM collections c
+                 JOIN collection_items ci ON ci.collection_id = c.id
+                 WHERE c.root_id = ?1 AND c.system_key IS NULL",
+                params![root_id],
+                |row| row.get(0),
+            )
+            .map_err(Into::into)
+    }
+
+    pub(crate) fn detach_root_collections(
+        &self,
+        root_id: &str,
+        timestamp: i64,
+    ) -> Result<usize, LibraryError> {
+        self.connection
+            .execute(
+                "UPDATE collections
+                 SET root_id = NULL, updated_at_ms = ?2
+                 WHERE root_id = ?1 AND system_key IS NULL",
+                params![root_id, timestamp],
+            )
+            .map_err(Into::into)
+    }
+
+    pub(crate) fn delete_library_root(&self, root_id: &str) -> Result<(), LibraryError> {
+        let changed = self
+            .connection
+            .execute("DELETE FROM library_roots WHERE id = ?1", params![root_id])?;
+        if changed == 0 {
+            return Err(LibraryError::Validation(format!(
+                "未找到媒体库根目录：{root_id}"
+            )));
+        }
+        Ok(())
     }
 
     pub(crate) fn list_continue_watching(
@@ -665,6 +1009,42 @@ impl<'connection> LibraryRepository<'connection> {
              WHERE NOT EXISTS (
                 SELECT 1 FROM collection_items ci WHERE ci.project_id = p.id
              )
+             ORDER BY p.created_at_ms DESC, p.id
+             LIMIT ?1",
+        )?;
+        statement
+            .query_and_then(params![limit], map_media_summary)?
+            .collect()
+    }
+
+    pub(crate) fn list_recently_added(
+        &self,
+        limit: i64,
+    ) -> Result<Vec<MediaSummary>, LibraryError> {
+        let mut statement = self.connection.prepare(
+            "SELECT
+                p.id, p.title, m.display_name, m.locator, m.poster_path,
+                ps.position_ms, ps.duration_ms, ps.completed_at_ms,
+                p.last_opened_at_ms, p.created_at_ms,
+                EXISTS(
+                    SELECT 1 FROM subtitle_tracks st
+                    WHERE st.project_id = p.id AND st.role = 'original'
+                      AND st.current_version_id IS NOT NULL
+                ),
+                EXISTS(
+                    SELECT 1 FROM subtitle_tracks st
+                    WHERE st.project_id = p.id AND st.role = 'translation'
+                      AND st.language_code = 'zh-cn' AND st.current_version_id IS NOT NULL
+                ),
+                MIN(ci.collection_id), MIN(c.title), MIN(ci.season_number),
+                MIN(ci.episode_number), MIN(ci.absolute_order), MIN(ci.display_title),
+                MIN(ci.availability)
+             FROM projects p
+             JOIN media_sources m ON m.project_id = p.id AND m.is_primary = 1
+             JOIN playback_states ps ON ps.project_id = p.id
+             LEFT JOIN collection_items ci ON ci.project_id = p.id
+             LEFT JOIN collections c ON c.id = ci.collection_id
+             GROUP BY p.id
              ORDER BY p.created_at_ms DESC, p.id
              LIMIT ?1",
         )?;
@@ -912,6 +1292,22 @@ impl<'connection> LibraryRepository<'connection> {
         Ok(())
     }
 
+    pub(crate) fn remove_root_item(
+        &self,
+        root_id: Option<&str>,
+        project_id: &str,
+    ) -> Result<(), LibraryError> {
+        let Some(root_id) = root_id else {
+            return Ok(());
+        };
+        self.connection.execute(
+            "DELETE FROM library_root_items
+             WHERE root_id = ?1 AND project_id = ?2",
+            params![root_id, project_id],
+        )?;
+        Ok(())
+    }
+
     pub(crate) fn counts(&self) -> Result<(i64, i64, i64), LibraryError> {
         self.connection
             .query_row(
@@ -963,9 +1359,24 @@ pub(crate) struct RootMembershipRecord {
     pub(crate) shared_with_other_root: bool,
 }
 
+#[derive(Clone, Debug)]
+pub(crate) struct LibraryRootItemRecord {
+    pub(crate) project_id: String,
+    pub(crate) season_number: Option<i64>,
+    pub(crate) episode_number: Option<i64>,
+    pub(crate) absolute_order: i64,
+    pub(crate) display_title: String,
+    pub(crate) relative_path: Option<String>,
+    pub(crate) availability: String,
+    pub(crate) source_size_bytes: Option<i64>,
+    pub(crate) source_modified_at_ms: Option<i64>,
+    pub(crate) quick_fingerprint: Option<String>,
+}
+
 pub(crate) struct ExistingMediaLocator {
     pub(crate) project_id: String,
     pub(crate) locator: String,
+    pub(crate) display_name: String,
     pub(crate) source_size_bytes: Option<i64>,
     pub(crate) source_modified_at_ms: Option<i64>,
 }
@@ -998,6 +1409,39 @@ pub(crate) struct NewImportedMembership<'value> {
     pub(crate) source_size_bytes: i64,
     pub(crate) source_modified_at_ms: Option<i64>,
     pub(crate) quick_fingerprint: &'value str,
+    pub(crate) timestamp: i64,
+}
+
+pub(crate) struct NewRootMembership<'value> {
+    pub(crate) root_id: &'value str,
+    pub(crate) collection_id: &'value str,
+    pub(crate) project_id: &'value str,
+    pub(crate) season_number: Option<i64>,
+    pub(crate) episode_number: Option<i64>,
+    pub(crate) absolute_order: i64,
+    pub(crate) display_title: &'value str,
+    pub(crate) relative_path: Option<&'value str>,
+    pub(crate) relative_path_key: Option<&'value str>,
+    pub(crate) availability: &'value str,
+    pub(crate) source_size_bytes: Option<i64>,
+    pub(crate) source_modified_at_ms: Option<i64>,
+    pub(crate) quick_fingerprint: Option<&'value str>,
+    pub(crate) timestamp: i64,
+}
+
+pub(crate) struct NewRootItem<'value> {
+    pub(crate) root_id: &'value str,
+    pub(crate) project_id: &'value str,
+    pub(crate) season_number: Option<i64>,
+    pub(crate) episode_number: Option<i64>,
+    pub(crate) absolute_order: i64,
+    pub(crate) display_title: &'value str,
+    pub(crate) relative_path: Option<&'value str>,
+    pub(crate) relative_path_key: Option<&'value str>,
+    pub(crate) availability: &'value str,
+    pub(crate) source_size_bytes: Option<i64>,
+    pub(crate) source_modified_at_ms: Option<i64>,
+    pub(crate) quick_fingerprint: Option<&'value str>,
     pub(crate) timestamp: i64,
 }
 

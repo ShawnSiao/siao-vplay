@@ -6,7 +6,8 @@ use crate::store::ProjectStore;
 
 use super::{
     AddProjectToCollectionInput, Collection, CollectionDetail, CollectionKind, CollectionSortMode,
-    CreateCollectionInput, EpisodeNeighbors, LibraryError, LibraryHome, MediaSummary, SearchResult,
+    CreateCollectionInput, EpisodeNeighbors, LibraryCollectionDeletionResult, LibraryError,
+    LibraryHome, LibraryRootRevokeResult, LibraryRootStatus, MediaSummary, SearchResult,
     UpdateCollectionInput,
     repository::{LibraryRepository, NewMembership},
 };
@@ -15,6 +16,7 @@ const WATCH_LATER_KEY: &str = "watch_later";
 const WATCH_LATER_TITLE: &str = "稍后观看";
 const HOME_CONTINUE_LIMIT: i64 = 12;
 const HOME_UNCLASSIFIED_LIMIT: i64 = 24;
+const HOME_RECENTLY_ADDED_LIMIT: i64 = 5;
 const SEARCH_LIMIT: i64 = 50;
 const MAX_TITLE_CHARS: usize = 200;
 
@@ -38,6 +40,7 @@ impl LibraryService {
             collections: repository.list_collection_summaries()?,
             folders: repository.list_roots()?,
             unclassified: repository.list_unclassified(HOME_UNCLASSIFIED_LIMIT)?,
+            recently_added: repository.list_recently_added(HOME_RECENTLY_ADDED_LIMIT)?,
             total_project_count,
             collection_item_count,
             unclassified_count,
@@ -111,7 +114,10 @@ impl LibraryService {
         Ok(collection)
     }
 
-    pub(crate) fn delete_collection(&self, collection_id: &str) -> Result<(), LibraryError> {
+    pub(crate) fn delete_collection(
+        &self,
+        collection_id: &str,
+    ) -> Result<LibraryCollectionDeletionResult, LibraryError> {
         validate_id("集合", collection_id)?;
         let mut connection = self.store.connect()?;
         let transaction = connection.transaction()?;
@@ -120,9 +126,56 @@ impl LibraryService {
         if collection.system_key.is_some() {
             return Err(LibraryError::Conflict("系统集合不能删除".to_owned()));
         }
+        let preserved_project_count = repository.collection_item_count(collection_id)?;
+        if let Some(root_id) = collection.root_id.as_deref() {
+            repository.snapshot_collection_to_root(root_id, collection_id)?;
+        }
         repository.delete_collection(collection_id)?;
+        let root_status = collection
+            .root_id
+            .as_deref()
+            .map(|root_id| repository.root_status(root_id))
+            .transpose()?;
         transaction.commit()?;
-        Ok(())
+        Ok(LibraryCollectionDeletionResult {
+            collection_id: collection_id.to_owned(),
+            root_id: collection.root_id.clone(),
+            preserved_project_count,
+            root_status,
+        })
+    }
+
+    pub(crate) fn revoke_library_root(
+        &self,
+        root_id: &str,
+    ) -> Result<LibraryRootRevokeResult, LibraryError> {
+        validate_id("文件夹", root_id)?;
+        let timestamp = now_ms()?;
+        let mut connection = self.store.connect()?;
+        let transaction =
+            connection.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+        let repository = LibraryRepository::new(&transaction);
+        let status = repository.root_status(root_id)?;
+        if status == LibraryRootStatus::Ambiguous {
+            return Err(LibraryError::Conflict(
+                "该文件夹关联多个剧集，暂不支持自动撤销授权，请先手动整理。".to_owned(),
+            ));
+        }
+        let preserved_project_count = match status {
+            LibraryRootStatus::Linked => repository.count_root_projects(root_id)?,
+            LibraryRootStatus::Orphaned | LibraryRootStatus::Ambiguous => {
+                repository.list_root_manifest_items(root_id)?.len() as i64
+            }
+        };
+        let detached_collection_count =
+            repository.detach_root_collections(root_id, timestamp)? as u64;
+        repository.delete_library_root(root_id)?;
+        transaction.commit()?;
+        Ok(LibraryRootRevokeResult {
+            root_id: root_id.to_owned(),
+            detached_collection_count,
+            preserved_project_count: preserved_project_count as u64,
+        })
     }
 
     pub(crate) fn get_collection_detail(
@@ -165,7 +218,12 @@ impl LibraryService {
         let mut connection = self.store.connect()?;
         let transaction = connection.transaction()?;
         let repository = LibraryRepository::new(&transaction);
-        repository.get_collection(&input.collection_id)?;
+        let collection = repository.get_collection(&input.collection_id)?;
+        if collection.root_id.is_some() {
+            return Err(LibraryError::Conflict(
+                "文件夹剧集不能手动添加视频，请使用「扫描更新」或「重建剧集」。".to_owned(),
+            ));
+        }
         let project_title = repository.project_title(&input.project_id)?;
         if repository.membership_exists(&input.collection_id, &input.project_id)? {
             return Err(LibraryError::MembershipExists {
@@ -205,6 +263,10 @@ impl LibraryService {
         let mut connection = self.store.connect()?;
         let transaction = connection.transaction()?;
         let repository = LibraryRepository::new(&transaction);
+        let collection = repository.get_collection(collection_id)?;
+        if collection.root_id.is_some() {
+            repository.remove_root_item(collection.root_id.as_deref(), project_id)?;
+        }
         repository.remove_membership(collection_id, project_id)?;
         transaction.commit()?;
         self.get_collection_detail(collection_id)
@@ -341,11 +403,17 @@ pub(super) fn now_ms() -> Result<i64, LibraryError> {
 mod tests {
     use std::{fs, path::Path};
 
+    use rusqlite::params;
     use tempfile::TempDir;
 
-    use crate::domain::{CreateLocalProjectInput, Project};
-
     use super::*;
+    use crate::{
+        domain::{CreateLocalProjectInput, Project},
+        library::{
+            LibraryRootStatus,
+            repository::{LibraryRepository, NewImportedMembership, NewLibraryRoot},
+        },
+    };
 
     struct Fixture {
         temporary: TempDir,
@@ -383,6 +451,73 @@ mod tests {
                 .expect("collection should be created")
         }
 
+        fn imported_collection(&self, title: &str) -> Collection {
+            let timestamp = now_ms().expect("timestamp should be available");
+            let root_id = Uuid::new_v4().to_string();
+            let collection = Collection {
+                id: Uuid::new_v4().to_string(),
+                kind: CollectionKind::Series,
+                title: title.to_owned(),
+                root_id: Some(root_id.clone()),
+                system_key: None,
+                poster_path: None,
+                sort_mode: CollectionSortMode::Episode,
+                auto_play_next: false,
+                last_opened_at_ms: None,
+                created_at_ms: timestamp,
+                updated_at_ms: timestamp,
+            };
+            let mut connection = self.service.store.connect().expect("store should connect");
+            let transaction = connection.transaction().expect("transaction should begin");
+            let repository = LibraryRepository::new(&transaction);
+            let root_path = self.temporary.path().to_string_lossy().into_owned();
+            repository
+                .insert_library_root(&NewLibraryRoot {
+                    id: &root_id,
+                    path: &root_path,
+                    path_key: &root_path,
+                    display_name: title,
+                    timestamp,
+                })
+                .expect("root should insert");
+            repository
+                .insert_collection(&collection)
+                .expect("series collection should insert");
+            transaction.commit().expect("transaction should commit");
+            collection
+        }
+
+        fn add_imported(&self, collection: &Collection, project: &Project, order: i64) {
+            let metadata =
+                fs::metadata(&project.media_source.locator).expect("project media should exist");
+            let relative_path = Path::new(&project.media_source.locator)
+                .file_name()
+                .and_then(|value| value.to_str())
+                .expect("fixture media should have a name")
+                .to_owned();
+            let fingerprint = "a".repeat(64);
+            let timestamp = now_ms().expect("timestamp should be available");
+            let mut connection = self.service.store.connect().expect("store should connect");
+            let transaction = connection.transaction().expect("transaction should begin");
+            LibraryRepository::new(&transaction)
+                .insert_imported_membership(&NewImportedMembership {
+                    collection_id: &collection.id,
+                    project_id: &project.id,
+                    season_number: Some(1),
+                    episode_number: Some(order + 1),
+                    absolute_order: order,
+                    display_title: &project.title,
+                    relative_path: &relative_path,
+                    relative_path_key: &relative_path.to_ascii_lowercase(),
+                    source_size_bytes: i64::try_from(metadata.len()).expect("size should fit"),
+                    source_modified_at_ms: None,
+                    quick_fingerprint: &fingerprint,
+                    timestamp,
+                })
+                .expect("imported membership should insert");
+            transaction.commit().expect("transaction should commit");
+        }
+
         fn add(
             &self,
             collection: &Collection,
@@ -413,6 +548,7 @@ mod tests {
         let home = fixture.service.get_home().expect("home should load");
         assert_eq!(home.total_project_count, 1);
         assert_eq!(home.unclassified_count, 1);
+        assert_eq!(home.recently_added.len(), 1);
         assert_eq!(home.unclassified[0].project_id, project.id);
 
         fixture.add(&collection, &project, 1, 1, 0);
@@ -420,6 +556,8 @@ mod tests {
         assert_eq!(home.collection_item_count, 1);
         assert_eq!(home.unclassified_count, 0);
         assert!(home.unclassified.is_empty());
+        assert_eq!(home.recently_added.len(), 1);
+        assert_eq!(home.recently_added[0].project_id, project.id);
 
         collection = fixture
             .service
@@ -454,6 +592,41 @@ mod tests {
                 .unclassified_count,
             1
         );
+    }
+
+    #[test]
+    fn deleting_imported_collection_preserves_root_manifest_and_marks_root_orphaned() {
+        let fixture = Fixture::new();
+        let project = fixture.project("episode-01.mp4");
+        let collection = fixture.imported_collection("导入剧集");
+        fixture.add_imported(&collection, &project, 0);
+
+        let result = fixture
+            .service
+            .delete_collection(&collection.id)
+            .expect("imported collection should delete");
+
+        assert_eq!(result.preserved_project_count, 1);
+        assert_eq!(result.root_status, Some(LibraryRootStatus::Orphaned));
+        assert!(fixture.service.store.get_project(&project.id).is_ok());
+        let home = fixture.service.get_home().expect("home should reload");
+        assert_eq!(home.unclassified_count, 1);
+        assert_eq!(home.folders.len(), 1);
+        assert_eq!(home.folders[0].status, LibraryRootStatus::Orphaned);
+
+        let connection = fixture
+            .service
+            .store
+            .connect()
+            .expect("store should connect");
+        let manifest_count: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM library_root_items WHERE root_id = ?1",
+                params![result.root_id.expect("root should be returned")],
+                |row| row.get(0),
+            )
+            .expect("root manifest should be readable");
+        assert_eq!(manifest_count, 1);
     }
 
     #[test]
@@ -492,6 +665,74 @@ mod tests {
                 .expect("home should load")
                 .unclassified_count,
             0
+        );
+    }
+
+    #[test]
+    fn revoking_linked_root_detaches_collection_without_deleting_projects() {
+        let fixture = Fixture::new();
+        let project = fixture.project("linked.mp4");
+        let collection = fixture.imported_collection("已关联剧集");
+        fixture.add_imported(&collection, &project, 0);
+
+        let result = fixture
+            .service
+            .revoke_library_root(collection.root_id.as_deref().expect("root id"))
+            .expect("root should revoke");
+        assert_eq!(result.detached_collection_count, 1);
+        assert_eq!(result.preserved_project_count, 1);
+        let connection = fixture.service.store.connect().expect("connection");
+        let root_id: Option<String> = connection
+            .query_row(
+                "SELECT root_id FROM collections WHERE id = ?1",
+                params![collection.id],
+                |row| row.get(0),
+            )
+            .expect("collection should remain");
+        assert!(root_id.is_none());
+        let membership_count: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM collection_items WHERE collection_id = ?1",
+                params![collection.id],
+                |row| row.get(0),
+            )
+            .expect("membership should remain");
+        assert_eq!(membership_count, 1);
+        assert!(fixture.service.store.get_project(&project.id).is_ok());
+        assert!(
+            fixture
+                .service
+                .get_home()
+                .expect("home should load")
+                .folders
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn revoking_orphaned_root_removes_authorization_but_keeps_projects() {
+        let fixture = Fixture::new();
+        let project = fixture.project("orphaned.mp4");
+        let collection = fixture.imported_collection("孤立剧集");
+        fixture.add_imported(&collection, &project, 0);
+        let deletion = fixture
+            .service
+            .delete_collection(&collection.id)
+            .expect("collection should delete");
+        let result = fixture
+            .service
+            .revoke_library_root(deletion.root_id.as_deref().expect("root id"))
+            .expect("orphaned root should revoke");
+        assert_eq!(result.detached_collection_count, 0);
+        assert_eq!(result.preserved_project_count, 1);
+        assert!(fixture.service.store.get_project(&project.id).is_ok());
+        assert!(
+            fixture
+                .service
+                .get_home()
+                .expect("home should load")
+                .folders
+                .is_empty()
         );
     }
 

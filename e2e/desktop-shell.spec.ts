@@ -40,7 +40,7 @@ test("media home uses a compact responsive desktop shell", async ({ page }) => {
   await expect(
     page.getByRole("searchbox", { name: "搜索媒体库" }),
   ).toBeEnabled();
-  await expect(page.getByRole("button", { name: "设置，内容待定义" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "设置" })).toBeEnabled();
   await expect(page.getByRole("contentinfo", { name: "媒体库状态" })).toHaveCSS(
     "height",
     "26px",
@@ -76,6 +76,36 @@ test("media home uses a compact responsive desktop shell", async ({ page }) => {
   await expect(page.locator(".desktop-navigation-note")).toBeHidden();
 });
 
+test("media library scrolls to its last row above the status bar", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.goto("/e2e/library.html");
+
+  const scroll = page.locator(".library-scroll");
+  const statusbar = page.getByRole("contentinfo", { name: "媒体库状态" });
+  const lastItem = page.locator(".library-item-open").last();
+  const before = await scroll.evaluate((element) => ({
+    clientHeight: element.clientHeight,
+    scrollHeight: element.scrollHeight,
+    scrollTop: element.scrollTop,
+  }));
+
+  expect(before.scrollHeight).toBeGreaterThan(before.clientHeight);
+  expect(before.scrollTop).toBe(0);
+  await scroll.evaluate((element) => {
+    element.scrollTop = element.scrollHeight;
+  });
+  await expect(lastItem).toBeVisible();
+
+  const lastItemBox = await lastItem.boundingBox();
+  const statusbarBox = await statusbar.boundingBox();
+  expect(lastItemBox).not.toBeNull();
+  expect(statusbarBox).not.toBeNull();
+  expect(lastItemBox!.y + lastItemBox!.height).toBeLessThanOrEqual(
+    statusbarBox!.y + 1,
+  );
+  expect(await scroll.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+});
+
 test("folder recovery requires confirmation and blocks unsafe relocation", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/e2e/library.html");
@@ -83,7 +113,7 @@ test("folder recovery requires confirmation and blocks unsafe relocation", async
   await expect(page.getByRole("heading", { name: "授权文件夹", level: 1 })).toBeVisible();
   await expect(page.getByText("W:\\Series\\Rain")).toBeVisible();
 
-  await page.getByRole("button", { name: "重新扫描 Rain" }).click();
+  await page.getByRole("button", { name: "扫描更新 Rain" }).click();
   const rescan = page.getByRole("dialog", { name: "确认重新扫描结果" });
   await expect(rescan).toContainText("根目录当前离线");
   const applyRescan = rescan.getByRole("button", { name: "应用扫描结果" });
@@ -93,7 +123,7 @@ test("folder recovery requires confirmation and blocks unsafe relocation", async
   await applyRescan.click();
   await expect(rescan).toHaveCount(0);
 
-  await page.getByRole("button", { name: "重新定位 Rain" }).click();
+  await page.getByRole("button", { name: "更换位置 Rain" }).click();
   const relocation = page.getByRole("dialog", { name: "确认根目录重定位" });
   await expect(relocation).toContainText("新目录缺少文件");
   await expect(relocation.getByRole("button", { name: "更新根目录" })).toBeDisabled();
@@ -172,6 +202,55 @@ test("drawers and context menu preserve the mounted video", async ({ page }) => 
   await expect(page.getByRole("menu", { name: "播放器右键菜单" })).toHaveCount(0);
 });
 
+test("keeps the progress bar and playback controls outside the video surface", async ({
+  page,
+}) => {
+  for (const viewport of [
+    { width: 960, height: 640 },
+    { width: 1280, height: 720 },
+    { width: 1440, height: 900 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await page.goto("/e2e/player.html");
+
+    const geometry = await page.evaluate(() => {
+      const rect = (selector: string) => {
+        const element = document.querySelector<HTMLElement>(selector);
+        if (!element) {
+          throw new Error(`missing ${selector}`);
+        }
+        const box = element.getBoundingClientRect();
+        return {
+          top: box.top,
+          right: box.right,
+          bottom: box.bottom,
+          left: box.left,
+          width: box.width,
+          height: box.height,
+        };
+      };
+      return {
+        stage: rect(".video-stage"),
+        video: rect(".video-stage video"),
+        controls: rect(".player-controls"),
+        seek: rect(".seek-control"),
+        primary: rect(".player-primary"),
+        viewport: { width: window.innerWidth, height: window.innerHeight },
+        documentHeight: document.documentElement.scrollHeight,
+      };
+    });
+
+    expect(geometry.controls.top).toBeGreaterThanOrEqual(geometry.stage.bottom - 1);
+    expect(geometry.seek.top).toBeGreaterThanOrEqual(geometry.stage.bottom - 1);
+    expect(geometry.controls.bottom).toBeLessThanOrEqual(geometry.primary.bottom + 1);
+    expect(geometry.video.top).toBeGreaterThanOrEqual(geometry.stage.top);
+    expect(geometry.video.bottom).toBeLessThanOrEqual(geometry.stage.bottom + 1);
+    expect(geometry.video.right).toBeLessThanOrEqual(geometry.stage.right + 1);
+    expect(geometry.video.left).toBeGreaterThanOrEqual(geometry.stage.left - 1);
+    expect(geometry.documentHeight).toBeLessThanOrEqual(geometry.viewport.height);
+  }
+});
+
 test("playback shortcuts ignore editable controls and drop feedback is explicit", async ({
   page,
 }) => {
@@ -226,4 +305,35 @@ test("dialog keeps its frame fixed and scrolls only the content at 900px", async
   });
   expect(await heading.boundingBox()).toEqual(before.heading);
   expect(await actions.boundingBox()).toEqual(before.actions);
+});
+
+test("runtime settings keeps the component list scrollable and explains storage behavior", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.goto("/e2e/runtime.html");
+
+  const dialog = page.getByRole("dialog", { name: "运行时与模型设置" });
+  const body = dialog.locator(".dialog-body");
+  const actions = dialog.locator(".dialog-actions");
+  const before = {
+    dialog: await dialog.boundingBox(),
+    actions: await actions.boundingBox(),
+  };
+
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toContainText("不会搬运现有组件、视频或模型");
+  await expect(dialog).toContainText("下载 FFmpeg 或识别模型前，需要先选择目录");
+  expect(await body.evaluate((element) => element.scrollHeight)).toBeGreaterThan(
+    await body.evaluate((element) => element.clientHeight),
+  );
+
+  await body.evaluate((element) => {
+    element.scrollTop = element.scrollHeight;
+  });
+  await expect(dialog.getByText("Whisper Base", { exact: true })).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "完成" })).toBeVisible();
+  expect(await dialog.boundingBox()).toEqual(before.dialog);
+  expect(await actions.boundingBox()).toEqual(before.actions);
+  expect(await body.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
 });

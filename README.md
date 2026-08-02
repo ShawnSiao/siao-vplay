@@ -38,17 +38,38 @@ SiaoVPlay 是一款 Windows 本地优先的跨语言智能播放器。它面向�
 - 导出原文、简体中文或双语 SRT／WebVTT。
 - 生成烧录简体中文字幕或双语字幕的独立 MP4；任务支持取消、中断恢复和版本确认。
 
+## 运行时与最终安装包
+
+默认安装包不把 FFmpeg 和 Whisper 大模型放进安装文件。应用设置中可以选择一个非系统盘目录，按需下载固定版本的 FFmpeg、`ggml-small.bin` 或 `ggml-base.bin`；下载完成后会先校验文件大小和 SHA-256，再切换为可用文件。
+
+最终 Windows 安装包随包提供 Whisper CPU、Whisper Vulkan、`yt-dlp` 和第三方许可证。Whisper 运行时及 `yt-dlp` 的版本和完整性校验继续由应用执行；FFmpeg 与模型保持独立，便于节省初始安装体积并允许切换模型。
+
+构建最终 NSIS 安装包需要准备本机 W 盘资源目录，不把这些二进制文件提交到仓库：
+
+```powershell
+$env:CARGO_TARGET_DIR = 'W:\SiaoVPlay\build\runtime-bundle\cargo-target'
+npm run desktop:build
+```
+
+脚本默认读取 `W:\SiaoVPlay`，只打包 `runtimes\whisper`、`runtimes\whisper-vulkan`、`runtimes\yt-dlp` 和 `licenses`。如需指定资源或构建目录，可直接调用 `tools\build-runtime-bundle.ps1` 的 `-AssetRoot` 与 `-BuildRoot` 参数；脚本会拒绝 C 盘构建目录。
+
+组件来源与固定基线：
+
+- Whisper 模型：[whisper.cpp 模型说明](https://github.com/ggml-org/whisper.cpp/blob/master/models/README.md)；`small` 与 `base` 的大小和 SHA-256 固定在本地运行时目录实现中。
+- FFmpeg：[FFmpeg 下载页](https://www.ffmpeg.org/download.html) 与 [gyan.dev Windows 构建](https://www.gyan.dev/ffmpeg/builds/)；按需版本固定为 8.1.2 Essentials。
+- `yt-dlp`：[官方 Releases](https://github.com/yt-dlp/yt-dlp/releases)；随包版本固定为 `2026.06.09`。
+
 ## 候选版本状态
 
-当前代码已形成 `0.1.0` Windows 10 x64 内部候选版本，并完成本地文件、公开 URL、英泰日韩真实语音、两种 Agent 交接、理解、学习、字幕导出和视频烧录的真实媒体验收。
+当前代码已形成 `0.2.0` Windows 10 x64 内部候选版本，并完成本地文件、公开 URL、英泰日韩真实语音、两种 Agent 交接、理解、学习、字幕导出和视频烧录的真实媒体验收。
 
 候选安装包暂未作为公开 Release 提供，原因如下：
 
 - 安装包尚未进行代码签名。
 - Windows 11 安装与启动验收尚未完成。
-- FFmpeg、yt-dlp、Whisper 运行时和模型属于本机构建依赖，不提交到仓库。
+- FFmpeg 和 Whisper 模型属于按需下载依赖；Whisper CPU/Vulkan、`yt-dlp` 和许可证通过 W 盘候选资源目录注入最终安装包，不提交到仓库。
 
-仓库中的开发版本和本地候选包可以从应用相邻目录自动发现这些运行时与模型，不要求设置 `SIAOVPLAY_RUNTIME_DIR`、`SIAOVPLAY_MODEL_DIR`、`SIAOVPLAY_FFMPEG` 或 `SIAOVPLAY_FFPROBE`。
+仓库中的开发版本和本地候选包可以从应用相邻目录自动发现随包运行时；设置中选择的目录优先提供按需组件。仍支持通过 `SIAOVPLAY_RUNTIME_DIR`、`SIAOVPLAY_MODEL_DIR`、`SIAOVPLAY_FFMPEG` 或 `SIAOVPLAY_FFPROBE` 做受控的本机调试覆盖。
 
 开发构建也可以传入本地媒体路径：
 

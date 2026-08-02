@@ -10,18 +10,19 @@ use uuid::Uuid;
 use crate::store::{ProjectStore, StoreError};
 
 use super::{
-    ApplyLibraryRescanInput, ApplyLibraryRootRelocationInput, ConfirmLibraryImportInput,
-    ItemAvailability, LibraryError, LibraryRecoveryItem, LibraryRecoveryStore,
-    LibraryRelocationMismatch, LibraryRescanPreview, LibraryRescanResult,
-    LibraryRootRelocationPreview, LibraryRootRelocationResult, LibraryScanPreview,
-    RelocationMismatchReason, migration,
+    ApplyLibraryRescanInput, ApplyLibraryRootRebuildInput, ApplyLibraryRootRelocationInput,
+    ConfirmLibraryImportInput, ItemAvailability, LibraryError, LibraryRecoveryItem,
+    LibraryRecoveryStore, LibraryRelocationMismatch, LibraryRescanPreview, LibraryRescanResult,
+    LibraryRootRebuildItem, LibraryRootRebuildMatchKind, LibraryRootRebuildPreview,
+    LibraryRootRebuildResult, LibraryRootRelocationPreview, LibraryRootRelocationResult,
+    LibraryScanPreview, RelocationMismatchReason, migration,
     recovery_store::RecoveryLease,
     repository::{
-        ExistingMediaLocator, LibraryRepository, NewImportedMembership, NewImportedProject,
-        RootMembershipRecord,
+        ExistingMediaLocator, LibraryRepository, LibraryRootItemRecord, NewImportedMembership,
+        NewImportedProject, NewRootItem, NewRootMembership, RootMembershipRecord,
     },
     scanner,
-    service::now_ms,
+    service::{now_ms, validate_title},
 };
 
 use super::import_service::{path_key, prepare_items, relative_path_key};
@@ -57,6 +58,29 @@ impl LibraryRecoveryService {
     ) -> Result<LibraryRescanResult, LibraryError> {
         let lease = self.previews.take(&input.preview_token)?;
         match self.apply_rescan_lease(&lease, &input) {
+            Ok(result) => Ok(result),
+            Err(error) => {
+                self.previews.restore(lease);
+                Err(error)
+            }
+        }
+    }
+
+    pub(crate) fn inspect_rebuild(
+        &self,
+        input: super::InspectLibraryRootRebuildInput,
+    ) -> Result<LibraryRootRebuildPreview, LibraryError> {
+        let preview =
+            self.build_rebuild_snapshot(&input.root_id, input.new_root_path.as_deref())?;
+        self.previews.store_rebuild(preview)
+    }
+
+    pub(crate) fn apply_rebuild(
+        &self,
+        input: ApplyLibraryRootRebuildInput,
+    ) -> Result<LibraryRootRebuildResult, LibraryError> {
+        let lease = self.previews.take(&input.preview_token)?;
+        match self.apply_rebuild_lease(&lease, &input) {
             Ok(result) => Ok(result),
             Err(error) => {
                 self.previews.restore(lease);
@@ -182,6 +206,537 @@ impl LibraryRecoveryService {
             ignored_count: scanned.ignored_count,
             expires_at_ms: 0,
         })
+    }
+
+    fn build_rebuild_snapshot(
+        &self,
+        root_id: &str,
+        requested_root_path: Option<&str>,
+    ) -> Result<LibraryRootRebuildPreview, LibraryError> {
+        let connection = self.store.connect()?;
+        let repository = LibraryRepository::new(&connection);
+        let root = repository.get_root(root_id)?;
+        let status = repository.root_status(root_id)?;
+        match status {
+            super::LibraryRootStatus::Linked => {
+                return Err(LibraryError::Conflict(
+                    "该文件夹已经关联剧集，请使用「扫描更新」".to_owned(),
+                ));
+            }
+            super::LibraryRootStatus::Ambiguous => {
+                return Err(LibraryError::Conflict(
+                    "该文件夹关联多个剧集，暂不支持自动重建，请手动整理。".to_owned(),
+                ));
+            }
+            super::LibraryRootStatus::Orphaned => {}
+        }
+
+        let manifest = repository.list_root_manifest_items(root_id)?;
+        if manifest.is_empty() {
+            drop(connection);
+            self.backfill_legacy_root_manifest(root_id, &root.path)?;
+        }
+        let connection = self.store.connect()?;
+        let repository = LibraryRepository::new(&connection);
+        let manifest = repository.list_root_manifest_items(root_id)?;
+        let target_path = match requested_root_path {
+            Some(path) => scanner::canonicalize_authorized_root(path)?,
+            None => PathBuf::from(&root.path),
+        };
+        let target_path_key = path_key(&target_path);
+        if target_path_key != root.path_key
+            && repository.root_path_key_exists_elsewhere(root_id, &target_path_key)?
+        {
+            return Err(LibraryError::Conflict(
+                "新的文件夹已经授权给其他媒体库".to_owned(),
+            ));
+        }
+
+        if !target_path.is_dir() {
+            return Ok(LibraryRootRebuildPreview {
+                preview_token: String::new(),
+                root_id: root_id.to_owned(),
+                current_root_path: root.path,
+                root_path: target_path.to_string_lossy().into_owned(),
+                root_display_name: root.display_name.clone(),
+                suggested_collection_title: root.display_name,
+                root_offline: true,
+                new_candidates: Vec::new(),
+                matched_items: Vec::new(),
+                missing_items: manifest
+                    .iter()
+                    .map(|item| {
+                        rebuild_item(item, None, LibraryRootRebuildMatchKind::Missing, None)
+                    })
+                    .collect::<Result<Vec<_>, _>>()?,
+                changed_items: Vec::new(),
+                uncertain_items: Vec::new(),
+                ignored_count: 0,
+                expires_at_ms: 0,
+            });
+        }
+
+        let scanned = scan_root(&target_path.to_string_lossy())?;
+        let candidates_by_key = scanned
+            .candidates
+            .iter()
+            .map(|candidate| (relative_path_key(&candidate.relative_path), candidate))
+            .collect::<HashMap<_, _>>();
+        let mut consumed_candidate_keys = HashSet::new();
+        let mut matched_items = Vec::new();
+        let mut missing_items = Vec::new();
+        let mut changed_items = Vec::new();
+        let mut uncertain_items = Vec::new();
+        for item in &manifest {
+            let Some(relative_path) = item.relative_path.as_deref() else {
+                uncertain_items.push(rebuild_item(
+                    item,
+                    None,
+                    LibraryRootRebuildMatchKind::NeedsConfirmation,
+                    Some("历史清单缺少相对路径，请人工确认对应文件".to_owned()),
+                )?);
+                continue;
+            };
+            if !is_safe_relative_path(relative_path) {
+                uncertain_items.push(rebuild_item(
+                    item,
+                    None,
+                    LibraryRootRebuildMatchKind::NeedsConfirmation,
+                    Some("历史清单中的相对路径不安全，请人工确认".to_owned()),
+                )?);
+                continue;
+            }
+            let key = relative_path_key(relative_path);
+            match candidates_by_key.get(&key) {
+                None => missing_items.push(rebuild_item(
+                    item,
+                    None,
+                    LibraryRootRebuildMatchKind::Missing,
+                    None,
+                )?),
+                Some(candidate) => {
+                    consumed_candidate_keys.insert(key);
+                    let (kind, reason) = match item.quick_fingerprint.as_deref() {
+                        Some(expected) if expected == candidate.quick_fingerprint => {
+                            (LibraryRootRebuildMatchKind::Matched, None)
+                        }
+                        Some(_) => (
+                            LibraryRootRebuildMatchKind::Changed,
+                            Some("相对路径相同，但文件内容指纹已经变化".to_owned()),
+                        ),
+                        None => (
+                            LibraryRootRebuildMatchKind::NeedsConfirmation,
+                            Some("历史清单缺少文件指纹，请确认这是原视频".to_owned()),
+                        ),
+                    };
+                    let rebuild = rebuild_item(item, Some(candidate), kind, reason)?;
+                    match kind {
+                        LibraryRootRebuildMatchKind::Matched => matched_items.push(rebuild),
+                        LibraryRootRebuildMatchKind::Changed => changed_items.push(rebuild),
+                        LibraryRootRebuildMatchKind::NeedsConfirmation => {
+                            uncertain_items.push(rebuild)
+                        }
+                        LibraryRootRebuildMatchKind::Missing => unreachable!(),
+                    }
+                }
+            }
+        }
+        let existing_fingerprints = repository
+            .list_existing_fingerprints()?
+            .into_iter()
+            .map(|item| item.quick_fingerprint)
+            .collect::<HashSet<_>>();
+        let mut new_candidates = scanned
+            .candidates
+            .into_iter()
+            .filter(|candidate| {
+                !consumed_candidate_keys.contains(&relative_path_key(&candidate.relative_path))
+            })
+            .collect::<Vec<_>>();
+        for candidate in &mut new_candidates {
+            if existing_fingerprints.contains(&candidate.quick_fingerprint) {
+                candidate.needs_confirmation = true;
+                candidate.confirmation_reason =
+                    Some("内容指纹与既有视频相同，但相对路径不同".to_owned());
+            }
+        }
+        Ok(LibraryRootRebuildPreview {
+            preview_token: String::new(),
+            root_id: root_id.to_owned(),
+            current_root_path: root.path,
+            root_path: scanned.root_path,
+            root_display_name: scanned.root_display_name.clone(),
+            suggested_collection_title: scanned.suggested_collection_title,
+            root_offline: false,
+            new_candidates,
+            matched_items,
+            missing_items,
+            changed_items,
+            uncertain_items,
+            ignored_count: scanned.ignored_count,
+            expires_at_ms: 0,
+        })
+    }
+
+    fn apply_rebuild_lease(
+        &self,
+        lease: &RecoveryLease,
+        input: &ApplyLibraryRootRebuildInput,
+    ) -> Result<LibraryRootRebuildResult, LibraryError> {
+        let expected = lease.rebuild()?;
+        if expected.preview_token != input.preview_token {
+            return Err(LibraryError::Conflict(
+                "剧集重建预览令牌与内存快照不一致".to_owned(),
+            ));
+        }
+        if expected.root_offline {
+            return Err(LibraryError::Conflict(
+                "该文件夹当前不可用，请先选择位置并重新检查".to_owned(),
+            ));
+        }
+        let mut current =
+            self.build_rebuild_snapshot(&expected.root_id, Some(&expected.root_path))?;
+        if !same_rebuild_snapshot(expected, &current) {
+            return Err(LibraryError::Conflict(
+                "文件夹内容在预览后发生变化，请重新检查".to_owned(),
+            ));
+        }
+        align_rebuild_candidate_ids(expected, &mut current);
+        if !current.missing_items.is_empty() && !input.confirm_missing {
+            return Err(LibraryError::Conflict(
+                "请确认保留缺失视频的字幕、进度和学习资料".to_owned(),
+            ));
+        }
+        if !current.changed_items.is_empty() && !input.confirm_changed {
+            return Err(LibraryError::Conflict(
+                "请确认将内容变化的视频作为原项目重建".to_owned(),
+            ));
+        }
+        if !current.uncertain_items.is_empty() && !input.confirm_uncertain_matches {
+            return Err(LibraryError::Conflict(
+                "请确认历史清单中无法自动确认的视频匹配".to_owned(),
+            ));
+        }
+        let collection_title = validate_title(&input.collection_title)?;
+        let synthetic_preview = LibraryScanPreview {
+            scan_id: Uuid::new_v4().to_string(),
+            preview_token: input.preview_token.clone(),
+            root_path: current.root_path.clone(),
+            root_display_name: current.root_display_name.clone(),
+            suggested_collection_title: current.suggested_collection_title.clone(),
+            candidates: current.new_candidates.clone(),
+            ignored_entries: Vec::new(),
+            ignored_count: current.ignored_count,
+            needs_confirmation_count: current
+                .new_candidates
+                .iter()
+                .filter(|candidate| candidate.needs_confirmation)
+                .count() as u64,
+            expires_at_ms: current.expires_at_ms,
+        };
+        let confirm_input = ConfirmLibraryImportInput {
+            preview_token: input.preview_token.clone(),
+            collection_title: collection_title.clone(),
+            items: input.new_items.clone(),
+            confirm_fingerprint_duplicates: input.confirm_fingerprint_duplicates,
+        };
+        let canonical_root = scanner::canonicalize_authorized_root(&current.root_path)?;
+        let prepared = if current.new_candidates.is_empty() {
+            if !input.new_items.is_empty() {
+                return Err(LibraryError::Validation(
+                    "重建预览没有可新增的视频".to_owned(),
+                ));
+            }
+            Vec::new()
+        } else {
+            prepare_items(&synthetic_preview, &confirm_input, &canonical_root)?
+        };
+        let timestamp = now_ms()?;
+        let mut connection = self.store.connect()?;
+        let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let repository = LibraryRepository::new(&transaction);
+        if repository.root_status(&current.root_id)? != super::LibraryRootStatus::Orphaned {
+            return Err(LibraryError::Conflict(
+                "该文件夹已经关联剧集，请刷新后再操作".to_owned(),
+            ));
+        }
+        let existing_root = repository.get_root(&current.root_id)?;
+        if existing_root.path_key != path_key(Path::new(&expected.current_root_path)) {
+            return Err(LibraryError::Conflict(
+                "原文件夹记录在预览后发生变化，请重新检查".to_owned(),
+            ));
+        }
+        if repository
+            .root_path_key_exists_elsewhere(&current.root_id, &path_key(&canonical_root))?
+        {
+            return Err(LibraryError::Conflict(
+                "新的文件夹已经授权给其他媒体库".to_owned(),
+            ));
+        }
+        let manifest = repository.list_root_manifest_items(&current.root_id)?;
+        let expected_item_count = current.matched_items.len()
+            + current.missing_items.len()
+            + current.changed_items.len()
+            + current.uncertain_items.len();
+        if manifest.len() != expected_item_count {
+            return Err(LibraryError::Conflict(
+                "文件夹清单在预览后发生变化，请重新检查".to_owned(),
+            ));
+        }
+        let candidates_by_key = scan_root(&current.root_path)?
+            .candidates
+            .into_iter()
+            .map(|candidate| (relative_path_key(&candidate.relative_path), candidate))
+            .collect::<HashMap<_, _>>();
+        let existing_fingerprints = repository.list_existing_fingerprints()?;
+        if !input.confirm_fingerprint_duplicates {
+            for item in &prepared {
+                if existing_fingerprints.iter().any(|existing| {
+                    existing.quick_fingerprint == item.candidate.quick_fingerprint
+                        && path_key(Path::new(&existing.locator)) != item.path_key
+                }) {
+                    return Err(LibraryError::Conflict(format!(
+                        "发现内容指纹相同但路径不同的视频，请人工确认：{}",
+                        item.candidate.relative_path
+                    )));
+                }
+            }
+        }
+        let collection_id = Uuid::new_v4().to_string();
+        let collection = super::Collection {
+            id: collection_id.clone(),
+            kind: super::CollectionKind::Series,
+            title: collection_title,
+            root_id: Some(current.root_id.clone()),
+            system_key: None,
+            poster_path: None,
+            sort_mode: super::CollectionSortMode::Episode,
+            auto_play_next: false,
+            last_opened_at_ms: None,
+            created_at_ms: timestamp,
+            updated_at_ms: timestamp,
+        };
+        repository.insert_collection(&collection)?;
+        repository.clear_root_manifest(&current.root_id)?;
+        let mut restored_item_count = 0_u64;
+        let mut missing_item_count = 0_u64;
+        let changed_item_count = current.changed_items.len() as u64;
+        for item in manifest {
+            let relative_path = item.relative_path.as_deref().ok_or_else(|| {
+                LibraryError::Conflict(format!(
+                    "视频「{}」缺少相对路径，请先人工整理清单",
+                    item.project_id
+                ))
+            })?;
+            let relative_key = relative_path_key(relative_path);
+            let candidate = candidates_by_key.get(&relative_key);
+            let (availability, source_size, source_modified, fingerprint) = match candidate {
+                Some(candidate) => {
+                    let canonical_media = dunce::canonicalize(canonical_root.join(relative_path))?;
+                    if !canonical_media.starts_with(&canonical_root) {
+                        return Err(LibraryError::Validation(format!(
+                            "视频逃出授权文件夹：{relative_path}"
+                        )));
+                    }
+                    let display_name = canonical_media
+                        .file_name()
+                        .and_then(|value| value.to_str())
+                        .ok_or_else(|| {
+                            LibraryError::Validation(format!(
+                                "视频文件名不是有效文本：{relative_path}"
+                            ))
+                        })?;
+                    let size = i64::try_from(candidate.source_size_bytes).map_err(|_| {
+                        LibraryError::Validation(format!(
+                            "媒体文件大小超出支持范围：{relative_path}"
+                        ))
+                    })?;
+                    repository.update_primary_media_source(
+                        &item.project_id,
+                        &canonical_media.to_string_lossy(),
+                        display_name,
+                        size,
+                        candidate.source_modified_at_ms,
+                        timestamp,
+                    )?;
+                    (
+                        ItemAvailability::Available.as_database_value(),
+                        Some(size),
+                        candidate.source_modified_at_ms,
+                        Some(candidate.quick_fingerprint.as_str()),
+                    )
+                }
+                None => {
+                    missing_item_count += 1;
+                    (
+                        ItemAvailability::Missing.as_database_value(),
+                        item.source_size_bytes,
+                        item.source_modified_at_ms,
+                        item.quick_fingerprint.as_deref(),
+                    )
+                }
+            };
+            repository.insert_root_membership(&NewRootMembership {
+                root_id: &current.root_id,
+                collection_id: &collection_id,
+                project_id: &item.project_id,
+                season_number: item.season_number,
+                episode_number: item.episode_number,
+                absolute_order: item.absolute_order,
+                display_title: &item.display_title,
+                relative_path: Some(relative_path),
+                relative_path_key: Some(&relative_key),
+                availability,
+                source_size_bytes: source_size,
+                source_modified_at_ms: source_modified,
+                quick_fingerprint: fingerprint,
+                timestamp,
+            })?;
+            restored_item_count += 1;
+        }
+
+        let existing_locators = repository.list_primary_media_locators()?;
+        let mut projects_by_path = existing_projects_by_path(existing_locators);
+        let mut created_project_count = 0_u64;
+        let mut reused_project_count = expected_item_count as u64;
+        for item in &prepared {
+            let project_id = if let Some(existing) = projects_by_path.get(&item.path_key) {
+                validate_existing_locator(existing, item)?;
+                reused_project_count += 1;
+                existing.project_id.clone()
+            } else {
+                let project_id = Uuid::new_v4().to_string();
+                let media_source_id = Uuid::new_v4().to_string();
+                let source_size_bytes =
+                    i64::try_from(item.file.source_size_bytes).map_err(|_| {
+                        LibraryError::Validation(format!(
+                            "媒体文件大小超出支持范围：{}",
+                            item.candidate.relative_path
+                        ))
+                    })?;
+                let locator = item.file.canonical_path.to_string_lossy().into_owned();
+                repository.insert_imported_project(&NewImportedProject {
+                    project_id: &project_id,
+                    media_source_id: &media_source_id,
+                    title: &item.display_title,
+                    locator: &locator,
+                    display_name: &item.display_name,
+                    source_size_bytes,
+                    source_modified_at_ms: item.file.source_modified_at_ms,
+                    timestamp,
+                })?;
+                projects_by_path.insert(
+                    item.path_key.clone(),
+                    ExistingProjectAtPath {
+                        project_id: project_id.clone(),
+                        source_size_bytes: Some(source_size_bytes),
+                        source_modified_at_ms: item.file.source_modified_at_ms,
+                    },
+                );
+                created_project_count += 1;
+                project_id
+            };
+            let source_size_bytes = i64::try_from(item.file.source_size_bytes).map_err(|_| {
+                LibraryError::Validation(format!(
+                    "媒体文件大小超出支持范围：{}",
+                    item.candidate.relative_path
+                ))
+            })?;
+            let relative_key = relative_path_key(&item.candidate.relative_path);
+            repository.insert_root_membership(&NewRootMembership {
+                root_id: &current.root_id,
+                collection_id: &collection_id,
+                project_id: &project_id,
+                season_number: item.input.season_number,
+                episode_number: item.input.episode_number,
+                absolute_order: item.input.absolute_order,
+                display_title: &item.display_title,
+                relative_path: Some(&item.candidate.relative_path),
+                relative_path_key: Some(&relative_key),
+                availability: ItemAvailability::Available.as_database_value(),
+                source_size_bytes: Some(source_size_bytes),
+                source_modified_at_ms: item.file.source_modified_at_ms,
+                quick_fingerprint: Some(&item.candidate.quick_fingerprint),
+                timestamp,
+            })?;
+        }
+        repository.relocate_root(
+            &current.root_id,
+            &current.root_path,
+            &path_key(&canonical_root),
+            &current.root_display_name,
+            timestamp,
+        )?;
+        let root = repository.get_root_summary(&current.root_id)?;
+        let collection_detail = repository.get_collection_detail(&collection_id)?;
+        migration::ensure_foreign_keys(&transaction)
+            .map_err(StoreError::LibraryMigration)
+            .map_err(LibraryError::Store)?;
+        transaction.commit()?;
+        Ok(LibraryRootRebuildResult {
+            root,
+            collection: collection_detail,
+            restored_item_count,
+            added_item_count: prepared.len() as u64,
+            created_project_count,
+            reused_project_count,
+            missing_item_count,
+            changed_item_count,
+        })
+    }
+
+    fn backfill_legacy_root_manifest(
+        &self,
+        root_id: &str,
+        root_path: &str,
+    ) -> Result<(), LibraryError> {
+        let timestamp = now_ms()?;
+        let mut connection = self.store.connect()?;
+        let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let repository = LibraryRepository::new(&transaction);
+        if !repository.list_root_manifest_items(root_id)?.is_empty() {
+            transaction.commit()?;
+            return Ok(());
+        }
+        let root = PathBuf::from(root_path);
+        let mut order = 0_i64;
+        for locator in repository.list_primary_media_locators()? {
+            let path = Path::new(&locator.locator);
+            let Ok(relative) = path.strip_prefix(&root) else {
+                continue;
+            };
+            let relative = relative.to_string_lossy().replace('\\', "/");
+            if relative.is_empty() || !is_safe_relative_path(&relative) {
+                continue;
+            }
+            let relative_key = relative_path_key(&relative);
+            let availability = if path.is_file() {
+                ItemAvailability::Available.as_database_value()
+            } else {
+                ItemAvailability::Missing.as_database_value()
+            };
+            repository.upsert_root_item(&NewRootItem {
+                root_id,
+                project_id: &locator.project_id,
+                season_number: None,
+                episode_number: None,
+                absolute_order: order,
+                display_title: &locator.display_name,
+                relative_path: Some(&relative),
+                relative_path_key: Some(&relative_key),
+                availability,
+                source_size_bytes: locator.source_size_bytes,
+                source_modified_at_ms: locator.source_modified_at_ms,
+                quick_fingerprint: None,
+                timestamp,
+            })?;
+            order += 1;
+        }
+        migration::ensure_foreign_keys(&transaction)
+            .map_err(StoreError::LibraryMigration)
+            .map_err(LibraryError::Store)?;
+        transaction.commit()?;
+        Ok(())
     }
 
     fn apply_rescan_lease(
@@ -464,6 +1019,20 @@ impl LibraryRecoveryService {
         let connection = self.store.connect()?;
         let repository = LibraryRepository::new(&connection);
         let root = repository.get_root(root_id)?;
+        match repository.root_status(root_id)? {
+            super::LibraryRootStatus::Linked => {}
+            super::LibraryRootStatus::Orphaned => {
+                return Err(LibraryError::Conflict(
+                    "该文件夹当前没有关联剧集，不能执行「重新定位」。请使用「重建剧集」。"
+                        .to_owned(),
+                ));
+            }
+            super::LibraryRootStatus::Ambiguous => {
+                return Err(LibraryError::Conflict(
+                    "该文件夹关联多个剧集，暂不支持自动重新定位，请手动整理。".to_owned(),
+                ));
+            }
+        }
         let canonical_new_root = scanner::canonicalize_authorized_root(new_root_path)?;
         let new_path_key = path_key(&canonical_new_root);
         if new_path_key == root.path_key {
@@ -664,6 +1233,84 @@ fn is_safe_relative_path(value: &str) -> bool {
         })
 }
 
+fn rebuild_item(
+    item: &LibraryRootItemRecord,
+    candidate: Option<&super::LibraryScanCandidate>,
+    match_kind: LibraryRootRebuildMatchKind,
+    reason: Option<String>,
+) -> Result<LibraryRootRebuildItem, LibraryError> {
+    Ok(LibraryRootRebuildItem {
+        project_id: item.project_id.clone(),
+        candidate_id: candidate.map(|value| value.candidate_id.clone()),
+        relative_path: item
+            .relative_path
+            .clone()
+            .unwrap_or_else(|| "（缺少相对路径）".to_owned()),
+        display_title: item.display_title.clone(),
+        season_number: item.season_number,
+        episode_number: item.episode_number,
+        absolute_order: item.absolute_order,
+        previous_availability: ItemAvailability::from_database_value(&item.availability)?,
+        match_kind,
+        reason,
+    })
+}
+
+fn same_rebuild_snapshot(
+    expected: &LibraryRootRebuildPreview,
+    current: &LibraryRootRebuildPreview,
+) -> bool {
+    let mut expected = expected.clone();
+    let mut current = current.clone();
+    expected.preview_token.clear();
+    expected.expires_at_ms = 0;
+    align_rebuild_candidate_ids(&expected, &mut current);
+    expected == current
+}
+
+fn align_rebuild_candidate_ids(
+    expected: &LibraryRootRebuildPreview,
+    current: &mut LibraryRootRebuildPreview,
+) {
+    let candidates = expected
+        .new_candidates
+        .iter()
+        .map(|candidate| {
+            (
+                relative_path_key(&candidate.relative_path),
+                candidate.candidate_id.clone(),
+            )
+        })
+        .collect::<HashMap<_, _>>();
+    for candidate in &mut current.new_candidates {
+        if let Some(candidate_id) = candidates.get(&relative_path_key(&candidate.relative_path)) {
+            candidate.candidate_id.clone_from(candidate_id);
+        }
+    }
+    align_rebuild_item_candidate_ids(&expected.matched_items, &mut current.matched_items);
+    align_rebuild_item_candidate_ids(&expected.changed_items, &mut current.changed_items);
+    align_rebuild_item_candidate_ids(&expected.uncertain_items, &mut current.uncertain_items);
+}
+
+fn align_rebuild_item_candidate_ids(
+    expected: &[LibraryRootRebuildItem],
+    current: &mut [LibraryRootRebuildItem],
+) {
+    let ids = expected
+        .iter()
+        .filter_map(|item| {
+            item.candidate_id
+                .as_ref()
+                .map(|candidate_id| (relative_path_key(&item.relative_path), candidate_id.clone()))
+        })
+        .collect::<HashMap<_, _>>();
+    for item in current {
+        if let Some(candidate_id) = ids.get(&relative_path_key(&item.relative_path)) {
+            item.candidate_id = Some(candidate_id.clone());
+        }
+    }
+}
+
 fn recovery_item(item: &RootMembershipRecord) -> Result<LibraryRecoveryItem, LibraryError> {
     Ok(LibraryRecoveryItem {
         collection_id: item.collection_id.clone(),
@@ -784,7 +1431,8 @@ mod tests {
 
     use super::*;
     use crate::library::{
-        ConfirmLibraryItemInput, LibraryImportService, LibraryPreviewStore, LibraryScanService,
+        ConfirmLibraryItemInput, InspectLibraryRootRebuildInput, LibraryImportService,
+        LibraryPreviewStore, LibraryRootStatus, LibraryScanService, LibraryService,
         ScanLibraryFolderInput,
     };
 
@@ -1087,5 +1735,189 @@ mod tests {
             }),
             Err(LibraryError::Conflict(_))
         ));
+    }
+
+    #[test]
+    fn rebuild_after_collection_deletion_reuses_projects_and_preserves_playback() {
+        let fixture = Fixture::new();
+        let project_ids = fixture
+            .store
+            .connect()
+            .expect("connection")
+            .prepare("SELECT project_id FROM collection_items WHERE collection_id = ?1 ORDER BY project_id")
+            .expect("project query")
+            .query_map([&fixture.collection_id], |row| row.get::<_, String>(0))
+            .expect("project rows")
+            .collect::<Result<Vec<_>, _>>()
+            .expect("project ids");
+        fixture
+            .store
+            .connect()
+            .expect("connection")
+            .execute(
+                "UPDATE playback_states SET position_ms = 1234 WHERE project_id = ?1",
+                [&project_ids[0]],
+            )
+            .expect("playback state");
+        LibraryService::new(fixture.store.clone())
+            .delete_collection(&fixture.collection_id)
+            .expect("delete collection");
+
+        let service = fixture.service();
+        let preview = service
+            .inspect_rebuild(InspectLibraryRootRebuildInput {
+                root_id: fixture.root_id.clone(),
+                new_root_path: None,
+            })
+            .expect("rebuild preview");
+        assert_eq!(preview.matched_items.len(), 2);
+        assert!(preview.missing_items.is_empty());
+        let result = service
+            .apply_rebuild(ApplyLibraryRootRebuildInput {
+                preview_token: preview.preview_token,
+                collection_title: "Rain 重建".to_owned(),
+                new_items: Vec::new(),
+                confirm_missing: false,
+                confirm_changed: false,
+                confirm_uncertain_matches: false,
+                confirm_fingerprint_duplicates: false,
+            })
+            .expect("apply rebuild");
+        assert_eq!(result.restored_item_count, 2);
+        assert_eq!(result.created_project_count, 0);
+        assert_eq!(result.reused_project_count, 2);
+        assert_eq!(result.root.status, LibraryRootStatus::Linked);
+        assert_ne!(
+            result.collection.summary.collection.id,
+            fixture.collection_id
+        );
+
+        let connection = fixture.store.connect().expect("connection");
+        let rebuilt_ids = connection
+            .prepare(
+                "SELECT project_id FROM collection_items WHERE collection_id = ?1 ORDER BY project_id",
+            )
+            .expect("rebuilt project query")
+            .query_map([&result.collection.summary.collection.id], |row| {
+                row.get::<_, String>(0)
+            })
+            .expect("rebuilt project rows")
+            .collect::<Result<Vec<_>, _>>()
+            .expect("rebuilt project ids");
+        assert_eq!(rebuilt_ids, project_ids);
+        let position: i64 = connection
+            .query_row(
+                "SELECT position_ms FROM playback_states WHERE project_id = ?1",
+                [&project_ids[0]],
+                |row| row.get(0),
+            )
+            .expect("playback position");
+        assert_eq!(position, 1234);
+    }
+
+    #[test]
+    fn rebuild_after_moving_orphaned_root_reuses_project_sources() {
+        let fixture = Fixture::new();
+        let project_ids = fixture
+            .store
+            .connect()
+            .expect("connection")
+            .prepare("SELECT project_id FROM collection_items WHERE collection_id = ?1 ORDER BY project_id")
+            .expect("project query")
+            .query_map([&fixture.collection_id], |row| row.get::<_, String>(0))
+            .expect("project rows")
+            .collect::<Result<Vec<_>, _>>()
+            .expect("project ids");
+        LibraryService::new(fixture.store.clone())
+            .delete_collection(&fixture.collection_id)
+            .expect("delete collection");
+        let new_root = fixture.temporary.path().join("Rain-moved");
+        fs::rename(&fixture.root, &new_root).expect("move root");
+
+        let service = fixture.service();
+        let preview = service
+            .inspect_rebuild(InspectLibraryRootRebuildInput {
+                root_id: fixture.root_id.clone(),
+                new_root_path: Some(new_root.to_string_lossy().into_owned()),
+            })
+            .expect("rebuild preview");
+        assert_eq!(preview.matched_items.len(), 2);
+        let result = service
+            .apply_rebuild(ApplyLibraryRootRebuildInput {
+                preview_token: preview.preview_token,
+                collection_title: "Rain moved".to_owned(),
+                new_items: Vec::new(),
+                confirm_missing: false,
+                confirm_changed: false,
+                confirm_uncertain_matches: false,
+                confirm_fingerprint_duplicates: false,
+            })
+            .expect("apply moved rebuild");
+        assert_eq!(result.created_project_count, 0);
+        assert_eq!(result.reused_project_count, 2);
+        let connection = fixture.store.connect().expect("connection");
+        let rebuilt_ids = connection
+            .prepare(
+                "SELECT project_id FROM collection_items WHERE collection_id = ?1 ORDER BY project_id",
+            )
+            .expect("rebuilt project query")
+            .query_map([&result.collection.summary.collection.id], |row| {
+                row.get::<_, String>(0)
+            })
+            .expect("rebuilt project rows")
+            .collect::<Result<Vec<_>, _>>()
+            .expect("rebuilt project ids");
+        assert_eq!(rebuilt_ids, project_ids);
+        let locators = LibraryRepository::new(&connection)
+            .list_primary_media_locators()
+            .expect("locators");
+        assert!(
+            locators
+                .iter()
+                .all(|item| Path::new(&item.locator).starts_with(&new_root))
+        );
+    }
+
+    #[test]
+    fn changed_rebuild_item_requires_explicit_confirmation() {
+        let fixture = Fixture::new();
+        fs::write(fixture.root.join("Rain.S01E01.mp4"), b"episode-one-changed")
+            .expect("change episode");
+        LibraryService::new(fixture.store.clone())
+            .delete_collection(&fixture.collection_id)
+            .expect("delete collection");
+        let service = fixture.service();
+        let preview = service
+            .inspect_rebuild(InspectLibraryRootRebuildInput {
+                root_id: fixture.root_id.clone(),
+                new_root_path: None,
+            })
+            .expect("rebuild preview");
+        assert_eq!(preview.changed_items.len(), 1);
+        let token = preview.preview_token.clone();
+        assert!(matches!(
+            service.apply_rebuild(ApplyLibraryRootRebuildInput {
+                preview_token: token.clone(),
+                collection_title: "Rain changed".to_owned(),
+                new_items: Vec::new(),
+                confirm_missing: false,
+                confirm_changed: false,
+                confirm_uncertain_matches: false,
+                confirm_fingerprint_duplicates: false,
+            }),
+            Err(LibraryError::Conflict(_))
+        ));
+        let result = service
+            .apply_rebuild(ApplyLibraryRootRebuildInput {
+                preview_token: token,
+                collection_title: "Rain changed".to_owned(),
+                new_items: Vec::new(),
+                confirm_missing: false,
+                confirm_changed: true,
+                confirm_uncertain_matches: false,
+                confirm_fingerprint_duplicates: false,
+            })
+            .expect("confirmed changed rebuild");
+        assert_eq!(result.changed_item_count, 1);
     }
 }
