@@ -69,6 +69,14 @@ const mediaSummary: LibraryMediaSummary = {
   itemAvailability: null,
 };
 
+const unclassifiedItems = Array.from({ length: 12 }, (_, index) => ({
+  ...mediaSummary,
+  projectId: `e2e-library-project-${index + 1}`,
+  projectTitle: `雨站台 ${index + 1}`,
+  displayName: `rain-platform-${index + 1}.mp4`,
+  mediaLocator: `W:\\Videos\\rain-platform-${index + 1}.mp4`,
+}));
+
 const libraryHome: LibraryHome = {
   continueWatching: [mediaSummary],
   collections: [
@@ -98,10 +106,10 @@ const libraryHome: LibraryHome = {
     lastScannedAtMs: Date.now(),
     itemCount: 3,
   }],
-  unclassified: [mediaSummary],
-  totalProjectCount: 1,
+  unclassified: unclassifiedItems,
+  totalProjectCount: unclassifiedItems.length,
   collectionItemCount: 0,
-  unclassifiedCount: 1,
+  unclassifiedCount: unclassifiedItems.length,
 };
 
 const unresolvedItem: LibraryImportDraftItem = {

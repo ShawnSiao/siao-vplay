@@ -98,7 +98,7 @@ describe("RuntimeSettingsDialog", () => {
       ),
     });
 
-    render(
+    const { rerender } = render(
       <RuntimeSettingsDialog
         catalog={catalog}
         loading={false}
@@ -117,6 +117,23 @@ describe("RuntimeSettingsDialog", () => {
     );
     expect(onCatalogChange).toHaveBeenCalled();
 
+    rerender(
+      <RuntimeSettingsDialog
+        catalog={{
+          ...catalog,
+          settings: {
+            ...catalog.settings,
+            storageRoot: "W:\\SiaoVPlay\\runtime-data",
+          },
+        }}
+        loading={false}
+        previewMode={false}
+        onClose={() => undefined}
+        onCatalogChange={onCatalogChange}
+        onError={() => undefined}
+      />,
+    );
+
     fireEvent.click(screen.getByRole("radio", { name: /base/i }));
     await waitFor(() =>
       expect(desktopMocks.setPreferredModel).toHaveBeenCalledWith("base"),
@@ -128,5 +145,24 @@ describe("RuntimeSettingsDialog", () => {
         "ffmpeg",
       ),
     );
+  });
+
+  it("blocks downloads until a storage root is selected", () => {
+    render(
+      <RuntimeSettingsDialog
+        catalog={catalog}
+        loading={false}
+        previewMode={false}
+        onClose={() => undefined}
+        onCatalogChange={() => undefined}
+        onError={() => undefined}
+      />,
+    );
+
+    const downloadButton = screen.getAllByRole("button", { name: "先选择目录" })[0];
+    expect(downloadButton).toBeDisabled();
+    expect(
+      screen.getByText("下载 FFmpeg 或识别模型前，需要先选择目录。"),
+    ).toBeInTheDocument();
   });
 });

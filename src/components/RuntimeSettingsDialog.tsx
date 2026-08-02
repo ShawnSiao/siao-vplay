@@ -40,6 +40,16 @@ function componentTone(component: RuntimeComponent): "ready" | "warning" {
   return component.available ? "ready" : "warning";
 }
 
+function displayStoragePath(path: string | null): string | null {
+  if (!path) {
+    return null;
+  }
+  if (path.startsWith("\\\\?\\UNC\\")) {
+    return `\\\\${path.slice("\\\\?\\UNC\\".length)}`;
+  }
+  return path.startsWith("\\\\?\\") ? path.slice("\\\\?\\".length) : path;
+}
+
 export function RuntimeSettingsDialog({
   catalog,
   loading,
@@ -145,7 +155,9 @@ export function RuntimeSettingsDialog({
               <div className="runtime-settings-section-head">
                 <div>
                   <h3>存储目录</h3>
-                  <p>FFmpeg、识别模型和下载缓存统一保存在选定目录。</p>
+                  <p>
+                    按需下载的 FFmpeg、识别模型和下载缓存会写入此目录。选择目录只保存配置并创建目录，不会搬运现有组件、视频或模型。
+                  </p>
                 </div>
                 <button
                   className="button quiet"
@@ -157,8 +169,13 @@ export function RuntimeSettingsDialog({
                 </button>
               </div>
               <div className="runtime-storage-path" title={catalog.settings.storageRoot ?? undefined}>
-                {catalog.settings.storageRoot ?? "尚未选择；可先选择一个非系统盘目录"}
+                {displayStoragePath(catalog.settings.storageRoot) ?? "尚未选择；可先选择一个非系统盘目录"}
               </div>
+              <p className="runtime-storage-note" role="status">
+                {catalog.settings.storageRoot
+                  ? "当前目录只决定后续按需下载的位置；已安装组件会保留原位置。"
+                  : "下载 FFmpeg 或识别模型前，需要先选择目录。"}
+              </p>
             </section>
 
             <section className="runtime-settings-section">
@@ -257,10 +274,17 @@ export function RuntimeSettingsDialog({
                       <button
                         className="button quiet runtime-component-action"
                         type="button"
-                        disabled={previewMode || busyAction !== null || component.available}
+                        disabled={
+                          previewMode ||
+                          busyAction !== null ||
+                          component.available ||
+                          !catalog.settings.storageRoot
+                        }
                         onClick={() => void download(component)}
                       >
-                        {busyAction === component.id
+                        {!catalog.settings.storageRoot
+                          ? "先选择目录"
+                          : busyAction === component.id
                           ? "正在下载并校验…"
                           : component.available
                             ? "已安装"

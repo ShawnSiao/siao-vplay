@@ -76,6 +76,36 @@ test("media home uses a compact responsive desktop shell", async ({ page }) => {
   await expect(page.locator(".desktop-navigation-note")).toBeHidden();
 });
 
+test("media library scrolls to its last row above the status bar", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.goto("/e2e/library.html");
+
+  const scroll = page.locator(".library-scroll");
+  const statusbar = page.getByRole("contentinfo", { name: "媒体库状态" });
+  const lastItem = page.locator(".library-item-open").last();
+  const before = await scroll.evaluate((element) => ({
+    clientHeight: element.clientHeight,
+    scrollHeight: element.scrollHeight,
+    scrollTop: element.scrollTop,
+  }));
+
+  expect(before.scrollHeight).toBeGreaterThan(before.clientHeight);
+  expect(before.scrollTop).toBe(0);
+  await scroll.evaluate((element) => {
+    element.scrollTop = element.scrollHeight;
+  });
+  await expect(lastItem).toBeVisible();
+
+  const lastItemBox = await lastItem.boundingBox();
+  const statusbarBox = await statusbar.boundingBox();
+  expect(lastItemBox).not.toBeNull();
+  expect(statusbarBox).not.toBeNull();
+  expect(lastItemBox!.y + lastItemBox!.height).toBeLessThanOrEqual(
+    statusbarBox!.y + 1,
+  );
+  expect(await scroll.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+});
+
 test("folder recovery requires confirmation and blocks unsafe relocation", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/e2e/library.html");
@@ -275,4 +305,35 @@ test("dialog keeps its frame fixed and scrolls only the content at 900px", async
   });
   expect(await heading.boundingBox()).toEqual(before.heading);
   expect(await actions.boundingBox()).toEqual(before.actions);
+});
+
+test("runtime settings keeps the component list scrollable and explains storage behavior", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.goto("/e2e/runtime.html");
+
+  const dialog = page.getByRole("dialog", { name: "运行时与模型设置" });
+  const body = dialog.locator(".dialog-body");
+  const actions = dialog.locator(".dialog-actions");
+  const before = {
+    dialog: await dialog.boundingBox(),
+    actions: await actions.boundingBox(),
+  };
+
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toContainText("不会搬运现有组件、视频或模型");
+  await expect(dialog).toContainText("下载 FFmpeg 或识别模型前，需要先选择目录");
+  expect(await body.evaluate((element) => element.scrollHeight)).toBeGreaterThan(
+    await body.evaluate((element) => element.clientHeight),
+  );
+
+  await body.evaluate((element) => {
+    element.scrollTop = element.scrollHeight;
+  });
+  await expect(dialog.getByText("Whisper Base", { exact: true })).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "完成" })).toBeVisible();
+  expect(await dialog.boundingBox()).toEqual(before.dialog);
+  expect(await actions.boundingBox()).toEqual(before.actions);
+  expect(await body.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
 });
