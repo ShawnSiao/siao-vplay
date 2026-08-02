@@ -159,6 +159,93 @@ pub(crate) struct LibraryCollectionDeletionResult {
     pub root_status: Option<LibraryRootStatus>,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum LibraryRootRebuildMatchKind {
+    Matched,
+    Missing,
+    Changed,
+    NeedsConfirmation,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct LibraryRootRebuildItem {
+    pub project_id: String,
+    pub candidate_id: Option<String>,
+    pub relative_path: String,
+    pub display_title: String,
+    pub season_number: Option<i64>,
+    pub episode_number: Option<i64>,
+    pub absolute_order: i64,
+    pub previous_availability: ItemAvailability,
+    pub match_kind: LibraryRootRebuildMatchKind,
+    pub reason: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct LibraryRootRebuildPreview {
+    pub preview_token: String,
+    pub root_id: String,
+    pub current_root_path: String,
+    pub root_path: String,
+    pub root_display_name: String,
+    pub suggested_collection_title: String,
+    pub root_offline: bool,
+    pub new_candidates: Vec<LibraryScanCandidate>,
+    pub matched_items: Vec<LibraryRootRebuildItem>,
+    pub missing_items: Vec<LibraryRootRebuildItem>,
+    pub changed_items: Vec<LibraryRootRebuildItem>,
+    pub uncertain_items: Vec<LibraryRootRebuildItem>,
+    pub ignored_count: u64,
+    pub expires_at_ms: i64,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct InspectLibraryRootRebuildInput {
+    pub root_id: String,
+    pub new_root_path: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ApplyLibraryRootRebuildInput {
+    pub preview_token: String,
+    pub collection_title: String,
+    pub new_items: Vec<ConfirmLibraryItemInput>,
+    #[serde(default)]
+    pub confirm_missing: bool,
+    #[serde(default)]
+    pub confirm_changed: bool,
+    #[serde(default)]
+    pub confirm_uncertain_matches: bool,
+    #[serde(default)]
+    pub confirm_fingerprint_duplicates: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct LibraryRootRebuildResult {
+    pub root: LibraryRootSummary,
+    pub collection: CollectionDetail,
+    pub restored_item_count: u64,
+    pub added_item_count: u64,
+    pub created_project_count: u64,
+    pub reused_project_count: u64,
+    pub missing_item_count: u64,
+    pub changed_item_count: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct LibraryRootRevokeResult {
+    pub root_id: String,
+    pub detached_collection_count: u64,
+    pub preserved_project_count: u64,
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct MediaSummary {
@@ -191,6 +278,7 @@ pub(crate) struct LibraryHome {
     pub collections: Vec<CollectionSummary>,
     pub folders: Vec<LibraryRootSummary>,
     pub unclassified: Vec<MediaSummary>,
+    pub recently_added: Vec<MediaSummary>,
     pub total_project_count: i64,
     pub collection_item_count: i64,
     pub unclassified_count: i64,

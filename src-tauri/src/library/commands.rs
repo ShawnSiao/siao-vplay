@@ -5,14 +5,16 @@ use tauri::{AppHandle, Emitter, Manager, State};
 use crate::{commands::CommandError, store::ProjectStore};
 
 use super::{
-    AddProjectToCollectionInput, ApplyLibraryRescanInput, ApplyLibraryRootRelocationInput,
-    Collection, CollectionDetail, ConfirmLibraryImportInput, CreateCollectionInput,
-    EpisodeNeighbors, InspectLibraryRootRelocationInput, LibraryCollectionDeletionResult,
-    LibraryError, LibraryHome, LibraryImportResult, LibraryImportService, LibraryPreviewStore,
-    LibraryRecoveryService, LibraryRecoveryStore, LibraryRescanPreview, LibraryRescanResult,
-    LibraryRootRelocationPreview, LibraryRootRelocationResult, LibraryScanPhase,
-    LibraryScanPreview, LibraryScanProgress, LibraryScanService, LibraryService, MediaSummary,
-    ScanLibraryFolderInput, SearchResult, UpdateCollectionInput,
+    AddProjectToCollectionInput, ApplyLibraryRescanInput, ApplyLibraryRootRebuildInput,
+    ApplyLibraryRootRelocationInput, Collection, CollectionDetail, ConfirmLibraryImportInput,
+    CreateCollectionInput, EpisodeNeighbors, InspectLibraryRootRebuildInput,
+    InspectLibraryRootRelocationInput, LibraryCollectionDeletionResult, LibraryError, LibraryHome,
+    LibraryImportResult, LibraryImportService, LibraryPreviewStore, LibraryRecoveryService,
+    LibraryRecoveryStore, LibraryRescanPreview, LibraryRescanResult, LibraryRootRebuildPreview,
+    LibraryRootRebuildResult, LibraryRootRelocationPreview, LibraryRootRelocationResult,
+    LibraryRootRevokeResult, LibraryScanPhase, LibraryScanPreview, LibraryScanProgress,
+    LibraryScanService, LibraryService, MediaSummary, ScanLibraryFolderInput, SearchResult,
+    UpdateCollectionInput,
 };
 
 const LIBRARY_SCAN_PROGRESS_EVENT: &str = "library-scan-progress";
@@ -231,6 +233,44 @@ pub(crate) async fn apply_library_rescan(
 }
 
 #[tauri::command]
+pub(crate) async fn inspect_library_root_rebuild(
+    store: State<'_, ProjectStore>,
+    recovery_store: State<'_, LibraryRecoveryStore>,
+    input: InspectLibraryRootRebuildInput,
+) -> Result<LibraryRootRebuildPreview, CommandError> {
+    let service =
+        LibraryRecoveryService::new(store.inner().clone(), recovery_store.inner().clone());
+    tauri::async_runtime::spawn_blocking(move || service.inspect_rebuild(input))
+        .await
+        .map_err(|error| LibraryError::Conflict(format!("剧集重建检查任务无法完成：{error}")))?
+        .map_err(CommandError::from)
+}
+
+#[tauri::command]
+pub(crate) async fn apply_library_root_rebuild(
+    store: State<'_, ProjectStore>,
+    recovery_store: State<'_, LibraryRecoveryStore>,
+    input: ApplyLibraryRootRebuildInput,
+) -> Result<LibraryRootRebuildResult, CommandError> {
+    let service =
+        LibraryRecoveryService::new(store.inner().clone(), recovery_store.inner().clone());
+    tauri::async_runtime::spawn_blocking(move || service.apply_rebuild(input))
+        .await
+        .map_err(|error| LibraryError::Conflict(format!("剧集重建应用任务无法完成：{error}")))?
+        .map_err(CommandError::from)
+}
+
+#[tauri::command]
+pub(crate) fn revoke_library_root(
+    store: State<'_, ProjectStore>,
+    root_id: String,
+) -> Result<LibraryRootRevokeResult, CommandError> {
+    LibraryService::new(store.inner().clone())
+        .revoke_library_root(&root_id)
+        .map_err(Into::into)
+}
+
+#[tauri::command]
 pub(crate) async fn inspect_library_root_relocation(
     store: State<'_, ProjectStore>,
     recovery_store: State<'_, LibraryRecoveryStore>,
@@ -326,7 +366,8 @@ fn allow_home_posters(app: &AppHandle, home: &LibraryHome) -> Result<(), Command
         allow_poster(app, poster_path)?;
     }
     allow_media_posters(app, &home.continue_watching)?;
-    allow_media_posters(app, &home.unclassified)
+    allow_media_posters(app, &home.unclassified)?;
+    allow_media_posters(app, &home.recently_added)
 }
 
 fn allow_media_posters(app: &AppHandle, media: &[MediaSummary]) -> Result<(), CommandError> {
