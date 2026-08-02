@@ -2696,7 +2696,10 @@ mod tests {
         let project_id = create_v14_database(&database_path);
 
         let store = ProjectStore::open(&database_path).expect("v14 store should upgrade");
-        assert_eq!(store.schema_version().expect("schema version"), 15);
+        assert_eq!(
+            store.schema_version().expect("schema version"),
+            CURRENT_SCHEMA_VERSION
+        );
         let project = store
             .get_project(&project_id)
             .expect("v14 project should remain readable");
@@ -2734,7 +2737,7 @@ mod tests {
     }
 
     #[test]
-    fn v14_business_data_remains_readable_and_unclassified_after_schema_15() {
+    fn v14_business_data_remains_readable_and_unclassified_after_schema_16() {
         let temporary = tempfile::tempdir().expect("temporary directory should be created");
         let database_path = temporary.path().join("v14-business.sqlite3");
         let fixture = create_v14_business_database(&database_path);
