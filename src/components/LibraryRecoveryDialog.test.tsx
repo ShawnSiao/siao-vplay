@@ -35,9 +35,12 @@ const rescanState: LibraryRecoveryState = {
     expiresAtMs: 1_900_000_000_000,
   },
   relocationPreview: null,
+  rebuildPreview: null,
   newItems: [],
+  rebuildCollectionTitle: "",
   confirmMissing: false,
   confirmChanged: false,
+  confirmUncertainMatches: false,
   confirmFingerprintDuplicates: false,
   error: null,
 };
@@ -49,11 +52,13 @@ function RescanHarness({ onApply }: { onApply: () => Promise<unknown> }) {
       state={state}
       onClose={() => undefined}
       onItemChange={() => undefined}
-      onConfirmationChange={(field, checked) =>
+        onConfirmationChange={(field, checked) =>
         setState((current) => ({ ...current, [field]: checked }))
-      }
-      onApplyRescan={onApply}
-      onApplyRelocation={async () => undefined}
+        }
+        onRebuildTitleChange={() => undefined}
+        onApplyRescan={onApply}
+        onApplyRebuild={async () => undefined}
+        onApplyRelocation={async () => undefined}
     />
   );
 }
@@ -99,11 +104,74 @@ describe("LibraryRecoveryDialog", () => {
         onClose={() => undefined}
         onItemChange={() => undefined}
         onConfirmationChange={() => undefined}
+        onRebuildTitleChange={() => undefined}
         onApplyRescan={async () => undefined}
+        onApplyRebuild={async () => undefined}
         onApplyRelocation={async () => undefined}
       />,
     );
     expect(screen.getByText("内容指纹不一致")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "更新根目录" })).toBeDisabled();
+  });
+
+  it("requires explicit confirmation before rebuilding uncertain or changed projects", () => {
+    const onApplyRebuild = vi.fn().mockResolvedValue(undefined);
+    render(
+      <LibraryRecoveryDialog
+        state={{
+          ...rescanState,
+          stage: "rebuild_preview",
+          rescanPreview: null,
+          rebuildPreview: {
+            previewToken: "rebuild",
+            rootId: "root",
+            currentRootPath: "W:\\Old",
+            rootPath: "W:\\New",
+            rootDisplayName: "New",
+            suggestedCollectionTitle: "New",
+            rootOffline: false,
+            newCandidates: [],
+            matchedItems: [],
+            missingItems: [],
+            changedItems: [{
+              projectId: "changed",
+              candidateId: "candidate-changed",
+              relativePath: "Rain.S01E01.mp4",
+              displayTitle: "第一集",
+              seasonNumber: 1,
+              episodeNumber: 1,
+              absoluteOrder: 0,
+              previousAvailability: "available",
+              matchKind: "changed",
+              reason: "内容变化",
+            }],
+            uncertainItems: [{
+              projectId: "uncertain",
+              candidateId: "candidate-uncertain",
+              relativePath: "Rain.S01E02.mp4",
+              displayTitle: "第二集",
+              seasonNumber: 1,
+              episodeNumber: 2,
+              absoluteOrder: 1,
+              previousAvailability: "available",
+              matchKind: "needs_confirmation",
+              reason: "缺少指纹",
+            }],
+            ignoredCount: 0,
+            expiresAtMs: 1_900_000_000_000,
+          },
+        }}
+        onClose={() => undefined}
+        onItemChange={() => undefined}
+        onConfirmationChange={() => undefined}
+        onRebuildTitleChange={() => undefined}
+        onApplyRescan={async () => undefined}
+        onApplyRebuild={onApplyRebuild}
+        onApplyRelocation={async () => undefined}
+      />,
+    );
+    const apply = screen.getByRole("button", { name: "创建剧集" });
+    expect(apply).toBeDisabled();
+    expect(screen.getByText("需要人工确认的匹配")).toBeInTheDocument();
   });
 });

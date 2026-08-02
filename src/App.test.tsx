@@ -207,6 +207,7 @@ function libraryHomeFor(value: Project = project): LibraryHome {
     collections: [],
     folders: [],
     unclassified: [media],
+    recentlyAdded: [media],
     totalProjectCount: 1,
     collectionItemCount: 0,
     unclassifiedCount: 1,

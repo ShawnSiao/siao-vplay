@@ -12,6 +12,9 @@ import type {
   LibraryMediaSummary,
   LibraryRescanPreview,
   LibraryRescanResult,
+  ApplyLibraryRootRebuildInput,
+  LibraryRootRebuildPreview,
+  LibraryRootRebuildResult,
   LibraryRootRelocationPreview,
   LibraryRootRelocationResult,
   LibraryScanCandidate,
@@ -22,6 +25,7 @@ import type {
 import {
   addProjectToCollection,
   applyLibraryRescan,
+  applyLibraryRootRebuild,
   applyLibraryRootRelocation,
   cancelLibraryScan,
   confirmLibraryImport,
@@ -31,10 +35,12 @@ import {
   getCollectionDetail,
   getLibraryHome,
   inspectLibraryRescan,
+  inspectLibraryRootRebuild,
   inspectLibraryRootRelocation,
   listCollectionEpisodes,
   listenLibraryScanProgress,
   removeProjectFromCollection,
+  revokeLibraryRoot,
   scanLibraryFolder,
   searchLibrary,
   setWatchLater,
@@ -95,16 +101,21 @@ export type LibraryRecoveryState = {
     | "closed"
     | "inspecting_rescan"
     | "rescan_preview"
+    | "inspecting_rebuild"
+    | "rebuild_preview"
     | "inspecting_relocation"
     | "relocation_preview"
     | "applying"
     | "error";
   rootId: string | null;
   rescanPreview: LibraryRescanPreview | null;
+  rebuildPreview: LibraryRootRebuildPreview | null;
   relocationPreview: LibraryRootRelocationPreview | null;
   newItems: LibraryImportDraftItem[];
+  rebuildCollectionTitle: string;
   confirmMissing: boolean;
   confirmChanged: boolean;
+  confirmUncertainMatches: boolean;
   confirmFingerprintDuplicates: boolean;
   error: string | null;
 };
@@ -113,10 +124,13 @@ const emptyRecovery: LibraryRecoveryState = {
   stage: "closed",
   rootId: null,
   rescanPreview: null,
+  rebuildPreview: null,
   relocationPreview: null,
   newItems: [],
+  rebuildCollectionTitle: "",
   confirmMissing: false,
   confirmChanged: false,
+  confirmUncertainMatches: false,
   confirmFingerprintDuplicates: false,
   error: null,
 };
@@ -160,6 +174,7 @@ type LibraryAction =
   | { type: "upsert_collection"; collection: LibraryCollection }
   | { type: "upsert_detail"; detail: CollectionDetail }
   | { type: "remove_collection"; collectionId: string }
+  | { type: "remove_root"; rootId: string }
   | { type: "remove_unclassified"; projectId: string }
   | { type: "scan_started"; scanId: string; rootPath: string }
   | { type: "scan_progress"; progress: LibraryScanProgress }
@@ -196,7 +211,7 @@ type LibraryAction =
   | { type: "scan_closed" }
   | {
       type: "recovery_started";
-      stage: "inspecting_rescan" | "inspecting_relocation";
+      stage: "inspecting_rescan" | "inspecting_rebuild" | "inspecting_relocation";
       rootId: string;
     }
   | {
@@ -204,7 +219,13 @@ type LibraryAction =
       preview: LibraryRescanPreview;
       items: LibraryImportDraftItem[];
     }
+  | {
+      type: "rebuild_preview";
+      preview: LibraryRootRebuildPreview;
+      items: LibraryImportDraftItem[];
+    }
   | { type: "relocation_preview"; preview: LibraryRootRelocationPreview }
+  | { type: "rebuild_title_changed"; title: string }
   | {
       type: "recovery_item_changed";
       candidateId: string;
@@ -221,12 +242,17 @@ type LibraryAction =
     }
   | {
       type: "recovery_confirmation_changed";
-      field: "confirmMissing" | "confirmChanged" | "confirmFingerprintDuplicates";
+      field:
+        | "confirmMissing"
+        | "confirmChanged"
+        | "confirmUncertainMatches"
+        | "confirmFingerprintDuplicates";
       checked: boolean;
     }
   | { type: "recovery_applying" }
   | { type: "recovery_failed"; message: string }
   | { type: "rescan_succeeded"; result: LibraryRescanResult }
+  | { type: "rebuild_succeeded"; result: LibraryRootRebuildResult; episodes: LibraryMediaSummary[] }
   | { type: "relocation_succeeded"; result: LibraryRootRelocationResult }
   | { type: "recovery_closed" };
 
@@ -478,6 +504,7 @@ function libraryReducer(state: LibraryState, action: LibraryAction): LibraryStat
               path: action.importedRootPath,
               displayName: action.importedRootName,
               availability: "available",
+              status: "linked",
               lastScannedAtMs: Date.now(),
               itemCount: importedItems,
             },
@@ -519,6 +546,26 @@ function libraryReducer(state: LibraryState, action: LibraryAction): LibraryStat
           error: null,
         },
       };
+    case "remove_root":
+      return {
+        ...state,
+        home: {
+          ...state.home,
+          folders: state.home.folders.filter((root) => root.id !== action.rootId),
+        },
+      };
+    case "rebuild_preview":
+      return {
+        ...state,
+        recovery: {
+          ...state.recovery,
+          stage: "rebuild_preview",
+          rebuildPreview: action.preview,
+          rebuildCollectionTitle: action.preview.suggestedCollectionTitle,
+          newItems: action.items,
+          error: null,
+        },
+      };
     case "relocation_preview":
       return {
         ...state,
@@ -528,6 +575,11 @@ function libraryReducer(state: LibraryState, action: LibraryAction): LibraryStat
           relocationPreview: action.preview,
           error: null,
         },
+      };
+    case "rebuild_title_changed":
+      return {
+        ...state,
+        recovery: { ...state.recovery, rebuildCollectionTitle: action.title },
       };
     case "recovery_item_changed":
       return {
@@ -558,6 +610,8 @@ function libraryReducer(state: LibraryState, action: LibraryAction): LibraryStat
           ...state.recovery,
           stage: state.recovery.rescanPreview
             ? "rescan_preview"
+            : state.recovery.rebuildPreview
+              ? "rebuild_preview"
             : state.recovery.relocationPreview
               ? "relocation_preview"
               : "error",
@@ -573,6 +627,33 @@ function libraryReducer(state: LibraryState, action: LibraryAction): LibraryStat
           state.currentCollection?.summary.id === action.result.collection.summary.id
             ? action.result.collection
             : state.currentCollection,
+        home: {
+          ...state.home,
+          folders: [
+            action.result.root,
+            ...state.home.folders.filter((root) => root.id !== action.result.root.id),
+          ],
+          collections: [
+            action.result.collection.summary,
+            ...state.home.collections.filter(
+              (collection) => collection.id !== action.result.collection.summary.id,
+            ),
+          ],
+          totalProjectCount:
+            state.home.totalProjectCount + action.result.createdProjectCount,
+          collectionItemCount: state.home.collectionItemCount + added,
+        },
+      };
+    }
+    case "rebuild_succeeded": {
+      const added = action.result.addedItemCount;
+      return {
+        ...state,
+        section: "series",
+        currentCollection: action.result.collection,
+        currentEpisodes: action.episodes,
+        selectedSeason: null,
+        recovery: emptyRecovery,
         home: {
           ...state.home,
           folders: [
@@ -998,6 +1079,31 @@ export function useLibraryController() {
     }
   }, []);
 
+  const inspectRootRebuild = useCallback(
+    async (rootId: string, newRootPath: string | null = null) => {
+      const sequence = recoveryRequestSequence.current + 1;
+      recoveryRequestSequence.current = sequence;
+      dispatch({ type: "recovery_started", stage: "inspecting_rebuild", rootId });
+      try {
+        const preview = await inspectLibraryRootRebuild({ rootId, newRootPath });
+        if (recoveryRequestSequence.current === sequence) {
+          dispatch({
+            type: "rebuild_preview",
+            preview,
+            items: draftCandidateItems(preview.newCandidates),
+          });
+        }
+        return preview;
+      } catch (error) {
+        if (recoveryRequestSequence.current === sequence) {
+          dispatch({ type: "recovery_failed", message: commandError(error).message });
+        }
+        return null;
+      }
+    },
+    [],
+  );
+
   const inspectRootRelocation = useCallback(
     async (rootId: string, newRootPath: string) => {
       const sequence = recoveryRequestSequence.current + 1;
@@ -1043,7 +1149,11 @@ export function useLibraryController() {
 
   const setRecoveryConfirmation = useCallback(
     (
-      field: "confirmMissing" | "confirmChanged" | "confirmFingerprintDuplicates",
+      field:
+        | "confirmMissing"
+        | "confirmChanged"
+        | "confirmUncertainMatches"
+        | "confirmFingerprintDuplicates",
       checked: boolean,
     ) => dispatch({ type: "recovery_confirmation_changed", field, checked }),
     [],
@@ -1079,6 +1189,49 @@ export function useLibraryController() {
     }
   }, [refresh, state.recovery]);
 
+  const setRebuildCollectionTitle = useCallback((title: string) => {
+    dispatch({ type: "rebuild_title_changed", title });
+  }, []);
+
+  const applyRebuild = useCallback(async () => {
+    const snapshot = state.recovery;
+    if (!snapshot.rebuildPreview || snapshot.stage !== "rebuild_preview") {
+      return null;
+    }
+    const input: ApplyLibraryRootRebuildInput = {
+      previewToken: snapshot.rebuildPreview.previewToken,
+      collectionTitle: snapshot.rebuildCollectionTitle,
+      newItems: snapshot.newItems.map((item) => ({
+        candidateId: item.candidateId,
+        displayTitle: item.displayTitle,
+        seasonNumber: item.seasonNumber,
+        episodeNumber: item.episodeNumber,
+        absoluteOrder: item.absoluteOrder,
+        confirmed: item.confirmed,
+      })),
+      confirmMissing: snapshot.confirmMissing,
+      confirmChanged: snapshot.confirmChanged,
+      confirmUncertainMatches: snapshot.confirmUncertainMatches,
+      confirmFingerprintDuplicates: snapshot.confirmFingerprintDuplicates,
+    };
+    dispatch({ type: "recovery_applying" });
+    try {
+      const result = await applyLibraryRootRebuild(input);
+      let episodes: LibraryMediaSummary[] = [];
+      try {
+        episodes = await listCollectionEpisodes(result.collection.summary.id, null);
+      } catch {
+        // The rebuild transaction already succeeded; refresh below reconciles the home view.
+      }
+      dispatch({ type: "rebuild_succeeded", result, episodes });
+      void refresh();
+      return result;
+    } catch (error) {
+      dispatch({ type: "recovery_failed", message: commandError(error).message });
+      return null;
+    }
+  }, [refresh, state.recovery]);
+
   const applyRootRelocation = useCallback(async () => {
     const snapshot = state.recovery;
     if (!snapshot.relocationPreview || snapshot.stage !== "relocation_preview") {
@@ -1097,6 +1250,15 @@ export function useLibraryController() {
       return null;
     }
   }, [refresh, state.recovery]);
+
+  const revokeRoot = useCallback(
+    (rootId: string) =>
+      runMutation(
+        () => revokeLibraryRoot(rootId),
+        (result) => dispatch({ type: "remove_root", rootId: result.rootId }),
+      ),
+    [runMutation],
+  );
 
   return {
     state,
@@ -1120,11 +1282,15 @@ export function useLibraryController() {
     setConfirmFingerprintDuplicates,
     importScannedFolder,
     inspectRootRescan,
+    inspectRootRebuild,
     inspectRootRelocation,
     closeRecovery,
     updateRecoveryItem,
     setRecoveryConfirmation,
+    setRebuildCollectionTitle,
     applyRescan,
+    applyRebuild,
     applyRootRelocation,
+    revokeRoot,
   };
 }

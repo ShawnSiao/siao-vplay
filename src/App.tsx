@@ -88,12 +88,16 @@ export default function App() {
     setConfirmFingerprintDuplicates,
     importScannedFolder,
     inspectRootRescan,
+    inspectRootRebuild,
     inspectRootRelocation,
     closeRecovery,
     updateRecoveryItem,
     setRecoveryConfirmation,
+    setRebuildCollectionTitle,
     applyRescan,
+    applyRebuild,
     applyRootRelocation,
+    revokeRoot,
   } = useLibraryController();
   const screen = shellController.state.activeView;
   const setScreen = shellController.setActiveView;
@@ -416,6 +420,28 @@ export default function App() {
       }
     },
     [inspectRootRelocation],
+  );
+
+  const rebuildLibraryRoot = useCallback(
+    async (rootId: string, needsNewLocation: boolean) => {
+      if (!isDesktopApp) {
+        setToast("浏览器预览不会读取本地文件夹，请在桌面应用中重建剧集。");
+        return;
+      }
+      try {
+        let newRootPath: string | null = null;
+        if (needsNewLocation) {
+          newRootPath = await chooseLocalFolder();
+          if (!newRootPath) {
+            return;
+          }
+        }
+        await inspectRootRebuild(rootId, newRootPath);
+      } catch (error) {
+        setLibraryError(commandError(error).message);
+      }
+    },
+    [inspectRootRebuild],
   );
 
   const openRemoteUrlImport = useCallback(() => {
@@ -909,6 +935,10 @@ export default function App() {
             onImportUrl={openRemoteUrlImport}
             onRescanRoot={(rootId) => void inspectRootRescan(rootId)}
             onRelocateRoot={(rootId) => void relocateLibraryRoot(rootId)}
+            onRebuildRoot={(rootId, needsNewLocation) =>
+              void rebuildLibraryRoot(rootId, needsNewLocation)
+            }
+            onRevokeRoot={(rootId) => void revokeRoot(rootId)}
             onOpen={(media) => void openLibraryMedia(media)}
             onRelink={(media) => void relinkLibraryMedia(media)}
             onDelete={(media) => void deleteLibraryMedia(media)}
@@ -1003,7 +1033,9 @@ export default function App() {
           onClose={closeRecovery}
           onItemChange={updateRecoveryItem}
           onConfirmationChange={setRecoveryConfirmation}
+          onRebuildTitleChange={setRebuildCollectionTitle}
           onApplyRescan={applyRescan}
+          onApplyRebuild={applyRebuild}
           onApplyRelocation={applyRootRelocation}
         />
       ) : null}

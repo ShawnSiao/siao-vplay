@@ -6,6 +6,7 @@ import { fileExtension, formatDuration, formatRecentTime } from "../lib/format";
 import type {
   CollectionDetail,
   CollectionSummary,
+  LibraryCollectionDeletionResult,
   LibraryHome,
   LibraryMediaSummary,
 } from "../types";
@@ -27,6 +28,8 @@ type LibraryScreenProps = {
   onImportUrl: () => void;
   onRescanRoot: (rootId: string) => void;
   onRelocateRoot: (rootId: string) => void;
+  onRebuildRoot: (rootId: string, needsNewLocation: boolean) => void;
+  onRevokeRoot: (rootId: string) => void;
   onOpen: (media: LibraryMediaSummary) => void;
   onRelink: (media: LibraryMediaSummary) => void;
   onDelete: (media: LibraryMediaSummary) => void;
@@ -40,7 +43,9 @@ type LibraryScreenProps = {
     collectionId: string,
     values: { title?: string; autoPlayNext?: boolean },
   ) => Promise<unknown>;
-  onDeleteCollection: (collectionId: string) => Promise<unknown>;
+  onDeleteCollection: (
+    collectionId: string,
+  ) => Promise<LibraryCollectionDeletionResult | null>;
   onAddToCollection: (collectionId: string, projectId: string) => Promise<unknown>;
   onRemoveFromCollection: (collectionId: string, projectId: string) => Promise<unknown>;
   onSetWatchLater: (projectId: string, enabled: boolean) => Promise<unknown>;
@@ -320,6 +325,8 @@ export function LibraryScreen(props: LibraryScreenProps) {
     onImportUrl,
     onRescanRoot,
     onRelocateRoot,
+    onRebuildRoot,
+    onRevokeRoot,
     onOpen,
     onRelink,
     onDelete,
@@ -339,6 +346,9 @@ export function LibraryScreen(props: LibraryScreenProps) {
   const [collectionTitle, setCollectionTitle] = useState("");
   const [editOpen, setEditOpen] = useState(false);
   const [editTitle, setEditTitle] = useState("");
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [revokeRootId, setRevokeRootId] = useState<string | null>(null);
+  const [deleteNotice, setDeleteNotice] = useState<string | null>(null);
   const collections = useMemo(
     () => home.collections.filter((item) => item.systemKey === null),
     [home.collections],
@@ -399,7 +409,7 @@ export function LibraryScreen(props: LibraryScreenProps) {
                         className="button danger"
                         type="button"
                         disabled={mutationPending}
-                        onClick={() => void onDeleteCollection(currentCollection.summary.id)}
+                        onClick={() => setDeleteOpen(true)}
                       >
                         删除合集
                       </button>
@@ -438,6 +448,11 @@ export function LibraryScreen(props: LibraryScreenProps) {
             <div className="notice danger" role="alert">
               <strong>媒体库暂时无法读取</strong>
               <p>{error}</p>
+            </div>
+          ) : null}
+          {deleteNotice ? (
+            <div className="notice success" role="status">
+              {deleteNotice}
             </div>
           ) : null}
 
@@ -555,13 +570,38 @@ export function LibraryScreen(props: LibraryScreenProps) {
                         <small title={folder.path}>{folder.path}</small>
                       </span>
                       <span>{folder.itemCount} 集</span>
-                      <span className={`library-item-status ${folder.availability === "available" ? "ready" : "warning"}`}>
-                        {folder.availability === "available" ? "可用" : "离线"}
+                      <span className={`library-item-status ${folder.status === "linked" ? "ready" : "warning"}`}>
+                        {folder.status === "linked"
+                          ? "已关联"
+                          : folder.status === "orphaned"
+                            ? folder.availability === "available"
+                              ? "待重建"
+                              : "待重建 · 路径不可用"
+                            : "关联不明确"}
                       </span>
-                      <small>{folder.lastScannedAtMs ? `上次扫描 ${formatRecentTime(folder.lastScannedAtMs)}` : "尚未扫描"}</small>
+                      <small>
+                        {folder.status === "orphaned"
+                          ? "文件夹已授权，但当前没有关联剧集合集。"
+                          : folder.status === "ambiguous"
+                            ? "请先手动整理关联关系，暂不自动处理。"
+                            : folder.lastScannedAtMs
+                              ? `上次扫描 ${formatRecentTime(folder.lastScannedAtMs)}`
+                              : "尚未扫描"}
+                      </small>
                       <span className="library-folder-actions">
-                        <button type="button" onClick={() => onRescanRoot(folder.id)} aria-label={`重新扫描 ${folder.displayName}`}>重新扫描</button>
-                        <button type="button" onClick={() => onRelocateRoot(folder.id)} aria-label={`重新定位 ${folder.displayName}`}>重新定位</button>
+                        {folder.status === "linked" ? (
+                          <>
+                            <button type="button" onClick={() => onRescanRoot(folder.id)} aria-label={`扫描更新 ${folder.displayName}`}>扫描更新</button>
+                            <button type="button" onClick={() => onRelocateRoot(folder.id)} aria-label={`更换位置 ${folder.displayName}`}>更换位置</button>
+                          </>
+                        ) : folder.status === "orphaned" ? (
+                          <>
+                            <button type="button" onClick={() => onRebuildRoot(folder.id, folder.availability !== "available")} aria-label={`${folder.availability === "available" ? "重建剧集" : "选择位置并重建"} ${folder.displayName}`}>
+                              {folder.availability === "available" ? "重建剧集" : "选择位置并重建"}
+                            </button>
+                            <button type="button" onClick={() => setRevokeRootId(folder.id)} aria-label={`撤销授权 ${folder.displayName}`}>撤销授权</button>
+                          </>
+                        ) : null}
                       </span>
                     </article>
                   ))}
@@ -576,15 +616,15 @@ export function LibraryScreen(props: LibraryScreenProps) {
             </section>
           ) : null}
 
-          {showHome && home.unclassified.length > 0 ? (
+          {showHome && home.recentlyAdded.length > 0 ? (
             <section className="project-section" aria-labelledby="recent-title">
-              <div className="section-heading"><div><h2 id="recent-title">最近加入</h2><p>尚未加入剧集或合集的视频</p></div><span>{Math.min(5, home.unclassified.length)} 个最近视频</span></div>
+              <div className="section-heading"><div><h2 id="recent-title">最近加入</h2><p>按视频首次入库时间排序，已归类视频也会显示。</p></div><span>{home.recentlyAdded.length} 个最近视频</span></div>
               <div className="recently-added-list">
-                {home.unclassified.slice(0, 5).map((media) => (
+                {home.recentlyAdded.map((media) => (
                   <button className="recently-added-row" type="button" key={media.projectId} aria-label={`打开最近加入的 ${media.projectTitle}`} onClick={() => onOpen(media)}>
                     <span className="library-file-kind">{fileExtension(media.displayName)}</span>
                     <span className="recently-added-title"><strong>{media.projectTitle}</strong><small title={mediaLocation(media)}>{mediaLocation(media)}</small></span>
-                    <MediaStatus media={media} />
+                    <span className="library-item-status ready">{media.collectionId ? "已归类" : "未归类"}</span>
                     <span className="library-item-recent">{formatRecentTime(media.createdAtMs)}</span>
                     <span className="recently-added-open" aria-hidden="true">›</span>
                   </button>
@@ -652,6 +692,73 @@ export function LibraryScreen(props: LibraryScreenProps) {
             <label className="library-dialog-field"><span>合集名称</span><input autoFocus value={collectionTitle} maxLength={200} onChange={(event) => setCollectionTitle(event.target.value)} placeholder="例如：周末电影" /></label>
             <p>合集只整理现有视频，不复制或修改源文件。</p>
           </form>
+        </Dialog>
+      ) : null}
+
+      {deleteOpen && currentCollection ? (
+        <Dialog
+          eyebrow="删除合集"
+          title={`删除「${currentCollection.summary.title}」合集？`}
+          onClose={() => setDeleteOpen(false)}
+          actions={
+            <>
+              <button className="button quiet" type="button" onClick={() => setDeleteOpen(false)}>
+                取消
+              </button>
+              <button
+                className="button danger"
+                type="button"
+                disabled={mutationPending}
+                onClick={() =>
+                  void onDeleteCollection(currentCollection.summary.id).then((result) => {
+                    if (result) {
+                      setDeleteOpen(false);
+                      setDeleteNotice(
+                        `已保留 ${result.preservedProjectCount} 个视频项目。${
+                          result.rootId ? "可在「授权文件夹」中重建剧集。" : ""
+                        }`,
+                      );
+                      onSelectSection(result.rootId ? "folders" : "series");
+                    }
+                  })
+                }
+              >
+                {mutationPending ? "正在删除…" : "确认删除合集"}
+              </button>
+            </>
+          }
+        >
+          <p>将移除合集和视频的归类关系。视频文件、播放进度、字幕和学习资料会保留，视频将进入「未归类视频」。</p>
+          {currentCollection.summary.rootId ? (
+            <p>对应文件夹会保留授权状态，并标记为「待重建」。删除完成后可在「授权文件夹」中重建剧集。</p>
+          ) : null}
+        </Dialog>
+      ) : null}
+
+      {revokeRootId ? (
+        <Dialog
+          eyebrow="授权文件夹"
+          title="撤销文件夹授权？"
+          onClose={() => setRevokeRootId(null)}
+          actions={
+            <>
+              <button className="button quiet" type="button" onClick={() => setRevokeRootId(null)}>
+                取消
+              </button>
+              <button
+                className="button danger"
+                type="button"
+                onClick={() => {
+                  onRevokeRoot(revokeRootId);
+                  setRevokeRootId(null);
+                }}
+              >
+                撤销授权
+              </button>
+            </>
+          }
+        >
+          <p>只移除文件夹授权和扫描关系，不删除源视频、视频项目、播放进度、字幕或学习资料。</p>
         </Dialog>
       ) : null}
 

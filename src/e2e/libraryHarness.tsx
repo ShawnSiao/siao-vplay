@@ -103,10 +103,12 @@ const libraryHome: LibraryHome = {
     path: "W:\\Series\\Rain",
     displayName: "Rain",
     availability: "available",
+    status: "linked",
     lastScannedAtMs: Date.now(),
     itemCount: 3,
   }],
   unclassified: unclassifiedItems,
+  recentlyAdded: [mediaSummary],
   totalProjectCount: unclassifiedItems.length,
   collectionItemCount: 0,
   unclassifiedCount: unclassifiedItems.length,
@@ -183,9 +185,12 @@ const offlineRecovery: LibraryRecoveryState = {
     expiresAtMs: 1_900_000_000_000,
   },
   relocationPreview: null,
+  rebuildPreview: null,
   newItems: [],
+  rebuildCollectionTitle: "",
   confirmMissing: false,
   confirmChanged: false,
+  confirmUncertainMatches: false,
   confirmFingerprintDuplicates: false,
   error: null,
 };
@@ -282,6 +287,8 @@ export function LibraryHarness() {
             expiresAtMs: 1_900_000_000_000,
           },
         })}
+        onRebuildRoot={() => undefined}
+        onRevokeRoot={() => undefined}
         onOpen={() => undefined}
         onRelink={() => undefined}
         onDelete={() => undefined}
@@ -292,7 +299,7 @@ export function LibraryHarness() {
         onSelectSeason={() => undefined}
         onCreateCollection={async () => undefined}
         onUpdateCollection={async () => undefined}
-        onDeleteCollection={async () => undefined}
+        onDeleteCollection={async () => null}
         onAddToCollection={async () => undefined}
         onRemoveFromCollection={async () => undefined}
         onSetWatchLater={async () => undefined}
@@ -326,7 +333,9 @@ export function LibraryHarness() {
           onConfirmationChange={(field, checked) =>
             setRecovery((current) => current ? { ...current, [field]: checked } : current)
           }
+          onRebuildTitleChange={() => undefined}
           onApplyRescan={async () => setRecovery(null)}
+          onApplyRebuild={async () => setRecovery(null)}
           onApplyRelocation={async () => setRecovery(null)}
         />
       ) : null}

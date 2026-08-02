@@ -113,7 +113,7 @@ test("folder recovery requires confirmation and blocks unsafe relocation", async
   await expect(page.getByRole("heading", { name: "授权文件夹", level: 1 })).toBeVisible();
   await expect(page.getByText("W:\\Series\\Rain")).toBeVisible();
 
-  await page.getByRole("button", { name: "重新扫描 Rain" }).click();
+  await page.getByRole("button", { name: "扫描更新 Rain" }).click();
   const rescan = page.getByRole("dialog", { name: "确认重新扫描结果" });
   await expect(rescan).toContainText("根目录当前离线");
   const applyRescan = rescan.getByRole("button", { name: "应用扫描结果" });
@@ -123,7 +123,7 @@ test("folder recovery requires confirmation and blocks unsafe relocation", async
   await applyRescan.click();
   await expect(rescan).toHaveCount(0);
 
-  await page.getByRole("button", { name: "重新定位 Rain" }).click();
+  await page.getByRole("button", { name: "更换位置 Rain" }).click();
   const relocation = page.getByRole("dialog", { name: "确认根目录重定位" });
   await expect(relocation).toContainText("新目录缺少文件");
   await expect(relocation.getByRole("button", { name: "更新根目录" })).toBeDisabled();
