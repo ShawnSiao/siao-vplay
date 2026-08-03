@@ -14,6 +14,8 @@ type EpisodeDrawerProps = {
   loading: boolean;
   error: string | null;
   switching: boolean;
+  playbackPositionMs: number;
+  playbackDurationMs: number | null;
   onSwitch: (episode: EpisodeReference) => void;
 };
 
@@ -35,6 +37,8 @@ export function EpisodeDrawer({
   loading,
   error,
   switching,
+  playbackPositionMs,
+  playbackDurationMs,
   onSwitch,
 }: EpisodeDrawerProps) {
   if (loading && !detail) {
@@ -47,13 +51,53 @@ export function EpisodeDrawer({
     return <div className="player-drawer-empty"><strong>这是单个视频</strong><p>从剧集详情打开单集后，这里会显示当前季和上一集／下一集。</p></div>;
   }
 
+  const currentEpisode = episodes.find((episode) => episode.projectId === projectId);
+  const currentPositionMs = playbackPositionMs;
+  const currentDurationMs = playbackDurationMs ?? currentEpisode?.durationMs ?? null;
+  const progressPercent = currentDurationMs
+    ? Math.min(100, Math.max(0, (currentPositionMs / currentDurationMs) * 100))
+    : 0;
+  const currentEpisodeLabel =
+    currentEpisode?.seasonNumber !== null &&
+    currentEpisode?.seasonNumber !== undefined &&
+    currentEpisode?.episodeNumber !== null &&
+    currentEpisode?.episodeNumber !== undefined
+      ? `第 ${currentEpisode.seasonNumber} 季 · 第 ${currentEpisode.episodeNumber} 集`
+      : "当前集";
+  const currentState = currentEpisode?.completedAtMs
+    ? "已看"
+    : currentPositionMs > 0
+      ? "进行中"
+      : "未观看";
+
   return (
     <div className="episode-drawer">
       <header>
-        <strong>{detail.summary.title}</strong>
-        <span>{detail.summary.itemCount} 集 · 自动连播{detail.summary.autoPlayNext ? "开启" : "关闭"}</span>
+        <div className="episode-drawer-hero">
+          <div>
+            <span>当前集</span>
+            <strong>{currentEpisodeLabel}</strong>
+          </div>
+          <span>{currentState}</span>
+        </div>
+        <div className="episode-drawer-progress-row">
+          <span>
+            <span className="episode-drawer-series">
+              {detail.summary.title} · {currentEpisode?.episodeTitle ?? "当前集"}
+            </span>
+            <strong>
+              {formatDuration(currentPositionMs)} / {formatDuration(currentDurationMs)}
+            </strong>
+          </span>
+        </div>
+        <div className="episode-drawer-progress" aria-label="当前集播放进度">
+          <span style={{ width: `${progressPercent}%` }} />
+        </div>
+        <span className="episode-drawer-series">
+          {detail.summary.itemCount} 集 · 自动连播{detail.summary.autoPlayNext ? "开启" : "关闭"}
+        </span>
       </header>
-      <div className="episode-neighbor-actions">
+      <div className="episode-neighbor-actions" aria-label="邻集操作">
         <button
           type="button"
           disabled={!neighbors.previous || switching}
