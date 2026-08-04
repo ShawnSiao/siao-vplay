@@ -673,7 +673,14 @@ pub fn set_preferred_model(
     input: SetPreferredModelInput,
 ) -> Result<RuntimeCatalog, CommandError> {
     let component_ref = manager
-        .component_ref_for("whisper-model", &[("model", input.model_kind.as_str())])
+        .component_ref_for(
+            "whisper-model",
+            &[
+                ("platform", runtime::WINDOWS_PLATFORM),
+                ("architecture", runtime::X86_64_ARCHITECTURE),
+                ("model", input.model_kind.as_str()),
+            ],
+        )
         .map_err(CommandError::from)?;
     runtime::set_preferred_model(&input.model_kind, component_ref).map_err(Into::into)
 }

@@ -19,6 +19,8 @@ use crate::{media, transcription, youtube_media};
 pub const DEFAULT_MODEL_KIND: &str = "small";
 pub const WHISPER_MODEL_COMPONENT_ID: &str = "whisper-model";
 pub const WHISPER_MODEL_COMPONENT_VERSION: &str = "1";
+pub const WINDOWS_PLATFORM: &str = "windows";
+pub const X86_64_ARCHITECTURE: &str = "x86_64";
 pub const WHISPER_RUNTIME_VERSION: &str = "1.9.1-siaocut.1";
 pub const YT_DLP_VERSION: &str = "2026.06.09";
 pub const YT_DLP_SHA256: &str = "3a48cb955d55c8821b60ccbdbbc6f61bc958f2f3d3b7ad5eaf3d83a543293a27";
@@ -293,7 +295,10 @@ fn normalize_settings(mut settings: RuntimeSettings) -> RuntimeSettings {
         .is_some_and(|component| {
             component.component_id == WHISPER_MODEL_COMPONENT_ID
                 && !component.version.trim().is_empty()
-                && component.variant.len() == 1
+                && component.variant.get("platform").map(String::as_str) == Some(WINDOWS_PLATFORM)
+                && component.variant.get("architecture").map(String::as_str)
+                    == Some(X86_64_ARCHITECTURE)
+                && component.variant.len() == 3
                 && component.variant.get("model").map(String::as_str)
                     == Some(preferred_model.as_str())
         });
@@ -308,7 +313,11 @@ fn component_ref_for_model(model_kind: &str) -> ComponentRef {
     ComponentRef {
         component_id: WHISPER_MODEL_COMPONENT_ID.to_owned(),
         version: WHISPER_MODEL_COMPONENT_VERSION.to_owned(),
-        variant: BTreeMap::from([("model".to_owned(), model_kind.to_owned())]),
+        variant: BTreeMap::from([
+            ("architecture".to_owned(), X86_64_ARCHITECTURE.to_owned()),
+            ("model".to_owned(), model_kind.to_owned()),
+            ("platform".to_owned(), WINDOWS_PLATFORM.to_owned()),
+        ]),
     }
 }
 
