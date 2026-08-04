@@ -39,6 +39,11 @@ import type {
   TranslationApplication,
   TranslationTask,
   YouTubeMediaPreview,
+  ComponentCatalogInfo,
+  ComponentInstallResult,
+  ComponentInstallationStatus,
+  ComponentOperation,
+  ComponentRef,
 } from "../types";
 
 export const isDesktopApp = "__TAURI_INTERNALS__" in window;
@@ -142,6 +147,71 @@ export async function downloadRuntimeComponent(
 ): Promise<RuntimeCatalog> {
   return invoke<RuntimeCatalog>("download_runtime_component", {
     input: { componentId },
+  });
+}
+
+export async function getComponentCatalogInfo(): Promise<ComponentCatalogInfo | null> {
+  if (!isDesktopApp) {
+    return null;
+  }
+  return invoke<ComponentCatalogInfo>("get_component_catalog_info");
+}
+
+export async function listComponentInstallations(): Promise<ComponentInstallationStatus[]> {
+  if (!isDesktopApp) {
+    return [];
+  }
+  return invoke<ComponentInstallationStatus[]>("list_component_installations");
+}
+
+export async function installComponent(
+  component: ComponentRef,
+): Promise<ComponentInstallResult> {
+  return invoke<ComponentInstallResult>("install_component", { input: { component } });
+}
+
+export async function verifyComponent(component: ComponentRef): Promise<unknown> {
+  return invoke("verify_component", { input: { component } });
+}
+
+export async function registerExistingComponent(
+  component: ComponentRef,
+  path: string,
+): Promise<ComponentInstallationStatus> {
+  return invoke<ComponentInstallationStatus>("register_existing_component", {
+    input: { component, path },
+  });
+}
+
+export async function getComponentOperation(
+  operationId: string,
+): Promise<ComponentOperation> {
+  return invoke<ComponentOperation>("get_component_operation", {
+    input: { operationId },
+  });
+}
+
+export async function pauseComponentOperation(
+  operationId: string,
+): Promise<ComponentOperation> {
+  return invoke<ComponentOperation>("pause_component_operation", {
+    input: { operationId },
+  });
+}
+
+export async function resumeComponentOperation(
+  operationId: string,
+): Promise<ComponentInstallResult> {
+  return invoke<ComponentInstallResult>("resume_component_operation", {
+    input: { operationId },
+  });
+}
+
+export async function cancelComponentOperation(
+  operationId: string,
+): Promise<ComponentOperation> {
+  return invoke<ComponentOperation>("cancel_component_operation", {
+    input: { operationId },
   });
 }
 

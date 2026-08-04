@@ -4,10 +4,16 @@ import {
   chooseRuntimeStorageRoot,
   commandError,
   downloadRuntimeComponent,
+  installComponent,
   setPreferredModel,
   setRuntimeStorageRoot,
 } from "../lib/desktop";
-import type { RuntimeCatalog, RuntimeComponent } from "../types";
+import type {
+  ComponentCatalogInfo,
+  ComponentInstallationStatus,
+  RuntimeCatalog,
+  RuntimeComponent,
+} from "../types";
 import { Dialog } from "./Dialog";
 
 type RuntimeSettingsDialogProps = {
@@ -17,6 +23,9 @@ type RuntimeSettingsDialogProps = {
   onClose: () => void;
   onCatalogChange: (catalog: RuntimeCatalog) => void;
   onError: (message: string) => void;
+  sharedCatalog?: ComponentCatalogInfo | null;
+  sharedInstallations?: ComponentInstallationStatus[];
+  onRefreshShared?: () => Promise<void>;
 };
 
 function formatBytes(bytes: number): string {
@@ -57,6 +66,9 @@ export function RuntimeSettingsDialog({
   onClose,
   onCatalogChange,
   onError,
+  sharedCatalog = null,
+  sharedInstallations = [],
+  onRefreshShared,
 }: RuntimeSettingsDialogProps) {
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -123,6 +135,27 @@ export function RuntimeSettingsDialog({
       (component) => component.id === `whisper-${modelKind}`,
     );
 
+  const installSharedComponent = async (component: ComponentInstallationStatus) => {
+    if (previewMode) {
+      return;
+    }
+    setBusyAction(`shared:${component.componentId}:${component.version}`);
+    try {
+      await installComponent({
+        componentId: component.componentId,
+        version: component.version,
+        variant: component.variant,
+      });
+      await onRefreshShared?.();
+    } catch (cause) {
+      const message = commandError(cause).message;
+      setError(message);
+      onError(message);
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
   return (
     <Dialog
       title="运行时与模型设置"
@@ -151,6 +184,53 @@ export function RuntimeSettingsDialog({
 
         {catalog ? (
           <>
+            {sharedCatalog ? (
+              <section className="runtime-settings-section">
+                <div className="runtime-settings-section-head">
+                  <div>
+                    <h3>共享组件 Store</h3>
+                    <p>
+                      当前产品使用固定 catalog；组件安装到所有 Siao 产品共享的本地 Store，运行前会再次校验并持有租约。
+                    </p>
+                  </div>
+                </div>
+                <div className="runtime-storage-path" title={sharedCatalog.catalogDigest}>
+                  {sharedCatalog.catalogId} · {sharedCatalog.catalogDigest.slice(0, 12)}…
+                </div>
+                <div className="runtime-component-list">
+                  {sharedInstallations.map((component) => {
+                    const key = `shared:${component.componentId}:${component.version}`;
+                    const ready = component.state === "verified" || component.state === "verified_archive";
+                    return (
+                      <article className="runtime-component-card" key={`${key}:${JSON.stringify(component.variant)}`}>
+                        <div className="runtime-component-card-head">
+                          <div>
+                            <strong>{component.componentId}</strong>
+                            <small>{component.version}</small>
+                          </div>
+                          <span className={`status-pill ${ready ? "ready" : "warning"}`}>
+                            {ready ? "已校验" : component.state === "not_installed" ? "未安装" : component.state}
+                          </span>
+                        </div>
+                        <p className="runtime-component-source">
+                          变体：{Object.entries(component.variant).map(([name, value]) => `${name}=${value}`).join(" · ")}
+                        </p>
+                        {!ready ? (
+                          <button
+                            className="button quiet runtime-component-action"
+                            type="button"
+                            disabled={busyAction !== null || previewMode}
+                            onClick={() => void installSharedComponent(component)}
+                          >
+                            {busyAction === key ? "正在安装并校验…" : "安装到共享 Store"}
+                          </button>
+                        ) : null}
+                      </article>
+                    );
+                  })}
+                </div>
+              </section>
+            ) : null}
             <section className="runtime-settings-section">
               <div className="runtime-settings-section-head">
                 <div>

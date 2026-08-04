@@ -32,6 +32,8 @@ import {
   getTranscriptionJob,
   getProject,
   getMediaRuntimeStatus,
+  getComponentCatalogInfo,
+  listComponentInstallations,
   getRuntimeCatalog,
   isDesktopApp,
   listProjects,
@@ -49,6 +51,8 @@ import type {
   MediaRuntimeStatus,
   Project,
   RuntimeCatalog,
+  ComponentCatalogInfo,
+  ComponentInstallationStatus,
   SubtitleVersion,
   TranscriptionJob,
   TranslationTask,
@@ -111,6 +115,8 @@ export default function App() {
   const [runtimeCatalog, setRuntimeCatalog] =
     useState<RuntimeCatalog | null>(null);
   const [runtimeCatalogLoading, setRuntimeCatalogLoading] = useState(false);
+  const [sharedCatalog, setSharedCatalog] = useState<ComponentCatalogInfo | null>(null);
+  const [sharedInstallations, setSharedInstallations] = useState<ComponentInstallationStatus[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [libraryError, setLibraryError] = useState<string | null>(null);
   const [activeProject, setActiveProject] = useState<Project | null>(null);
@@ -156,10 +162,27 @@ export default function App() {
     }
   }, []);
 
+  const refreshSharedComponents = useCallback(async () => {
+    try {
+      const [info, installations] = await Promise.all([
+        getComponentCatalogInfo(),
+        listComponentInstallations(),
+      ]);
+      setSharedCatalog(info);
+      setSharedInstallations(installations);
+    } catch (error) {
+      if (String(error).includes("getComponentCatalogInfo")) {
+        return;
+      }
+      setToast(commandError(error).message);
+    }
+  }, []);
+
   const openRuntimeSettings = useCallback(() => {
     setRuntimeSettingsOpen(true);
     void refreshRuntimeCatalog();
-  }, [refreshRuntimeCatalog]);
+    void refreshSharedComponents();
+  }, [refreshRuntimeCatalog, refreshSharedComponents]);
 
   const handleRuntimeCatalogChange = useCallback((catalog: RuntimeCatalog) => {
     setRuntimeCatalog(catalog);
@@ -1012,6 +1035,9 @@ export default function App() {
           onClose={() => setRuntimeSettingsOpen(false)}
           onCatalogChange={handleRuntimeCatalogChange}
           onError={setToast}
+          sharedCatalog={sharedCatalog}
+          sharedInstallations={sharedInstallations}
+          onRefreshShared={refreshSharedComponents}
         />
       ) : null}
 

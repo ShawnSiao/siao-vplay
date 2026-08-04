@@ -1,0 +1,17 @@
+SiaoVPlay shared component store
+
+Runtime components are installed explicitly into the shared local store at:
+%LOCALAPPDATA%\Siao\component-store
+
+Catalog: siao-vplay.verified.windows-x86_64.v2 (verified v2 transition subset)
+Consumer: siao-vplay
+Core/catalog source revision: 8d41b55
+Source repository: https://github.com/ShawnSiao/siao-component-store
+Large fixed runtime release assets: https://github.com/ShawnSiao/siao-components
+
+This application package does not contain FFmpeg, yt-dlp, Whisper runtimes, or
+Whisper models. Install only from the catalog and verify before use. The
+neutral Whisper CPU/Vulkan archives are not part of this transition package
+until their public fixed archive, SHA-256, SBOM, and source provenance are
+complete. Existing product-local files are never moved or deleted by the
+shared store.
