@@ -526,6 +526,26 @@ export type ComponentCatalogInfo = {
   requirementCount: number;
 };
 
+export type ComponentStoreRootInfo = {
+  rootPath: string;
+  catalogId: string;
+  catalogDigest: string;
+};
+
+export type ComponentMigrationResult = {
+  operationId: string;
+  sourceRoot: string;
+  targetRoot: string;
+  locationConfigPath: string;
+};
+
+export type ComponentMigrationCleanupResult = {
+  operationId: string;
+  sourceRoot: string;
+  targetRoot: string;
+  removed: boolean;
+};
+
 export type ComponentInstallationStatus = {
   componentId: string;
   version: string;

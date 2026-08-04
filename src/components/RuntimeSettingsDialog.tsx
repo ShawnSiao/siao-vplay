@@ -1,16 +1,19 @@
 import { useState } from "react";
 
 import {
+  chooseComponentStoreRoot,
   chooseRuntimeStorageRoot,
   commandError,
   downloadRuntimeComponent,
   installComponent,
+  migrateComponentStore,
   setPreferredModel,
   setRuntimeStorageRoot,
 } from "../lib/desktop";
 import type {
   ComponentCatalogInfo,
   ComponentInstallationStatus,
+  ComponentStoreRootInfo,
   RuntimeCatalog,
   RuntimeComponent,
 } from "../types";
@@ -24,6 +27,7 @@ type RuntimeSettingsDialogProps = {
   onCatalogChange: (catalog: RuntimeCatalog) => void;
   onError: (message: string) => void;
   sharedCatalog?: ComponentCatalogInfo | null;
+  sharedRoot?: ComponentStoreRootInfo | null;
   sharedInstallations?: ComponentInstallationStatus[];
   onRefreshShared?: () => Promise<void>;
 };
@@ -67,6 +71,7 @@ export function RuntimeSettingsDialog({
   onCatalogChange,
   onError,
   sharedCatalog = null,
+  sharedRoot = null,
   sharedInstallations = [],
   onRefreshShared,
 }: RuntimeSettingsDialogProps) {
@@ -156,6 +161,27 @@ export function RuntimeSettingsDialog({
     }
   };
 
+  const migrateSharedStore = async () => {
+    if (previewMode) {
+      return;
+    }
+    setBusyAction("shared-root");
+    try {
+      const targetRoot = await chooseComponentStoreRoot();
+      if (!targetRoot) {
+        return;
+      }
+      await migrateComponentStore(targetRoot);
+      await onRefreshShared?.();
+    } catch (cause) {
+      const message = commandError(cause).message;
+      setError(message);
+      onError(message);
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
   return (
     <Dialog
       title="运行时与模型设置"
@@ -197,6 +223,17 @@ export function RuntimeSettingsDialog({
                 <div className="runtime-storage-path" title={sharedCatalog.catalogDigest}>
                   {sharedCatalog.catalogId} · {sharedCatalog.catalogDigest.slice(0, 12)}…
                 </div>
+                <div className="runtime-storage-path" title={sharedRoot?.rootPath}>
+                  共享根目录：{sharedRoot?.rootPath ?? "未读取"}
+                </div>
+                <button
+                  className="button quiet runtime-component-action"
+                  type="button"
+                  disabled={busyAction !== null || previewMode}
+                  onClick={() => void migrateSharedStore()}
+                >
+                  {busyAction === "shared-root" ? "正在迁移共享 Store…" : "迁移共享 Store"}
+                </button>
                 <div className="runtime-component-list">
                   {sharedInstallations.map((component) => {
                     const key = `shared:${component.componentId}:${component.version}`;

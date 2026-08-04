@@ -2,7 +2,7 @@ use std::{
     collections::BTreeMap,
     path::Path,
     sync::{
-        Arc, OnceLock,
+        Arc, OnceLock, RwLock,
         atomic::{AtomicBool, Ordering},
     },
     thread,
@@ -18,6 +18,7 @@ use siao_component_store_core::{
     catalog::{CatalogBundle, CatalogDocument, ComponentRef, ComponentRequirement},
     install::{InstallRequest, InstallResult, ProgressEvent},
     lease::Lease,
+    migration::{MigrationCleanupResult, MigrationRequest, MigrationResult},
     operation::OperationJournal,
     store::{AcquiredComponent, ComponentStatus, ResolvedComponent, Store},
 };
@@ -36,6 +37,8 @@ pub enum ComponentManagerError {
     RequirementNotFound(String),
     #[error("共享组件 Store 尚未初始化")]
     NotInitialized,
+    #[error("共享组件 Store 状态锁不可用")]
+    StateLock,
 }
 
 pub type ComponentManagerResult<T> = Result<T, ComponentManagerError>;
@@ -51,9 +54,57 @@ pub struct ComponentCatalogInfo {
     pub requirement_count: usize,
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ComponentStoreRootInfo {
+    pub root_path: String,
+    pub catalog_id: String,
+    pub catalog_digest: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ComponentMigrationResultInfo {
+    pub operation_id: String,
+    pub source_root: String,
+    pub target_root: String,
+    pub location_config_path: String,
+}
+
+impl From<MigrationResult> for ComponentMigrationResultInfo {
+    fn from(result: MigrationResult) -> Self {
+        Self {
+            operation_id: result.operation_id,
+            source_root: result.source_root.to_string_lossy().into_owned(),
+            target_root: result.target_root.to_string_lossy().into_owned(),
+            location_config_path: result.location_config_path.to_string_lossy().into_owned(),
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ComponentMigrationCleanupResultInfo {
+    pub operation_id: String,
+    pub source_root: String,
+    pub target_root: String,
+    pub removed: bool,
+}
+
+impl From<MigrationCleanupResult> for ComponentMigrationCleanupResultInfo {
+    fn from(result: MigrationCleanupResult) -> Self {
+        Self {
+            operation_id: result.operation_id,
+            source_root: result.source_root.to_string_lossy().into_owned(),
+            target_root: result.target_root.to_string_lossy().into_owned(),
+            removed: result.removed,
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct ComponentManager {
-    store: Store,
+    store: Arc<RwLock<Store>>,
     bundle: CatalogBundle,
 }
 
@@ -65,11 +116,33 @@ impl ComponentManager {
         let bundle = CatalogBundle::new(common, consumer)
             .map_err(|error| ComponentManagerError::Catalog(error.to_string()))?;
         let store = Store::open_default(bundle.common.clone())?;
-        Ok(Self { store, bundle })
+        Ok(Self {
+            store: Arc::new(RwLock::new(store)),
+            bundle,
+        })
     }
 
     pub fn from_store(store: Store, bundle: CatalogBundle) -> Self {
-        Self { store, bundle }
+        Self {
+            store: Arc::new(RwLock::new(store)),
+            bundle,
+        }
+    }
+
+    fn store_snapshot(&self) -> ComponentManagerResult<Store> {
+        self.store
+            .read()
+            .map(|store| store.clone())
+            .map_err(|_| ComponentManagerError::StateLock)
+    }
+
+    fn replace_store(&self, store: Store) -> ComponentManagerResult<()> {
+        let mut current = self
+            .store
+            .write()
+            .map_err(|_| ComponentManagerError::StateLock)?;
+        *current = store;
+        Ok(())
     }
 
     pub fn resolve_component(
@@ -99,8 +172,9 @@ impl ComponentManager {
                         .join(",")
                 ))
             })?;
-        let acquired = self.store.resolve_and_acquire(CONSUMER_ID, requirement)?;
-        Ok(ComponentLeaseGuard::new(self.store.clone(), acquired))
+        let store = self.store_snapshot()?;
+        let acquired = store.resolve_and_acquire(CONSUMER_ID, requirement)?;
+        Ok(ComponentLeaseGuard::new(store, acquired))
     }
 
     pub fn component_ref_for(
@@ -123,8 +197,17 @@ impl ComponentManager {
             .ok_or_else(|| ComponentManagerError::RequirementNotFound(component_id.to_owned()))
     }
 
-    pub fn store(&self) -> &Store {
-        &self.store
+    pub fn store(&self) -> ComponentManagerResult<Store> {
+        self.store_snapshot()
+    }
+
+    pub fn store_root_info(&self) -> ComponentManagerResult<ComponentStoreRootInfo> {
+        let store = self.store_snapshot()?;
+        Ok(ComponentStoreRootInfo {
+            root_path: store.root().to_string_lossy().into_owned(),
+            catalog_id: store.catalog_id().to_owned(),
+            catalog_digest: store.catalog_digest().to_owned(),
+        })
     }
 
     pub fn common_catalog(&self) -> &CatalogDocument {
@@ -155,7 +238,7 @@ impl ComponentManager {
     }
 
     pub fn list_installations(&self) -> ComponentManagerResult<Vec<ComponentStatus>> {
-        Ok(self.store.list_installations()?)
+        Ok(self.store_snapshot()?.list_installations()?)
     }
 
     pub fn install(
@@ -164,7 +247,8 @@ impl ComponentManager {
         observer: Option<&mut dyn FnMut(ProgressEvent)>,
     ) -> ComponentManagerResult<ComponentInstallResult> {
         self.requirement_for(&component)?;
-        let result = self.store.install(
+        let store = self.store_snapshot()?;
+        let result = store.install(
             InstallRequest::new(component.clone()).with_consumer(CONSUMER_ID),
             observer,
         )?;
@@ -172,7 +256,7 @@ impl ComponentManager {
     }
 
     pub fn pause(&self, operation_id: &str) -> ComponentManagerResult<OperationJournal> {
-        Ok(self.store.pause(operation_id)?)
+        Ok(self.store_snapshot()?.pause(operation_id)?)
     }
 
     pub fn resume(
@@ -180,17 +264,22 @@ impl ComponentManager {
         operation_id: &str,
         observer: Option<&mut dyn FnMut(ProgressEvent)>,
     ) -> ComponentManagerResult<ComponentInstallResult> {
+        let store = self.store_snapshot()?;
         Ok(ComponentInstallResult::from_install_result(
-            self.store.resume(operation_id, observer)?,
+            store.resume(operation_id, observer)?,
         ))
     }
 
     pub fn cancel(&self, operation_id: &str) -> ComponentManagerResult<OperationJournal> {
-        Ok(self.store.cancel(operation_id)?)
+        Ok(self.store_snapshot()?.cancel(operation_id)?)
     }
 
     pub fn operation_status(&self, operation_id: &str) -> ComponentManagerResult<OperationJournal> {
-        Ok(self.store.operation_status(operation_id)?)
+        Ok(self.store_snapshot()?.operation_status(operation_id)?)
+    }
+
+    pub fn list_recoverable_operations(&self) -> ComponentManagerResult<Vec<OperationJournal>> {
+        Ok(self.store_snapshot()?.list_recoverable_operations()?)
     }
 
     pub fn verify(
@@ -198,7 +287,7 @@ impl ComponentManager {
         component: ComponentRef,
     ) -> ComponentManagerResult<siao_component_store_core::store::VerificationReport> {
         self.requirement_for(&component)?;
-        Ok(self.store.verify(&component)?)
+        Ok(self.store_snapshot()?.verify(&component)?)
     }
 
     pub fn register_existing(
@@ -208,7 +297,7 @@ impl ComponentManager {
     ) -> ComponentManagerResult<ComponentStatus> {
         self.requirement_for(&component)?;
         Ok(self
-            .store
+            .store_snapshot()?
             .register_existing_for_consumer(&component, path, CONSUMER_ID)?)
     }
 
@@ -217,8 +306,41 @@ impl ComponentManager {
         component: &ComponentRef,
     ) -> ComponentManagerResult<ComponentLeaseGuard> {
         let requirement = self.requirement_for(component)?.clone();
-        let acquired = self.store.resolve_and_acquire(CONSUMER_ID, &requirement)?;
-        Ok(ComponentLeaseGuard::new(self.store.clone(), acquired))
+        let store = self.store_snapshot()?;
+        let acquired = store.resolve_and_acquire(CONSUMER_ID, &requirement)?;
+        Ok(ComponentLeaseGuard::new(store, acquired))
+    }
+
+    pub fn migrate_root(
+        &self,
+        target_root: impl Into<std::path::PathBuf>,
+    ) -> ComponentManagerResult<ComponentMigrationResultInfo> {
+        let store = self.store_snapshot()?;
+        let result = store.migrate_root(MigrationRequest::new(target_root), None)?;
+        let reopened = Store::open_default(self.bundle.common.clone())?;
+        self.replace_store(reopened)?;
+        Ok(result.into())
+    }
+
+    pub fn resume_migration(
+        &self,
+        operation_id: &str,
+    ) -> ComponentManagerResult<ComponentMigrationResultInfo> {
+        let store = self.store_snapshot()?;
+        let result = store.resume_migration(operation_id, None)?;
+        let reopened = Store::open_default(self.bundle.common.clone())?;
+        self.replace_store(reopened)?;
+        Ok(result.into())
+    }
+
+    pub fn cleanup_migration_source(
+        &self,
+        operation_id: &str,
+    ) -> ComponentManagerResult<ComponentMigrationCleanupResultInfo> {
+        Ok(self
+            .store_snapshot()?
+            .cleanup_migration_source(operation_id)?
+            .into())
     }
 
     fn requirement_for(
@@ -404,6 +526,11 @@ mod tests {
             "siao-vplay.verified.windows-x86_64.v2"
         );
         assert!(manager.catalog_digest().is_ok());
+        let root = manager
+            .store_root_info()
+            .expect("store root should be readable");
+        assert_eq!(root.catalog_id, manager.store().unwrap().catalog_id());
+        assert!(!root.root_path.is_empty());
     }
 
     #[test]

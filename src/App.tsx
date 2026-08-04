@@ -33,6 +33,7 @@ import {
   getProject,
   getMediaRuntimeStatus,
   getComponentCatalogInfo,
+  getComponentStoreRoot,
   listComponentInstallations,
   getRuntimeCatalog,
   isDesktopApp,
@@ -53,6 +54,7 @@ import type {
   RuntimeCatalog,
   ComponentCatalogInfo,
   ComponentInstallationStatus,
+  ComponentStoreRootInfo,
   SubtitleVersion,
   TranscriptionJob,
   TranslationTask,
@@ -116,6 +118,7 @@ export default function App() {
     useState<RuntimeCatalog | null>(null);
   const [runtimeCatalogLoading, setRuntimeCatalogLoading] = useState(false);
   const [sharedCatalog, setSharedCatalog] = useState<ComponentCatalogInfo | null>(null);
+  const [sharedRoot, setSharedRoot] = useState<ComponentStoreRootInfo | null>(null);
   const [sharedInstallations, setSharedInstallations] = useState<ComponentInstallationStatus[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [libraryError, setLibraryError] = useState<string | null>(null);
@@ -164,11 +167,13 @@ export default function App() {
 
   const refreshSharedComponents = useCallback(async () => {
     try {
-      const [info, installations] = await Promise.all([
+      const [info, root, installations] = await Promise.all([
         getComponentCatalogInfo(),
+        getComponentStoreRoot(),
         listComponentInstallations(),
       ]);
       setSharedCatalog(info);
+      setSharedRoot(root);
       setSharedInstallations(installations);
     } catch (error) {
       if (String(error).includes("getComponentCatalogInfo")) {
@@ -1036,6 +1041,7 @@ export default function App() {
           onCatalogChange={handleRuntimeCatalogChange}
           onError={setToast}
           sharedCatalog={sharedCatalog}
+          sharedRoot={sharedRoot}
           sharedInstallations={sharedInstallations}
           onRefreshShared={refreshSharedComponents}
         />

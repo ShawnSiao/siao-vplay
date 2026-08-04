@@ -42,8 +42,11 @@ import type {
   ComponentCatalogInfo,
   ComponentInstallResult,
   ComponentInstallationStatus,
+  ComponentMigrationCleanupResult,
+  ComponentMigrationResult,
   ComponentOperation,
   ComponentRef,
+  ComponentStoreRootInfo,
 } from "../types";
 
 export const isDesktopApp = "__TAURI_INTERNALS__" in window;
@@ -155,6 +158,56 @@ export async function getComponentCatalogInfo(): Promise<ComponentCatalogInfo | 
     return null;
   }
   return invoke<ComponentCatalogInfo>("get_component_catalog_info");
+}
+
+export async function getComponentStoreRoot(): Promise<ComponentStoreRootInfo | null> {
+  if (!isDesktopApp) {
+    return null;
+  }
+  return invoke<ComponentStoreRootInfo>("get_component_store_root");
+}
+
+export async function chooseComponentStoreRoot(): Promise<string | null> {
+  if (!isDesktopApp) {
+    return null;
+  }
+  const selected = await open({
+    multiple: false,
+    directory: true,
+    title: "选择共享组件 Store 目录",
+  });
+  return typeof selected === "string" ? selected : null;
+}
+
+export async function migrateComponentStore(
+  targetRoot: string,
+): Promise<ComponentMigrationResult> {
+  return invoke<ComponentMigrationResult>("migrate_component_store", {
+    input: { targetRoot },
+  });
+}
+
+export async function listRecoverableComponentOperations(): Promise<ComponentOperation[]> {
+  if (!isDesktopApp) {
+    return [];
+  }
+  return invoke<ComponentOperation[]>("list_recoverable_component_operations");
+}
+
+export async function resumeComponentStoreMigration(
+  operationId: string,
+): Promise<ComponentMigrationResult> {
+  return invoke<ComponentMigrationResult>("resume_component_store_migration", {
+    input: { operationId },
+  });
+}
+
+export async function cleanupComponentStoreMigration(
+  operationId: string,
+): Promise<ComponentMigrationCleanupResult> {
+  return invoke<ComponentMigrationCleanupResult>("cleanup_component_store_migration", {
+    input: { operationId },
+  });
 }
 
 export async function listComponentInstallations(): Promise<ComponentInstallationStatus[]> {
