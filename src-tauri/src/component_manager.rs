@@ -407,6 +407,28 @@ mod tests {
     }
 
     #[test]
+    fn model_component_ref_uses_the_exact_catalog_variant() {
+        let manager = ComponentManager::open().expect("checked-in catalogs should load");
+        let component = manager
+            .component_ref_for(
+                "whisper-model",
+                &[
+                    ("platform", "windows"),
+                    ("architecture", "x86_64"),
+                    ("model", "small"),
+                ],
+            )
+            .expect("small model should be a catalog requirement");
+        assert_eq!(component.component_id, "whisper-model");
+        assert_eq!(component.version, "1");
+        assert_eq!(
+            component.variant.get("model").map(String::as_str),
+            Some("small")
+        );
+        assert_eq!(component.variant.len(), 3);
+    }
+
+    #[test]
     fn component_key_is_deterministic() {
         let component = ComponentRef {
             component_id: "ffmpeg".into(),
