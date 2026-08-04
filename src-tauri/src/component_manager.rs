@@ -1,7 +1,9 @@
 use std::{collections::BTreeMap, path::Path, sync::OnceLock};
 
 use serde::Serialize;
-use siao_component_store_catalogs::{common_windows_x86_64, siao_vplay_windows_x86_64};
+use siao_component_store_catalogs::{
+    common_verified_windows_x86_64, siao_vplay_verified_transition_windows_x86_64,
+};
 use siao_component_store_core::{
     StoreError, StoreResult,
     catalog::{CatalogBundle, CatalogDocument, ComponentRef, ComponentRequirement},
@@ -47,8 +49,8 @@ pub struct ComponentManager {
 
 impl ComponentManager {
     pub fn open() -> ComponentManagerResult<Self> {
-        let common = common_windows_x86_64()?;
-        let consumer = siao_vplay_windows_x86_64()?;
+        let common = common_verified_windows_x86_64()?;
+        let consumer = siao_vplay_verified_transition_windows_x86_64()?;
         let bundle = CatalogBundle::new(common, consumer)
             .map_err(|error| ComponentManagerError::Catalog(error.to_string()))?;
         let store = Store::open_default(bundle.common.clone())?;
@@ -331,7 +333,10 @@ mod tests {
             manager.consumer_catalog().consumer_id.as_deref(),
             Some(CONSUMER_ID)
         );
-        assert_eq!(manager.catalog_id(), "siao-vplay.windows-x86_64");
+        assert_eq!(
+            manager.catalog_id(),
+            "siao-vplay.verified.windows-x86_64.v2"
+        );
         assert!(manager.catalog_digest().is_ok());
     }
 

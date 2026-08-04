@@ -14,8 +14,8 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-siao-component-store-core = { git = "https://github.com/ShawnSiao/siao-component-store.git", rev = "e7a72565b0020138a051e5c128cc5788c2185835" }
-siao-component-store-catalogs = { git = "https://github.com/ShawnSiao/siao-component-store.git", rev = "e7a72565b0020138a051e5c128cc5788c2185835" }
+siao-component-store-core = { git = "https://github.com/ShawnSiao/siao-component-store.git", rev = "8d41b55" }
+siao-component-store-catalogs = { git = "https://github.com/ShawnSiao/siao-component-store.git", rev = "8d41b55" }
 dunce = "1.0.5"
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls"] }
 regex = "1.11"
