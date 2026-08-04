@@ -4,7 +4,10 @@ param(
     [string]$AssetRoot = 'W:\SiaoVPlay',
 
     [Parameter()]
-    [string]$OutputConfig = 'W:\SiaoVPlay\build-configs\tauri.component-store-bundle.json'
+    [string]$OutputConfig = 'W:\SiaoVPlay\build-configs\tauri.component-store-bundle.json',
+
+    [Parameter()]
+    [string]$ResourceRoot = 'component-store-assets'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -29,12 +32,13 @@ if ($outputConfigPath -match '^(?i)C:\\') {
 }
 
 $noticePath = (Resolve-Path (Join-Path $repoRoot 'src-tauri\component-store-notice.txt')).Path
+$resourceRootForConfig = $ResourceRoot.Replace('\', '/')
 $resourceMap = [ordered]@{
     $noticePath = 'component-store-notice.txt'
 }
 $licensePath = Join-Path $assetRootPath 'licenses'
 if (Test-Path -LiteralPath $licensePath -PathType Container) {
-    $resourceMap[$licensePath] = 'third-party-notices/'
+    $resourceMap["$resourceRootForConfig/licenses"] = 'third-party-notices/'
 }
 
 $config = [ordered]@{

@@ -22,26 +22,53 @@ if ($buildRootPath -match '^(?i)C:\\') {
 New-Item -ItemType Directory -Force -Path $buildRootPath | Out-Null
 $configPath = Join-Path $buildRootPath 'tauri.component-store-bundle.json'
 $cargoTargetPath = Join-Path $buildRootPath 'cargo-target'
+$bundleLinkPath = Join-Path $repoRoot 'src-tauri\component-store-assets'
+$bundleLinkCreated = $false
 
-& (Join-Path $PSScriptRoot 'prepare-component-store-bundle.ps1') `
-    -AssetRoot $AssetRoot `
-    -OutputConfig $configPath
+function Remove-BundleLink([string]$Path) {
+    $item = Get-Item -LiteralPath $Path -Force -ErrorAction SilentlyContinue
+    if ($null -eq $item) {
+        return
+    }
+    if (($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -eq 0) {
+        throw "Refusing to remove a non-reparse path: $Path"
+    }
+    [System.IO.Directory]::Delete($Path, $false)
+}
 
-$previousCargoTarget = $env:CARGO_TARGET_DIR
 try {
-    $env:CARGO_TARGET_DIR = $cargoTargetPath
-    Set-Location -LiteralPath $repoRoot
-    $tauriCli = Join-Path $repoRoot 'node_modules\.bin\tauri.cmd'
-    & $tauriCli build --config $configPath
-    if ($LASTEXITCODE -ne 0) {
-        throw "Tauri app-only bundle build failed with exit code $LASTEXITCODE"
+    if (Test-Path -LiteralPath $bundleLinkPath) {
+        throw "Temporary component-store bundle link already exists; refusing to overwrite: $bundleLinkPath"
+    }
+    New-Item -ItemType Junction -Path $bundleLinkPath -Target ((Resolve-Path -LiteralPath $AssetRoot).Path) | Out-Null
+    $bundleLinkCreated = $true
+
+    & (Join-Path $PSScriptRoot 'prepare-component-store-bundle.ps1') `
+        -AssetRoot $AssetRoot `
+        -OutputConfig $configPath `
+        -ResourceRoot 'component-store-assets'
+
+    $previousCargoTarget = $env:CARGO_TARGET_DIR
+    try {
+        $env:CARGO_TARGET_DIR = $cargoTargetPath
+        Set-Location -LiteralPath $repoRoot
+        $tauriCli = Join-Path $repoRoot 'node_modules\.bin\tauri.cmd'
+        & $tauriCli build --config $configPath
+        if ($LASTEXITCODE -ne 0) {
+            throw "Tauri app-only bundle build failed with exit code $LASTEXITCODE"
+        }
+    }
+    finally {
+        if ($null -eq $previousCargoTarget) {
+            Remove-Item Env:CARGO_TARGET_DIR -ErrorAction SilentlyContinue
+        } else {
+            $env:CARGO_TARGET_DIR = $previousCargoTarget
+        }
     }
 }
 finally {
-    if ($null -eq $previousCargoTarget) {
-        Remove-Item Env:CARGO_TARGET_DIR -ErrorAction SilentlyContinue
-    } else {
-        $env:CARGO_TARGET_DIR = $previousCargoTarget
+    if ($bundleLinkCreated) {
+        Remove-BundleLink $bundleLinkPath
     }
 }
 
