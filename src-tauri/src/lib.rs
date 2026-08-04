@@ -101,6 +101,11 @@ pub fn run() {
             let data_directory = resolve_data_directory(app)?;
             runtime::initialize(&data_directory)?;
             let component_manager = component_manager::ComponentManager::open()?;
+            // The bridge candidate is an explicit compatibility build. It keeps
+            // the manager in Tauri state for catalog/status UI, but does not
+            // register it as the worker-global resolver, so workers use their
+            // existing product-local runtime search only in that build.
+            #[cfg(not(feature = "bridge"))]
             component_manager::initialize_global(component_manager.clone())
                 .map_err(|error| error.to_string())?;
             let database_path = data_directory.join("projects").join("siaovplay.db");

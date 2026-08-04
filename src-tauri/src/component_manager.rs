@@ -478,6 +478,7 @@ impl ComponentLeaseGuard {
 
 static GLOBAL_MANAGER: OnceLock<ComponentManager> = OnceLock::new();
 
+#[cfg(not(feature = "bridge"))]
 pub fn initialize_global(manager: ComponentManager) -> ComponentManagerResult<()> {
     GLOBAL_MANAGER
         .set(manager)

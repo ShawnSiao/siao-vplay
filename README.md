@@ -40,18 +40,18 @@ SiaoVPlay 是一款 Windows 本地优先的跨语言智能播放器。它面向�
 
 ## 运行时与最终安装包
 
-默认安装包不把 FFmpeg 和 Whisper 大模型放进安装文件。应用设置中可以选择一个非系统盘目录，按需下载固定版本的 FFmpeg、`ggml-small.bin` 或 `ggml-base.bin`；下载完成后会先校验文件大小和 SHA-256，再切换为可用文件。
+默认 `npm run desktop:build` 是共享组件 Store 的 app-only 包：只包含应用、Core sidecar、catalog/provenance notice 和许可证，不把 FFmpeg、`yt-dlp`、Whisper 运行时或模型复制进安装文件。运行时必须按固定 catalog 显式安装到 `%LOCALAPPDATA%\\Siao\\component-store`，并由 Store verify、entrypoint 和 lease 保护。
 
-最终 Windows 安装包随包提供 Whisper CPU、Whisper Vulkan、`yt-dlp` 和第三方许可证。Whisper 运行时及 `yt-dlp` 的版本和完整性校验继续由应用执行；FFmpeg 与模型保持独立，便于节省初始安装体积并允许切换模型。
+`npm run desktop:build:bridge` 仅用于 `0.2.1` 兼容候选。它显式使用 Cargo `bridge` feature，随包保留旧产品本地 Whisper/`yt-dlp` 资源；该包不代表完整 v2 共享发布，也不能把旧 `1.9.1-siaocut.1` 身份注册为共享组件。
 
-构建最终 NSIS 安装包需要准备本机 W 盘资源目录，不把这些二进制文件提交到仓库：
+构建 app-only NSIS 安装包需要准备本机 W 盘的许可证/证据目录，不把二进制文件提交到仓库：
 
 ```powershell
 $env:CARGO_TARGET_DIR = 'W:\SiaoVPlay\build\runtime-bundle\cargo-target'
 npm run desktop:build
 ```
 
-脚本默认读取 `W:\SiaoVPlay`，只打包 `runtimes\whisper`、`runtimes\whisper-vulkan`、`runtimes\yt-dlp` 和 `licenses`。如需指定资源或构建目录，可直接调用 `tools\build-runtime-bundle.ps1` 的 `-AssetRoot` 与 `-BuildRoot` 参数；脚本会拒绝 C 盘构建目录。
+脚本默认读取 `W:\SiaoVPlay` 的 `licenses`，只打包组件 Store notice 和第三方许可证。如需构建兼容候选，才调用 `tools\build-runtime-bundle.ps1` 的 `-AssetRoot` 与 `-BuildRoot` 参数；该脚本会拒绝 C 盘构建目录。
 
 组件来源与固定基线：
 
