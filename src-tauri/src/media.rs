@@ -250,10 +250,6 @@ impl MediaRuntime {
         &self.ffmpeg_path
     }
 
-    pub(crate) fn ffprobe(&self) -> &Path {
-        &self.ffprobe_path
-    }
-
     pub(crate) fn version(&self) -> &str {
         &self.version
     }
@@ -272,6 +268,7 @@ pub(crate) fn validate_media_path(media_path: &Path) -> Result<MediaProbe, Media
     Ok(probe)
 }
 
+#[allow(dead_code)]
 pub(crate) fn ffmpeg_path() -> Result<PathBuf, MediaError> {
     Ok(MediaRuntime::resolve()?.ffmpeg_path)
 }

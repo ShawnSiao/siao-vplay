@@ -57,6 +57,7 @@ pub struct ComponentManager {
     bundle: CatalogBundle,
 }
 
+#[allow(dead_code)]
 impl ComponentManager {
     pub fn open() -> ComponentManagerResult<Self> {
         let common = common_verified_windows_x86_64()?;
@@ -311,11 +312,13 @@ impl ComponentLeaseGuard {
         })
     }
 
+    #[allow(dead_code)]
     pub fn heartbeat(&mut self) -> ComponentManagerResult<ComponentResolution> {
         self.lease = self.store.heartbeat(&self.lease.lease_id)?;
         Ok(self.resolution())
     }
 
+    #[allow(dead_code)]
     pub fn release(mut self) -> ComponentManagerResult<()> {
         self.stop_heartbeat();
         self.store.release(&self.lease.lease_id)?;

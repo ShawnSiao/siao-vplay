@@ -766,7 +766,7 @@ fn verify_runtime(
     let current_version = runtime.version();
     if current_path != job.runtime_path
         || current_version != job.public.runtime_version
-        || !hash_file(&current_path)?.eq_ignore_ascii_case(&job.runtime_sha256)
+        || !hash_file(current_path)?.eq_ignore_ascii_case(&job.runtime_sha256)
     {
         return Err(SubtitleBurnError::RuntimeChanged);
     }

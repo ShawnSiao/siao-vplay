@@ -404,7 +404,7 @@ fn download_video(
 ) -> Result<PathBuf, YouTubeMediaError> {
     let ffmpeg_path = ffmpeg_runtime.ffmpeg();
     let mut command = hidden_command(&tool.path);
-    command.args(download_arguments(original, output_directory, &ffmpeg_path));
+    command.args(download_arguments(original, output_directory, ffmpeg_path));
     let output = capture_command(
         command,
         DOWNLOAD_TIMEOUT,

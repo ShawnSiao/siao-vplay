@@ -237,7 +237,7 @@ pub fn prepare_explanation_task(
     let runtime = media::resolve_runtime()?;
     let ffmpeg = runtime.ffmpeg();
     prepare_explanation_task_with(store, input, |media_path, timestamp_ms, output_path| {
-        extract_keyframe(&ffmpeg, media_path, timestamp_ms, output_path)
+        extract_keyframe(ffmpeg, media_path, timestamp_ms, output_path)
     })
 }
 

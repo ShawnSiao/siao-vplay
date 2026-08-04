@@ -666,7 +666,7 @@ pub fn create_learning_card(
         .map_err(|error| LearningError::ScreenshotFailed(error.to_string()))?;
     let ffmpeg = runtime.ffmpeg();
     create_learning_card_with(store, input, |media_path, timestamp_ms, output_path| {
-        extract_scene_screenshot(&ffmpeg, media_path, timestamp_ms, output_path)
+        extract_scene_screenshot(ffmpeg, media_path, timestamp_ms, output_path)
     })
 }
 
