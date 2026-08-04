@@ -1,4 +1,13 @@
-use std::{collections::BTreeMap, path::Path, sync::OnceLock};
+use std::{
+    collections::BTreeMap,
+    path::Path,
+    sync::{
+        Arc, OnceLock,
+        atomic::{AtomicBool, Ordering},
+    },
+    thread,
+    time::Duration,
+};
 
 use serde::Serialize;
 use siao_component_store_catalogs::{
@@ -15,6 +24,7 @@ use siao_component_store_core::{
 use thiserror::Error;
 
 pub const CONSUMER_ID: &str = "siao-vplay";
+const LEASE_HEARTBEAT_INTERVAL: Duration = Duration::from_secs(10);
 
 #[derive(Debug, Error)]
 pub enum ComponentManagerError {
@@ -240,14 +250,38 @@ pub struct ComponentLeaseGuard {
     store: Store,
     lease: Lease,
     resolved: ResolvedComponent,
+    heartbeat_stop: Arc<AtomicBool>,
+    heartbeat_thread: Option<thread::JoinHandle<()>>,
 }
 
 impl ComponentLeaseGuard {
     fn new(store: Store, acquired: AcquiredComponent) -> Self {
+        let heartbeat_stop = Arc::new(AtomicBool::new(false));
+        let heartbeat_store = store.clone();
+        let heartbeat_lease_id = acquired.lease.lease_id.clone();
+        let heartbeat_stop_signal = heartbeat_stop.clone();
+        let heartbeat_thread = thread::Builder::new()
+            .name(format!("siao-component-lease-{}", heartbeat_lease_id))
+            .spawn(move || {
+                while !heartbeat_stop_signal.load(Ordering::Relaxed) {
+                    for _ in 0..100 {
+                        if heartbeat_stop_signal.load(Ordering::Relaxed) {
+                            return;
+                        }
+                        thread::sleep(LEASE_HEARTBEAT_INTERVAL / 100);
+                    }
+                    if !heartbeat_stop_signal.load(Ordering::Relaxed) {
+                        let _ = heartbeat_store.heartbeat(&heartbeat_lease_id);
+                    }
+                }
+            })
+            .ok();
         Self {
             store,
             lease: acquired.lease,
             resolved: acquired.resolved,
+            heartbeat_stop,
+            heartbeat_thread,
         }
     }
 
@@ -283,9 +317,17 @@ impl ComponentLeaseGuard {
     }
 
     pub fn release(mut self) -> ComponentManagerResult<()> {
+        self.stop_heartbeat();
         self.store.release(&self.lease.lease_id)?;
         self.lease.expires_at_ms = 0;
         Ok(())
+    }
+
+    fn stop_heartbeat(&mut self) {
+        self.heartbeat_stop.store(true, Ordering::Relaxed);
+        if let Some(thread) = self.heartbeat_thread.take() {
+            let _ = thread.join();
+        }
     }
 }
 
@@ -305,6 +347,7 @@ pub fn global() -> ComponentManagerResult<&'static ComponentManager> {
 
 impl Drop for ComponentLeaseGuard {
     fn drop(&mut self) {
+        self.stop_heartbeat();
         let _ = self.store.release(&self.lease.lease_id);
     }
 }
