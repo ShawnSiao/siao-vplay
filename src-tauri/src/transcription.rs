@@ -20,6 +20,7 @@ use thiserror::Error;
 use uuid::Uuid;
 
 use crate::{
+    component_manager::{self, ComponentLeaseGuard},
     media::{self, MediaError},
     store::{ProjectStore, StoreError},
     subtitles::{
@@ -235,8 +236,8 @@ pub struct TranscriptionRuntimeStatus {
     pub models: Vec<TranscriptionModelStatus>,
 }
 
-#[derive(Clone, Debug)]
 struct RuntimeBundle {
+    _lease: Option<ComponentLeaseGuard>,
     directory: PathBuf,
     executable: PathBuf,
     backend: &'static str,
@@ -246,15 +247,15 @@ struct RuntimeBundle {
     vad_timeline_verified: bool,
 }
 
-#[derive(Clone, Debug)]
 struct ModelBundle {
+    _lease: Option<ComponentLeaseGuard>,
     path: PathBuf,
     kind: TranscriptionModelKind,
     sha256: String,
 }
 
-#[derive(Clone, Debug)]
 struct VadModelBundle {
+    _lease: Option<ComponentLeaseGuard>,
     path: PathBuf,
     sha256: String,
 }
@@ -353,6 +354,9 @@ fn hidden_command(program: &Path) -> Command {
 }
 
 fn runtime_directory(backend: &str) -> Result<PathBuf, TranscriptionError> {
+    if let Some(lease) = resolve_component_runtime_lease(backend)? {
+        return Ok(PathBuf::from(lease.resolution().root_path));
+    }
     let override_name = if backend == "vulkan" {
         "SIAOVPLAY_WHISPER_VULKAN_DIR"
     } else {
@@ -370,6 +374,25 @@ fn runtime_directory(backend: &str) -> Result<PathBuf, TranscriptionError> {
         .or_else(crate::runtime::configured_runtime_root);
     let executable_path = env::current_exe().ok();
     resolve_runtime_directory(backend, runtime_root.as_deref(), executable_path.as_deref())
+}
+
+fn resolve_component_runtime_lease(
+    backend: &str,
+) -> Result<Option<ComponentLeaseGuard>, TranscriptionError> {
+    let Ok(manager) = component_manager::global() else {
+        return Ok(None);
+    };
+    let lease = manager
+        .resolve_component(
+            "whisper-runtime",
+            &[
+                ("platform", "windows"),
+                ("architecture", "x86_64"),
+                ("backend", backend),
+            ],
+        )
+        .map_err(|error| TranscriptionError::RuntimeUnavailable(error.to_string()))?;
+    Ok(Some(lease))
 }
 
 pub(crate) fn runtime_directory_for_status(backend: &str) -> Result<PathBuf, TranscriptionError> {
@@ -444,7 +467,19 @@ fn runtime_directory_candidates(
 }
 
 fn verify_runtime(backend: &'static str) -> Result<RuntimeBundle, TranscriptionError> {
-    let directory = runtime_directory(backend)?;
+    let component_lease = resolve_component_runtime_lease(backend)?;
+    let directory = component_lease
+        .as_ref()
+        .map(|lease| PathBuf::from(lease.resolution().root_path.clone()))
+        .unwrap_or(runtime_directory(backend)?);
+    let component_version = component_lease
+        .as_ref()
+        .map(|lease| lease.resolution().component.version.clone());
+    let component_executable = component_lease
+        .as_ref()
+        .map(|lease| lease.entrypoint("whisper"))
+        .transpose()
+        .map_err(|error| TranscriptionError::RuntimeUnavailable(error.to_string()))?;
     let metadata_path = directory.join("runtime-metadata.json");
     if !metadata_path.is_file() {
         return Err(TranscriptionError::RuntimeUnavailable(format!(
@@ -452,21 +487,25 @@ fn verify_runtime(backend: &'static str) -> Result<RuntimeBundle, TranscriptionE
             metadata_path.display()
         )));
     }
-    let expected_metadata_hash = if backend == "vulkan" {
-        VULKAN_METADATA_SHA256
-    } else {
-        CPU_METADATA_SHA256
-    };
     let metadata_hash = hash_file(&metadata_path)?;
-    if !metadata_hash.eq_ignore_ascii_case(expected_metadata_hash) {
+    if component_lease.is_none()
+        && !metadata_hash.eq_ignore_ascii_case(if backend == "vulkan" {
+            VULKAN_METADATA_SHA256
+        } else {
+            CPU_METADATA_SHA256
+        })
+    {
         return Err(TranscriptionError::RuntimeIntegrity(format!(
             "{} 的元数据哈希不匹配",
             metadata_path.display()
         )));
     }
     let metadata: RuntimeMetadata = serde_json::from_slice(&fs::read(&metadata_path)?)?;
+    let expected_version = component_version
+        .as_deref()
+        .unwrap_or(WHISPER_RUNTIME_VERSION);
     if metadata.schema_version != 1
-        || metadata.version != WHISPER_RUNTIME_VERSION
+        || metadata.version != expected_version
         || metadata.backend != backend
         || metadata.source_commit != WHISPER_SOURCE_COMMIT
         || metadata.source_capabilities.segment_timestamp_domain != "original_media"
@@ -502,7 +541,7 @@ fn verify_runtime(backend: &'static str) -> Result<RuntimeBundle, TranscriptionE
             )));
         }
     }
-    let executable = directory.join("whisper-cli.exe");
+    let executable = component_executable.unwrap_or_else(|| directory.join("whisper-cli.exe"));
     let executable_hash = hash_file(&executable)?;
     if !executable_hash.eq_ignore_ascii_case(&metadata.executable_sha256) {
         return Err(TranscriptionError::RuntimeIntegrity(
@@ -532,6 +571,7 @@ fn verify_runtime(backend: &'static str) -> Result<RuntimeBundle, TranscriptionE
         )));
     }
     Ok(RuntimeBundle {
+        _lease: component_lease,
         directory,
         executable,
         backend,
@@ -543,6 +583,11 @@ fn verify_runtime(backend: &'static str) -> Result<RuntimeBundle, TranscriptionE
 }
 
 fn model_path(kind: TranscriptionModelKind) -> Result<PathBuf, TranscriptionError> {
+    if let Some(lease) = resolve_component_model_lease(kind)? {
+        return lease
+            .entrypoint("model")
+            .map_err(|error| TranscriptionError::ModelUnavailable(error.to_string()));
+    }
     let override_name = match kind {
         TranscriptionModelKind::Small => "SIAOVPLAY_WHISPER_SMALL_MODEL",
         TranscriptionModelKind::Base => "SIAOVPLAY_WHISPER_BASE_MODEL",
@@ -559,6 +604,25 @@ fn model_path(kind: TranscriptionModelKind) -> Result<PathBuf, TranscriptionErro
         .or_else(crate::runtime::configured_model_root);
     let executable_path = env::current_exe().ok();
     resolve_model_path(kind, model_root.as_deref(), executable_path.as_deref())
+}
+
+fn resolve_component_model_lease(
+    kind: TranscriptionModelKind,
+) -> Result<Option<ComponentLeaseGuard>, TranscriptionError> {
+    let Ok(manager) = component_manager::global() else {
+        return Ok(None);
+    };
+    let lease = manager
+        .resolve_component(
+            "whisper-model",
+            &[
+                ("platform", "windows"),
+                ("architecture", "x86_64"),
+                ("model", kind.as_str()),
+            ],
+        )
+        .map_err(|error| TranscriptionError::ModelUnavailable(error.to_string()))?;
+    Ok(Some(lease))
 }
 
 pub(crate) fn model_path_for_status(model_kind: &str) -> Result<PathBuf, TranscriptionError> {
@@ -635,6 +699,24 @@ fn push_unique(candidates: &mut Vec<PathBuf>, path: PathBuf) {
 }
 
 fn verify_model(kind: TranscriptionModelKind) -> Result<ModelBundle, TranscriptionError> {
+    if let Some(lease) = resolve_component_model_lease(kind)? {
+        let path = lease
+            .entrypoint("model")
+            .map_err(|error| TranscriptionError::ModelUnavailable(error.to_string()))?;
+        let sha256 = hash_file(&path)?;
+        if !sha256.eq_ignore_ascii_case(&lease.resolution().artifact_sha256) {
+            return Err(TranscriptionError::ModelIntegrity(format!(
+                "{} 的哈希不符合 catalog",
+                path.display()
+            )));
+        }
+        return Ok(ModelBundle {
+            path,
+            kind,
+            sha256,
+            _lease: Some(lease),
+        });
+    }
     let path = model_path(kind)?;
     let (expected_size, expected_hash) = kind.expected();
     let size = fs::metadata(&path)
@@ -653,10 +735,20 @@ fn verify_model(kind: TranscriptionModelKind) -> Result<ModelBundle, Transcripti
             path.display()
         )));
     }
-    Ok(ModelBundle { path, kind, sha256 })
+    Ok(ModelBundle {
+        path,
+        kind,
+        sha256,
+        _lease: None,
+    })
 }
 
 fn vad_model_path() -> Result<PathBuf, TranscriptionError> {
+    if let Some(lease) = resolve_component_vad_lease()? {
+        return lease
+            .entrypoint("vadModel")
+            .map_err(|error| TranscriptionError::ModelUnavailable(error.to_string()));
+    }
     if let Some(path) = env::var_os("SIAOVPLAY_WHISPER_VAD_MODEL")
         .filter(|value| !value.is_empty())
         .map(PathBuf::from)
@@ -674,6 +766,23 @@ fn vad_model_path() -> Result<PathBuf, TranscriptionError> {
         executable_path.as_deref(),
         cpu_runtime_directory.as_deref(),
     )
+}
+
+fn resolve_component_vad_lease() -> Result<Option<ComponentLeaseGuard>, TranscriptionError> {
+    let Ok(manager) = component_manager::global() else {
+        return Ok(None);
+    };
+    let lease = manager
+        .resolve_component(
+            "whisper-vad",
+            &[
+                ("platform", "windows"),
+                ("architecture", "x86_64"),
+                ("model", "silero-v6.2"),
+            ],
+        )
+        .map_err(|error| TranscriptionError::ModelUnavailable(error.to_string()))?;
+    Ok(Some(lease))
 }
 
 fn resolve_vad_model_path(
@@ -746,6 +855,23 @@ fn resolve_vad_model_path(
 }
 
 fn verify_vad_model() -> Result<VadModelBundle, TranscriptionError> {
+    if let Some(lease) = resolve_component_vad_lease()? {
+        let path = lease
+            .entrypoint("vadModel")
+            .map_err(|error| TranscriptionError::ModelUnavailable(error.to_string()))?;
+        let sha256 = hash_file(&path)?;
+        if !sha256.eq_ignore_ascii_case(&lease.resolution().artifact_sha256) {
+            return Err(TranscriptionError::ModelIntegrity(format!(
+                "{} 的哈希不符合 catalog",
+                path.display()
+            )));
+        }
+        return Ok(VadModelBundle {
+            path,
+            sha256,
+            _lease: Some(lease),
+        });
+    }
     let path = vad_model_path()?;
     let size = fs::metadata(&path)
         .map_err(|_| TranscriptionError::ModelUnavailable(format!("缺少 {}", path.display())))?
@@ -763,7 +889,11 @@ fn verify_vad_model() -> Result<VadModelBundle, TranscriptionError> {
             path.display()
         )));
     }
-    Ok(VadModelBundle { path, sha256 })
+    Ok(VadModelBundle {
+        path,
+        sha256,
+        _lease: None,
+    })
 }
 
 fn preferred_runtime() -> Result<RuntimeBundle, TranscriptionError> {
@@ -1371,11 +1501,11 @@ pub(crate) fn run_job(
     )?;
     let media_path = validate_baseline(store, &job)?;
     let (mut runtime, model, vad_model) = verify_job_assets(&job)?;
+    let ffmpeg_runtime = media::resolve_runtime()?;
     let work_directory = reset_job_directory(store, job_id)?;
     let audio_path = work_directory.join("audio-16khz-mono.wav");
     let ffmpeg_log = work_directory.join("ffmpeg.log");
-    let ffmpeg_path = media::ffmpeg_path()?;
-    let mut extraction = hidden_command(&ffmpeg_path);
+    let mut extraction = hidden_command(ffmpeg_runtime.ffmpeg());
     extraction
         .args(["-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-i"])
         .arg(&media_path)

@@ -21,6 +21,7 @@ use url::Url;
 use uuid::Uuid;
 
 use crate::{
+    component_manager::{self, ComponentLeaseGuard},
     domain::Project,
     media::{self, MediaError},
     remote_media::{self, RemoteMediaError},
@@ -126,6 +127,11 @@ struct ToolIdentity {
     sha256: String,
 }
 
+struct ToolRuntime {
+    identity: ToolIdentity,
+    _lease: Option<ComponentLeaseGuard>,
+}
+
 struct ImportOperation {
     id: String,
     cancelled: Arc<AtomicBool>,
@@ -183,8 +189,8 @@ pub fn inspect_youtube_url(
     let original = validate_youtube_page_url(&input.url)?;
     let final_url = remote_media::preflight_public_https_page(original.as_str())?;
     validate_youtube_page_url(final_url.as_str())?;
-    let tool = verify_tool(&resolve_yt_dlp_path()?)?;
-    inspect_with_tool(&original, &tool)
+    let tool = resolve_yt_dlp_runtime()?;
+    inspect_with_tool(&original, &tool.identity)
 }
 
 pub fn import_youtube_url(
@@ -197,8 +203,9 @@ pub fn import_youtube_url(
     validate_youtube_page_url(final_url.as_str())?;
     operation.check()?;
 
-    let tool = verify_tool(&resolve_yt_dlp_path()?)?;
-    let refreshed = inspect_with_tool(&original, &tool)?;
+    let tool = resolve_yt_dlp_runtime()?;
+    let ffmpeg_runtime = media::resolve_runtime()?;
+    let refreshed = inspect_with_tool(&original, &tool.identity)?;
     operation.check()?;
     if refreshed.preview_token != input.expected_preview_token {
         return Err(YouTubeMediaError::PreviewChanged);
@@ -210,7 +217,13 @@ pub fn import_youtube_url(
         .join(Uuid::new_v4().to_string());
     fs::create_dir_all(&import_directory)?;
     let result = (|| {
-        let media_path = download_video(&original, &tool, &import_directory, &operation.cancelled)?;
+        let media_path = download_video(
+            &original,
+            &tool.identity,
+            &ffmpeg_runtime,
+            &import_directory,
+            &operation.cancelled,
+        )?;
         operation.check()?;
         let metadata = fs::metadata(&media_path)?;
         if metadata.len() > MAX_MEDIA_BYTES {
@@ -226,8 +239,8 @@ pub fn import_youtube_url(
                 Some(&refreshed.title),
                 &RemoteImportProvenance {
                     importer: "yt-dlp".to_owned(),
-                    importer_version: tool.version.clone(),
-                    importer_sha256: tool.sha256.clone(),
+                    importer_version: tool.identity.version.clone(),
+                    importer_sha256: tool.identity.sha256.clone(),
                 },
             )
             .map_err(YouTubeMediaError::from)
@@ -385,10 +398,11 @@ fn collect_media_urls<'a>(value: &'a Value, output: &mut Vec<&'a str>) {
 fn download_video(
     original: &Url,
     tool: &ToolIdentity,
+    ffmpeg_runtime: &media::MediaRuntime,
     output_directory: &Path,
     cancelled: &Arc<AtomicBool>,
 ) -> Result<PathBuf, YouTubeMediaError> {
-    let ffmpeg_path = media::ffmpeg_path()?;
+    let ffmpeg_path = ffmpeg_runtime.ffmpeg();
     let mut command = hidden_command(&tool.path);
     command.args(download_arguments(original, output_directory, &ffmpeg_path));
     let output = capture_command(
@@ -660,6 +674,51 @@ fn resolve_yt_dlp_path() -> Result<PathBuf, YouTubeMediaError> {
                 "未找到固定运行时。可以设置 SIAOVPLAY_YT_DLP，或放入应用相邻的 yt-dlp 目录。已检查：{checked}"
             ))
         })
+}
+
+fn resolve_yt_dlp_runtime() -> Result<ToolRuntime, YouTubeMediaError> {
+    if let Ok(manager) = component_manager::global() {
+        let lease = manager
+            .resolve_component(
+                "yt-dlp",
+                &[("platform", "windows"), ("architecture", "x86_64")],
+            )
+            .map_err(|error| YouTubeMediaError::ToolUnavailable(error.to_string()))?;
+        let path = lease
+            .entrypoint("ytDlp")
+            .map_err(|error| YouTubeMediaError::ToolUnavailable(error.to_string()))?;
+        let resolution = lease.resolution();
+        let sha256 = hash_file(&path)?;
+        if !sha256.eq_ignore_ascii_case(&resolution.artifact_sha256) {
+            return Err(YouTubeMediaError::ToolIntegrity);
+        }
+        let version = verify_tool_version(&path, &resolution.component.version)?;
+        return Ok(ToolRuntime {
+            identity: ToolIdentity {
+                path,
+                version,
+                sha256,
+            },
+            _lease: Some(lease),
+        });
+    }
+    let path = resolve_yt_dlp_path()?;
+    let identity = verify_tool(&path)?;
+    Ok(ToolRuntime {
+        identity,
+        _lease: None,
+    })
+}
+
+fn verify_tool_version(path: &Path, expected: &str) -> Result<String, YouTubeMediaError> {
+    let mut command = hidden_command(path);
+    command.arg("--version");
+    let output = capture_command(command, TOOL_TIMEOUT, None, false)?;
+    let version = String::from_utf8_lossy(&output.stdout).trim().to_owned();
+    if !output.status.success() || version != expected {
+        return Err(YouTubeMediaError::ToolVersion);
+    }
+    Ok(version)
 }
 
 fn yt_dlp_candidates(runtime_root: Option<&Path>, executable_path: Option<&Path>) -> Vec<PathBuf> {

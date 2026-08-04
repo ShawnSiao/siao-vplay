@@ -354,6 +354,7 @@ impl From<ComponentManagerError> for CommandError {
             ComponentManagerError::Catalog(_) => "component_catalog_invalid",
             ComponentManagerError::Store(_) => "component_store_error",
             ComponentManagerError::RequirementNotFound(_) => "component_requirement_not_found",
+            ComponentManagerError::NotInitialized => "component_manager_not_initialized",
         };
         Self {
             code,

@@ -101,6 +101,8 @@ pub fn run() {
             let data_directory = resolve_data_directory(app)?;
             runtime::initialize(&data_directory)?;
             let component_manager = component_manager::ComponentManager::open()?;
+            component_manager::initialize_global(component_manager.clone())
+                .map_err(|error| error.to_string())?;
             let database_path = data_directory.join("projects").join("siaovplay.db");
             let store = ProjectStore::open(database_path)?;
             store.recover_running_media_artifacts()?;

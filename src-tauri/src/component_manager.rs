@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, path::Path};
+use std::{collections::BTreeMap, path::Path, sync::OnceLock};
 
 use serde::Serialize;
 use siao_component_store_catalogs::{common_windows_x86_64, siao_vplay_windows_x86_64};
@@ -22,6 +22,8 @@ pub enum ComponentManagerError {
     Store(#[from] StoreError),
     #[error("组件不在 SiaoVPlay catalog 中：{0}")]
     RequirementNotFound(String),
+    #[error("共享组件 Store 尚未初始化")]
+    NotInitialized,
 }
 
 pub type ComponentManagerResult<T> = Result<T, ComponentManagerError>;
@@ -55,6 +57,37 @@ impl ComponentManager {
 
     pub fn from_store(store: Store, bundle: CatalogBundle) -> Self {
         Self { store, bundle }
+    }
+
+    pub fn resolve_component(
+        &self,
+        component_id: &str,
+        variant: &[(&str, &str)],
+    ) -> ComponentManagerResult<ComponentLeaseGuard> {
+        let variant = variant
+            .iter()
+            .map(|(key, value)| ((*key).to_owned(), (*value).to_owned()))
+            .collect::<BTreeMap<_, _>>();
+        let requirement = self
+            .bundle
+            .consumer
+            .requirements
+            .iter()
+            .find(|requirement| {
+                requirement.component_id == component_id && requirement.variant == variant
+            })
+            .ok_or_else(|| {
+                ComponentManagerError::RequirementNotFound(format!(
+                    "{component_id}[{}]",
+                    variant
+                        .iter()
+                        .map(|(key, value)| format!("{key}={value}"))
+                        .collect::<Vec<_>>()
+                        .join(",")
+                ))
+            })?;
+        let acquired = self.store.resolve_and_acquire(CONSUMER_ID, requirement)?;
+        Ok(ComponentLeaseGuard::new(self.store.clone(), acquired))
     }
 
     pub fn store(&self) -> &Store {
@@ -236,6 +269,12 @@ impl ComponentLeaseGuard {
         }
     }
 
+    pub fn entrypoint(&self, name: &str) -> ComponentManagerResult<std::path::PathBuf> {
+        self.resolved.entrypoints.get(name).cloned().ok_or_else(|| {
+            ComponentManagerError::RequirementNotFound(format!("组件入口点：{name}"))
+        })
+    }
+
     pub fn heartbeat(&mut self) -> ComponentManagerResult<ComponentResolution> {
         self.lease = self.store.heartbeat(&self.lease.lease_id)?;
         Ok(self.resolution())
@@ -246,6 +285,20 @@ impl ComponentLeaseGuard {
         self.lease.expires_at_ms = 0;
         Ok(())
     }
+}
+
+static GLOBAL_MANAGER: OnceLock<ComponentManager> = OnceLock::new();
+
+pub fn initialize_global(manager: ComponentManager) -> ComponentManagerResult<()> {
+    GLOBAL_MANAGER
+        .set(manager)
+        .map_err(|_| ComponentManagerError::Catalog("组件管理器重复初始化".to_owned()))
+}
+
+pub fn global() -> ComponentManagerResult<&'static ComponentManager> {
+    GLOBAL_MANAGER
+        .get()
+        .ok_or(ComponentManagerError::NotInitialized)
 }
 
 impl Drop for ComponentLeaseGuard {
