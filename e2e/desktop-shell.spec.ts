@@ -202,6 +202,46 @@ test("drawers and context menu preserve the mounted video", async ({ page }) => 
   await expect(page.getByRole("menu", { name: "播放器右键菜单" })).toHaveCount(0);
 });
 
+test("reading-first drawer exposes readable hierarchy and density controls", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/e2e/player.html");
+
+  const drawer = page.getByRole("complementary", { name: "当前内容抽屉" });
+  await page.getByRole("button", { name: "剧集", exact: true }).click();
+
+  await expect(drawer).toHaveCSS("width", "416px");
+  await expect(drawer.locator(".player-drawer-meta")).toContainText("正在观看");
+  await expect(drawer.locator(".player-drawer-toolbar")).toBeVisible();
+  await expect(drawer.locator(".player-drawer-toolbar")).toHaveCSS(
+    "height",
+    "54px",
+  );
+  await expect(
+    drawer.getByRole("button", { name: "舒适", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await expect(drawer.locator(".player-drawer-content")).toHaveCSS(
+    "font-size",
+    "15px",
+  );
+
+  await drawer.getByRole("button", { name: "紧凑", exact: true }).click();
+  await expect(drawer).toHaveAttribute("data-density", "compact");
+  await expect(
+    drawer.getByRole("button", { name: "紧凑", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+
+  await page.setViewportSize({ width: 800, height: 900 });
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () => document.documentElement.scrollWidth <= document.documentElement.clientWidth,
+      ),
+    )
+    .toBe(true);
+});
+
 test("keeps the progress bar and playback controls outside the video surface", async ({
   page,
 }) => {

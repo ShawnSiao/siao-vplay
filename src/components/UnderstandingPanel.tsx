@@ -85,6 +85,8 @@ export function UnderstandingPanel({
   const [history, setHistory] = useState<Explanation[]>([]);
   const [prompt, setPrompt] = useState<string | null>(null);
   const [promptExpanded, setPromptExpanded] = useState(false);
+  const [factsExpanded, setFactsExpanded] = useState(false);
+  const [interpretationExpanded, setInterpretationExpanded] = useState(true);
   const [copyNotice, setCopyNotice] = useState<string | null>(null);
   const [resultPath, setResultPath] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -118,6 +120,8 @@ export function UnderstandingPanel({
           explanations[0] ??
           null;
         if (!activeTask && latestVisible) {
+          setFactsExpanded(false);
+          setInterpretationExpanded(true);
           setExplanation(latestVisible);
           setTask(
             tasks.find((item) => item.id === latestVisible.taskId) ?? null,
@@ -206,6 +210,8 @@ export function UnderstandingPanel({
     handledCompletionRef.current = task.id;
     void getExplanation(task.outputExplanationId)
       .then((value) => {
+        setFactsExpanded(false);
+        setInterpretationExpanded(true);
         setExplanation(value);
         setHistory((current) => [
           value,
@@ -223,6 +229,8 @@ export function UnderstandingPanel({
     setExplanation(null);
     setPrompt(null);
     setPromptExpanded(false);
+    setFactsExpanded(false);
+    setInterpretationExpanded(true);
     setCopyNotice(null);
     setResultPath(null);
     setError(null);
@@ -344,6 +352,8 @@ export function UnderstandingPanel({
     try {
       const application = await importExplanationResult(task.id, resultPath);
       handledCompletionRef.current = task.id;
+      setFactsExpanded(false);
+      setInterpretationExpanded(true);
       setTask(application.task);
       setExplanation(application.explanation);
       setHistory((current) => [
@@ -366,6 +376,12 @@ export function UnderstandingPanel({
   const canResume =
     task?.handoffKind === "codex" &&
     ["failed", "cancelled", "interrupted"].includes(task.status);
+  const visibleFacts = explanation
+    ? explanation.confirmedFacts.slice(0, factsExpanded ? undefined : 3)
+    : [];
+  const hasMoreFacts = Boolean(
+    explanation && explanation.confirmedFacts.length > 3,
+  );
 
   const PanelElement = embedded ? "section" : "aside";
 
@@ -413,21 +429,64 @@ export function UnderstandingPanel({
               <span>解释位置</span>
               <strong>{formatDuration(explanation.playbackCutoffMs)}</strong>
             </div>
-            <section>
-              <h3>当前可确认的事实</h3>
-              <ul>
-                {explanation.confirmedFacts.map((fact) => (
+            <section className="understanding-result-section facts-section">
+              <div className="understanding-section-heading">
+                <div>
+                  <span>01</span>
+                  <h3>当前可确认的事实</h3>
+                </div>
+                {hasMoreFacts ? (
+                  <button
+                    aria-controls="understanding-facts"
+                    aria-expanded={factsExpanded}
+                    className="understanding-disclosure"
+                    type="button"
+                    onClick={() => setFactsExpanded((value) => !value)}
+                  >
+                    {factsExpanded ? "收起部分" : "展开全部"}
+                  </button>
+                ) : null}
+              </div>
+              <ul id="understanding-facts">
+                {visibleFacts.map((fact) => (
                   <li key={fact}>{fact}</li>
                 ))}
               </ul>
             </section>
-            <section className="interpretation">
-              <h3>结合当前剧情的可能解读</h3>
-              <ul>
-                {explanation.possibleInterpretations.map((item) => (
-                  <li key={item}>{item}</li>
-                ))}
-              </ul>
+            <section
+              className={`understanding-result-section interpretation ${
+                interpretationExpanded ? "is-expanded" : "is-collapsed"
+              }`}
+            >
+              <div className="understanding-section-heading">
+                <div>
+                  <span>02</span>
+                  <h3>结合当前剧情的可能解读</h3>
+                </div>
+                <button
+                  aria-controls="understanding-interpretation"
+                  aria-expanded={interpretationExpanded}
+                  className="understanding-disclosure"
+                  type="button"
+                  onClick={() => setInterpretationExpanded((value) => !value)}
+                >
+                  {interpretationExpanded ? "收起" : "展开"}
+                </button>
+              </div>
+              <div
+                className="understanding-disclosure-body"
+                hidden={!interpretationExpanded}
+                id="understanding-interpretation"
+              >
+                <ul>
+                  {explanation.possibleInterpretations.map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ul>
+                <p className="understanding-interpretation-note">
+                  这是结合当前播放位置的可能解读，不代表影片后续已经给出结论。
+                </p>
+              </div>
             </section>
             {explanation.withheldReason ? (
               <p className="understanding-withheld">
@@ -677,6 +736,8 @@ export function UnderstandingPanel({
                   key={item.id}
                   type="button"
                   onClick={() => {
+                    setFactsExpanded(false);
+                    setInterpretationExpanded(true);
                     setExplanation(item);
                     setTask(null);
                   }}

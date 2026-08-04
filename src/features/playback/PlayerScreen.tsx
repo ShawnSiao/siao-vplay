@@ -112,6 +112,23 @@ export function PlayerScreen({
     onPersist,
     onError,
   });
+  const currentEpisode = episodeNavigation.episodes.find(
+    (episode) => episode.projectId === project.id,
+  );
+  const drawerContextLabel =
+    currentEpisode?.seasonNumber !== null &&
+    currentEpisode?.seasonNumber !== undefined &&
+    currentEpisode?.episodeNumber !== null &&
+    currentEpisode?.episodeNumber !== undefined
+      ? `第 ${currentEpisode.seasonNumber} 季 · 第 ${currentEpisode.episodeNumber} 集`
+      : "当前视频";
+  const drawerEpisodeSummary = episodeNavigation.detail
+    ? `${episodeNavigation.detail.summary.itemCount} 集 · ${
+        positionMs > 0 ? `看到 ${formatDuration(positionMs)}` : "未观看"
+      }`
+    : "当前视频";
+  const drawerContextStatus =
+    currentSubtitle || currentTranslation ? "字幕已同步" : "等待字幕";
   const switchEpisode = useCallback(
     async (episode: EpisodeReference, currentStateAlreadyPersisted = false) => {
       if (switchingEpisode || episode.projectId === project.id) {
@@ -373,6 +390,9 @@ export function PlayerScreen({
           <PlayerDrawer
             activeTab={drawerTab}
             mediaTitle={project.title}
+            contextLabel={drawerContextLabel}
+            contextStatus={drawerContextStatus}
+            episodeSummary={drawerEpisodeSummary}
             onSelectTab={onSelectDrawer}
             onClose={onCloseDrawer}
           >
@@ -385,6 +405,8 @@ export function PlayerScreen({
                 loading={episodeNavigation.loading}
                 error={episodeNavigation.error}
                 switching={switchingEpisode}
+                playbackPositionMs={positionMs}
+                playbackDurationMs={durationMs}
                 onSwitch={(episode) => void switchEpisode(episode)}
               />
             ) : drawerTab === "understand" ? (
