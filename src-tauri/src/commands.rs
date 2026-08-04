@@ -668,8 +668,14 @@ pub fn set_runtime_storage_root(
 }
 
 #[tauri::command]
-pub fn set_preferred_model(input: SetPreferredModelInput) -> Result<RuntimeCatalog, CommandError> {
-    runtime::set_preferred_model(&input.model_kind).map_err(Into::into)
+pub fn set_preferred_model(
+    manager: State<'_, ComponentManager>,
+    input: SetPreferredModelInput,
+) -> Result<RuntimeCatalog, CommandError> {
+    let component_ref = manager
+        .component_ref_for("whisper-model", &[("model", input.model_kind.as_str())])
+        .map_err(CommandError::from)?;
+    runtime::set_preferred_model(&input.model_kind, component_ref).map_err(Into::into)
 }
 
 #[tauri::command]

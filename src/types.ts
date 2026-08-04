@@ -487,6 +487,7 @@ export type MediaRuntimeStatus = {
 export type RuntimeSettings = {
   storageRoot: string | null;
   preferredModel: "small" | "base";
+  preferredModelComponent?: ComponentRef;
 };
 
 export type RuntimeComponent = {

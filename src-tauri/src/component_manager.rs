@@ -103,6 +103,26 @@ impl ComponentManager {
         Ok(ComponentLeaseGuard::new(self.store.clone(), acquired))
     }
 
+    pub fn component_ref_for(
+        &self,
+        component_id: &str,
+        variant: &[(&str, &str)],
+    ) -> ComponentManagerResult<ComponentRef> {
+        let variant = variant
+            .iter()
+            .map(|(key, value)| ((*key).to_owned(), (*value).to_owned()))
+            .collect::<BTreeMap<_, _>>();
+        self.bundle
+            .consumer
+            .requirements
+            .iter()
+            .find(|requirement| {
+                requirement.component_id == component_id && requirement.variant == variant
+            })
+            .map(ComponentRequirement::component_ref)
+            .ok_or_else(|| ComponentManagerError::RequirementNotFound(component_id.to_owned()))
+    }
+
     pub fn store(&self) -> &Store {
         &self.store
     }
