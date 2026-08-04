@@ -3,6 +3,7 @@ import { useState } from "react";
 import {
   chooseComponentStoreRoot,
   chooseRuntimeStorageRoot,
+  cleanupComponentStoreMigration,
   commandError,
   downloadRuntimeComponent,
   installComponent,
@@ -77,6 +78,11 @@ export function RuntimeSettingsDialog({
 }: RuntimeSettingsDialogProps) {
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [migrationResult, setMigrationResult] = useState<{
+    operationId: string;
+    sourceRoot: string;
+    targetRoot: string;
+  } | null>(null);
 
   const applyCatalog = (nextCatalog: RuntimeCatalog) => {
     setError(null);
@@ -171,7 +177,26 @@ export function RuntimeSettingsDialog({
       if (!targetRoot) {
         return;
       }
-      await migrateComponentStore(targetRoot);
+      const result = await migrateComponentStore(targetRoot);
+      setMigrationResult(result);
+      await onRefreshShared?.();
+    } catch (cause) {
+      const message = commandError(cause).message;
+      setError(message);
+      onError(message);
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
+  const cleanupSharedStoreSource = async () => {
+    if (previewMode || !migrationResult) {
+      return;
+    }
+    setBusyAction("shared-root-cleanup");
+    try {
+      await cleanupComponentStoreMigration(migrationResult.operationId);
+      setMigrationResult(null);
       await onRefreshShared?.();
     } catch (cause) {
       const message = commandError(cause).message;
@@ -234,6 +259,22 @@ export function RuntimeSettingsDialog({
                 >
                   {busyAction === "shared-root" ? "正在迁移共享 Store…" : "迁移共享 Store"}
                 </button>
+                {migrationResult ? (
+                  <div className="notice warning" role="status">
+                    <strong>迁移已完成，旧根目录仍保留</strong>
+                    <p>
+                      {migrationResult.sourceRoot} → {migrationResult.targetRoot}
+                    </p>
+                    <button
+                      className="button quiet runtime-component-action"
+                      type="button"
+                      disabled={busyAction !== null || previewMode}
+                      onClick={() => void cleanupSharedStoreSource()}
+                    >
+                      {busyAction === "shared-root-cleanup" ? "正在清理旧根目录…" : "确认清理旧根目录"}
+                    </button>
+                  </div>
+                ) : null}
                 <div className="runtime-component-list">
                   {sharedInstallations.map((component) => {
                     const key = `shared:${component.componentId}:${component.version}`;
