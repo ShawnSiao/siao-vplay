@@ -487,6 +487,7 @@ export type MediaRuntimeStatus = {
 export type RuntimeSettings = {
   storageRoot: string | null;
   preferredModel: "small" | "base";
+  preferredModelComponent?: ComponentRef;
 };
 
 export type RuntimeComponent = {
@@ -508,6 +509,88 @@ export type RuntimeComponent = {
 export type RuntimeCatalog = {
   settings: RuntimeSettings;
   components: RuntimeComponent[];
+};
+
+export type ComponentRef = {
+  componentId: string;
+  version: string;
+  variant: Record<string, string>;
+};
+
+export type ComponentCatalogInfo = {
+  catalogId: string;
+  catalogDigest: string;
+  consumerId: string;
+  protocolVersion: number;
+  schemaVersion: number;
+  requirementCount: number;
+};
+
+export type ComponentStoreRootInfo = {
+  rootPath: string;
+  catalogId: string;
+  catalogDigest: string;
+};
+
+export type ComponentMigrationResult = {
+  operationId: string;
+  sourceRoot: string;
+  targetRoot: string;
+  locationConfigPath: string;
+};
+
+export type ComponentMigrationCleanupResult = {
+  operationId: string;
+  sourceRoot: string;
+  targetRoot: string;
+  removed: boolean;
+};
+
+export type ComponentInstallationStatus = {
+  componentId: string;
+  version: string;
+  variant: Record<string, string>;
+  state: "not_installed" | "verified" | "unverified" | "failed" | "verified_archive";
+  paths: string[];
+  consumers: string[];
+  details: string[];
+};
+
+export type ComponentInstallResult = {
+  operationId: string | null;
+  component: ComponentRef;
+  identityHash: string;
+  payloadPath: string;
+  reusedExisting: boolean;
+};
+
+export type ComponentOperation = {
+  operationId: string;
+  operationType: "install" | "migration";
+  state:
+    | "queued"
+    | "preparing"
+    | "downloading"
+    | "paused"
+    | "verifying_download"
+    | "extracting"
+    | "verifying_payload"
+    | "committing"
+    | "completed"
+    | "cancelled"
+    | "failed"
+    | "recoverable";
+  component: ComponentRef | null;
+  consumerId: string | null;
+  stagingPath: string | null;
+  processedBytes: number | null;
+  totalBytes: number | null;
+  errorCode: string | null;
+  errorMessage: string | null;
+  canResume: boolean;
+  canCancel: boolean;
+  createdAtMs: number;
+  updatedAtMs: number;
 };
 
 export type DeleteProjectResult = {

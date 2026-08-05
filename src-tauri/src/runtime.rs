@@ -1,4 +1,5 @@
 use std::{
+    collections::BTreeMap,
     fs::{self, File},
     io::{self, Read, Write},
     path::{Component, Path, PathBuf},
@@ -8,6 +9,7 @@ use std::{
 use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use siao_component_store_core::catalog::ComponentRef;
 use thiserror::Error;
 use uuid::Uuid;
 use zip::ZipArchive;
@@ -15,6 +17,10 @@ use zip::ZipArchive;
 use crate::{media, transcription, youtube_media};
 
 pub const DEFAULT_MODEL_KIND: &str = "small";
+pub const WHISPER_MODEL_COMPONENT_ID: &str = "whisper-model";
+pub const WHISPER_MODEL_COMPONENT_VERSION: &str = "1";
+pub const WINDOWS_PLATFORM: &str = "windows";
+pub const X86_64_ARCHITECTURE: &str = "x86_64";
 pub const WHISPER_RUNTIME_VERSION: &str = "1.9.1-siaocut.1";
 pub const YT_DLP_VERSION: &str = "2026.06.09";
 pub const YT_DLP_SHA256: &str = "3a48cb955d55c8821b60ccbdbbc6f61bc958f2f3d3b7ad5eaf3d83a543293a27";
@@ -69,6 +75,8 @@ pub enum RuntimeError {
 pub struct RuntimeSettings {
     pub storage_root: Option<String>,
     pub preferred_model: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub preferred_model_component: Option<ComponentRef>,
 }
 
 impl Default for RuntimeSettings {
@@ -76,6 +84,7 @@ impl Default for RuntimeSettings {
         Self {
             storage_root: None,
             preferred_model: DEFAULT_MODEL_KIND.to_owned(),
+            preferred_model_component: Some(component_ref_for_model(DEFAULT_MODEL_KIND)),
         }
     }
 }
@@ -182,9 +191,23 @@ pub fn set_storage_root(path: &str) -> Result<RuntimeCatalog, RuntimeError> {
     catalog()
 }
 
-pub fn set_preferred_model(model_kind: &str) -> Result<RuntimeCatalog, RuntimeError> {
+pub fn set_preferred_model(
+    model_kind: &str,
+    component_ref: ComponentRef,
+) -> Result<RuntimeCatalog, RuntimeError> {
     validate_model_kind(model_kind)?;
-    update_settings(|settings| settings.preferred_model = model_kind.to_owned())?;
+    if component_ref.component_id != WHISPER_MODEL_COMPONENT_ID
+        || component_ref.version.trim().is_empty()
+        || component_ref.variant.get("model").map(String::as_str) != Some(model_kind)
+    {
+        return Err(RuntimeError::InvalidModel(format!(
+            "组件身份与模型 {model_kind} 不匹配"
+        )));
+    }
+    update_settings(|settings| {
+        settings.preferred_model = model_kind.to_owned();
+        settings.preferred_model_component = Some(component_ref.clone());
+    })?;
     catalog()
 }
 
@@ -197,7 +220,14 @@ pub fn configured_model_root() -> Option<PathBuf> {
 }
 
 pub fn preferred_model_kind() -> String {
-    settings_snapshot().preferred_model
+    let settings = settings_snapshot();
+    settings
+        .preferred_model_component
+        .as_ref()
+        .and_then(|component| component.variant.get("model"))
+        .filter(|model| model.as_str() == "small" || model.as_str() == "base")
+        .cloned()
+        .unwrap_or(settings.preferred_model)
 }
 
 pub fn download_component(component_id: &str) -> Result<RuntimeCatalog, RuntimeError> {
@@ -245,11 +275,50 @@ fn load_settings(path: &Path) -> Result<RuntimeSettings, RuntimeError> {
 }
 
 fn normalize_settings(mut settings: RuntimeSettings) -> RuntimeSettings {
-    if settings.preferred_model != "small" && settings.preferred_model != "base" {
-        settings.preferred_model = DEFAULT_MODEL_KIND.to_owned();
+    let preferred_model = settings
+        .preferred_model_component
+        .as_ref()
+        .and_then(|component| component.variant.get("model"))
+        .filter(|model| model.as_str() == "small" || model.as_str() == "base")
+        .cloned()
+        .unwrap_or_else(|| {
+            if settings.preferred_model == "small" || settings.preferred_model == "base" {
+                settings.preferred_model.clone()
+            } else {
+                DEFAULT_MODEL_KIND.to_owned()
+            }
+        });
+    settings.preferred_model = preferred_model.clone();
+    let component_is_valid = settings
+        .preferred_model_component
+        .as_ref()
+        .is_some_and(|component| {
+            component.component_id == WHISPER_MODEL_COMPONENT_ID
+                && !component.version.trim().is_empty()
+                && component.variant.get("platform").map(String::as_str) == Some(WINDOWS_PLATFORM)
+                && component.variant.get("architecture").map(String::as_str)
+                    == Some(X86_64_ARCHITECTURE)
+                && component.variant.len() == 3
+                && component.variant.get("model").map(String::as_str)
+                    == Some(preferred_model.as_str())
+        });
+    if !component_is_valid {
+        settings.preferred_model_component = Some(component_ref_for_model(&preferred_model));
     }
     settings.storage_root = settings.storage_root.filter(|path| !path.trim().is_empty());
     settings
+}
+
+fn component_ref_for_model(model_kind: &str) -> ComponentRef {
+    ComponentRef {
+        component_id: WHISPER_MODEL_COMPONENT_ID.to_owned(),
+        version: WHISPER_MODEL_COMPONENT_VERSION.to_owned(),
+        variant: BTreeMap::from([
+            ("architecture".to_owned(), X86_64_ARCHITECTURE.to_owned()),
+            ("model".to_owned(), model_kind.to_owned()),
+            ("platform".to_owned(), WINDOWS_PLATFORM.to_owned()),
+        ]),
+    }
 }
 
 fn settings_snapshot() -> RuntimeSettings {
@@ -619,13 +688,37 @@ mod tests {
 
     #[test]
     fn default_settings_keep_model_selection_stable() {
-        assert_eq!(RuntimeSettings::default().preferred_model, "small");
+        let defaults = RuntimeSettings::default();
+        assert_eq!(defaults.preferred_model, "small");
+        assert_eq!(
+            defaults
+                .preferred_model_component
+                .as_ref()
+                .and_then(|component| component.variant.get("model"))
+                .map(String::as_str),
+            Some("small")
+        );
         assert_eq!(
             normalize_settings(RuntimeSettings {
                 storage_root: Some(String::new()),
                 preferred_model: "unexpected".to_owned(),
+                preferred_model_component: None,
             }),
-            RuntimeSettings::default()
+            defaults
+        );
+        let migrated = normalize_settings(RuntimeSettings {
+            storage_root: None,
+            preferred_model: "base".to_owned(),
+            preferred_model_component: None,
+        });
+        assert_eq!(migrated.preferred_model, "base");
+        assert_eq!(
+            migrated
+                .preferred_model_component
+                .as_ref()
+                .and_then(|component| component.variant.get("model"))
+                .map(String::as_str),
+            Some("base")
         );
     }
 

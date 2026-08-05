@@ -4,10 +4,13 @@ import { describe, expect, it, vi } from "vitest";
 import type { RuntimeCatalog } from "../types";
 
 const desktopMocks = vi.hoisted(() => ({
+  chooseComponentStoreRoot: vi.fn(),
   chooseRuntimeStorageRoot: vi.fn(),
   setRuntimeStorageRoot: vi.fn(),
   setPreferredModel: vi.fn(),
   downloadRuntimeComponent: vi.fn(),
+  installComponent: vi.fn(),
+  migrateComponentStore: vi.fn(),
 }));
 
 vi.mock("../lib/desktop", () => ({
@@ -164,5 +167,48 @@ describe("RuntimeSettingsDialog", () => {
     expect(
       screen.getByText("下载 FFmpeg 或识别模型前，需要先选择目录。"),
     ).toBeInTheDocument();
+  });
+
+  it("migrates the shared component store through the Store adapter", async () => {
+    desktopMocks.chooseComponentStoreRoot.mockResolvedValue("W:\\Siao\\component-store-new");
+    desktopMocks.migrateComponentStore.mockResolvedValue({
+      operationId: "migration-1",
+      sourceRoot: "W:\\Siao\\component-store",
+      targetRoot: "W:\\Siao\\component-store-new",
+      locationConfigPath: "C:\\Users\\test\\component-store-location.json",
+    });
+    const onRefreshShared = vi.fn().mockResolvedValue(undefined);
+    render(
+      <RuntimeSettingsDialog
+        catalog={catalog}
+        loading={false}
+        previewMode={false}
+        onClose={() => undefined}
+        onCatalogChange={() => undefined}
+        onError={() => undefined}
+        sharedCatalog={{
+          catalogId: "siao-vplay.verified.windows-x86_64.v2",
+          catalogDigest: "a".repeat(64),
+          consumerId: "siao-vplay",
+          protocolVersion: 1,
+          schemaVersion: 2,
+          requirementCount: 5,
+        }}
+        sharedRoot={{
+          rootPath: "W:\\Siao\\component-store",
+          catalogId: "common.verified.windows-x86_64.v2",
+          catalogDigest: "b".repeat(64),
+        }}
+        onRefreshShared={onRefreshShared}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "迁移共享 Store" }));
+    await waitFor(() =>
+      expect(desktopMocks.migrateComponentStore).toHaveBeenCalledWith(
+        "W:\\Siao\\component-store-new",
+      ),
+    );
+    expect(onRefreshShared).toHaveBeenCalled();
   });
 });

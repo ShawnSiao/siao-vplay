@@ -1,4 +1,9 @@
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
+use siao_component_store_core::{
+    catalog::ComponentRef,
+    operation::OperationJournal,
+    store::{ComponentStatus, VerificationReport},
+};
 use tauri::{AppHandle, Manager, State};
 
 use crate::{
@@ -6,6 +11,10 @@ use crate::{
         self, StartSubtitleBurnInput, SubtitleBurnError, SubtitleBurnJob, SubtitleBurnJobInput,
     },
     codex_runner::{self, CodexRunnerError, CodexRuntimeStatus, StartCodexTranslationInput},
+    component_manager::{
+        ComponentCatalogInfo, ComponentInstallResult, ComponentManager, ComponentManagerError,
+        ComponentMigrationCleanupResultInfo, ComponentMigrationResultInfo, ComponentStoreRootInfo,
+    },
     delivery::{self, DeliveryError, ExportSubtitlesInput, SubtitleExport},
     domain::{
         CreateLocalProjectInput, DeleteProjectResult, PrepareProjectMediaInput, Project,
@@ -340,6 +349,22 @@ impl From<RuntimeError> for CommandError {
     }
 }
 
+impl From<ComponentManagerError> for CommandError {
+    fn from(error: ComponentManagerError) -> Self {
+        let code = match &error {
+            ComponentManagerError::Catalog(_) => "component_catalog_invalid",
+            ComponentManagerError::Store(_) => "component_store_error",
+            ComponentManagerError::RequirementNotFound(_) => "component_requirement_not_found",
+            ComponentManagerError::NotInitialized => "component_manager_not_initialized",
+            ComponentManagerError::StateLock => "component_store_state_lock_error",
+        };
+        Self {
+            code,
+            message: error.to_string(),
+        }
+    }
+}
+
 impl From<TranslationError> for CommandError {
     fn from(error: TranslationError) -> Self {
         Self {
@@ -536,6 +561,161 @@ pub fn get_runtime_catalog() -> Result<RuntimeCatalog, CommandError> {
     runtime::catalog().map_err(Into::into)
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ComponentRefInput {
+    pub component: ComponentRef,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RegisterExistingComponentInput {
+    pub component: ComponentRef,
+    pub path: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ComponentOperationInput {
+    pub operation_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ComponentStoreMigrationInput {
+    pub target_root: String,
+}
+
+#[tauri::command]
+pub fn get_component_catalog_info(
+    manager: State<'_, ComponentManager>,
+) -> Result<ComponentCatalogInfo, CommandError> {
+    manager.catalog_info().map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn get_component_store_root(
+    manager: State<'_, ComponentManager>,
+) -> Result<ComponentStoreRootInfo, CommandError> {
+    manager.store_root_info().map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn list_recoverable_component_operations(
+    manager: State<'_, ComponentManager>,
+) -> Result<Vec<OperationJournal>, CommandError> {
+    manager.list_recoverable_operations().map_err(Into::into)
+}
+
+#[tauri::command]
+pub async fn migrate_component_store(
+    manager: State<'_, ComponentManager>,
+    input: ComponentStoreMigrationInput,
+) -> Result<ComponentMigrationResultInfo, CommandError> {
+    let manager = manager.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || manager.migrate_root(input.target_root))
+        .await
+        .map_err(CommandError::background_task_failed)?
+        .map_err(Into::into)
+}
+
+#[tauri::command]
+pub async fn resume_component_store_migration(
+    manager: State<'_, ComponentManager>,
+    input: ComponentOperationInput,
+) -> Result<ComponentMigrationResultInfo, CommandError> {
+    let manager = manager.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || manager.resume_migration(&input.operation_id))
+        .await
+        .map_err(CommandError::background_task_failed)?
+        .map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn cleanup_component_store_migration(
+    manager: State<'_, ComponentManager>,
+    input: ComponentOperationInput,
+) -> Result<ComponentMigrationCleanupResultInfo, CommandError> {
+    manager
+        .cleanup_migration_source(&input.operation_id)
+        .map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn list_component_installations(
+    manager: State<'_, ComponentManager>,
+) -> Result<Vec<ComponentStatus>, CommandError> {
+    manager.list_installations().map_err(Into::into)
+}
+
+#[tauri::command]
+pub async fn install_component(
+    manager: State<'_, ComponentManager>,
+    input: ComponentRefInput,
+) -> Result<ComponentInstallResult, CommandError> {
+    let manager = manager.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || manager.install(input.component, None))
+        .await
+        .map_err(CommandError::background_task_failed)?
+        .map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn verify_component(
+    manager: State<'_, ComponentManager>,
+    input: ComponentRefInput,
+) -> Result<VerificationReport, CommandError> {
+    manager.verify(input.component).map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn register_existing_component(
+    manager: State<'_, ComponentManager>,
+    input: RegisterExistingComponentInput,
+) -> Result<ComponentStatus, CommandError> {
+    manager
+        .register_existing(input.component, input.path)
+        .map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn get_component_operation(
+    manager: State<'_, ComponentManager>,
+    input: ComponentOperationInput,
+) -> Result<OperationJournal, CommandError> {
+    manager
+        .operation_status(&input.operation_id)
+        .map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn pause_component_operation(
+    manager: State<'_, ComponentManager>,
+    input: ComponentOperationInput,
+) -> Result<OperationJournal, CommandError> {
+    manager.pause(&input.operation_id).map_err(Into::into)
+}
+
+#[tauri::command]
+pub async fn resume_component_operation(
+    manager: State<'_, ComponentManager>,
+    input: ComponentOperationInput,
+) -> Result<ComponentInstallResult, CommandError> {
+    let manager = manager.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || manager.resume(&input.operation_id, None))
+        .await
+        .map_err(CommandError::background_task_failed)?
+        .map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn cancel_component_operation(
+    manager: State<'_, ComponentManager>,
+    input: ComponentOperationInput,
+) -> Result<OperationJournal, CommandError> {
+    manager.cancel(&input.operation_id).map_err(Into::into)
+}
+
 #[tauri::command]
 pub fn set_runtime_storage_root(
     input: SetRuntimeStorageRootInput,
@@ -544,8 +724,21 @@ pub fn set_runtime_storage_root(
 }
 
 #[tauri::command]
-pub fn set_preferred_model(input: SetPreferredModelInput) -> Result<RuntimeCatalog, CommandError> {
-    runtime::set_preferred_model(&input.model_kind).map_err(Into::into)
+pub fn set_preferred_model(
+    manager: State<'_, ComponentManager>,
+    input: SetPreferredModelInput,
+) -> Result<RuntimeCatalog, CommandError> {
+    let component_ref = manager
+        .component_ref_for(
+            "whisper-model",
+            &[
+                ("platform", runtime::WINDOWS_PLATFORM),
+                ("architecture", runtime::X86_64_ARCHITECTURE),
+                ("model", input.model_kind.as_str()),
+            ],
+        )
+        .map_err(CommandError::from)?;
+    runtime::set_preferred_model(&input.model_kind, component_ref).map_err(Into::into)
 }
 
 #[tauri::command]

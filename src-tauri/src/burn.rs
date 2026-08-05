@@ -226,11 +226,10 @@ pub fn start_subtitle_burn(
     let project = store.get_project(&input.project_id)?;
     ensure_no_active_job(store, &project.id, None)?;
     let destination = canonical_destination(&input.destination_directory)?;
-    let runtime_path = media::ffmpeg_path()?;
+    let runtime = media::resolve_runtime()?;
+    let runtime_path = runtime.ffmpeg().to_path_buf();
     let runtime_sha256 = hash_file(&runtime_path)?;
-    let runtime_version = media::media_runtime_status()
-        .version
-        .ok_or_else(|| SubtitleBurnError::RuntimeChanged)?;
+    let runtime_version = runtime.version().to_owned();
     let timestamp = now_ms()?;
     let job_id = Uuid::new_v4().to_string();
     let job_directory = reset_job_directory(store, &project.id, &job_id)?;
@@ -476,7 +475,8 @@ pub fn resume_subtitle_burn_job(
         return Err(SubtitleBurnError::InvalidJobState(job.public.status));
     }
     validate_baseline(store, &job)?;
-    verify_runtime(&job)?;
+    let runtime = media::resolve_runtime()?;
+    verify_runtime(&job, &runtime)?;
     ensure_no_active_job(store, &job.public.project_id, Some(job_id))?;
     let project = store.get_project(&job.public.project_id)?;
     let job_directory = reset_job_directory(store, &project.id, job_id)?;
@@ -561,7 +561,8 @@ fn run_job(
     transition_job(store, job_id, "queued", "running", "verifying", 0.02)?;
     let job = load_stored_job(store, job_id)?;
     let media_path = validate_baseline(store, &job)?;
-    verify_runtime(&job)?;
+    let runtime = media::resolve_runtime()?;
+    verify_runtime(&job, &runtime)?;
     verify_subtitle(&job)?;
     check_cancelled(store, job_id, cancellation)?;
     if job.intended_output_path.exists() || job.intended_manifest_path.exists() {
@@ -585,7 +586,7 @@ fn run_job(
     let filter = format!(
         "subtitles={subtitle_file_name}:force_style='FontName=Microsoft YaHei,FontSize=20,PrimaryColour=&H00FFFFFF,OutlineColour=&H80000000,BorderStyle=1,Outline=2,Shadow=0,MarginV=32,Alignment=2'"
     );
-    let mut command = hidden_command(&job.runtime_path);
+    let mut command = hidden_command(runtime.ffmpeg());
     command
         .current_dir(&job_directory)
         .args([
@@ -757,14 +758,15 @@ fn validate_baseline(
     Ok(media_path)
 }
 
-fn verify_runtime(job: &StoredBurnJob) -> Result<(), SubtitleBurnError> {
-    let current_path = media::ffmpeg_path()?;
-    let current_version = media::media_runtime_status()
-        .version
-        .ok_or(SubtitleBurnError::RuntimeChanged)?;
+fn verify_runtime(
+    job: &StoredBurnJob,
+    runtime: &media::MediaRuntime,
+) -> Result<(), SubtitleBurnError> {
+    let current_path = runtime.ffmpeg();
+    let current_version = runtime.version();
     if current_path != job.runtime_path
         || current_version != job.public.runtime_version
-        || !hash_file(&current_path)?.eq_ignore_ascii_case(&job.runtime_sha256)
+        || !hash_file(current_path)?.eq_ignore_ascii_case(&job.runtime_sha256)
     {
         return Err(SubtitleBurnError::RuntimeChanged);
     }
