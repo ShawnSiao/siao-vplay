@@ -17,10 +17,9 @@ use siao_component_store_core::{
     StoreError, StoreResult,
     catalog::{CatalogBundle, CatalogDocument, ComponentRef, ComponentRequirement},
     install::{InstallRequest, InstallResult, ProgressEvent},
-    lease::Lease,
     migration::{MigrationCleanupResult, MigrationRequest, MigrationResult},
     operation::OperationJournal,
-    store::{AcquiredComponent, ComponentStatus, ResolvedComponent, Store},
+    store::{ComponentStatus, LeasedComponent, ResolveRequest, Store},
 };
 use thiserror::Error;
 
@@ -173,8 +172,9 @@ impl ComponentManager {
                 ))
             })?;
         let store = self.store_snapshot()?;
-        let acquired = store.resolve_and_acquire(CONSUMER_ID, requirement)?;
-        Ok(ComponentLeaseGuard::new(store, acquired))
+        let leased =
+            store.resolve_and_acquire(ResolveRequest::new(requirement.clone(), CONSUMER_ID))?;
+        Ok(ComponentLeaseGuard::new(store, leased))
     }
 
     pub fn component_ref_for(
@@ -205,8 +205,8 @@ impl ComponentManager {
         let store = self.store_snapshot()?;
         Ok(ComponentStoreRootInfo {
             root_path: store.root().to_string_lossy().into_owned(),
-            catalog_id: store.catalog_id().to_owned(),
-            catalog_digest: store.catalog_digest().to_owned(),
+            catalog_id: store.catalog().catalog_id.clone(),
+            catalog_digest: store.catalog().digest()?,
         })
     }
 
@@ -238,7 +238,7 @@ impl ComponentManager {
     }
 
     pub fn list_installations(&self) -> ComponentManagerResult<Vec<ComponentStatus>> {
-        Ok(self.store_snapshot()?.list_installations()?)
+        Ok(self.store_snapshot()?.list_components()?)
     }
 
     pub fn install(
@@ -307,8 +307,8 @@ impl ComponentManager {
     ) -> ComponentManagerResult<ComponentLeaseGuard> {
         let requirement = self.requirement_for(component)?.clone();
         let store = self.store_snapshot()?;
-        let acquired = store.resolve_and_acquire(CONSUMER_ID, &requirement)?;
-        Ok(ComponentLeaseGuard::new(store, acquired))
+        let leased = store.resolve_and_acquire(ResolveRequest::new(requirement, CONSUMER_ID))?;
+        Ok(ComponentLeaseGuard::new(store, leased))
     }
 
     pub fn migrate_root(
@@ -391,17 +391,16 @@ pub struct ComponentResolution {
 
 pub struct ComponentLeaseGuard {
     store: Store,
-    lease: Lease,
-    resolved: ResolvedComponent,
+    leased: LeasedComponent,
     heartbeat_stop: Arc<AtomicBool>,
     heartbeat_thread: Option<thread::JoinHandle<()>>,
 }
 
 impl ComponentLeaseGuard {
-    fn new(store: Store, acquired: AcquiredComponent) -> Self {
+    fn new(store: Store, leased: LeasedComponent) -> Self {
         let heartbeat_stop = Arc::new(AtomicBool::new(false));
         let heartbeat_store = store.clone();
-        let heartbeat_lease_id = acquired.lease.lease_id.clone();
+        let heartbeat_lease_id = leased.lease.lease_id.clone();
         let heartbeat_stop_signal = heartbeat_stop.clone();
         let heartbeat_thread = thread::Builder::new()
             .name(format!("siao-component-lease-{}", heartbeat_lease_id))
@@ -421,8 +420,7 @@ impl ComponentLeaseGuard {
             .ok();
         Self {
             store,
-            lease: acquired.lease,
-            resolved: acquired.resolved,
+            leased,
             heartbeat_stop,
             heartbeat_thread,
         }
@@ -431,40 +429,42 @@ impl ComponentLeaseGuard {
     pub fn resolution(&self) -> ComponentResolution {
         ComponentResolution {
             component: ComponentRef {
-                component_id: self.resolved.component_id.clone(),
-                version: self.resolved.version.clone(),
-                variant: self.resolved.variant.clone(),
+                component_id: self.leased.component_id.clone(),
+                version: self.leased.version.clone(),
+                variant: self.leased.variant.clone(),
             },
-            artifact_sha256: self.resolved.artifact_sha256.clone(),
-            root_path: self.resolved.root_path.to_string_lossy().into_owned(),
+            artifact_sha256: self.leased.lease.artifact_sha256.clone(),
+            root_path: self.leased.root_path.to_string_lossy().into_owned(),
             entrypoints: self
-                .resolved
+                .leased
                 .entrypoints
                 .iter()
                 .map(|(name, path)| (name.clone(), path.to_string_lossy().into_owned()))
                 .collect(),
-            lease_id: self.lease.lease_id.clone(),
-            expires_at_ms: self.lease.expires_at_ms,
+            lease_id: self.leased.lease.lease_id.clone(),
+            expires_at_ms: self.leased.lease.expires_at_ms,
         }
     }
 
     pub fn entrypoint(&self, name: &str) -> ComponentManagerResult<std::path::PathBuf> {
-        self.resolved.entrypoints.get(name).cloned().ok_or_else(|| {
+        self.leased.entrypoints.get(name).cloned().ok_or_else(|| {
             ComponentManagerError::RequirementNotFound(format!("组件入口点：{name}"))
         })
     }
 
     #[allow(dead_code)]
     pub fn heartbeat(&mut self) -> ComponentManagerResult<ComponentResolution> {
-        self.lease = self.store.heartbeat(&self.lease.lease_id)?;
+        let lease_id = self.leased.lease.lease_id.clone();
+        self.leased.lease = self.store.heartbeat(&lease_id)?;
         Ok(self.resolution())
     }
 
     #[allow(dead_code)]
     pub fn release(mut self) -> ComponentManagerResult<()> {
         self.stop_heartbeat();
-        self.store.release(&self.lease.lease_id)?;
-        self.lease.expires_at_ms = 0;
+        let lease_id = self.leased.lease.lease_id.clone();
+        self.store.release(&lease_id)?;
+        self.leased.lease.expires_at_ms = 0;
         Ok(())
     }
 
@@ -494,7 +494,7 @@ pub fn global() -> ComponentManagerResult<&'static ComponentManager> {
 impl Drop for ComponentLeaseGuard {
     fn drop(&mut self) {
         self.stop_heartbeat();
-        let _ = self.store.release(&self.lease.lease_id);
+        let _ = self.store.release(&self.leased.lease.lease_id);
     }
 }
 
@@ -530,7 +530,10 @@ mod tests {
         let root = manager
             .store_root_info()
             .expect("store root should be readable");
-        assert_eq!(root.catalog_id, manager.store().unwrap().catalog_id());
+        assert_eq!(
+            root.catalog_id,
+            manager.store().unwrap().catalog().catalog_id
+        );
         assert!(!root.root_path.is_empty());
     }
 
