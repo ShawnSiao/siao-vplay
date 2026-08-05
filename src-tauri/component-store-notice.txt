@@ -5,8 +5,8 @@ Runtime components are installed explicitly into the shared local store at:
 
 Catalog: siao-vplay.verified.windows-x86_64.v2 (verified v2 transition subset)
 Consumer: siao-vplay
-Core/catalog source tag: v0.2.3
-Core/catalog source revision: 74b1af723bdd220e63a89c02631d81e98e345a10
+Core/catalog source tag: v0.2.4
+Core/catalog source revision: 19c33b32b33ad2122654e2012c47995cff59a40c
 Catalog bundle digest: 872f4309b317648ea89a0e4fe5a4f0a6577a4e19967fe537be0f954df5b4f1e8
 Source repository: https://github.com/ShawnSiao/siao-component-store
 Large fixed runtime release assets: https://github.com/ShawnSiao/siao-components
