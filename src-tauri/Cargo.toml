@@ -20,8 +20,8 @@ bridge = []
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-siao-component-store-core = { git = "https://github.com/ShawnSiao/siao-component-store.git", rev = "8d41b55" }
-siao-component-store-catalogs = { git = "https://github.com/ShawnSiao/siao-component-store.git", rev = "8d41b55" }
+siao-component-store-core = { git = "https://github.com/ShawnSiao/siao-component-store.git", rev = "74b1af723bdd220e63a89c02631d81e98e345a10" }
+siao-component-store-catalogs = { git = "https://github.com/ShawnSiao/siao-component-store.git", rev = "74b1af723bdd220e63a89c02631d81e98e345a10" }
 dunce = "1.0.5"
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls"] }
 regex = "1.11"
