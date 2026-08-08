@@ -386,9 +386,24 @@ test("local resources stay product-focused, accessible, and scrollable at 1280 b
   await body.evaluate((element) => {
     element.scrollTop = element.scrollHeight;
   });
-  await expect(dialog.getByText("高级诊断与第三方许可")).toBeVisible();
+  await dialog.getByText("高级诊断与第三方许可").click();
+  await expect(dialog.getByText("当前使用内置可信目录清单")).toBeVisible();
+  await expect(dialog.getByText("2026.05.01（活动）")).toBeVisible();
+  await expect(
+    dialog.getByRole("button", { name: "回退到 2026.04.01" }),
+  ).toBeVisible();
+  await expect(
+    dialog.getByRole("button", { name: "复制脱敏诊断摘要" }),
+  ).toBeVisible();
   await expect(dialog.getByRole("button", { name: "完成" })).toBeVisible();
   expect(await dialog.boundingBox()).toEqual(before.dialog);
   expect(await actions.boundingBox()).toEqual(before.actions);
   expect(await body.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+  const evidencePath = process.env.SIAOVPLAY_E2E_EVIDENCE_PATH;
+  if (evidencePath) {
+    await dialog
+      .getByRole("button", { name: "回退到 2026.04.01" })
+      .scrollIntoViewIfNeeded();
+    await page.screenshot({ path: evidencePath });
+  }
 });

@@ -2937,6 +2937,75 @@ h3 {
   border-radius: 8px;
 }
 
+.local-resource-version {
+  display: grid;
+  gap: 6px;
+  padding: 9px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 7px;
+  background: #10151a;
+}
+
+.local-resource-version > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.local-resource-version code {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.local-resource-version .button {
+  justify-self: start;
+}
+
+.local-resource-task-diagnostics {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: #10151a;
+}
+
+.local-resource-task-diagnostics > div {
+  display: grid;
+  gap: 4px;
+}
+
+.local-resource-task-diagnostics code {
+  overflow-wrap: anywhere;
+}
+
+.local-resource-license-notices {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.local-resource-license-notices summary {
+  font-size: 12px;
+}
+
+.local-resource-license-notices pre {
+  overflow: auto;
+  max-height: 260px;
+  padding: 10px;
+  border-radius: 7px;
+  color: var(--text-secondary);
+  background: #0d1115;
+  font: 10px/1.6 "SFMono-Regular", Consolas, monospace;
+  white-space: pre-wrap;
+}
+
 .local-resource-diagnostic-list article > div:first-child {
   display: flex;
   justify-content: space-between;

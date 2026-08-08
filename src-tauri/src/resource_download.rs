@@ -444,6 +444,31 @@ pub fn repair_resource(
     task_snapshot(&task_id)
 }
 
+pub fn update_resource(
+    resource_id: &str,
+    app: Option<AppHandle>,
+) -> Result<ResourceDownloadTask, ResourceDownloadError> {
+    if !local_resources::resource_update_available(resource_id)? {
+        return Err(ResourceDownloadError::InvalidTaskState(format!(
+            "{resource_id} 当前没有可用更新"
+        )));
+    }
+    let resource = local_resources::resource_definition(resource_id)?;
+    if resource.artifact.is_none() {
+        return Err(ResourceDownloadError::ArtifactUnavailable(resource.id));
+    }
+    let (task_id, created) = with_manager_write(|manager| {
+        manager.ensure_root_available()?;
+        let result = manager.ensure_task_record(&resource, "update", None, false)?;
+        manager.persist()?;
+        Ok(result)
+    })?;
+    if created {
+        spawn_task(task_id.clone(), app)?;
+    }
+    task_snapshot(&task_id)
+}
+
 pub fn remove_resource(
     resource_id: &str,
     confirmed: bool,
@@ -1297,6 +1322,7 @@ pub(crate) fn activate_staged_resource(
         entrypoints: effective_entrypoints(resource)?,
         files,
         health_status: "passed".to_owned(),
+        activated_at_ms: None,
     };
     if let Err(error) = local_resources::activate_resource(receipt) {
         let _ = remove_directory_if_exists(&destination);

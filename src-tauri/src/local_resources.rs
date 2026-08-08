@@ -240,6 +240,8 @@ pub struct ResourceReceipt {
     #[serde(default)]
     pub files: Vec<ReceiptFile>,
     pub health_status: String,
+    #[serde(default)]
+    pub activated_at_ms: Option<i64>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -349,6 +351,10 @@ pub(crate) fn resource_is_ready(resource_id: &str) -> Result<bool, LocalResource
     with_manager_read(|manager| Ok(manager.resource_ready(resource_id)))
 }
 
+pub(crate) fn resource_update_available(resource_id: &str) -> Result<bool, LocalResourceError> {
+    with_manager_read(|manager| Ok(manager.resource_update_available(resource_id)))
+}
+
 pub(crate) fn activate_resource(receipt: ResourceReceipt) -> Result<(), LocalResourceError> {
     with_manager_write(|manager| manager.activate_receipt(receipt))
 }
@@ -359,10 +365,23 @@ pub(crate) fn active_receipt(
     with_manager_read(|manager| manager.active_receipt(resource_id))
 }
 
+pub(crate) fn installed_receipts(
+    resource_id: &str,
+) -> Result<Vec<ResourceReceipt>, LocalResourceError> {
+    with_manager_read(|manager| manager.installed_receipts(resource_id))
+}
+
 pub(crate) fn deactivate_resource(
     resource_id: &str,
 ) -> Result<Option<ResourceReceipt>, LocalResourceError> {
     with_manager_write(|manager| manager.deactivate_resource(resource_id))
+}
+
+pub(crate) fn remove_inactive_receipt(
+    resource_id: &str,
+    version: &str,
+) -> Result<bool, LocalResourceError> {
+    with_manager_write(|manager| manager.remove_inactive_receipt(resource_id, version))
 }
 
 pub(crate) fn configuration_snapshot() -> Option<LocalResourceConfiguration> {
@@ -621,6 +640,7 @@ impl LocalResourceManager {
                     LocalResourceRootState::SetupRequired,
                     |_| false,
                     |_| false,
+                    |_| false,
                 ),
             });
         };
@@ -646,6 +666,7 @@ impl LocalResourceManager {
             root_state.clone(),
             |resource_id| self.resource_ready(resource_id),
             crate::resource_download::resource_is_preparing,
+            |resource_id| self.resource_update_available(resource_id),
         );
         Ok(LocalResourceStatus {
             configured: true,
@@ -675,6 +696,27 @@ impl LocalResourceManager {
             .entrypoints
             .keys()
             .all(|entrypoint| self.resolve_entrypoint(resource_id, entrypoint).is_ok())
+    }
+
+    fn resource_update_available(&self, resource_id: &str) -> bool {
+        if !self.resource_ready(resource_id) {
+            return false;
+        }
+        let Some(configuration) = self.configuration.as_ref() else {
+            return false;
+        };
+        let Some(active_version) = configuration.active_resources.get(resource_id) else {
+            return false;
+        };
+        catalog()
+            .ok()
+            .and_then(|catalog| {
+                catalog
+                    .resources
+                    .iter()
+                    .find(|resource| resource.id == resource_id)
+            })
+            .is_some_and(|resource| resource.version != *active_version)
     }
 
     fn required_resource_ids(
@@ -769,12 +811,19 @@ impl LocalResourceManager {
         Ok(receipt)
     }
 
-    fn activate_receipt(&mut self, receipt: ResourceReceipt) -> Result<(), LocalResourceError> {
+    fn activate_receipt(&mut self, mut receipt: ResourceReceipt) -> Result<(), LocalResourceError> {
         let configuration = self
             .configuration
             .as_mut()
             .ok_or_else(|| LocalResourceError::ResourceNotReady(receipt.resource_id.clone()))?;
         validate_receipt(&receipt, &receipt.resource_id, &receipt.version)?;
+        if receipt.health_status != "passed" {
+            return Err(LocalResourceError::InvalidReceipt(format!(
+                "{}@{} 的健康检查未通过，不能激活",
+                receipt.resource_id, receipt.version
+            )));
+        }
+        receipt.activated_at_ms = Some(now_ms());
         let receipt_directory = configuration_root(configuration)
             .join("receipts")
             .join(&receipt.resource_id);
@@ -802,6 +851,46 @@ impl LocalResourceManager {
         self.read_receipt(resource_id, version).map(Some)
     }
 
+    fn installed_receipts(
+        &self,
+        resource_id: &str,
+    ) -> Result<Vec<ResourceReceipt>, LocalResourceError> {
+        validate_identifier(resource_id, "资源 ID")?;
+        let Some(configuration) = self.configuration.as_ref() else {
+            return Ok(Vec::new());
+        };
+        let directory = configuration_root(configuration)
+            .join("receipts")
+            .join(resource_id);
+        if !directory.is_dir() {
+            return Ok(Vec::new());
+        }
+        let mut receipts = Vec::new();
+        for entry in fs::read_dir(directory)? {
+            let entry = entry?;
+            let path = entry.path();
+            if !entry.file_type()?.is_file()
+                || path.extension().and_then(|value| value.to_str()) != Some("json")
+            {
+                continue;
+            }
+            let Ok(receipt) = serde_json::from_slice::<ResourceReceipt>(&fs::read(&path)?) else {
+                continue;
+            };
+            if validate_receipt(&receipt, resource_id, &receipt.version).is_ok() {
+                receipts.push(receipt);
+            }
+        }
+        receipts.sort_by(|left, right| {
+            right
+                .activated_at_ms
+                .unwrap_or_default()
+                .cmp(&left.activated_at_ms.unwrap_or_default())
+                .then(right.version.cmp(&left.version))
+        });
+        Ok(receipts)
+    }
+
     fn deactivate_resource(
         &mut self,
         resource_id: &str,
@@ -823,6 +912,37 @@ impl LocalResourceManager {
             fs::remove_file(receipt_path)?;
         }
         Ok(Some(receipt))
+    }
+
+    fn remove_inactive_receipt(
+        &mut self,
+        resource_id: &str,
+        version: &str,
+    ) -> Result<bool, LocalResourceError> {
+        validate_identifier(resource_id, "资源 ID")?;
+        validate_identifier(version, "资源版本")?;
+        let configuration = self
+            .configuration
+            .as_ref()
+            .ok_or(LocalResourceError::ConfirmationRequired)?;
+        if configuration
+            .active_resources
+            .get(resource_id)
+            .is_some_and(|active| active == version)
+        {
+            return Err(LocalResourceError::ResourceNotReady(format!(
+                "不能删除活动版本 {resource_id}@{version}"
+            )));
+        }
+        let path = configuration_root(configuration)
+            .join("receipts")
+            .join(resource_id)
+            .join(format!("{version}.json"));
+        if !path.is_file() {
+            return Ok(false);
+        }
+        fs::remove_file(path)?;
+        Ok(true)
     }
 }
 
@@ -944,6 +1064,7 @@ fn capability_statuses(
     root_state: LocalResourceRootState,
     mut is_ready: impl FnMut(&str) -> bool,
     mut is_preparing: impl FnMut(&str) -> bool,
+    mut has_update: impl FnMut(&str) -> bool,
 ) -> Vec<LocalResourceCapabilityStatus> {
     let profile_resources = catalog
         .profiles
@@ -977,6 +1098,9 @@ fn capability_statuses(
         let has_preparing_resource = required_resource_ids
             .iter()
             .any(|resource_id| is_preparing(resource_id));
+        let has_update_available = required_resource_ids
+            .iter()
+            .any(|resource_id| has_update(resource_id));
         let state = match root_state {
             LocalResourceRootState::SetupRequired => LocalResourceCapabilityState::SetupRequired,
             LocalResourceRootState::RootUnavailable => {
@@ -987,7 +1111,11 @@ fn capability_statuses(
                 if missing_resource_ids.is_empty() && dependencies_ready =>
             {
                 ready_capabilities.insert(capability.id.clone());
-                LocalResourceCapabilityState::Ready
+                if has_update_available {
+                    LocalResourceCapabilityState::UpdateAvailable
+                } else {
+                    LocalResourceCapabilityState::Ready
+                }
             }
             LocalResourceRootState::Ready if has_preparing_resource => {
                 LocalResourceCapabilityState::Preparing
@@ -1267,6 +1395,14 @@ fn path_string(path: &Path) -> String {
     path.to_string_lossy().into_owned()
 }
 
+fn now_ms() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis()
+        .min(i64::MAX as u128) as i64
+}
+
 fn verify_writable(directory: &Path) -> Result<(), LocalResourceError> {
     let probe = directory.join(format!(".write-probe-{}", std::process::id()));
     File::create(&probe)?.write_all(b"SiaoVPlay")?;
@@ -1335,6 +1471,22 @@ mod tests {
     use super::*;
     use tempfile::tempdir;
 
+    fn fixture_receipt(version: &str, health_status: &str) -> ResourceReceipt {
+        ResourceReceipt {
+            schema_version: RECEIPT_SCHEMA_VERSION,
+            resource_id: "ffmpeg-cpu".to_owned(),
+            version: version.to_owned(),
+            install_relative_path: format!("packages/ffmpeg-cpu/{version}"),
+            entrypoints: BTreeMap::from([
+                ("ffmpeg".to_owned(), "bin/ffmpeg.exe".to_owned()),
+                ("ffprobe".to_owned(), "bin/ffprobe.exe".to_owned()),
+            ]),
+            files: Vec::new(),
+            health_status: health_status.to_owned(),
+            activated_at_ms: None,
+        }
+    }
+
     #[test]
     fn embedded_catalog_is_valid_and_app_only() {
         let catalog = catalog().expect("catalog should parse");
@@ -1363,6 +1515,7 @@ mod tests {
             LocalResourceRootState::Ready,
             |_| false,
             |resource_id| resource_id == "ffmpeg-cpu",
+            |_| false,
         );
         assert_eq!(
             statuses
@@ -1557,6 +1710,105 @@ mod tests {
     }
 
     #[test]
+    fn failed_new_version_keeps_the_previous_version_active_and_update_is_visible() {
+        let data = tempdir().expect("data directory");
+        let parent = tempdir().expect("resource parent");
+        let mut manager = LocalResourceManager::load(data.path()).expect("manager should load");
+        manager
+            .configure_location(parent.path().to_str().expect("UTF-8 path"), true)
+            .expect("configuration should succeed");
+        let root = parent.path().join(RESOURCE_DIRECTORY_NAME);
+        for version in ["7.0", "8.1"] {
+            let install = root.join(format!("packages/ffmpeg-cpu/{version}/bin"));
+            fs::create_dir_all(&install).expect("install directory should create");
+            fs::write(install.join("ffmpeg.exe"), b"ffmpeg").expect("ffmpeg should write");
+            fs::write(install.join("ffprobe.exe"), b"ffprobe").expect("ffprobe should write");
+        }
+        manager
+            .activate_receipt(fixture_receipt("7.0", "passed"))
+            .expect("old version should activate");
+        assert!(manager.resource_update_available("ffmpeg-cpu"));
+        assert_eq!(
+            manager
+                .status()
+                .expect("status should resolve")
+                .capabilities
+                .iter()
+                .find(|capability| capability.id == "basic_media")
+                .expect("basic media should exist")
+                .state,
+            LocalResourceCapabilityState::UpdateAvailable
+        );
+
+        let error = manager
+            .activate_receipt(fixture_receipt("8.1", "failed"))
+            .expect_err("failed health must not activate");
+        assert!(matches!(error, LocalResourceError::InvalidReceipt(_)));
+        assert_eq!(
+            manager
+                .configuration
+                .as_ref()
+                .and_then(|configuration| configuration.active_resources.get("ffmpeg-cpu"))
+                .map(String::as_str),
+            Some("7.0")
+        );
+        assert!(!root.join("receipts/ffmpeg-cpu/8.1.json").exists());
+
+        manager
+            .activate_receipt(fixture_receipt("8.1", "passed"))
+            .expect("healthy new version should activate");
+        assert_eq!(
+            manager
+                .configuration
+                .as_ref()
+                .and_then(|configuration| configuration.active_resources.get("ffmpeg-cpu"))
+                .map(String::as_str),
+            Some("8.1")
+        );
+        assert!(root.join("receipts/ffmpeg-cpu/7.0.json").is_file());
+        assert!(!manager.resource_update_available("ffmpeg-cpu"));
+    }
+
+    #[test]
+    fn external_resource_root_survives_upgrade_reinstall_and_app_removal_simulation() {
+        let data = tempdir().expect("persistent app data");
+        let resource_parent = tempdir().expect("external resource parent");
+        let install_directory = tempdir().expect("application install directory");
+        fs::write(install_directory.path().join("SiaoVPlay.exe"), b"app")
+            .expect("app fixture should write");
+        let mut manager = LocalResourceManager::load(data.path()).expect("manager should load");
+        manager
+            .configure_location(resource_parent.path().to_str().expect("UTF-8 path"), true)
+            .expect("configuration should succeed");
+        let root = resource_parent.path().join(RESOURCE_DIRECTORY_NAME);
+        let install = root.join("packages/ffmpeg-cpu/8.1/bin");
+        fs::create_dir_all(&install).expect("resource install should create");
+        fs::write(install.join("ffmpeg.exe"), b"ffmpeg").expect("ffmpeg should write");
+        fs::write(install.join("ffprobe.exe"), b"ffprobe").expect("ffprobe should write");
+        manager
+            .activate_receipt(fixture_receipt("8.1", "passed"))
+            .expect("resource should activate");
+
+        drop(install_directory);
+        assert!(
+            root.is_dir(),
+            "default app removal must not touch external resources"
+        );
+        assert!(data.path().join(CONFIG_FILE_NAME).is_file());
+        let expected_root = path_string(&root);
+        let upgraded = LocalResourceManager::load(data.path())
+            .expect("upgrade or reinstall should reuse persistent settings");
+        assert_eq!(
+            upgraded
+                .configuration
+                .as_ref()
+                .map(|configuration| configuration.resource_root.as_str()),
+            Some(expected_root.as_str())
+        );
+        assert!(upgraded.resource_ready("ffmpeg-cpu"));
+    }
+
+    #[test]
     fn resolver_uses_active_receipt_and_rejects_unsafe_paths() {
         let data = tempdir().expect("data directory");
         let parent = tempdir().expect("resource parent");
@@ -1579,6 +1831,7 @@ mod tests {
                 entrypoints,
                 files: Vec::new(),
                 health_status: "passed".to_owned(),
+                activated_at_ms: None,
             })
             .expect("receipt should activate");
         manager

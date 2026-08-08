@@ -153,6 +153,33 @@ function makeController(
       removedResourceIds: [],
       reclaimedBytes: 0,
     }),
+    loadDiagnostics: vi.fn().mockResolvedValue({
+      diagnostics: {
+        generatedAtMs: 1,
+        catalogSource: "embedded",
+        remoteCatalogEnabled: false,
+        remoteSignaturePolicy: "ed25519-detached-v1-required-before-enable",
+        rootState: "ready",
+        resourceRoot: "W:\\SiaoVPlay\\SiaoVPlay",
+        preferredProfile: "standard",
+        resources: [],
+        tasks: [],
+      },
+      thirdPartyNotices: "# 第三方许可说明",
+    }),
+    diagnosticSummary: vi.fn().mockResolvedValue("脱敏诊断摘要"),
+    updateResource: vi.fn(),
+    rollbackResource: vi.fn(),
+    planOldVersionCleanup: vi.fn().mockResolvedValue({
+      candidates: [],
+      protectedVersions: [],
+      reclaimableBytes: 0,
+      confirmationRequired: true,
+    }),
+    cleanupOldVersions: vi.fn().mockResolvedValue({
+      removedVersions: [],
+      reclaimedBytes: 0,
+    }),
     selectProfile: vi.fn().mockResolvedValue(setupStatus),
     prepareCapability: vi.fn().mockResolvedValue({
       capabilityId: "basic_media",
@@ -617,5 +644,115 @@ describe("LocalResourcesDialog", () => {
     expect(
       screen.getByRole("button", { name: "修复 ffmpeg-cpu" }),
     ).toBeVisible();
+  });
+
+  it("loads version history, supports safe update and rollback, and copies a redacted summary", async () => {
+    const readyStatus: LocalResourceStatus = {
+      ...setupStatus,
+      configured: true,
+      resourceRoot: "W:\\SiaoVPlay\\SiaoVPlay",
+      rootState: "ready",
+      capabilities: setupStatus.capabilities.map((capability) => ({
+        ...capability,
+        state: capability.id === "url_import" ? "update_available" : "ready",
+        missingResourceIds: [],
+      })),
+    };
+    const loadDiagnostics = vi.fn().mockResolvedValue({
+      diagnostics: {
+        generatedAtMs: 1,
+        catalogSource: "embedded",
+        remoteCatalogEnabled: false,
+        remoteSignaturePolicy: "ed25519-detached-v1-required-before-enable",
+        rootState: "ready",
+        resourceRoot: "W:\\SiaoVPlay\\SiaoVPlay",
+        preferredProfile: "standard",
+        resources: [
+          {
+            id: "yt-dlp",
+            catalogVersion: "2026.06.09",
+            activeVersion: "2026.05.01",
+            state: "update_available",
+            license: "GPL-3.0-or-later",
+            sourcePage: "https://example.com/yt-dlp",
+            artifactSha256: "b".repeat(64),
+            artifactUrl: "https://example.com/yt-dlp.exe",
+            healthCheck: "yt-dlp-version",
+            versions: [
+              {
+                version: "2026.05.01",
+                active: true,
+                installPath: "W:\\SiaoVPlay\\packages\\yt-dlp\\2026.05.01",
+                fileCount: 1,
+                installedBytes: 18_000_000,
+                manifestSha256: "c".repeat(64),
+                healthStatus: "passed",
+                activatedAtMs: 2,
+                entrypointsAvailable: true,
+              },
+              {
+                version: "2026.04.01",
+                active: false,
+                installPath: "W:\\SiaoVPlay\\packages\\yt-dlp\\2026.04.01",
+                fileCount: 1,
+                installedBytes: 17_000_000,
+                manifestSha256: "d".repeat(64),
+                healthStatus: "passed",
+                activatedAtMs: 1,
+                entrypointsAvailable: true,
+              },
+            ],
+          },
+        ],
+        tasks: [],
+      },
+      thirdPartyNotices: "# 第三方许可说明\n\n本安装包不包含可选资源。",
+    });
+    const updateResource = vi.fn().mockResolvedValue({});
+    const rollbackResource = vi.fn().mockResolvedValue({
+      resourceId: "yt-dlp",
+      previousVersion: "2026.05.01",
+      activeVersion: "2026.04.01",
+    });
+    const diagnosticSummary = vi.fn().mockResolvedValue("不含 token 的脱敏摘要");
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+    render(
+      <LocalResourcesDialog
+        controller={makeController({
+          status: readyStatus,
+          loadDiagnostics,
+          updateResource,
+          rollbackResource,
+          diagnosticSummary,
+        })}
+        firstRun={false}
+        pendingAction={null}
+        previewMode={false}
+        onClose={() => undefined}
+        onDismissFirstRun={() => undefined}
+        onNotice={() => undefined}
+      />,
+    );
+
+    fireEvent.click(screen.getByText("高级诊断与第三方许可"));
+    expect(await screen.findByText("当前使用内置可信目录清单")).toBeVisible();
+    expect(screen.getByText("2026.05.01（活动）")).toBeVisible();
+    expect(screen.getByText("2026.04.01")).toBeVisible();
+    expect(screen.getByText(/路径 W:\\SiaoVPlay.*2026\.05\.01/)).toBeVisible();
+    expect(screen.getAllByText(/健康检查 passed/)).toHaveLength(2);
+    fireEvent.click(screen.getByRole("button", { name: "回退到 2026.04.01" }));
+    await waitFor(() =>
+      expect(rollbackResource).toHaveBeenCalledWith("yt-dlp", "2026.04.01"),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "复制脱敏诊断摘要" }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith("不含 token 的脱敏摘要"));
+    fireEvent.click(screen.getByText("查看完整第三方许可说明"));
+    expect(screen.getByText(/本安装包不包含可选资源/)).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "更新 yt-dlp" }));
+    await waitFor(() => expect(updateResource).toHaveBeenCalledWith("yt-dlp"));
   });
 });

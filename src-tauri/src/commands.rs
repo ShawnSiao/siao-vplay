@@ -28,6 +28,11 @@ use crate::{
         self, CancelRemoteMediaImportInput, ImportRemoteMediaUrlInput, InspectRemoteMediaUrlInput,
         RemoteMediaError, RemoteMediaPreview,
     },
+    resource_diagnostics::{
+        self, CleanupOldResourceVersionsInput, LocalResourceDiagnostics,
+        OldResourceVersionCleanupPlan, OldResourceVersionCleanupResult, ResourceDiagnosticsError,
+        ResourceRollbackResult, RollbackLocalResourceInput,
+    },
     resource_download::{
         self, CapabilityPreparation, PrepareLocalCapabilityInput, RemoveLocalResourceInput,
         RepairLocalResourceInput, ResourceDownloadError, ResourceDownloadTask,
@@ -389,6 +394,15 @@ impl From<ResourceDownloadError> for CommandError {
     }
 }
 
+impl From<ResourceDiagnosticsError> for CommandError {
+    fn from(error: ResourceDiagnosticsError) -> Self {
+        Self {
+            code: error.code(),
+            message: error.to_string(),
+        }
+    }
+}
+
 impl From<ResourceMigrationError> for CommandError {
     fn from(error: ResourceMigrationError) -> Self {
         Self {
@@ -737,10 +751,52 @@ pub fn repair_local_resource(
 }
 
 #[tauri::command]
+pub fn update_local_resource(
+    app: AppHandle,
+    input: RepairLocalResourceInput,
+) -> Result<ResourceDownloadTask, CommandError> {
+    resource_download::update_resource(&input.resource_id, Some(app)).map_err(Into::into)
+}
+
+#[tauri::command]
 pub fn remove_local_resource(
     input: RemoveLocalResourceInput,
 ) -> Result<ResourceRemovalResult, CommandError> {
     resource_download::remove_resource(&input.resource_id, input.confirmed).map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn get_local_resource_diagnostics() -> Result<LocalResourceDiagnostics, CommandError> {
+    resource_diagnostics::diagnostics().map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn get_local_resource_diagnostic_summary() -> Result<String, CommandError> {
+    resource_diagnostics::diagnostic_summary().map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn get_local_resource_third_party_notices() -> String {
+    resource_diagnostics::third_party_notices().to_owned()
+}
+
+#[tauri::command]
+pub fn rollback_local_resource(
+    input: RollbackLocalResourceInput,
+) -> Result<ResourceRollbackResult, CommandError> {
+    resource_diagnostics::rollback_resource(input).map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn plan_old_resource_version_cleanup() -> Result<OldResourceVersionCleanupPlan, CommandError> {
+    resource_diagnostics::plan_old_version_cleanup().map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn cleanup_old_resource_versions(
+    input: CleanupOldResourceVersionsInput,
+) -> Result<OldResourceVersionCleanupResult, CommandError> {
+    resource_diagnostics::cleanup_old_versions(input).map_err(Into::into)
 }
 
 #[tauri::command]

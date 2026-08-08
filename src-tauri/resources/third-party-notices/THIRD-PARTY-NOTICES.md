@@ -12,4 +12,4 @@
 | Silero VAD | https://github.com/snakers4/silero-vad | MIT |
 | OpenAI Whisper 模型 | https://github.com/openai/whisper | MIT |
 
-固定版本、下载地址、大小和 SHA-256 记录在 `local-resource-catalog.json`。资源管理器完成后，应用将在下载和诊断界面提供对应许可材料。
+固定版本、下载地址、大小和 SHA-256 记录在 `local-resource-catalog.json`。应用的「高级诊断与第三方许可」提供活动版本、来源、完整性信息和本许可说明；普通使用流程不显示这些技术细节。

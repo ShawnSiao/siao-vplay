@@ -25,6 +25,7 @@ import type {
   LocalResourceLocationPlan,
   LocalResourceMovePlan,
   LocalResourceMoveResult,
+  LocalResourceDiagnostics,
   LocalResourceStatus,
   MediaPreparation,
   MediaRuntimeStatus,
@@ -35,6 +36,9 @@ import type {
   ResourceAdoptionResult,
   ResourceMigrationPreview,
   ResourceRemovalResult,
+  ResourceRollbackResult,
+  OldResourceVersionCleanupPlan,
+  OldResourceVersionCleanupResult,
   UnusedResourceCleanupPlan,
   UnusedResourceCleanupResult,
   SubtitleGlobalReplacement,
@@ -492,12 +496,51 @@ export async function repairLocalResource(
   });
 }
 
+export async function updateLocalResource(
+  resourceId: string,
+): Promise<ResourceDownloadTask> {
+  return invoke<ResourceDownloadTask>("update_local_resource", {
+    input: { resourceId },
+  });
+}
+
 export async function removeLocalResource(
   resourceId: string,
   confirmed: boolean,
 ): Promise<ResourceRemovalResult> {
   return invoke<ResourceRemovalResult>("remove_local_resource", {
     input: { resourceId, confirmed },
+  });
+}
+
+export async function getLocalResourceDiagnostics(): Promise<LocalResourceDiagnostics> {
+  return invoke<LocalResourceDiagnostics>("get_local_resource_diagnostics");
+}
+
+export async function getLocalResourceDiagnosticSummary(): Promise<string> {
+  return invoke<string>("get_local_resource_diagnostic_summary");
+}
+
+export async function getLocalResourceThirdPartyNotices(): Promise<string> {
+  return invoke<string>("get_local_resource_third_party_notices");
+}
+
+export async function rollbackLocalResource(
+  resourceId: string,
+  version: string,
+): Promise<ResourceRollbackResult> {
+  return invoke<ResourceRollbackResult>("rollback_local_resource", {
+    input: { resourceId, version, confirmed: true },
+  });
+}
+
+export async function planOldResourceVersionCleanup(): Promise<OldResourceVersionCleanupPlan> {
+  return invoke<OldResourceVersionCleanupPlan>("plan_old_resource_version_cleanup");
+}
+
+export async function cleanupOldResourceVersions(): Promise<OldResourceVersionCleanupResult> {
+  return invoke<OldResourceVersionCleanupResult>("cleanup_old_resource_versions", {
+    input: { confirmed: true },
   });
 }
 

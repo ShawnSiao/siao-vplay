@@ -8,7 +8,10 @@ import {
   commandError,
   configureLocalResourceRoot,
   getLocalResourceCatalog,
+  getLocalResourceDiagnostics,
+  getLocalResourceDiagnosticSummary,
   getLocalResourceStatus,
+  getLocalResourceThirdPartyNotices,
   inspectLocalResourceMigration,
   listenResourceDownloadTasks,
   listResourceDownloadTasks,
@@ -16,15 +19,19 @@ import {
   planLocalResourceMove,
   planLocalResourceLocation,
   planUnusedResourceCleanup,
+  planOldResourceVersionCleanup,
   prepareLocalCapability,
   removeLocalResource,
   reconnectLocalResourceRoot,
   repairLocalResource,
   repairLocalResourceRoot,
+  rollbackLocalResource,
   resumeResourceDownload,
   retryResourceDownload,
   setLocalResourceProfile,
   moveLocalResourceRoot,
+  updateLocalResource,
+  cleanupOldResourceVersions,
 } from "../../lib/desktop";
 import type {
   CapabilityPreparation,
@@ -32,11 +39,15 @@ import type {
   LocalResourceLocationPlan,
   LocalResourceMovePlan,
   LocalResourceMoveResult,
+  LocalResourceDiagnostics,
   LocalResourceStatus,
   ResourceAdoptionResult,
   ResourceDownloadTask,
   ResourceMigrationPreview,
   ResourceRemovalResult,
+  ResourceRollbackResult,
+  OldResourceVersionCleanupPlan,
+  OldResourceVersionCleanupResult,
   UnusedResourceCleanupPlan,
   UnusedResourceCleanupResult,
 } from "../../types";
@@ -76,6 +87,18 @@ export type LocalResourcesController = {
   reconnectRoot: () => Promise<LocalResourceStatus | null>;
   planCleanup: () => Promise<UnusedResourceCleanupPlan>;
   cleanupUnused: () => Promise<UnusedResourceCleanupResult>;
+  loadDiagnostics: () => Promise<{
+    diagnostics: LocalResourceDiagnostics;
+    thirdPartyNotices: string;
+  }>;
+  diagnosticSummary: () => Promise<string>;
+  updateResource: (resourceId: string) => Promise<ResourceDownloadTask>;
+  rollbackResource: (
+    resourceId: string,
+    version: string,
+  ) => Promise<ResourceRollbackResult>;
+  planOldVersionCleanup: () => Promise<OldResourceVersionCleanupPlan>;
+  cleanupOldVersions: () => Promise<OldResourceVersionCleanupResult>;
   selectProfile: (profileId: string) => Promise<LocalResourceStatus>;
   prepareCapability: (
     capabilityId: string,
@@ -409,6 +432,63 @@ export function useLocalResources(): LocalResourcesController {
     cleanupUnused: async () => {
       try {
         const result = await cleanupUnusedResources();
+        setStatus(await getLocalResourceStatus());
+        setError(null);
+        return result;
+      } catch (cause) {
+        captureError(cause);
+        throw cause;
+      }
+    },
+    loadDiagnostics: async () => {
+      try {
+        const [diagnostics, thirdPartyNotices] = await Promise.all([
+          getLocalResourceDiagnostics(),
+          getLocalResourceThirdPartyNotices(),
+        ]);
+        setError(null);
+        return { diagnostics, thirdPartyNotices };
+      } catch (cause) {
+        captureError(cause);
+        throw cause;
+      }
+    },
+    diagnosticSummary: async () => {
+      try {
+        const summary = await getLocalResourceDiagnosticSummary();
+        setError(null);
+        return summary;
+      } catch (cause) {
+        captureError(cause);
+        throw cause;
+      }
+    },
+    updateResource: (resourceId) =>
+      updateTask(() => updateLocalResource(resourceId)),
+    rollbackResource: async (resourceId, version) => {
+      try {
+        const result = await rollbackLocalResource(resourceId, version);
+        setStatus(await getLocalResourceStatus());
+        setError(null);
+        return result;
+      } catch (cause) {
+        captureError(cause);
+        throw cause;
+      }
+    },
+    planOldVersionCleanup: async () => {
+      try {
+        const plan = await planOldResourceVersionCleanup();
+        setError(null);
+        return plan;
+      } catch (cause) {
+        captureError(cause);
+        throw cause;
+      }
+    },
+    cleanupOldVersions: async () => {
+      try {
+        const result = await cleanupOldResourceVersions();
         setStatus(await getLocalResourceStatus());
         setError(null);
         return result;

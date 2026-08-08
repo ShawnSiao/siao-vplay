@@ -3,11 +3,13 @@ import { useMemo, useState } from "react";
 import type { LocalResourcesController } from "../features/resources/useLocalResources";
 import type {
   LocalResourceCapabilityStatus,
+  LocalResourceDiagnostics,
   LocalResourceLocationPlan,
   LocalResourceMovePlan,
   ResourceDownloadTask,
   ResourceMigrationPreview,
   UnusedResourceCleanupPlan,
+  OldResourceVersionCleanupPlan,
 } from "../types";
 import { Dialog } from "./Dialog";
 
@@ -143,6 +145,10 @@ export function LocalResourcesDialog({
   const [movePlan, setMovePlan] = useState<LocalResourceMovePlan | null>(null);
   const [cleanupPlan, setCleanupPlan] =
     useState<UnusedResourceCleanupPlan | null>(null);
+  const [diagnostics, setDiagnostics] = useState<LocalResourceDiagnostics | null>(null);
+  const [thirdPartyNotices, setThirdPartyNotices] = useState<string | null>(null);
+  const [oldVersionCleanupPlan, setOldVersionCleanupPlan] =
+    useState<OldResourceVersionCleanupPlan | null>(null);
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
 
@@ -226,6 +232,7 @@ export function LocalResourcesDialog({
 
   const capabilityInstallable = (capability: LocalResourceCapabilityStatus) =>
     capability.state === "ready" ||
+    capability.state === "update_available" ||
     (missingResourceIdsByCapability.get(capability.id) ?? []).every(
       (resourceId) => resourceById.get(resourceId)?.artifact,
     );
@@ -262,7 +269,9 @@ export function LocalResourcesDialog({
     selectedCapabilities.every(capabilityInstallable) &&
     selectedCapabilities.some(
       (capability) =>
-        capability.state !== "ready" && capability.state !== "preparing",
+        capability.state !== "ready" &&
+        capability.state !== "update_available" &&
+        capability.state !== "preparing",
     );
   const selectionPreparing = selectedCapabilities.some(
     (capability) => capability.state === "preparing",
@@ -388,10 +397,74 @@ export function LocalResourcesDialog({
       );
     });
 
+  const loadDiagnostics = () =>
+    runAction("load-diagnostics", async () => {
+      const result = await controller.loadDiagnostics();
+      setDiagnostics(result.diagnostics);
+      setThirdPartyNotices(result.thirdPartyNotices);
+    });
+
+  const copyDiagnosticSummary = () =>
+    runAction("copy-diagnostics", async () => {
+      const summary = await controller.diagnosticSummary();
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(summary);
+      } else {
+        const textarea = document.createElement("textarea");
+        textarea.value = summary;
+        textarea.style.position = "fixed";
+        textarea.style.opacity = "0";
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand("copy");
+        textarea.remove();
+      }
+      onNotice("已复制脱敏后的本地资源诊断摘要。");
+    });
+
+  const updateResource = (resourceId: string) =>
+    runAction(`update-${resourceId}`, async () => {
+      await controller.updateResource(resourceId);
+      setDiagnostics(null);
+      onNotice("资源更新已开始；新版本验证通过前会继续使用当前版本。");
+    });
+
+  const rollbackResource = (resourceId: string, version: string) =>
+    runAction(`rollback-${resourceId}-${version}`, async () => {
+      await controller.rollbackResource(resourceId, version);
+      const result = await controller.loadDiagnostics();
+      setDiagnostics(result.diagnostics);
+      setThirdPartyNotices(result.thirdPartyNotices);
+      onNotice(`已切换到已验证版本 ${version}。`);
+    });
+
+  const inspectOldVersionCleanup = () =>
+    runAction("plan-old-version-cleanup", async () => {
+      const plan = await controller.planOldVersionCleanup();
+      setOldVersionCleanupPlan(plan);
+      if (plan.candidates.length === 0) {
+        onNotice("当前没有可清理的旧资源版本；活动版本和最近一个历史版本会保留。");
+      }
+    });
+
+  const confirmOldVersionCleanup = () =>
+    runAction("cleanup-old-versions", async () => {
+      const result = await controller.cleanupOldVersions();
+      setOldVersionCleanupPlan(null);
+      setDiagnostics(null);
+      onNotice(
+        result.removedVersions.length > 0
+          ? `已清理 ${result.removedVersions.length} 个旧资源版本。`
+          : "当前没有需要清理的旧版本。",
+      );
+    });
+
   const prepareSelection = async () => {
     const capabilities = selectedCapabilities.filter(
       (capability) =>
-        capability.state !== "ready" && capability.state !== "preparing",
+        capability.state !== "ready" &&
+        capability.state !== "update_available" &&
+        capability.state !== "preparing",
     );
     for (const capability of capabilities) {
       await controller.prepareCapability(
@@ -613,6 +686,7 @@ export function LocalResourcesDialog({
                           previewMode ||
                           locked ||
                           capability.state === "ready" ||
+                          capability.state === "update_available" ||
                           !installable ||
                           busyAction !== null
                         }
@@ -625,8 +699,11 @@ export function LocalResourcesDialog({
                             "在需要时准备对应的本地功能。"}
                         </span>
                         <small>
-                          {capability.state === "ready"
-                            ? "无需下载"
+                          {capability.state === "ready" ||
+                          capability.state === "update_available"
+                            ? capability.state === "update_available"
+                              ? "当前可用，可选择更新"
+                              : "无需下载"
                             : installable
                               ? `需下载 ${formatBytes(downloadBytes)}`
                               : "当前不能开始下载"}
@@ -946,17 +1023,45 @@ export function LocalResourcesDialog({
         ) : null}
 
         {catalog && status ? (
-          <details className="local-resource-diagnostics">
+          <details
+            className="local-resource-diagnostics"
+            onToggle={(event) => {
+              if (event.currentTarget.open && !diagnostics && busyAction === null) {
+                void loadDiagnostics();
+              }
+            }}
+          >
             <summary>高级诊断与第三方许可</summary>
             <p>
               以下信息用于核对资源版本、完整性和许可证。普通使用不需要修改这些内容。
             </p>
+            {diagnostics ? (
+              <div className="notice" role="status">
+                <strong>当前使用内置可信目录清单</strong>
+                <p>
+                  远程目录尚未启用；只有完成独立 Ed25519 签名、过期时间和防回滚验证后才会开放。
+                </p>
+              </div>
+            ) : (
+              <div className="local-resources-loading" role="status">
+                <span className="spinner" />
+                <span>正在读取版本与健康状态…</span>
+              </div>
+            )}
             <div className="local-resource-diagnostic-list">
-              {catalog.resources.map((resource) => (
-                <article key={resource.id}>
+              {catalog.resources.map((resource) => {
+                const diagnostic = diagnostics?.resources.find(
+                  (item) => item.id === resource.id,
+                );
+                return (
+                  <article key={resource.id}>
                   <div>
                     <strong>{resource.id}</strong>
-                    <span>{resource.version}</span>
+                    <span>
+                      {diagnostic?.activeVersion
+                        ? `当前 ${diagnostic.activeVersion}`
+                        : `目录 ${resource.version}`}
+                    </span>
                   </div>
                   <dl>
                     <div>
@@ -981,9 +1086,53 @@ export function LocalResourcesDialog({
                   ) : (
                     <span>尚无可下载制品</span>
                   )}
+                  {diagnostic?.artifactUrl ? (
+                    <code title={diagnostic.artifactUrl}>
+                      下载地址 {diagnostic.artifactUrl}
+                    </code>
+                  ) : null}
                   <a href={resource.sourcePage} target="_blank" rel="noreferrer">
                     查看来源与许可说明
                   </a>
+                  {diagnostic?.versions.map((version) => (
+                    <div className="local-resource-version" key={version.version}>
+                      <div>
+                        <strong>
+                          {version.version}
+                          {version.active ? "（活动）" : ""}
+                        </strong>
+                        <span>
+                          {formatBytes(version.installedBytes)} · {version.fileCount} 个文件 ·
+                          {version.entrypointsAvailable ? " 入口可用" : " 入口缺失"} ·
+                          {` 健康检查 ${version.healthStatus}`}
+                        </span>
+                      </div>
+                      <code>路径 {version.installPath}</code>
+                      <code>清单 {version.manifestSha256}</code>
+                      {!version.active && version.entrypointsAvailable ? (
+                        <button
+                          className="button quiet"
+                          type="button"
+                          disabled={previewMode || busyAction !== null}
+                          onClick={() =>
+                            void rollbackResource(resource.id, version.version)
+                          }
+                        >
+                          回退到 {version.version}
+                        </button>
+                      ) : null}
+                    </div>
+                  ))}
+                  {diagnostic?.state === "update_available" && resource.artifact ? (
+                    <button
+                      className="button quiet"
+                      type="button"
+                      disabled={busyAction !== null || previewMode}
+                      onClick={() => void updateResource(resource.id)}
+                    >
+                      更新 {resource.id}
+                    </button>
+                  ) : null}
                   {activeResourceIds.has(resource.id) && resource.artifact ? (
                     <button
                       className="button quiet"
@@ -998,10 +1147,40 @@ export function LocalResourcesDialog({
                       修复 {resource.id}
                     </button>
                   ) : null}
-                </article>
-              ))}
+                  </article>
+                );
+              })}
             </div>
+            {diagnostics && diagnostics.tasks.length > 0 ? (
+              <section className="local-resource-task-diagnostics">
+                <strong>下载与安装任务</strong>
+                {diagnostics.tasks.map((task) => (
+                  <div key={task.id}>
+                    <span>
+                      {task.resourceId} · {task.version} · {task.state} ·
+                      {` ${formatBytes(task.downloadedBytes)} / ${formatBytes(
+                        task.totalBytes,
+                      )}`}
+                    </span>
+                    {task.errorCode || task.errorMessage ? (
+                      <code>
+                        {task.errorCode ?? "未分类"}
+                        {task.errorMessage ? `：${task.errorMessage}` : ""}
+                      </code>
+                    ) : null}
+                  </div>
+                ))}
+              </section>
+            ) : null}
             <div className="local-resource-location-actions">
+              <button
+                className="button quiet"
+                type="button"
+                disabled={previewMode || busyAction !== null}
+                onClick={() => void copyDiagnosticSummary()}
+              >
+                {busyAction === "copy-diagnostics" ? "正在复制…" : "复制脱敏诊断摘要"}
+              </button>
               <button
                 className="button quiet"
                 type="button"
@@ -1022,7 +1201,37 @@ export function LocalResourcesDialog({
                     : `清理 ${formatBytes(cleanupPlan.reclaimableBytes)}`}
                 </button>
               ) : null}
+              <button
+                className="button quiet"
+                type="button"
+                disabled={previewMode || busyAction !== null}
+                onClick={() => void inspectOldVersionCleanup()}
+              >
+                {busyAction === "plan-old-version-cleanup"
+                  ? "正在计算…"
+                  : "检查旧资源版本"}
+              </button>
+              {oldVersionCleanupPlan && oldVersionCleanupPlan.candidates.length > 0 ? (
+                <button
+                  className="text-button danger"
+                  type="button"
+                  disabled={previewMode || busyAction !== null}
+                  onClick={() => void confirmOldVersionCleanup()}
+                >
+                  {busyAction === "cleanup-old-versions"
+                    ? "正在清理…"
+                    : `清理旧版本 ${formatBytes(
+                        oldVersionCleanupPlan.reclaimableBytes,
+                      )}`}
+                </button>
+              ) : null}
             </div>
+            {thirdPartyNotices ? (
+              <details className="local-resource-license-notices">
+                <summary>查看完整第三方许可说明</summary>
+                <pre>{thirdPartyNotices}</pre>
+              </details>
+            ) : null}
           </details>
         ) : null}
 

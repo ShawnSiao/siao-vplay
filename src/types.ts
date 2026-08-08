@@ -713,6 +713,78 @@ export type UnusedResourceCleanupResult = {
   reclaimedBytes: number;
 };
 
+export type ResourceVersionDiagnostic = {
+  version: string;
+  active: boolean;
+  installPath: string;
+  fileCount: number;
+  installedBytes: number;
+  manifestSha256: string;
+  healthStatus: string;
+  activatedAtMs: number | null;
+  entrypointsAvailable: boolean;
+};
+
+export type ResourceDiagnosticItem = {
+  id: string;
+  catalogVersion: string;
+  activeVersion: string | null;
+  state: "not_installed" | "ready" | "update_available" | "repair_required";
+  license: string;
+  sourcePage: string;
+  artifactSha256: string | null;
+  artifactUrl: string | null;
+  healthCheck: string;
+  versions: ResourceVersionDiagnostic[];
+};
+
+export type ResourceTaskDiagnostic = {
+  id: string;
+  resourceId: string;
+  version: string;
+  state: string;
+  downloadedBytes: number;
+  totalBytes: number;
+  errorCode: string | null;
+  errorMessage: string | null;
+};
+
+export type LocalResourceDiagnostics = {
+  generatedAtMs: number;
+  catalogSource: "embedded";
+  remoteCatalogEnabled: false;
+  remoteSignaturePolicy: string;
+  rootState: LocalResourceRootState;
+  resourceRoot: string | null;
+  preferredProfile: string;
+  resources: ResourceDiagnosticItem[];
+  tasks: ResourceTaskDiagnostic[];
+};
+
+export type ResourceRollbackResult = {
+  resourceId: string;
+  previousVersion: string;
+  activeVersion: string;
+};
+
+export type OldResourceVersionCandidate = {
+  resourceId: string;
+  version: string;
+  reclaimableBytes: number;
+};
+
+export type OldResourceVersionCleanupPlan = {
+  candidates: OldResourceVersionCandidate[];
+  protectedVersions: string[];
+  reclaimableBytes: number;
+  confirmationRequired: boolean;
+};
+
+export type OldResourceVersionCleanupResult = {
+  removedVersions: string[];
+  reclaimedBytes: number;
+};
+
 export type DeleteProjectResult = {
   projectId: string;
   deleted: boolean;

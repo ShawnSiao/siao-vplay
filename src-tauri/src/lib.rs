@@ -11,6 +11,7 @@ mod library;
 mod local_resources;
 mod media;
 mod remote_media;
+mod resource_diagnostics;
 mod resource_download;
 mod resource_migration;
 mod runtime;
@@ -177,7 +178,14 @@ pub fn run() {
             commands::cancel_resource_download,
             commands::retry_resource_download,
             commands::repair_local_resource,
+            commands::update_local_resource,
             commands::remove_local_resource,
+            commands::get_local_resource_diagnostics,
+            commands::get_local_resource_diagnostic_summary,
+            commands::get_local_resource_third_party_notices,
+            commands::rollback_local_resource,
+            commands::plan_old_resource_version_cleanup,
+            commands::cleanup_old_resource_versions,
             commands::get_runtime_catalog,
             commands::set_runtime_storage_root,
             commands::set_preferred_model,
