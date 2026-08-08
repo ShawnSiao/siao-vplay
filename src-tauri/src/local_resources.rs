@@ -36,6 +36,10 @@ pub enum LocalResourceError {
     RootUnavailable(String),
     #[error("本地资源尚未准备完成：{0}")]
     ResourceNotReady(String),
+    #[error("未找到对应能力：{0}")]
+    UnknownCapability(String),
+    #[error("未找到对应资源：{0}")]
+    UnknownResource(String),
     #[error("可信资源清单无效：{0}")]
     InvalidCatalog(String),
     #[error("资源安装凭据无效：{0}")]
@@ -290,6 +294,43 @@ pub fn resolve_entrypoint(resource_id: &str, entrypoint: &str) -> Option<PathBuf
         .and_then(|manager| manager.resolve_entrypoint(resource_id, entrypoint).ok())
 }
 
+pub(crate) fn resource_definition(
+    resource_id: &str,
+) -> Result<ResourceDefinition, LocalResourceError> {
+    catalog()?
+        .resources
+        .iter()
+        .find(|resource| resource.id == resource_id)
+        .cloned()
+        .ok_or_else(|| LocalResourceError::UnknownResource(resource_id.to_owned()))
+}
+
+pub(crate) fn required_resource_ids(
+    capability_id: &str,
+) -> Result<Vec<String>, LocalResourceError> {
+    with_manager_read(|manager| manager.required_resource_ids(capability_id))
+}
+
+pub(crate) fn resource_is_ready(resource_id: &str) -> Result<bool, LocalResourceError> {
+    with_manager_read(|manager| Ok(manager.resource_ready(resource_id)))
+}
+
+pub(crate) fn activate_resource(receipt: ResourceReceipt) -> Result<(), LocalResourceError> {
+    with_manager_write(|manager| manager.activate_receipt(receipt))
+}
+
+pub(crate) fn active_receipt(
+    resource_id: &str,
+) -> Result<Option<ResourceReceipt>, LocalResourceError> {
+    with_manager_read(|manager| manager.active_receipt(resource_id))
+}
+
+pub(crate) fn deactivate_resource(
+    resource_id: &str,
+) -> Result<Option<ResourceReceipt>, LocalResourceError> {
+    with_manager_write(|manager| manager.deactivate_resource(resource_id))
+}
+
 pub(crate) fn development_path_override(name: &str) -> Option<PathBuf> {
     if cfg!(any(test, debug_assertions)) {
         std::env::var_os(name)
@@ -365,12 +406,20 @@ impl LocalResourceManager {
             fs::create_dir_all(root.join(relative))?;
         }
         verify_writable(&root.join("state"))?;
+        let existing_configuration = self
+            .configuration
+            .as_ref()
+            .filter(|configuration| configuration_root(configuration) == root);
         let configuration = LocalResourceConfiguration {
             schema_version: CONFIG_SCHEMA_VERSION,
             selected_parent: path_string(&parent),
             resource_root: path_string(&root),
-            preferred_profile: DEFAULT_PROFILE.to_owned(),
-            active_resources: BTreeMap::new(),
+            preferred_profile: existing_configuration
+                .map(|configuration| configuration.preferred_profile.clone())
+                .unwrap_or_else(|| DEFAULT_PROFILE.to_owned()),
+            active_resources: existing_configuration
+                .map(|configuration| configuration.active_resources.clone())
+                .unwrap_or_default(),
         };
         persist_json(&self.config_path, &configuration)?;
         self.configuration = Some(configuration);
@@ -391,6 +440,7 @@ impl LocalResourceManager {
                     catalog,
                     DEFAULT_PROFILE,
                     LocalResourceRootState::SetupRequired,
+                    |_| false,
                     |_| false,
                 ),
             });
@@ -416,6 +466,7 @@ impl LocalResourceManager {
             &configuration.preferred_profile,
             root_state.clone(),
             |resource_id| self.resource_ready(resource_id),
+            crate::resource_download::resource_is_preparing,
         );
         Ok(LocalResourceStatus {
             configured: true,
@@ -445,6 +496,28 @@ impl LocalResourceManager {
             .entrypoints
             .keys()
             .all(|entrypoint| self.resolve_entrypoint(resource_id, entrypoint).is_ok())
+    }
+
+    fn required_resource_ids(
+        &self,
+        capability_id: &str,
+    ) -> Result<Vec<String>, LocalResourceError> {
+        let catalog = catalog()?;
+        let profile = self
+            .configuration
+            .as_ref()
+            .map(|configuration| configuration.preferred_profile.as_str())
+            .unwrap_or(DEFAULT_PROFILE);
+        let mut capability_ids = BTreeSet::new();
+        let mut resource_ids = BTreeSet::new();
+        collect_capability_resources(
+            catalog,
+            capability_id,
+            profile,
+            &mut capability_ids,
+            &mut resource_ids,
+        )?;
+        Ok(resource_ids.into_iter().collect())
     }
 
     fn resolve_entrypoint(
@@ -517,8 +590,7 @@ impl LocalResourceManager {
         Ok(receipt)
     }
 
-    #[cfg(test)]
-    fn activate_for_test(&mut self, receipt: ResourceReceipt) -> Result<(), LocalResourceError> {
+    fn activate_receipt(&mut self, receipt: ResourceReceipt) -> Result<(), LocalResourceError> {
         let configuration = self
             .configuration
             .as_mut()
@@ -537,6 +609,86 @@ impl LocalResourceManager {
             .insert(receipt.resource_id.clone(), receipt.version.clone());
         persist_json(&self.config_path, configuration)
     }
+
+    fn active_receipt(
+        &self,
+        resource_id: &str,
+    ) -> Result<Option<ResourceReceipt>, LocalResourceError> {
+        let Some(configuration) = self.configuration.as_ref() else {
+            return Ok(None);
+        };
+        let Some(version) = configuration.active_resources.get(resource_id) else {
+            return Ok(None);
+        };
+        self.read_receipt(resource_id, version).map(Some)
+    }
+
+    fn deactivate_resource(
+        &mut self,
+        resource_id: &str,
+    ) -> Result<Option<ResourceReceipt>, LocalResourceError> {
+        let receipt = self.active_receipt(resource_id)?;
+        let Some(receipt) = receipt else {
+            return Ok(None);
+        };
+        let configuration = self.configuration.as_mut().ok_or_else(|| {
+            LocalResourceError::ResourceNotReady(format!("{resource_id} 尚未配置"))
+        })?;
+        configuration.active_resources.remove(resource_id);
+        persist_json(&self.config_path, configuration)?;
+        let receipt_path = configuration_root(configuration)
+            .join("receipts")
+            .join(resource_id)
+            .join(format!("{}.json", receipt.version));
+        if receipt_path.is_file() {
+            fs::remove_file(receipt_path)?;
+        }
+        Ok(Some(receipt))
+    }
+}
+
+fn collect_capability_resources(
+    catalog: &LocalResourceCatalog,
+    capability_id: &str,
+    preferred_profile: &str,
+    visited_capability_ids: &mut BTreeSet<String>,
+    resource_ids: &mut BTreeSet<String>,
+) -> Result<(), LocalResourceError> {
+    if !visited_capability_ids.insert(capability_id.to_owned()) {
+        return Ok(());
+    }
+    let capability = catalog
+        .capabilities
+        .iter()
+        .find(|capability| capability.id == capability_id)
+        .ok_or_else(|| LocalResourceError::UnknownCapability(capability_id.to_owned()))?;
+    for dependency in &capability.requires_capability_ids {
+        collect_capability_resources(
+            catalog,
+            dependency,
+            preferred_profile,
+            visited_capability_ids,
+            resource_ids,
+        )?;
+    }
+    resource_ids.extend(capability.resource_ids.iter().cloned());
+    if capability
+        .profile_ids
+        .iter()
+        .any(|profile_id| profile_id == preferred_profile)
+    {
+        let profile = catalog
+            .profiles
+            .iter()
+            .find(|profile| profile.id == preferred_profile)
+            .ok_or_else(|| {
+                LocalResourceError::InvalidCatalog(format!(
+                    "能力 {capability_id} 引用了未知配置档 {preferred_profile}"
+                ))
+            })?;
+        resource_ids.extend(profile.resource_ids.iter().cloned());
+    }
+    Ok(())
 }
 
 fn capability_statuses(
@@ -544,6 +696,7 @@ fn capability_statuses(
     preferred_profile: &str,
     root_state: LocalResourceRootState,
     mut is_ready: impl FnMut(&str) -> bool,
+    mut is_preparing: impl FnMut(&str) -> bool,
 ) -> Vec<LocalResourceCapabilityStatus> {
     let profile_resources = catalog
         .profiles
@@ -574,6 +727,9 @@ fn capability_statuses(
             .requires_capability_ids
             .iter()
             .all(|dependency| ready_capabilities.contains(dependency));
+        let has_preparing_resource = required_resource_ids
+            .iter()
+            .any(|resource_id| is_preparing(resource_id));
         let state = match root_state {
             LocalResourceRootState::SetupRequired => LocalResourceCapabilityState::SetupRequired,
             LocalResourceRootState::RootUnavailable => {
@@ -585,6 +741,9 @@ fn capability_statuses(
             {
                 ready_capabilities.insert(capability.id.clone());
                 LocalResourceCapabilityState::Ready
+            }
+            LocalResourceRootState::Ready if has_preparing_resource => {
+                LocalResourceCapabilityState::Preparing
             }
             LocalResourceRootState::Ready => LocalResourceCapabilityState::NotReady,
         };
@@ -900,6 +1059,25 @@ mod tests {
     }
 
     #[test]
+    fn capability_reports_preparing_while_a_required_resource_is_active() {
+        let statuses = capability_statuses(
+            catalog().expect("catalog should parse"),
+            DEFAULT_PROFILE,
+            LocalResourceRootState::Ready,
+            |_| false,
+            |resource_id| resource_id == "ffmpeg-cpu",
+        );
+        assert_eq!(
+            statuses
+                .iter()
+                .find(|status| status.id == "basic_media")
+                .expect("basic media should exist")
+                .state,
+            LocalResourceCapabilityState::Preparing
+        );
+    }
+
+    #[test]
     fn planning_is_read_only_and_reports_child_root() {
         let data = tempdir().expect("data directory");
         let parent = tempdir().expect("resource parent");
@@ -970,7 +1148,7 @@ mod tests {
         let mut entrypoints = BTreeMap::new();
         entrypoints.insert("ffmpeg".to_owned(), "bin/ffmpeg.exe".to_owned());
         manager
-            .activate_for_test(ResourceReceipt {
+            .activate_receipt(ResourceReceipt {
                 schema_version: RECEIPT_SCHEMA_VERSION,
                 resource_id: "ffmpeg-cpu".to_owned(),
                 version: "8.1".to_owned(),
@@ -980,12 +1158,24 @@ mod tests {
                 health_status: "passed".to_owned(),
             })
             .expect("receipt should activate");
+        manager
+            .configure_location(parent.path().to_str().expect("UTF-8 path"), true)
+            .expect("confirming the same root should preserve active resources");
         assert_eq!(
             manager
                 .resolve_entrypoint("ffmpeg-cpu", "ffmpeg")
                 .expect("entrypoint should resolve"),
             install.join("bin/ffmpeg.exe")
         );
+        let receipt_path = root.join("receipts/ffmpeg-cpu/8.1.json");
+        assert!(receipt_path.is_file());
+        let removed = manager
+            .deactivate_resource("ffmpeg-cpu")
+            .expect("resource should deactivate")
+            .expect("active receipt should return");
+        assert_eq!(removed.resource_id, "ffmpeg-cpu");
+        assert!(!receipt_path.exists());
+        assert!(manager.resolve_entrypoint("ffmpeg-cpu", "ffmpeg").is_err());
         assert!(safe_relative_path("../outside.exe", "fixture").is_err());
     }
 }

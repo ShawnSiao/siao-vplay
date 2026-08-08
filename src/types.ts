@@ -602,6 +602,46 @@ export type LocalResourceCatalog = {
   resources: LocalResourceDefinition[];
 };
 
+export type ResourceDownloadTaskState =
+  | "queued"
+  | "downloading"
+  | "paused"
+  | "verifying"
+  | "installing"
+  | "completed"
+  | "failed"
+  | "cancelled";
+
+export type ResourceDownloadTask = {
+  id: string;
+  resourceId: string;
+  version: string;
+  state: ResourceDownloadTaskState;
+  downloadedBytes: number;
+  totalBytes: number;
+  requestedByCapabilityIds: string[];
+  attempt: number;
+  errorCode: string | null;
+  errorMessage: string | null;
+  createdAtMs: number;
+  updatedAtMs: number;
+  forceReinstall: boolean;
+};
+
+export type CapabilityPreparation = {
+  capabilityId: string;
+  state: "ready" | "preparing";
+  resourceIds: string[];
+  readyResourceIds: string[];
+  taskIds: string[];
+};
+
+export type ResourceRemovalResult = {
+  resourceId: string;
+  removed: boolean;
+  affectedCapabilityIds: string[];
+};
+
 export type DeleteProjectResult = {
   projectId: string;
   deleted: boolean;

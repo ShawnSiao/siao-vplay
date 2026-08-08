@@ -171,6 +171,8 @@ pub fn set_storage_root(path: &str) -> Result<RuntimeCatalog, RuntimeError> {
     }
     let status = local_resources::configure_location(path, true)
         .map_err(|error| RuntimeError::InvalidStorageRoot(error.to_string()))?;
+    crate::resource_download::bind_configured_root()
+        .map_err(|error| RuntimeError::InvalidStorageRoot(error.to_string()))?;
     let resource_root = status.resource_root.ok_or_else(|| {
         RuntimeError::InvalidStorageRoot("资源目录配置后未返回有效路径".to_owned())
     })?;

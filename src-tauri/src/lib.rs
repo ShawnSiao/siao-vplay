@@ -11,6 +11,7 @@ mod library;
 mod local_resources;
 mod media;
 mod remote_media;
+mod resource_download;
 mod runtime;
 mod store;
 mod subtitles;
@@ -100,6 +101,7 @@ pub fn run() {
             }
             let data_directory = resolve_data_directory(app)?;
             local_resources::initialize(&data_directory)?;
+            resource_download::initialize()?;
             runtime::initialize(&data_directory)?;
             let database_path = data_directory.join("projects").join("siaovplay.db");
             let store = ProjectStore::open(database_path)?;
@@ -158,6 +160,14 @@ pub fn run() {
             commands::get_local_resource_status,
             commands::plan_local_resource_location,
             commands::configure_local_resource_root,
+            commands::list_resource_download_tasks,
+            commands::prepare_local_capability,
+            commands::pause_resource_download,
+            commands::resume_resource_download,
+            commands::cancel_resource_download,
+            commands::retry_resource_download,
+            commands::repair_local_resource,
+            commands::remove_local_resource,
             commands::get_runtime_catalog,
             commands::set_runtime_storage_root,
             commands::set_preferred_model,

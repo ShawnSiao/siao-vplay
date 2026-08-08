@@ -5,6 +5,7 @@ import { supportedVideoExtensions } from "./mediaFiles";
 
 import type {
   AppStatus,
+  CapabilityPreparation,
   DeleteProjectResult,
   DesktopCommandError,
   EmbeddedSubtitlePreview,
@@ -27,6 +28,8 @@ import type {
   Project,
   RemoteMediaPreview,
   RuntimeCatalog,
+  ResourceDownloadTask,
+  ResourceRemovalResult,
   SubtitleGlobalReplacement,
   SubtitleBurnJob,
   SubtitleBurnMode,
@@ -149,6 +152,72 @@ export async function configureLocalResourceRoot(
 ): Promise<LocalResourceStatus> {
   return invoke<LocalResourceStatus>("configure_local_resource_root", {
     input: { parentPath, confirmed },
+  });
+}
+
+export async function listResourceDownloadTasks(): Promise<
+  ResourceDownloadTask[]
+> {
+  if (!isDesktopApp) {
+    return [];
+  }
+  return invoke<ResourceDownloadTask[]>("list_resource_download_tasks");
+}
+
+export async function prepareLocalCapability(
+  capabilityId: string,
+): Promise<CapabilityPreparation> {
+  return invoke<CapabilityPreparation>("prepare_local_capability", {
+    input: { capabilityId },
+  });
+}
+
+export async function pauseResourceDownload(
+  taskId: string,
+): Promise<ResourceDownloadTask> {
+  return invoke<ResourceDownloadTask>("pause_resource_download", {
+    input: { taskId },
+  });
+}
+
+export async function resumeResourceDownload(
+  taskId: string,
+): Promise<ResourceDownloadTask> {
+  return invoke<ResourceDownloadTask>("resume_resource_download", {
+    input: { taskId },
+  });
+}
+
+export async function cancelResourceDownload(
+  taskId: string,
+): Promise<ResourceDownloadTask> {
+  return invoke<ResourceDownloadTask>("cancel_resource_download", {
+    input: { taskId },
+  });
+}
+
+export async function retryResourceDownload(
+  taskId: string,
+): Promise<ResourceDownloadTask> {
+  return invoke<ResourceDownloadTask>("retry_resource_download", {
+    input: { taskId },
+  });
+}
+
+export async function repairLocalResource(
+  resourceId: string,
+): Promise<ResourceDownloadTask> {
+  return invoke<ResourceDownloadTask>("repair_local_resource", {
+    input: { resourceId },
+  });
+}
+
+export async function removeLocalResource(
+  resourceId: string,
+  confirmed: boolean,
+): Promise<ResourceRemovalResult> {
+  return invoke<ResourceRemovalResult>("remove_local_resource", {
+    input: { resourceId, confirmed },
   });
 }
 

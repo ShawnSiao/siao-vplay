@@ -27,6 +27,11 @@ use crate::{
         self, CancelRemoteMediaImportInput, ImportRemoteMediaUrlInput, InspectRemoteMediaUrlInput,
         RemoteMediaError, RemoteMediaPreview,
     },
+    resource_download::{
+        self, CapabilityPreparation, PrepareLocalCapabilityInput, RemoveLocalResourceInput,
+        RepairLocalResourceInput, ResourceDownloadError, ResourceDownloadTask,
+        ResourceDownloadTaskInput, ResourceRemovalResult,
+    },
     runtime::{
         self, DownloadRuntimeComponentInput, RuntimeCatalog, RuntimeError, SetPreferredModelInput,
         SetRuntimeStorageRootInput,
@@ -352,6 +357,8 @@ impl From<LocalResourceError> for CommandError {
             LocalResourceError::InvalidParent(_) => "local_resource_parent_invalid",
             LocalResourceError::RootUnavailable(_) => "root_unavailable",
             LocalResourceError::ResourceNotReady(_) => "local_resource_not_ready",
+            LocalResourceError::UnknownCapability(_) => "local_resource_capability_invalid",
+            LocalResourceError::UnknownResource(_) => "local_resource_invalid",
             LocalResourceError::InvalidCatalog(_) => "local_resource_catalog_invalid",
             LocalResourceError::InvalidReceipt(_) => "local_resource_receipt_invalid",
             LocalResourceError::FileSystem(_) => "local_resource_filesystem_error",
@@ -359,6 +366,15 @@ impl From<LocalResourceError> for CommandError {
         };
         Self {
             code,
+            message: error.to_string(),
+        }
+    }
+}
+
+impl From<ResourceDownloadError> for CommandError {
+    fn from(error: ResourceDownloadError) -> Self {
+        Self {
+            code: error.code(),
             message: error.to_string(),
         }
     }
@@ -576,7 +592,67 @@ pub fn plan_local_resource_location(
 pub fn configure_local_resource_root(
     input: ConfigureLocalResourceRootInput,
 ) -> Result<LocalResourceStatus, CommandError> {
-    local_resources::configure_location(&input.parent_path, input.confirmed).map_err(Into::into)
+    let status = local_resources::configure_location(&input.parent_path, input.confirmed)?;
+    resource_download::bind_configured_root()?;
+    Ok(status)
+}
+
+#[tauri::command]
+pub fn list_resource_download_tasks() -> Result<Vec<ResourceDownloadTask>, CommandError> {
+    resource_download::list_tasks().map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn prepare_local_capability(
+    app: AppHandle,
+    input: PrepareLocalCapabilityInput,
+) -> Result<CapabilityPreparation, CommandError> {
+    resource_download::prepare_capability(&input.capability_id, Some(app)).map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn pause_resource_download(
+    input: ResourceDownloadTaskInput,
+) -> Result<ResourceDownloadTask, CommandError> {
+    resource_download::pause_task(&input.task_id).map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn resume_resource_download(
+    app: AppHandle,
+    input: ResourceDownloadTaskInput,
+) -> Result<ResourceDownloadTask, CommandError> {
+    resource_download::resume_task(&input.task_id, Some(app)).map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn cancel_resource_download(
+    input: ResourceDownloadTaskInput,
+) -> Result<ResourceDownloadTask, CommandError> {
+    resource_download::cancel_task(&input.task_id).map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn retry_resource_download(
+    app: AppHandle,
+    input: ResourceDownloadTaskInput,
+) -> Result<ResourceDownloadTask, CommandError> {
+    resource_download::retry_task(&input.task_id, Some(app)).map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn repair_local_resource(
+    app: AppHandle,
+    input: RepairLocalResourceInput,
+) -> Result<ResourceDownloadTask, CommandError> {
+    resource_download::repair_resource(&input.resource_id, Some(app)).map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn remove_local_resource(
+    input: RemoveLocalResourceInput,
+) -> Result<ResourceRemovalResult, CommandError> {
+    resource_download::remove_resource(&input.resource_id, input.confirmed).map_err(Into::into)
 }
 
 #[tauri::command]
