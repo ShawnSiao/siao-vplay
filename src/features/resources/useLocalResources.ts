@@ -307,7 +307,7 @@ export function useLocalResources(): LocalResourcesController {
     clearError: () => setError(null),
     chooseLocation: async () => {
       try {
-        const parentPath = await chooseLocalResourceParent();
+        const parentPath = await chooseLocalResourceParent(status?.selectedParent);
         if (!parentPath) {
           return null;
         }
@@ -342,7 +342,7 @@ export function useLocalResources(): LocalResourcesController {
     },
     chooseExistingResources: async () => {
       try {
-        const sourcePath = await chooseLocalResourceParent();
+        const sourcePath = await chooseLocalResourceParent(status?.selectedParent);
         if (!sourcePath) {
           return null;
         }
@@ -367,7 +367,7 @@ export function useLocalResources(): LocalResourcesController {
     },
     chooseMoveLocation: async () => {
       try {
-        const parentPath = await chooseLocalResourceParent();
+        const parentPath = await chooseLocalResourceParent(status?.selectedParent);
         if (!parentPath) {
           return null;
         }
@@ -405,7 +405,7 @@ export function useLocalResources(): LocalResourcesController {
     },
     reconnectRoot: async () => {
       try {
-        const parentPath = await chooseLocalResourceParent();
+        const parentPath = await chooseLocalResourceParent(status?.selectedParent);
         if (!parentPath) {
           return null;
         }

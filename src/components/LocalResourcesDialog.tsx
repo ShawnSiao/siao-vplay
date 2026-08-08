@@ -550,6 +550,13 @@ export function LocalResourcesDialog({
           </div>
         ) : null}
 
+        {localError || controller.error ? (
+          <div className="notice danger" role="alert">
+            <strong>本地功能未完成准备</strong>
+            <p>{localError ?? controller.error}</p>
+          </div>
+        ) : null}
+
         {firstRun && setupChoice === null ? (
           <section className="local-resources-welcome" aria-labelledby="resource-welcome-title">
             <h3 id="resource-welcome-title">先选择需要准备的功能</h3>
@@ -728,16 +735,20 @@ export function LocalResourcesDialog({
                   <h3 id="location-heading">保存位置</h3>
                   <p>下载、暂存和安装都在确认的位置完成，不会使用隐式系统盘目录。</p>
                 </div>
-                {!status.configured ? (
-                  <button
-                    className="button quiet"
-                    type="button"
-                    disabled={previewMode || busyAction !== null}
-                    onClick={() => void chooseLocation()}
-                  >
-                    {busyAction === "location" ? "正在读取…" : "选择位置"}
-                  </button>
-                ) : null}
+                <button
+                  className="button quiet"
+                  type="button"
+                  disabled={previewMode || busyAction !== null}
+                  onClick={() =>
+                    void (status.configured ? chooseMoveLocation() : chooseLocation())
+                  }
+                >
+                  {busyAction === "location" || busyAction === "plan-move"
+                    ? "正在打开…"
+                    : status.configured
+                      ? "更改保存位置"
+                      : "选择保存位置"}
+                </button>
               </div>
               <div className="local-resources-path" title={status.resourceRoot ?? undefined}>
                 {locationPlan?.resourceRoot ??
@@ -817,14 +828,6 @@ export function LocalResourcesDialog({
                     {busyAction === "inspect-existing"
                       ? "正在验证…"
                       : "选择现有资源目录"}
-                  </button>
-                  <button
-                    className="button quiet"
-                    type="button"
-                    disabled={previewMode || busyAction !== null}
-                    onClick={() => void chooseMoveLocation()}
-                  >
-                    {busyAction === "plan-move" ? "正在计算…" : "移动保存位置"}
                   </button>
                 </div>
               ) : null}
@@ -1235,12 +1238,6 @@ export function LocalResourcesDialog({
           </details>
         ) : null}
 
-        {localError || controller.error ? (
-          <div className="notice danger" role="alert">
-            <strong>本地功能未完成准备</strong>
-            <p>{localError ?? controller.error}</p>
-          </div>
-        ) : null}
       </div>
     </Dialog>
   );

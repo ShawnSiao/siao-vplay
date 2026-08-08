@@ -318,7 +318,9 @@ export async function getLocalResourceStatus(): Promise<LocalResourceStatus> {
   return invoke<LocalResourceStatus>("get_local_resource_status");
 }
 
-export async function chooseLocalResourceParent(): Promise<string | null> {
+export async function chooseLocalResourceParent(
+  defaultPath?: string | null,
+): Promise<string | null> {
   if (!isDesktopApp) {
     return null;
   }
@@ -326,6 +328,7 @@ export async function chooseLocalResourceParent(): Promise<string | null> {
     directory: true,
     multiple: false,
     title: "选择本地功能资源保存位置",
+    ...(defaultPath?.trim() ? { defaultPath } : {}),
   });
   return typeof selected === "string" ? selected : null;
 }

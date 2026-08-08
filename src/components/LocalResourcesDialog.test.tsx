@@ -245,7 +245,7 @@ describe("LocalResourcesDialog", () => {
     expect(screen.getByText("194 MB")).toBeInTheDocument();
     expect(controller.prepareCapability).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByRole("button", { name: "选择位置" }));
+    fireEvent.click(screen.getByRole("button", { name: "选择保存位置" }));
     expect(
       await screen.findByText("W:\\SiaoVPlay\\SiaoVPlay"),
     ).toBeInTheDocument();
@@ -268,6 +268,29 @@ describe("LocalResourcesDialog", () => {
       "url_import",
       undefined,
     );
+  });
+
+  it("shows directory selection errors before the scrollable setup content", async () => {
+    const chooseLocation = vi.fn().mockRejectedValue(new Error("无法打开目录选择器"));
+    render(
+      <LocalResourcesDialog
+        controller={makeController({ chooseLocation })}
+        firstRun={false}
+        pendingAction={null}
+        previewMode={false}
+        onClose={() => undefined}
+        onDismissFirstRun={() => undefined}
+        onNotice={() => undefined}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "选择保存位置" }));
+    const alert = await screen.findByRole("alert");
+    const locationHeading = screen.getByRole("heading", { name: "保存位置" });
+    expect(alert).toHaveTextContent("无法打开目录选择器");
+    expect(
+      alert.compareDocumentPosition(locationHeading) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
   it("associates a pending action and exposes task controls with accessible progress", async () => {
@@ -411,7 +434,7 @@ describe("LocalResourcesDialog", () => {
     fireEvent.click(screen.getByRole("button", { name: "接管已验证资源" }));
     await waitFor(() => expect(adoptResources).toHaveBeenCalledWith(undefined));
 
-    fireEvent.click(screen.getByRole("button", { name: "移动保存位置" }));
+    fireEvent.click(screen.getByRole("button", { name: "更改保存位置" }));
     expect(await screen.findByText("E:\\Resources\\SiaoVPlay")).toBeInTheDocument();
     expect(screen.getByText(/切换成功后原目录仍保留/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "确认复制并切换" }));
