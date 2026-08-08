@@ -37,6 +37,7 @@ const TASK_STORE_FILE_NAME: &str = "download-tasks.json";
 const TASK_EVENT_NAME: &str = "local-resource-task-updated";
 const PROGRESS_PERSIST_BYTES: u64 = 1024 * 1024;
 const DOWNLOAD_READ_BUFFER_BYTES: usize = 256 * 1024;
+const FILE_DIGEST_BUFFER_BYTES: usize = 1024 * 1024;
 const FILE_INSTALL_MARGIN_BYTES: u64 = 16 * 1024 * 1024;
 const ARCHIVE_INSTALL_MARGIN_BYTES: u64 = 64 * 1024 * 1024;
 const MAX_ARCHIVE_EXPANSION_FACTOR: u64 = 20;
@@ -1579,7 +1580,10 @@ pub(crate) fn file_digest(path: &Path) -> Result<(u64, String), ResourceDownload
     let mut reader = BufReader::new(file);
     let mut hasher = Sha256::new();
     let mut size = 0_u64;
-    let mut buffer = [0_u8; 1024 * 1024];
+    // Keep the large hashing buffer off the Windows thread stack. Release
+    // executables reserve roughly one MiB by default, so a one-MiB stack array
+    // can overflow before the first read when a migration plan hashes files.
+    let mut buffer = vec![0_u8; FILE_DIGEST_BUFFER_BYTES];
     loop {
         let count = reader.read(&mut buffer)?;
         if count == 0 {
@@ -1819,6 +1823,25 @@ mod tests {
             format: "file".to_owned(),
             strip_components: None,
         }
+    }
+
+    #[test]
+    fn file_digest_runs_on_a_small_thread_stack() {
+        let directory = tempdir().expect("digest directory");
+        let path = directory.path().join("fixture.bin");
+        let body = b"small-stack digest fixture";
+        fs::write(&path, body).expect("digest fixture should write");
+
+        let result = thread::Builder::new()
+            .stack_size(256 * 1024)
+            .spawn(move || file_digest(&path))
+            .expect("digest thread should start")
+            .join()
+            .expect("digest thread should not overflow")
+            .expect("digest should succeed");
+
+        assert_eq!(result.0, body.len() as u64);
+        assert_eq!(result.1, format!("{:x}", Sha256::digest(body)));
     }
 
     #[test]
