@@ -691,7 +691,7 @@ mod tests {
     #[test]
     fn remote_catalog_remains_disabled_until_detached_signature_policy_exists() {
         assert_eq!(CATALOG_SOURCE, "embedded");
-        assert!(!REMOTE_CATALOG_ENABLED);
+        assert!(!std::hint::black_box(REMOTE_CATALOG_ENABLED));
         assert_eq!(
             REMOTE_SIGNATURE_POLICY,
             "ed25519-detached-v1-required-before-enable"

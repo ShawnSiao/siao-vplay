@@ -10,7 +10,10 @@ param(
     [switch]$UseExistingInstall,
 
     [Parameter()]
-    [switch]$Cleanup
+    [switch]$Cleanup,
+
+    [Parameter()]
+    [string[]]$ProtectedFile = @()
 )
 
 $ErrorActionPreference = 'Stop'
@@ -44,6 +47,22 @@ if (Test-Path -LiteralPath $validationRootPath) {
         throw "Validation install directory is not empty: $validationRootPath"
     }
 }
+
+$protectedSnapshots = @($ProtectedFile | ForEach-Object {
+    $protectedPath = [System.IO.Path]::GetFullPath($_)
+    $installRootWithSeparator = $validationRootPath.TrimEnd('\') + '\'
+    if ($protectedPath.Equals($validationRootPath, [System.StringComparison]::OrdinalIgnoreCase) -or
+        $protectedPath.StartsWith($installRootWithSeparator, [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "Protected resource file must be outside the validation install directory: $protectedPath"
+    }
+    if (-not (Test-Path -LiteralPath $protectedPath -PathType Leaf)) {
+        throw "Protected resource file does not exist: $protectedPath"
+    }
+    [pscustomobject]@{
+        path = $protectedPath
+        sha256 = Get-Sha256 $protectedPath
+    }
+})
 
 if (-not $UseExistingInstall) {
     New-Item -ItemType Directory -Force -Path $validationRootPath | Out-Null
@@ -89,5 +108,17 @@ if ($Cleanup) {
         throw "Silent uninstall failed with exit code $($uninstallProcess.ExitCode)"
     }
 }
+
+foreach ($snapshot in $protectedSnapshots) {
+    if (-not (Test-Path -LiteralPath $snapshot.path -PathType Leaf)) {
+        throw "Install lifecycle removed a protected resource file: $($snapshot.path)"
+    }
+    if ((Get-Sha256 $snapshot.path) -ne $snapshot.sha256) {
+        throw "Install lifecycle changed a protected resource file: $($snapshot.path)"
+    }
+}
+
+$result | Add-Member -NotePropertyName protectedFiles -NotePropertyValue $protectedSnapshots.Count
+$result | Add-Member -NotePropertyName protectedHashesUnchanged -NotePropertyValue $true
 
 $result | ConvertTo-Json -Depth 6
