@@ -79,7 +79,6 @@ export type LocalResourcesController = {
   clearError: () => void;
   chooseLocation: () => Promise<LocalResourceLocationPlan | null>;
   confirmLocation: (parentPath: string) => Promise<LocalResourceStatus>;
-  inspectLegacyResources: () => Promise<ResourceMigrationPreview>;
   chooseExistingResources: () => Promise<{
     sourcePath: string;
     preview: ResourceMigrationPreview;
@@ -338,16 +337,6 @@ export function useLocalResources(): LocalResourcesController {
         setStatus(nextStatus);
         setError(null);
         return nextStatus;
-      } catch (cause) {
-        captureError(cause);
-        throw cause;
-      }
-    },
-    inspectLegacyResources: async () => {
-      try {
-        const preview = await inspectLocalResourceMigration();
-        setError(null);
-        return preview;
       } catch (cause) {
         captureError(cause);
         throw cause;

@@ -194,17 +194,6 @@ pub fn configured_runtime_root() -> Option<PathBuf> {
     })
 }
 
-pub(crate) fn legacy_runtime_root() -> Option<PathBuf> {
-    let persisted = persisted_settings_snapshot()
-        .storage_root
-        .map(PathBuf::from)?;
-    (Some(&persisted) != local_resources::configured_root().as_ref()).then_some(persisted)
-}
-
-pub(crate) fn legacy_model_root() -> Option<PathBuf> {
-    legacy_runtime_root().map(|root| root.join("models"))
-}
-
 pub fn preferred_model_kind() -> String {
     settings_snapshot().preferred_model
 }

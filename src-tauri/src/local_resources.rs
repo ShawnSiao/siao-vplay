@@ -416,18 +416,6 @@ pub(crate) fn replace_configuration(
     with_manager_write(|manager| manager.replace_configuration(configuration))
 }
 
-pub(crate) fn configured_legacy_candidate_roots() -> Vec<PathBuf> {
-    configuration_snapshot()
-        .map(|configuration| {
-            configuration
-                .legacy_candidate_roots
-                .into_iter()
-                .map(PathBuf::from)
-                .collect()
-        })
-        .unwrap_or_default()
-}
-
 pub(crate) fn resource_subdirectories() -> &'static [&'static str] {
     &RESOURCE_SUBDIRECTORIES
 }

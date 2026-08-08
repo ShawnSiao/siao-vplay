@@ -990,8 +990,7 @@ fn resolve_runtime_tool(
     {
         return Ok(path);
     }
-    let runtime_root = crate::local_resources::development_path_override("SIAOVPLAY_RUNTIME_DIR")
-        .or_else(crate::runtime::legacy_runtime_root);
+    let runtime_root = crate::local_resources::development_path_override("SIAOVPLAY_RUNTIME_DIR");
     let executable_path = env::current_exe().ok();
     let candidates = runtime_tool_candidates(
         file_name,

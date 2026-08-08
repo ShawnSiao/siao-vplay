@@ -639,8 +639,7 @@ fn resolve_yt_dlp_path() -> Result<PathBuf, YouTubeMediaError> {
     if let Some(path) = crate::local_resources::resolve_entrypoint("yt-dlp", "ytDlp") {
         return Ok(path);
     }
-    let runtime_root = crate::local_resources::development_path_override("SIAOVPLAY_RUNTIME_DIR")
-        .or_else(crate::runtime::legacy_runtime_root);
+    let runtime_root = crate::local_resources::development_path_override("SIAOVPLAY_RUNTIME_DIR");
     let executable_path = env::current_exe().ok();
     let candidates = yt_dlp_candidates(runtime_root.as_deref(), executable_path.as_deref());
     candidates

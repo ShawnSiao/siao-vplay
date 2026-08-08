@@ -225,13 +225,6 @@ export function RuntimeHarness() {
       clearError: () => undefined,
       chooseLocation: async () => null,
       confirmLocation: async () => status,
-      inspectLegacyResources: async () => ({
-        sources: [],
-        candidates: [],
-        verifiedResourceIds: [],
-        reusableBytes: 0,
-        rejectedCount: 0,
-      }),
       chooseExistingResources: async () => null,
       adoptResources: async () => ({
         adoptedResourceIds: [],

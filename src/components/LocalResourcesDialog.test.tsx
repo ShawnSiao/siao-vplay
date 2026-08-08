@@ -131,13 +131,6 @@ function makeController(
       resourceRoot: "W:\\SiaoVPlay\\SiaoVPlay",
       rootState: "ready",
     }),
-    inspectLegacyResources: vi.fn().mockResolvedValue({
-      sources: [],
-      candidates: [],
-      verifiedResourceIds: [],
-      reusableBytes: 0,
-      rejectedCount: 0,
-    }),
     chooseExistingResources: vi.fn().mockResolvedValue(null),
     adoptResources: vi.fn().mockResolvedValue({
       adoptedResourceIds: [],
@@ -365,22 +358,25 @@ describe("LocalResourcesDialog", () => {
       resourceRoot: "W:\\SiaoVPlay\\SiaoVPlay",
       rootState: "ready",
     };
-    const inspectLegacyResources = vi.fn().mockResolvedValue({
-      sources: [{ kind: "legacy_settings", path: "W:\\Legacy" }],
-      candidates: [
-        {
-          sourceKind: "legacy_settings",
-          sourceRoot: "W:\\Legacy",
-          resourceId: "yt-dlp",
-          resourcePath: "W:\\Legacy\\yt-dlp.exe",
-          state: "verified",
-          reusableBytes: 18_202_192,
-          message: null,
-        },
-      ],
-      verifiedResourceIds: ["yt-dlp"],
-      reusableBytes: 18_202_192,
-      rejectedCount: 0,
+    const chooseExistingResources = vi.fn().mockResolvedValue({
+      sourcePath: "W:\\LegacySiaoVPlay",
+      preview: {
+        sources: [{ kind: "selected_directory", path: "W:\\LegacySiaoVPlay" }],
+        candidates: [
+          {
+            sourceKind: "selected_directory",
+            sourceRoot: "W:\\LegacySiaoVPlay",
+            resourceId: "yt-dlp",
+            resourcePath: "W:\\LegacySiaoVPlay\\yt-dlp.exe",
+            state: "verified",
+            reusableBytes: 18_202_192,
+            message: null,
+          },
+        ],
+        verifiedResourceIds: ["yt-dlp"],
+        reusableBytes: 18_202_192,
+        rejectedCount: 0,
+      },
     });
     const adoptResources = vi.fn().mockResolvedValue({
       adoptedResourceIds: ["yt-dlp"],
@@ -409,7 +405,7 @@ describe("LocalResourcesDialog", () => {
     });
     const controller = makeController({
       status: readyStatus,
-      inspectLegacyResources,
+      chooseExistingResources,
       adoptResources,
       chooseMoveLocation,
       moveLocation,
@@ -426,11 +422,13 @@ describe("LocalResourcesDialog", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "检查旧版资源" }));
+    fireEvent.click(screen.getByRole("button", { name: "选择现有资源目录" }));
     expect(await screen.findByText("发现 1 项可复用资源")).toBeInTheDocument();
-    expect(screen.getByText(/不会读取 Component Store 数据库或租约/)).toBeInTheDocument();
+    expect(screen.getByText(/只检查了明确选择的目录/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "接管已验证资源" }));
-    await waitFor(() => expect(adoptResources).toHaveBeenCalledWith(undefined));
+    await waitFor(() =>
+      expect(adoptResources).toHaveBeenCalledWith("W:\\LegacySiaoVPlay"),
+    );
 
     fireEvent.click(screen.getByRole("button", { name: "更改保存位置" }));
     expect(await screen.findByText("E:\\Resources\\SiaoVPlay")).toBeInTheDocument();

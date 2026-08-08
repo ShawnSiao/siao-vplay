@@ -653,12 +653,7 @@ export type ResourceRemovalResult = {
 };
 
 export type ResourceMigrationSource = {
-  kind:
-    | "legacy_settings"
-    | "legacy_installation"
-    | "component_store"
-    | "selected_directory"
-    | "development_override";
+  kind: "selected_directory";
   path: string;
 };
 

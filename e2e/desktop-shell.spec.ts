@@ -366,7 +366,6 @@ test("local resources stay product-focused, accessible, and scrollable at 1280 b
   await expect(dialog).toContainText("不会使用隐式系统盘目录");
   await expect(dialog).toContainText("识别模型下载 148 MB");
   await expect(dialog).toContainText("识别模型下载 488 MB");
-  await expect(dialog.getByRole("button", { name: "检查旧版资源" })).toBeVisible();
   await expect(dialog.getByRole("button", { name: "选择现有资源目录" })).toBeVisible();
   await expect(dialog.getByRole("button", { name: "更改保存位置" })).toBeVisible();
   expect(await dialog.evaluate((element) => (element as HTMLElement).innerText)).not.toMatch(

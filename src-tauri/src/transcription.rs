@@ -381,8 +381,7 @@ fn runtime_directory(backend: &str) -> Result<PathBuf, TranscriptionError> {
     {
         return Ok(directory.to_path_buf());
     }
-    let runtime_root = crate::local_resources::development_path_override("SIAOVPLAY_RUNTIME_DIR")
-        .or_else(crate::runtime::legacy_runtime_root);
+    let runtime_root = crate::local_resources::development_path_override("SIAOVPLAY_RUNTIME_DIR");
     let executable_path = env::current_exe().ok();
     resolve_runtime_directory(backend, runtime_root.as_deref(), executable_path.as_deref())
 }
@@ -634,8 +633,7 @@ fn model_path(kind: TranscriptionModelKind) -> Result<PathBuf, TranscriptionErro
     if let Some(path) = crate::local_resources::resolve_entrypoint(managed_resource, "model") {
         return Ok(path);
     }
-    let model_root = crate::local_resources::development_path_override("SIAOVPLAY_MODEL_DIR")
-        .or_else(crate::runtime::legacy_model_root);
+    let model_root = crate::local_resources::development_path_override("SIAOVPLAY_MODEL_DIR");
     let executable_path = env::current_exe().ok();
     resolve_model_path(kind, model_root.as_deref(), executable_path.as_deref())
 }
@@ -746,8 +744,7 @@ fn vad_model_path() -> Result<PathBuf, TranscriptionError> {
     {
         return Ok(path);
     }
-    let runtime_root = crate::local_resources::development_path_override("SIAOVPLAY_RUNTIME_DIR")
-        .or_else(crate::runtime::legacy_runtime_root);
+    let runtime_root = crate::local_resources::development_path_override("SIAOVPLAY_RUNTIME_DIR");
     let executable_path = env::current_exe().ok();
     let cpu_runtime_directory = runtime_directory("cpu").ok();
     resolve_vad_model_path(

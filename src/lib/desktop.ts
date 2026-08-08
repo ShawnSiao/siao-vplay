@@ -322,26 +322,22 @@ export async function repairLocalResourceRoot(): Promise<LocalResourceStatus> {
 
 export async function inspectLocalResourceMigration(
   sourcePath?: string,
-  sourceKind: "selected_directory" | "component_store" | "legacy_installation" =
-    "selected_directory",
 ): Promise<ResourceMigrationPreview> {
   return invoke<ResourceMigrationPreview>("inspect_local_resource_migration", {
     input: {
       sourcePath: sourcePath ?? null,
-      sourceKind: sourcePath ? sourceKind : null,
+      sourceKind: sourcePath ? "selected_directory" : null,
     },
   });
 }
 
 export async function adoptLocalResources(
   sourcePath?: string,
-  sourceKind: "selected_directory" | "component_store" | "legacy_installation" =
-    "selected_directory",
 ): Promise<ResourceAdoptionResult> {
   return invoke<ResourceAdoptionResult>("adopt_local_resources", {
     input: {
       sourcePath: sourcePath ?? null,
-      sourceKind: sourcePath ? sourceKind : null,
+      sourceKind: sourcePath ? "selected_directory" : null,
       confirmed: true,
     },
   });

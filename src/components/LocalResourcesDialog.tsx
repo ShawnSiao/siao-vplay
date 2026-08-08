@@ -309,13 +309,6 @@ export function LocalResourcesDialog({
       }
     });
 
-  const inspectLegacyResources = () =>
-    runAction("inspect-legacy", async () => {
-      const preview = await controller.inspectLegacyResources();
-      setMigrationSourcePath(undefined);
-      setMigrationPreview(preview);
-    });
-
   const chooseExistingResources = () =>
     runAction("inspect-existing", async () => {
       const selection = await controller.chooseExistingResources();
@@ -832,14 +825,6 @@ export function LocalResourcesDialog({
                     className="button quiet"
                     type="button"
                     disabled={previewMode || busyAction !== null}
-                    onClick={() => void inspectLegacyResources()}
-                  >
-                    {busyAction === "inspect-legacy" ? "正在检查…" : "检查旧版资源"}
-                  </button>
-                  <button
-                    className="button quiet"
-                    type="button"
-                    disabled={previewMode || busyAction !== null}
                     onClick={() => void chooseExistingResources()}
                   >
                     {busyAction === "inspect-existing"
@@ -859,7 +844,7 @@ export function LocalResourcesDialog({
                     {migrationPreview.verifiedResourceIds.length > 0
                       ? `已按当前清单验证，可复用 ${formatBytes(
                           migrationPreview.reusableBytes,
-                        )}，不会读取 Component Store 数据库或租约。`
+                        )}。只检查了明确选择的目录，不会读取其他应用的数据。`
                       : "候选文件未通过当前版本、大小、哈希、文件清单或健康检查。"}
                   </p>
                   {migrationPreview.verifiedResourceIds.length > 0 ? (

@@ -525,22 +525,6 @@ fn candidate_sources(
     selected_kind: Option<&str>,
 ) -> Result<Vec<CandidateSource>, ResourceMigrationError> {
     let mut sources = Vec::new();
-    for root in local_resources::configured_legacy_candidate_roots() {
-        push_source(&mut sources, "legacy_settings", root);
-    }
-    if let Ok(executable) = std::env::current_exe()
-        && let Some(directory) = executable.parent()
-    {
-        push_source(&mut sources, "legacy_installation", directory.to_path_buf());
-    }
-    for (kind, name) in [
-        ("development_override", "SIAOVPLAY_RUNTIME_DIR"),
-        ("development_override", "SIAOVPLAY_MODEL_DIR"),
-    ] {
-        if let Some(root) = local_resources::development_path_override(name) {
-            push_source(&mut sources, kind, root);
-        }
-    }
     if let Some(selected_path) = selected_path {
         let root = PathBuf::from(selected_path.trim());
         if !root.is_absolute() || !root.is_dir() {
@@ -550,10 +534,7 @@ fn candidate_sources(
         }
         let root = dunce::canonicalize(root)?;
         let kind = selected_kind.unwrap_or("selected_directory");
-        if !matches!(
-            kind,
-            "selected_directory" | "component_store" | "legacy_installation"
-        ) {
+        if kind != "selected_directory" {
             return Err(ResourceMigrationError::InvalidSource(format!(
                 "不支持的候选来源类型：{kind}"
             )));
@@ -1153,9 +1134,9 @@ mod tests {
     }
 
     #[test]
-    fn component_store_scan_reads_only_candidate_files_and_skips_database_and_leases() {
-        let source = tempdir().expect("component store source");
-        fs::write(source.path().join("component-store.sqlite"), b"database").expect("db fixture");
+    fn selected_directory_scan_reads_only_candidate_files_and_skips_database_and_leases() {
+        let source = tempdir().expect("selected source directory");
+        fs::write(source.path().join("unrelated.sqlite"), b"database").expect("db fixture");
         fs::create_dir_all(source.path().join("leases")).expect("lease directory");
         fs::write(source.path().join("leases/ggml-base.bin"), b"lease").expect("lease fixture");
         fs::create_dir_all(source.path().join("packages/model/1.0")).expect("candidate directory");
@@ -1169,6 +1150,25 @@ mod tests {
                 .expect("candidate should verify"),
             14
         );
+    }
+
+    #[test]
+    fn migration_sources_require_an_explicit_selected_directory() {
+        assert!(
+            candidate_sources(None, None)
+                .expect("an omitted source should be accepted as empty")
+                .is_empty()
+        );
+        let source = tempdir().expect("selected source directory");
+        let source_path = source.path().to_string_lossy();
+        let accepted = candidate_sources(Some(&source_path), Some("selected_directory"))
+            .expect("the selected directory should be accepted");
+        assert_eq!(accepted.len(), 1);
+        assert_eq!(accepted[0].kind, "selected_directory");
+        assert!(matches!(
+            candidate_sources(Some(&source_path), Some("component_store")),
+            Err(ResourceMigrationError::InvalidSource(_))
+        ));
     }
 
     #[test]
@@ -1279,8 +1279,8 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "requires pinned W: legacy runtime and model directories"]
-    fn real_legacy_resources_match_the_current_catalog_without_downloads() {
+    #[ignore = "requires explicitly selected W: runtime and model directories"]
+    fn real_selected_resources_match_the_current_catalog_without_downloads() {
         let runtime_root = std::env::var_os("SIAOVPLAY_PHASE6_LEGACY_RUNTIME_ROOT")
             .map(PathBuf::from)
             .expect("SIAOVPLAY_PHASE6_LEGACY_RUNTIME_ROOT is required");
@@ -1289,11 +1289,11 @@ mod tests {
             .expect("SIAOVPLAY_PHASE6_LEGACY_MODEL_ROOT is required");
         let sources = vec![
             CandidateSource {
-                kind: "legacy_installation".to_owned(),
+                kind: "selected_directory".to_owned(),
                 root: runtime_root,
             },
             CandidateSource {
-                kind: "legacy_settings".to_owned(),
+                kind: "selected_directory".to_owned(),
                 root: model_root,
             },
         ];
