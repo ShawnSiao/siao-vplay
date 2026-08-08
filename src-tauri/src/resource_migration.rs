@@ -454,6 +454,9 @@ pub fn reconnect_resource_root(
             .unwrap_or_else(|| "standard".to_owned()),
         active_resources,
         legacy_candidate_roots,
+        proxy_url: previous
+            .as_ref()
+            .and_then(|configuration| configuration.proxy_url.clone()),
     })?;
     resource_download::bind_configured_root()?;
     crate::runtime::sync_managed_root()?;

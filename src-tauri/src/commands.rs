@@ -21,7 +21,7 @@ use crate::{
     local_resources::{
         self, ConfigureLocalResourceRootInput, LocalResourceCatalog, LocalResourceError,
         LocalResourceLocationPlan, LocalResourceStatus, PlanLocalResourceLocationInput,
-        SetLocalResourceProfileInput,
+        SetLocalResourceProfileInput, SetLocalResourceProxyInput,
     },
     media::{self, MediaError, MediaInspection, MediaPreparation, MediaRuntimeStatus},
     remote_media::{
@@ -36,7 +36,7 @@ use crate::{
     resource_download::{
         self, CapabilityPreparation, PrepareLocalCapabilityInput, RemoveLocalResourceInput,
         RepairLocalResourceInput, ResourceDownloadError, ResourceDownloadTask,
-        ResourceDownloadTaskInput, ResourceRemovalResult,
+        ResourceDownloadTaskInput, ResourceNetworkStatus, ResourceRemovalResult,
     },
     resource_migration::{
         self, AdoptLocalResourcesInput, CleanupUnusedResourcesInput,
@@ -373,6 +373,7 @@ impl From<LocalResourceError> for CommandError {
             LocalResourceError::UnknownCapability(_) => "local_resource_capability_invalid",
             LocalResourceError::UnknownProfile(_) => "local_resource_profile_invalid",
             LocalResourceError::UnknownResource(_) => "local_resource_invalid",
+            LocalResourceError::InvalidProxy(_) => "local_resource_proxy_invalid",
             LocalResourceError::InvalidCatalog(_) => "local_resource_catalog_invalid",
             LocalResourceError::InvalidReceipt(_) => "local_resource_receipt_invalid",
             LocalResourceError::FileSystem(_) => "local_resource_filesystem_error",
@@ -692,6 +693,19 @@ pub fn set_local_resource_profile(
     input: SetLocalResourceProfileInput,
 ) -> Result<LocalResourceStatus, CommandError> {
     local_resources::set_preferred_profile(&input.profile_id).map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn get_local_resource_network_status() -> ResourceNetworkStatus {
+    resource_download::network_status()
+}
+
+#[tauri::command]
+pub fn set_local_resource_proxy(
+    input: SetLocalResourceProxyInput,
+) -> Result<ResourceNetworkStatus, CommandError> {
+    local_resources::set_proxy_url(input.proxy_url.as_deref())?;
+    Ok(resource_download::network_status())
 }
 
 #[tauri::command]

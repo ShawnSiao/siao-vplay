@@ -164,6 +164,8 @@ pub fn run() {
             commands::configure_local_resource_root,
             commands::repair_local_resource_root,
             commands::set_local_resource_profile,
+            commands::get_local_resource_network_status,
+            commands::set_local_resource_proxy,
             commands::inspect_local_resource_migration,
             commands::adopt_local_resources,
             commands::plan_local_resource_move,

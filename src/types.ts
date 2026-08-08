@@ -631,6 +631,12 @@ export type ResourceDownloadTask = {
   forceReinstall: boolean;
 };
 
+export type ResourceNetworkStatus = {
+  mode: "direct" | "proxy";
+  proxySource: "custom" | "environment" | "windows_system" | "direct";
+  proxyAddress: string | null;
+};
+
 export type CapabilityPreparation = {
   capabilityId: string;
   pendingActionId: string | null;

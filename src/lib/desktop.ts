@@ -33,6 +33,7 @@ import type {
   RemoteMediaPreview,
   RuntimeCatalog,
   ResourceDownloadTask,
+  ResourceNetworkStatus,
   ResourceAdoptionResult,
   ResourceMigrationPreview,
   ResourceRemovalResult,
@@ -399,6 +400,21 @@ export async function listResourceDownloadTasks(): Promise<
     return [];
   }
   return invoke<ResourceDownloadTask[]>("list_resource_download_tasks");
+}
+
+export async function getLocalResourceNetworkStatus(): Promise<ResourceNetworkStatus> {
+  if (!isDesktopApp) {
+    return { mode: "direct", proxySource: "direct", proxyAddress: null };
+  }
+  return invoke<ResourceNetworkStatus>("get_local_resource_network_status");
+}
+
+export async function setLocalResourceProxy(
+  proxyUrl: string | null,
+): Promise<ResourceNetworkStatus> {
+  return invoke<ResourceNetworkStatus>("set_local_resource_proxy", {
+    input: { proxyUrl },
+  });
 }
 
 export async function listenResourceDownloadTasks(

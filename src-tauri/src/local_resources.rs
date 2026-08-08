@@ -42,6 +42,8 @@ pub enum LocalResourceError {
     UnknownProfile(String),
     #[error("未找到对应资源：{0}")]
     UnknownResource(String),
+    #[error("代理地址无效：{0}")]
+    InvalidProxy(String),
     #[error("可信资源清单无效：{0}")]
     InvalidCatalog(String),
     #[error("资源安装凭据无效：{0}")]
@@ -152,6 +154,8 @@ pub struct LocalResourceConfiguration {
     pub active_resources: BTreeMap<String, String>,
     #[serde(default)]
     pub legacy_candidate_roots: Vec<String>,
+    #[serde(default)]
+    pub proxy_url: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -171,6 +175,13 @@ pub struct ConfigureLocalResourceRootInput {
 #[serde(rename_all = "camelCase")]
 pub struct SetLocalResourceProfileInput {
     pub profile_id: String,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SetLocalResourceProxyInput {
+    #[serde(default)]
+    pub proxy_url: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
@@ -321,6 +332,14 @@ pub fn configured_root() -> Option<PathBuf> {
         .get()
         .and_then(|state| state.read().ok())
         .and_then(|manager| manager.configuration.as_ref().map(configuration_root))
+}
+
+pub(crate) fn configured_proxy_url() -> Option<String> {
+    configuration_snapshot().and_then(|configuration| configuration.proxy_url)
+}
+
+pub fn set_proxy_url(proxy_url: Option<&str>) -> Result<(), LocalResourceError> {
+    with_manager_write(|manager| manager.set_proxy_url(proxy_url))
 }
 
 pub fn resolve_entrypoint(resource_id: &str, entrypoint: &str) -> Option<PathBuf> {
@@ -549,6 +568,10 @@ impl LocalResourceManager {
                 .map(|configuration| configuration.active_resources.clone())
                 .unwrap_or_default(),
             legacy_candidate_roots,
+            proxy_url: self
+                .configuration
+                .as_ref()
+                .and_then(|configuration| configuration.proxy_url.clone()),
         };
         persist_json(&self.config_path, &configuration)?;
         self.configuration = Some(configuration);
@@ -622,6 +645,16 @@ impl LocalResourceManager {
         configuration.preferred_profile = profile_id.to_owned();
         persist_json(&self.config_path, configuration)?;
         self.status()
+    }
+
+    fn set_proxy_url(&mut self, proxy_url: Option<&str>) -> Result<(), LocalResourceError> {
+        let normalized = normalize_proxy_url(proxy_url)?;
+        let configuration = self
+            .configuration
+            .as_mut()
+            .ok_or(LocalResourceError::ConfirmationRequired)?;
+        configuration.proxy_url = normalized;
+        persist_json(&self.config_path, configuration)
     }
 
     fn status(&self) -> Result<LocalResourceStatus, LocalResourceError> {
@@ -1042,7 +1075,29 @@ fn migrate_legacy_configuration(
         },
         active_resources: BTreeMap::new(),
         legacy_candidate_roots: vec![path_string(legacy_root)],
+        proxy_url: None,
     })
+}
+
+fn normalize_proxy_url(proxy_url: Option<&str>) -> Result<Option<String>, LocalResourceError> {
+    let Some(proxy_url) = proxy_url.map(str::trim).filter(|value| !value.is_empty()) else {
+        return Ok(None);
+    };
+    let parsed = url::Url::parse(proxy_url).map_err(|_| {
+        LocalResourceError::InvalidProxy("请输入完整的 http:// 或 https:// 地址".to_owned())
+    })?;
+    if !matches!(parsed.scheme(), "http" | "https")
+        || parsed.host_str().is_none()
+        || parsed.username() != ""
+        || parsed.password().is_some()
+        || parsed.query().is_some()
+        || parsed.fragment().is_some()
+    {
+        return Err(LocalResourceError::InvalidProxy(
+            "仅支持不含账号、密码、查询参数的 HTTP(S) 代理地址".to_owned(),
+        ));
+    }
+    Ok(Some(parsed.to_string().trim_end_matches('/').to_owned()))
 }
 
 fn push_unique_path(paths: &mut Vec<String>, path: &Path) -> bool {
@@ -1254,6 +1309,11 @@ fn validate_configuration(
                 "旧资源候选目录不是绝对路径".to_owned(),
             ));
         }
+    }
+    if normalize_proxy_url(configuration.proxy_url.as_deref())? != configuration.proxy_url {
+        return Err(LocalResourceError::InvalidProxy(
+            "代理地址不是规范的 HTTP(S) 地址".to_owned(),
+        ));
     }
     Ok(())
 }
@@ -1470,6 +1530,27 @@ fn available_space(_path: &Path) -> Option<u64> {
 mod tests {
     use super::*;
     use tempfile::tempdir;
+
+    #[test]
+    fn custom_proxy_requires_safe_http_address() {
+        assert_eq!(
+            normalize_proxy_url(Some(" http://127.0.0.1:7897/ "))
+                .expect("local proxy should be accepted"),
+            Some("http://127.0.0.1:7897".to_owned())
+        );
+        assert!(matches!(
+            normalize_proxy_url(Some("socks5://127.0.0.1:1080")),
+            Err(LocalResourceError::InvalidProxy(_))
+        ));
+        assert!(matches!(
+            normalize_proxy_url(Some("http://user:secret@proxy.example:8080")),
+            Err(LocalResourceError::InvalidProxy(_))
+        ));
+        assert_eq!(
+            normalize_proxy_url(Some(" ")).expect("empty value should restore automatic mode"),
+            None
+        );
+    }
 
     fn fixture_receipt(version: &str, health_status: &str) -> ResourceReceipt {
         ResourceReceipt {
@@ -1710,6 +1791,37 @@ mod tests {
                 .as_ref()
                 .map(|configuration| configuration.preferred_profile.as_str()),
             Some("fast")
+        );
+    }
+
+    #[test]
+    fn custom_proxy_persists_and_can_return_to_automatic_mode() {
+        let data = tempdir().expect("data directory");
+        let parent = tempdir().expect("resource parent");
+        let mut manager = LocalResourceManager::load(data.path()).expect("manager should load");
+        manager
+            .configure_location(parent.path().to_str().expect("UTF-8 path"), true)
+            .expect("configuration should succeed");
+        manager
+            .set_proxy_url(Some("http://127.0.0.1:7897"))
+            .expect("custom proxy should persist");
+        let reloaded = LocalResourceManager::load(data.path()).expect("manager should reload");
+        assert_eq!(
+            reloaded
+                .configuration
+                .as_ref()
+                .and_then(|configuration| configuration.proxy_url.as_deref()),
+            Some("http://127.0.0.1:7897")
+        );
+        manager
+            .set_proxy_url(None)
+            .expect("automatic proxy mode should persist");
+        assert_eq!(
+            LocalResourceManager::load(data.path())
+                .expect("manager should reload")
+                .configuration
+                .and_then(|configuration| configuration.proxy_url),
+            None
         );
     }
 

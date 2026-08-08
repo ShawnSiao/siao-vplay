@@ -13,7 +13,7 @@ use std::{
 };
 
 use reqwest::{
-    StatusCode,
+    Proxy, StatusCode,
     blocking::Client,
     header::{CONTENT_RANGE, RANGE},
 };
@@ -58,6 +58,12 @@ pub enum ResourceDownloadError {
     InvalidPendingAction(String),
     #[error("资源尚无可信下载制品：{0}")]
     ArtifactUnavailable(String),
+    #[error("资源下载连接超时。已保留下载进度；请检查网络或代理设置后继续")]
+    NetworkTimeout,
+    #[error("无法连接资源下载服务。已保留下载进度；请检查网络或代理设置后继续")]
+    NetworkConnect,
+    #[error("资源下载服务返回 HTTP {0}")]
+    HttpStatus(u16),
     #[error("资源下载失败：{0}")]
     Network(String),
     #[error("资源完整性校验失败：{0}")]
@@ -92,6 +98,9 @@ impl ResourceDownloadError {
             Self::InvalidTaskState(_) => "local_resource_task_state_invalid",
             Self::InvalidPendingAction(_) => "pending_action_invalid",
             Self::ArtifactUnavailable(_) => "local_resource_artifact_unavailable",
+            Self::NetworkTimeout => "local_resource_download_timeout",
+            Self::NetworkConnect => "local_resource_download_connection_failed",
+            Self::HttpStatus(_) => "local_resource_download_http_failed",
             Self::Network(_) => "local_resource_download_failed",
             Self::Integrity(_) => "local_resource_integrity_failed",
             Self::Archive(_) => "local_resource_archive_invalid",
@@ -148,6 +157,14 @@ pub struct ResourceDownloadTask {
     pub updated_at_ms: i64,
     #[serde(default)]
     force_reinstall: bool,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ResourceNetworkStatus {
+    pub mode: String,
+    pub proxy_source: String,
+    pub proxy_address: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
@@ -240,6 +257,19 @@ pub fn bind_configured_root() -> Result<(), ResourceDownloadError> {
 
 pub fn list_tasks() -> Result<Vec<ResourceDownloadTask>, ResourceDownloadError> {
     with_manager_read(|manager| Ok(manager.tasks.values().cloned().collect()))
+}
+
+pub fn network_status() -> ResourceNetworkStatus {
+    let (proxy_url, proxy_source) = effective_proxy();
+    ResourceNetworkStatus {
+        mode: if proxy_url.is_some() || proxy_source == "environment" {
+            "proxy".to_owned()
+        } else {
+            "direct".to_owned()
+        },
+        proxy_source: proxy_source.to_owned(),
+        proxy_address: proxy_url,
+    }
 }
 
 pub(crate) fn has_active_tasks() -> Result<bool, ResourceDownloadError> {
@@ -787,15 +817,7 @@ fn execute_task_inner(
         Ok(())
     })?;
 
-    let client = Client::builder()
-        .user_agent(format!(
-            "SiaoVPlay local resource manager/{}",
-            env!("CARGO_PKG_VERSION")
-        ))
-        .connect_timeout(Duration::from_secs(30))
-        .timeout(Duration::from_secs(2 * 60 * 60))
-        .build()
-        .map_err(|error| ResourceDownloadError::Network(error.to_string()))?;
+    let client = build_download_client()?;
     let mut last_persisted = existing_bytes;
     let outcome = download_artifact(
         &client,
@@ -887,6 +909,103 @@ fn execute_task_inner(
     Ok(())
 }
 
+fn build_download_client() -> Result<Client, ResourceDownloadError> {
+    let (proxy_url, _) = effective_proxy();
+    let mut builder = Client::builder()
+        .user_agent(format!(
+            "SiaoVPlay local resource manager/{}",
+            env!("CARGO_PKG_VERSION")
+        ))
+        .connect_timeout(Duration::from_secs(30))
+        .timeout(Duration::from_secs(2 * 60 * 60));
+    if let Some(proxy_url) = proxy_url {
+        let proxy = Proxy::all(&proxy_url)
+            .map_err(|error| ResourceDownloadError::Network(error.to_string()))?;
+        builder = builder.proxy(proxy);
+    }
+    builder
+        .build()
+        .map_err(|error| ResourceDownloadError::Network(error.to_string()))
+}
+
+fn effective_proxy() -> (Option<String>, &'static str) {
+    if let Some(proxy_url) = local_resources::configured_proxy_url() {
+        return (Some(proxy_url), "custom");
+    }
+    if environment_proxy_configured() {
+        return (None, "environment");
+    }
+    if let Some(proxy_url) = windows_system_proxy() {
+        return (Some(proxy_url), "windows_system");
+    }
+    (None, "direct")
+}
+
+fn environment_proxy_configured() -> bool {
+    [
+        "HTTPS_PROXY",
+        "https_proxy",
+        "HTTP_PROXY",
+        "http_proxy",
+        "ALL_PROXY",
+        "all_proxy",
+    ]
+    .iter()
+    .any(|name| std::env::var_os(name).is_some_and(|value| !value.is_empty()))
+}
+
+#[cfg(windows)]
+fn windows_system_proxy() -> Option<String> {
+    use winreg::{RegKey, enums::HKEY_CURRENT_USER};
+
+    let settings = RegKey::predef(HKEY_CURRENT_USER)
+        .open_subkey("Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings")
+        .ok()?;
+    let enabled = settings.get_value::<u32, _>("ProxyEnable").ok()?;
+    if enabled == 0 {
+        return None;
+    }
+    let raw = settings.get_value::<String, _>("ProxyServer").ok()?;
+    parse_windows_proxy_server(&raw)
+}
+
+#[cfg(not(windows))]
+fn windows_system_proxy() -> Option<String> {
+    None
+}
+
+fn parse_windows_proxy_server(raw: &str) -> Option<String> {
+    let raw = raw.trim();
+    let candidate = if raw.contains('=') {
+        let entries = raw
+            .split(';')
+            .filter_map(|entry| entry.split_once('='))
+            .map(|(scheme, address)| (scheme.trim().to_ascii_lowercase(), address.trim()))
+            .collect::<Vec<_>>();
+        entries
+            .iter()
+            .find(|(scheme, _)| scheme == "https")
+            .or_else(|| entries.iter().find(|(scheme, _)| scheme == "http"))
+            .map(|(_, address)| *address)?
+    } else {
+        raw
+    };
+    let with_scheme = if candidate.contains("://") {
+        candidate.to_owned()
+    } else {
+        format!("http://{candidate}")
+    };
+    let parsed = Url::parse(&with_scheme).ok()?;
+    if !matches!(parsed.scheme(), "http" | "https")
+        || parsed.host_str().is_none()
+        || parsed.username() != ""
+        || parsed.password().is_some()
+    {
+        return None;
+    }
+    Some(parsed.to_string().trim_end_matches('/').to_owned())
+}
+
 fn download_artifact(
     client: &Client,
     artifact: &ResourceArtifact,
@@ -919,9 +1038,7 @@ fn download_artifact(
     if existing_bytes > 0 {
         request = request.header(RANGE, format!("bytes={existing_bytes}-"));
     }
-    let mut response = request
-        .send()
-        .map_err(|error| ResourceDownloadError::Network(redact_request_error(&error)))?;
+    let mut response = request.send().map_err(classify_request_error)?;
     let append = if existing_bytes > 0 && response.status() == StatusCode::PARTIAL_CONTENT {
         validate_content_range(&response, existing_bytes)?;
         true
@@ -929,10 +1046,9 @@ fn download_artifact(
         existing_bytes = 0;
         false
     } else {
-        return Err(ResourceDownloadError::Network(format!(
-            "下载服务返回 HTTP {}",
-            response.status()
-        )));
+        return Err(ResourceDownloadError::HttpStatus(
+            response.status().as_u16(),
+        ));
     };
     let mut file = OpenOptions::new()
         .create(true)
@@ -1686,13 +1802,13 @@ fn should_discard_partial(error: &ResourceDownloadError) -> bool {
     )
 }
 
-fn redact_request_error(error: &reqwest::Error) -> String {
+fn classify_request_error(error: reqwest::Error) -> ResourceDownloadError {
     if error.is_timeout() {
-        "连接下载服务超时".to_owned()
+        ResourceDownloadError::NetworkTimeout
     } else if error.is_connect() {
-        "无法连接下载服务".to_owned()
+        ResourceDownloadError::NetworkConnect
     } else {
-        "下载请求未完成".to_owned()
+        ResourceDownloadError::Network("下载请求未完成；已保留下载进度".to_owned())
     }
 }
 
@@ -1760,6 +1876,35 @@ mod tests {
     };
     use tempfile::tempdir;
     use zip::{ZipWriter, write::SimpleFileOptions};
+
+    #[test]
+    fn windows_proxy_parser_prefers_https_and_normalizes_address() {
+        assert_eq!(
+            parse_windows_proxy_server("http=127.0.0.1:8080;https=127.0.0.1:7897"),
+            Some("http://127.0.0.1:7897".to_owned())
+        );
+        assert_eq!(
+            parse_windows_proxy_server("http://proxy.example:3128"),
+            Some("http://proxy.example:3128".to_owned())
+        );
+        assert_eq!(parse_windows_proxy_server("socks=127.0.0.1:1080"), None);
+    }
+
+    #[test]
+    fn network_errors_have_actionable_stable_codes() {
+        assert_eq!(
+            ResourceDownloadError::NetworkTimeout.code(),
+            "local_resource_download_timeout"
+        );
+        assert_eq!(
+            ResourceDownloadError::NetworkConnect.code(),
+            "local_resource_download_connection_failed"
+        );
+        assert_eq!(
+            ResourceDownloadError::HttpStatus(403).code(),
+            "local_resource_download_http_failed"
+        );
+    }
 
     struct TestServer {
         url: String,
@@ -2240,6 +2385,55 @@ mod tests {
         fs::write(
             evidence_root.join("phase3-real-resource-evidence.json"),
             serde_json::to_vec_pretty(&evidence).expect("evidence should serialize"),
+        )
+        .expect("evidence should write");
+    }
+
+    #[test]
+    #[ignore = "downloads and verifies the official Whisper archive into an explicit W: evidence root"]
+    fn real_official_whisper_archive_downloads_through_effective_proxy() {
+        let evidence_root = std::env::var_os("SIAOVPLAY_PROXY_DOWNLOAD_ROOT")
+            .map(PathBuf::from)
+            .expect("SIAOVPLAY_PROXY_DOWNLOAD_ROOT is required");
+        fs::create_dir_all(&evidence_root).expect("evidence root should create");
+        let resource = local_resources::resource_definition("whisper-cpu")
+            .expect("Whisper CPU resource should exist");
+        let artifact = resource
+            .artifact
+            .as_ref()
+            .expect("Whisper CPU artifact should exist");
+        let partial_path = evidence_root.join("whisper-cpu.zip");
+        let staging_path = evidence_root.join("staging");
+        remove_directory_if_exists(&staging_path).expect("old staging should be removable");
+        let client = build_download_client().expect("download client should build");
+        let outcome = download_artifact(
+            &client,
+            artifact,
+            &partial_path,
+            &DownloadControl::default(),
+            |_| Ok(()),
+        )
+        .expect("official Whisper archive should download");
+        assert_eq!(outcome, DownloadOutcome::Complete);
+        verify_downloaded_file(&partial_path, artifact.size, &artifact.sha256)
+            .expect("official Whisper archive should match the catalog");
+        let payload = staging_path.join("payload");
+        fs::create_dir_all(&payload).expect("payload directory should create");
+        install_to_staging(&resource, artifact, &partial_path, &payload)
+            .expect("official Whisper archive should extract");
+        verify_entrypoints(&resource, &payload).expect("Whisper entrypoint should exist");
+        run_health_check(&resource, &payload).expect("Whisper version should match the catalog");
+        fs::write(
+            evidence_root.join("proxy-download-evidence.json"),
+            serde_json::to_vec_pretty(&serde_json::json!({
+                "network": network_status(),
+                "resourceId": resource.id,
+                "version": resource.version,
+                "artifactSize": artifact.size,
+                "artifactSha256": artifact.sha256,
+                "healthCheck": resource.health_check,
+            }))
+            .expect("evidence should serialize"),
         )
         .expect("evidence should write");
     }
