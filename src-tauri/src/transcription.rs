@@ -163,6 +163,13 @@ impl TranscriptionModelKind {
             Self::Base => (BASE_MODEL_SIZE, BASE_MODEL_SHA256),
         }
     }
+
+    fn product_label(self) -> &'static str {
+        match self {
+            Self::Small => "标准",
+            Self::Base => "快速",
+        }
+    }
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -450,6 +457,13 @@ fn runtime_directory_candidates(
 
 fn verify_runtime(backend: &'static str) -> Result<RuntimeBundle, TranscriptionError> {
     let directory = runtime_directory(backend)?;
+    verify_runtime_directory(backend, directory)
+}
+
+fn verify_runtime_directory(
+    backend: &'static str,
+    directory: PathBuf,
+) -> Result<RuntimeBundle, TranscriptionError> {
     let metadata_path = directory.join("runtime-metadata.json");
     if !metadata_path.is_file() {
         return Err(TranscriptionError::RuntimeUnavailable(format!(
@@ -545,6 +559,13 @@ fn verify_runtime(backend: &'static str) -> Result<RuntimeBundle, TranscriptionE
         metadata_sha256: metadata_hash,
         vad_timeline_verified: true,
     })
+}
+
+pub(crate) fn verify_managed_runtime(
+    backend: &'static str,
+    directory: &Path,
+) -> Result<(), TranscriptionError> {
+    verify_runtime_directory(backend, directory.to_path_buf()).map(|_| ())
 }
 
 fn model_path(kind: TranscriptionModelKind) -> Result<PathBuf, TranscriptionError> {
@@ -1489,7 +1510,7 @@ pub(crate) fn run_job(
         store,
         PersistTranscriptionInput {
             project_id: job.public.project_id.clone(),
-            source_label: format!("本地转写 · {} · {}", job.public.model_kind, runtime.backend),
+            source_label: format!("本地字幕识别 · {}", model.kind.product_label()),
             source_sha256: output_hash,
             language_code: parsed.language_code,
             expected_project_revision: job.expected_project_revision,
@@ -2295,6 +2316,16 @@ mod tests {
     struct RealFixture {
         language: String,
         audio_path: String,
+    }
+
+    #[test]
+    #[ignore = "requires the pinned W: CPU Whisper runtime, models, and VAD model"]
+    fn real_runtime_selection_falls_back_to_cpu_when_vulkan_is_unavailable() {
+        let runtime = preferred_runtime().expect("CPU runtime should remain available");
+        assert_eq!(runtime.backend, "cpu");
+        let status = transcription_runtime_status();
+        assert!(status.available);
+        assert_eq!(status.preferred_backend.as_deref(), Some("cpu"));
     }
 
     #[test]

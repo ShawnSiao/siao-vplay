@@ -76,8 +76,8 @@ const browserResourceCapabilities = [
   {
     id: "local_transcription",
     title: "本地字幕识别",
-    resourceIds: ["ffmpeg-cpu", "whisper-cpu"],
-    profileIds: ["standard"],
+    resourceIds: ["ffmpeg-cpu", "whisper-cpu", "whisper-vad-silero-6.2"],
+    profileIds: ["fast", "standard"],
     requiresCapabilityIds: [],
   },
   {
@@ -150,6 +150,12 @@ export async function getLocalResourceCatalog(): Promise<LocalResourceCatalog> {
       capabilities: browserResourceCapabilities,
       profiles: [
         {
+          id: "fast",
+          title: "快速",
+          resourceIds: ["whisper-model-base"],
+          recommended: false,
+        },
+        {
           id: "standard",
           title: "标准",
           resourceIds: ["whisper-model-small"],
@@ -192,6 +198,88 @@ export async function getLocalResourceCatalog(): Promise<LocalResourceCatalog> {
           },
           entrypoints: {},
           healthCheck: "yt-dlp-version",
+        },
+        {
+          id: "whisper-cpu",
+          version: "1.9.1-siaocut.1",
+          platform: "windows-x86_64",
+          kind: "source-built-runtime",
+          bundled: false,
+          installedSize: 9_751_754,
+          expectedDownloadSize: 3_594_453,
+          license: "MIT",
+          sourcePage: "https://github.com/ggml-org/whisper.cpp",
+          entrypoints: { whisperCli: "whisper-cli.exe" },
+          healthCheck: "whisper-runtime-metadata-and-timeline",
+          distribution: { status: "pending_release_asset" },
+        },
+        {
+          id: "whisper-vad-silero-6.2",
+          version: "6.2.0",
+          platform: "all",
+          kind: "file",
+          bundled: false,
+          installedSize: 885_098,
+          license: "MIT",
+          sourcePage: "https://huggingface.co/ggml-org/whisper-vad",
+          artifact: {
+            url: "https://example.invalid/vad.bin",
+            size: 885_098,
+            sha256: "0".repeat(64),
+            format: "file",
+          },
+          entrypoints: {},
+          healthCheck: "sha256",
+        },
+        {
+          id: "whisper-model-base",
+          version: "whisper.cpp-base",
+          platform: "all",
+          kind: "model",
+          bundled: false,
+          installedSize: 147_951_465,
+          license: "MIT",
+          sourcePage: "https://huggingface.co/ggerganov/whisper.cpp",
+          artifact: {
+            url: "https://example.invalid/base.bin",
+            size: 147_951_465,
+            sha256: "0".repeat(64),
+            format: "file",
+          },
+          entrypoints: {},
+          healthCheck: "sha256",
+        },
+        {
+          id: "whisper-model-small",
+          version: "whisper.cpp-small",
+          platform: "all",
+          kind: "model",
+          bundled: false,
+          installedSize: 487_601_967,
+          license: "MIT",
+          sourcePage: "https://huggingface.co/ggerganov/whisper.cpp",
+          artifact: {
+            url: "https://example.invalid/small.bin",
+            size: 487_601_967,
+            sha256: "0".repeat(64),
+            format: "file",
+          },
+          entrypoints: {},
+          healthCheck: "sha256",
+        },
+        {
+          id: "whisper-vulkan",
+          version: "1.9.1-siaocut.1",
+          platform: "windows-x86_64",
+          kind: "source-built-runtime",
+          bundled: false,
+          installedSize: 58_320_931,
+          expectedDownloadSize: 18_571_656,
+          license: "MIT",
+          sourcePage: "https://github.com/ggml-org/whisper.cpp",
+          entrypoints: { whisperCli: "whisper-cli.exe" },
+          healthCheck: "whisper-runtime-metadata-and-timeline",
+          distribution: { status: "pending_release_asset" },
         },
       ],
     };
@@ -246,6 +334,18 @@ export async function configureLocalResourceRoot(
 ): Promise<LocalResourceStatus> {
   return invoke<LocalResourceStatus>("configure_local_resource_root", {
     input: { parentPath, confirmed },
+  });
+}
+
+export async function setLocalResourceProfile(
+  profileId: string,
+): Promise<LocalResourceStatus> {
+  if (!isDesktopApp) {
+    const status = await getLocalResourceStatus();
+    return { ...status, preferredProfile: profileId };
+  }
+  return invoke<LocalResourceStatus>("set_local_resource_profile", {
+    input: { profileId },
   });
 }
 

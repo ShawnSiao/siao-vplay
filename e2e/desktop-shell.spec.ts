@@ -364,8 +364,10 @@ test("local resources stay product-focused, accessible, and scrollable at 1280 b
   await expect(dialog).toBeVisible();
   await expect(dialog).toContainText("共享内容不会重复下载");
   await expect(dialog).toContainText("不会使用隐式系统盘目录");
+  await expect(dialog).toContainText("识别模型下载 148 MB");
+  await expect(dialog).toContainText("识别模型下载 488 MB");
   expect(await dialog.evaluate((element) => (element as HTMLElement).innerText)).not.toMatch(
-    /FFmpeg|yt-dlp|Whisper|SHA-256|https:\/\/|SIAOVPLAY_/i,
+    /FFmpeg|yt-dlp|Whisper|SHA-256|https:\/\/|SIAOVPLAY_|轻量/i,
   );
   await expect(dialog.getByText("ffmpeg-cpu", { exact: true })).toBeHidden();
   await expect(dialog.getByText(/SHA-256/).first()).toBeHidden();

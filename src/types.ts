@@ -567,6 +567,7 @@ export type LocalResourceDefinition = {
   kind: string;
   bundled: boolean;
   installedSize?: number;
+  expectedDownloadSize?: number;
   license: string;
   sourcePage: string;
   artifact?: LocalResourceArtifact;

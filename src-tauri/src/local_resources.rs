@@ -38,6 +38,8 @@ pub enum LocalResourceError {
     ResourceNotReady(String),
     #[error("未找到对应能力：{0}")]
     UnknownCapability(String),
+    #[error("未找到对应字幕识别方式：{0}")]
+    UnknownProfile(String),
     #[error("未找到对应资源：{0}")]
     UnknownResource(String),
     #[error("可信资源清单无效：{0}")]
@@ -103,6 +105,8 @@ pub struct ResourceDefinition {
     pub bundled: bool,
     #[serde(default)]
     pub installed_size: Option<u64>,
+    #[serde(default)]
+    pub expected_download_size: Option<u64>,
     pub license: String,
     pub source_page: String,
     #[serde(default)]
@@ -159,6 +163,12 @@ pub struct PlanLocalResourceLocationInput {
 pub struct ConfigureLocalResourceRootInput {
     pub parent_path: String,
     pub confirmed: bool,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SetLocalResourceProfileInput {
+    pub profile_id: String,
 }
 
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
@@ -280,6 +290,10 @@ pub fn configure_location(
     confirmed: bool,
 ) -> Result<LocalResourceStatus, LocalResourceError> {
     with_manager_write(|manager| manager.configure_location(parent, confirmed))
+}
+
+pub fn set_preferred_profile(profile_id: &str) -> Result<LocalResourceStatus, LocalResourceError> {
+    with_manager_write(|manager| manager.set_preferred_profile(profile_id))
 }
 
 pub fn configured_root() -> Option<PathBuf> {
@@ -425,6 +439,26 @@ impl LocalResourceManager {
         };
         persist_json(&self.config_path, &configuration)?;
         self.configuration = Some(configuration);
+        self.status()
+    }
+
+    fn set_preferred_profile(
+        &mut self,
+        profile_id: &str,
+    ) -> Result<LocalResourceStatus, LocalResourceError> {
+        if !catalog()?
+            .profiles
+            .iter()
+            .any(|profile| profile.id == profile_id)
+        {
+            return Err(LocalResourceError::UnknownProfile(profile_id.to_owned()));
+        }
+        let configuration = self
+            .configuration
+            .as_mut()
+            .ok_or(LocalResourceError::ConfirmationRequired)?;
+        configuration.preferred_profile = profile_id.to_owned();
+        persist_json(&self.config_path, configuration)?;
         self.status()
     }
 
@@ -801,26 +835,39 @@ fn validate_catalog(catalog: &LocalResourceCatalog) -> Result<(), LocalResourceE
                 resource.id
             )));
         }
+        if resource.expected_download_size == Some(0) {
+            return Err(LocalResourceError::InvalidCatalog(format!(
+                "{} 的预计下载大小无效",
+                resource.id
+            )));
+        }
         if let Some(artifact) = &resource.artifact {
             if !artifact.url.starts_with("https://")
                 || artifact.size == 0
                 || !is_sha256(&artifact.sha256)
                 || resource.installed_size.unwrap_or(0) == 0
+                || resource
+                    .expected_download_size
+                    .is_some_and(|expected| expected != artifact.size)
             {
                 return Err(LocalResourceError::InvalidCatalog(format!(
                     "{} 的下载地址、下载大小、安装后大小或 SHA-256 无效",
                     resource.id
                 )));
             }
-        } else if resource
-            .distribution
-            .as_ref()
-            .is_none_or(|distribution| distribution.status != "pending_release_asset")
-        {
-            return Err(LocalResourceError::InvalidCatalog(format!(
-                "{} 既没有可信下载制品，也没有待发布标记",
-                resource.id
-            )));
+        } else {
+            if resource
+                .distribution
+                .as_ref()
+                .is_none_or(|distribution| distribution.status != "pending_release_asset")
+                || resource.expected_download_size.unwrap_or(0) == 0
+                || resource.installed_size.unwrap_or(0) == 0
+            {
+                return Err(LocalResourceError::InvalidCatalog(format!(
+                    "{} 既没有可信下载制品，也没有完整的待发布大小信息",
+                    resource.id
+                )));
+            }
         }
         for relative in resource.entrypoints.values() {
             safe_relative_path(relative, "清单资源入口")?;
@@ -1059,6 +1106,18 @@ mod tests {
         validate_catalog(catalog).expect("catalog should validate");
         assert_eq!(catalog.resources.len(), 7);
         assert!(catalog.resources.iter().all(|resource| !resource.bundled));
+        let cpu = catalog
+            .resources
+            .iter()
+            .find(|resource| resource.id == "whisper-cpu")
+            .expect("CPU runtime should be catalogued");
+        assert_eq!(cpu.expected_download_size, Some(3_594_453));
+        assert_eq!(cpu.installed_size, Some(9_751_754));
+        assert!(cpu.artifact.is_none());
+        assert_eq!(
+            cpu.distribution.as_ref().map(|value| value.status.as_str()),
+            Some("pending_release_asset")
+        );
     }
 
     #[test]
@@ -1133,6 +1192,41 @@ mod tests {
         assert_eq!(
             reloaded.status().expect("status should resolve").root_state,
             LocalResourceRootState::RootUnavailable
+        );
+    }
+
+    #[test]
+    fn preferred_profile_persists_and_unknown_profiles_are_rejected() {
+        let data = tempdir().expect("data directory");
+        let parent = tempdir().expect("resource parent");
+        let mut manager = LocalResourceManager::load(data.path()).expect("manager should load");
+        manager
+            .configure_location(parent.path().to_str().expect("UTF-8 path"), true)
+            .expect("configuration should succeed");
+
+        let status = manager
+            .set_preferred_profile("fast")
+            .expect("known profile should persist");
+        assert_eq!(status.preferred_profile, "fast");
+        let reloaded = LocalResourceManager::load(data.path()).expect("manager should reload");
+        assert_eq!(
+            reloaded
+                .configuration
+                .as_ref()
+                .map(|configuration| configuration.preferred_profile.as_str()),
+            Some("fast")
+        );
+
+        let error = manager
+            .set_preferred_profile("unknown")
+            .expect_err("unknown profile should fail");
+        assert!(matches!(error, LocalResourceError::UnknownProfile(_)));
+        assert_eq!(
+            manager
+                .configuration
+                .as_ref()
+                .map(|configuration| configuration.preferred_profile.as_str()),
+            Some("fast")
         );
     }
 

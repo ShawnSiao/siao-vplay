@@ -126,6 +126,7 @@ function makeController(
       resourceRoot: "W:\\SiaoVPlay\\SiaoVPlay",
       rootState: "ready",
     }),
+    selectProfile: vi.fn().mockResolvedValue(setupStatus),
     prepareCapability: vi.fn().mockResolvedValue({
       capabilityId: "basic_media",
       pendingActionId: null,
@@ -279,6 +280,165 @@ describe("LocalResourcesDialog", () => {
     expect(screen.getByText(/2.0 MB\/秒/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "暂停" }));
     await waitFor(() => expect(pauseTask).toHaveBeenCalledWith(task.id));
+  });
+
+  it("shows real transcription profile sizes and keeps unpublished runtimes disabled", async () => {
+    const transcriptionCatalog: LocalResourceCatalog = {
+      ...catalog,
+      capabilities: [
+        ...catalog.capabilities,
+        {
+          id: "local_transcription",
+          title: "本地字幕识别",
+          resourceIds: ["ffmpeg-cpu", "whisper-cpu", "whisper-vad-silero-6.2"],
+          profileIds: ["fast", "standard"],
+          requiresCapabilityIds: [],
+        },
+      ],
+      profiles: [
+        {
+          id: "fast",
+          title: "快速",
+          resourceIds: ["whisper-model-base"],
+          recommended: false,
+        },
+        {
+          id: "standard",
+          title: "标准",
+          resourceIds: ["whisper-model-small"],
+          recommended: true,
+        },
+      ],
+      resources: [
+        ...catalog.resources,
+        {
+          id: "whisper-cpu",
+          version: "1.9.1-siaocut.1",
+          platform: "windows-x86_64",
+          kind: "archive",
+          bundled: false,
+          installedSize: 9_751_754,
+          expectedDownloadSize: 3_594_453,
+          license: "MIT",
+          sourcePage: "https://example.com/whisper-cpu",
+          distribution: { status: "pending_release_asset" },
+          entrypoints: {},
+          healthCheck: "whisper-runtime-metadata-and-timeline",
+        },
+        {
+          id: "whisper-vad-silero-6.2",
+          version: "6.2.0",
+          platform: "any",
+          kind: "file",
+          bundled: false,
+          installedSize: 864_680,
+          license: "MIT",
+          sourcePage: "https://example.com/vad",
+          artifact: {
+            url: "https://example.com/ggml-silero-v6.2.0.bin",
+            size: 864_680,
+            sha256: "e".repeat(64),
+            format: "file",
+          },
+          entrypoints: {},
+          healthCheck: "whisper-vad-magic",
+        },
+        {
+          id: "whisper-model-base",
+          version: "ggml-base",
+          platform: "any",
+          kind: "file",
+          bundled: false,
+          installedSize: 147_951_465,
+          license: "MIT",
+          sourcePage: "https://example.com/base",
+          artifact: {
+            url: "https://example.com/ggml-base.bin",
+            size: 147_951_465,
+            sha256: "c".repeat(64),
+            format: "file",
+          },
+          entrypoints: {},
+          healthCheck: "whisper-model-magic",
+        },
+        {
+          id: "whisper-model-small",
+          version: "ggml-small",
+          platform: "any",
+          kind: "file",
+          bundled: false,
+          installedSize: 487_601_967,
+          license: "MIT",
+          sourcePage: "https://example.com/small",
+          artifact: {
+            url: "https://example.com/ggml-small.bin",
+            size: 487_601_967,
+            sha256: "d".repeat(64),
+            format: "file",
+          },
+          entrypoints: {},
+          healthCheck: "whisper-model-magic",
+        },
+      ],
+    };
+    const transcriptionStatus: LocalResourceStatus = {
+      ...setupStatus,
+      configured: true,
+      resourceRoot: "W:\\SiaoVPlay\\SiaoVPlay",
+      rootState: "ready",
+      capabilities: [
+        ...setupStatus.capabilities,
+        {
+          id: "local_transcription",
+          title: "本地字幕识别",
+          state: "not_ready",
+          requiredResourceIds: [
+            "ffmpeg-cpu",
+            "whisper-cpu",
+            "whisper-vad-silero-6.2",
+            "whisper-model-small",
+          ],
+          missingResourceIds: [
+            "whisper-cpu",
+            "whisper-vad-silero-6.2",
+            "whisper-model-small",
+          ],
+        },
+      ],
+    };
+    const selectProfile = vi.fn().mockResolvedValue(transcriptionStatus);
+    render(
+      <LocalResourcesDialog
+        controller={makeController({
+          catalog: transcriptionCatalog,
+          status: transcriptionStatus,
+          selectProfile,
+        })}
+        firstRun={false}
+        pendingAction={{
+          id: "00000000-0000-4000-8000-000000000199",
+          capabilityId: "local_transcription",
+          label: "继续生成原文字幕",
+          profileId: "standard",
+        }}
+        previewMode={false}
+        onClose={() => undefined}
+        onDismissFirstRun={() => undefined}
+        onNotice={() => undefined}
+      />,
+    );
+
+    expect(screen.getByText(/直接展示真实大小/)).toBeInTheDocument();
+    expect(screen.queryByText(/轻量/)).not.toBeInTheDocument();
+    expect(screen.getByText(/识别模型下载 488 MB/)).toBeInTheDocument();
+    expect(screen.getByText(/识别模型下载 148 MB/)).toBeInTheDocument();
+    expect(screen.getByText("当前不能开始下载")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "当前不能开始准备" }),
+    ).toBeDisabled();
+
+    fireEvent.click(screen.getByRole("radio", { name: /快速/ }));
+    await waitFor(() => expect(selectProfile).toHaveBeenCalledWith("fast"));
   });
 
   it("keeps versions, hashes, sources, and repair actions inside advanced diagnostics", () => {

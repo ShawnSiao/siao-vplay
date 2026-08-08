@@ -114,12 +114,17 @@
       "platform": "windows-x86_64",
       "kind": "source-built-runtime",
       "bundled": false,
+      "installedSize": 9751754,
+      "expectedDownloadSize": 3594453,
       "license": "MIT",
       "sourcePage": "https://github.com/ggml-org/whisper.cpp",
       "sourceCommit": "080bbbe85230f624f0b52127f1ae1218247989f9",
       "patchSha256": "e8bc54eb4499a2b59cd2b632554d96f45bb7290cc9a37d2b53837be3e9f5fe74",
       "distribution": {
         "status": "pending_release_asset"
+      },
+      "entrypoints": {
+        "whisperCli": "whisper-cli.exe"
       },
       "healthCheck": "whisper-runtime-metadata-and-timeline"
     },
@@ -129,6 +134,8 @@
       "platform": "windows-x86_64",
       "kind": "source-built-runtime",
       "bundled": false,
+      "installedSize": 58320931,
+      "expectedDownloadSize": 18571656,
       "license": "MIT",
       "sourcePage": "https://github.com/ggml-org/whisper.cpp",
       "sourceCommit": "080bbbe85230f624f0b52127f1ae1218247989f9",
@@ -136,6 +143,9 @@
       "requires": "Vulkan 1.2 compatible graphics adapter and driver",
       "distribution": {
         "status": "pending_release_asset"
+      },
+      "entrypoints": {
+        "whisperCli": "whisper-cli.exe"
       },
       "healthCheck": "whisper-runtime-metadata-and-timeline"
     },

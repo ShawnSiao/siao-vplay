@@ -160,6 +160,7 @@ pub fn run() {
             commands::get_local_resource_status,
             commands::plan_local_resource_location,
             commands::configure_local_resource_root,
+            commands::set_local_resource_profile,
             commands::list_resource_download_tasks,
             commands::prepare_local_capability,
             commands::pause_resource_download,

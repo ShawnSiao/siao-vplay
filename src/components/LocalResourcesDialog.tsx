@@ -12,6 +12,7 @@ export type PendingResourceAction = {
   id: string;
   capabilityId: string;
   label: string;
+  profileId?: "fast" | "standard";
 };
 
 type LocalResourcesDialogProps = {
@@ -49,6 +50,12 @@ function formatBytes(bytes: number | null | undefined): string {
     return `${(bytes / 1_000_000).toFixed(bytes >= 100_000_000 ? 0 : 1)} MB`;
   }
   return `${(bytes / 1_000_000_000).toFixed(1)} GB`;
+}
+
+function resourceDownloadBytes(
+  resource: { artifact?: { size: number }; expectedDownloadSize?: number } | undefined,
+): number {
+  return resource?.artifact?.size ?? resource?.expectedDownloadSize ?? 0;
 }
 
 function formatRemaining(seconds: number | null): string {
@@ -122,6 +129,9 @@ export function LocalResourcesDialog({
   const [selectedCapabilityIds, setSelectedCapabilityIds] = useState(
     new Set(pendingAction ? [pendingAction.capabilityId] : recommendedCapabilityIds),
   );
+  const [selectedProfileId, setSelectedProfileId] = useState(
+    pendingAction?.profileId ?? controller.status?.preferredProfile ?? "standard",
+  );
   const [locationPlan, setLocationPlan] =
     useState<LocalResourceLocationPlan | null>(null);
   const [busyAction, setBusyAction] = useState<string | null>(null);
@@ -151,7 +161,7 @@ export function LocalResourcesDialog({
       (totals, resourceId) => {
         const resource = resourceById.get(resourceId);
         return {
-          downloadBytes: totals.downloadBytes + (resource?.artifact?.size ?? 0),
+          downloadBytes: totals.downloadBytes + resourceDownloadBytes(resource),
           installedBytes: totals.installedBytes + (resource?.installedSize ?? 0),
         };
       },
@@ -159,9 +169,55 @@ export function LocalResourcesDialog({
     );
   }, [catalog?.capabilities, resourceById]);
 
+  const missingResourceIdsByCapability = useMemo(() => {
+    const result = new Map<string, string[]>();
+    const profile = catalog?.profiles.find((item) => item.id === selectedProfileId);
+    const collect = (capabilityId: string, visited: Set<string>): Set<string> => {
+      if (visited.has(capabilityId)) {
+        return new Set();
+      }
+      visited.add(capabilityId);
+      const definition = catalog?.capabilities.find((item) => item.id === capabilityId);
+      const statusItem = statusByCapabilityId.get(capabilityId);
+      const ids = new Set<string>();
+      for (const dependency of definition?.requiresCapabilityIds ?? []) {
+        for (const resourceId of collect(dependency, visited)) {
+          ids.add(resourceId);
+        }
+      }
+      if (
+        definition?.profileIds.includes(selectedProfileId) &&
+        selectedProfileId !== status?.preferredProfile
+      ) {
+        for (const resourceId of definition.resourceIds) {
+          ids.add(resourceId);
+        }
+        for (const resourceId of profile?.resourceIds ?? []) {
+          ids.add(resourceId);
+        }
+      } else {
+        for (const resourceId of statusItem?.missingResourceIds ?? []) {
+          ids.add(resourceId);
+        }
+      }
+      return ids;
+    };
+    for (const capability of capabilityStatuses) {
+      result.set(capability.id, [...collect(capability.id, new Set())]);
+    }
+    return result;
+  }, [
+    capabilityStatuses,
+    catalog?.capabilities,
+    catalog?.profiles,
+    selectedProfileId,
+    status?.preferredProfile,
+    statusByCapabilityId,
+  ]);
+
   const capabilityInstallable = (capability: LocalResourceCapabilityStatus) =>
     capability.state === "ready" ||
-    capability.missingResourceIds.every(
+    (missingResourceIdsByCapability.get(capability.id) ?? []).every(
       (resourceId) => resourceById.get(resourceId)?.artifact,
     );
 
@@ -169,16 +225,17 @@ export function LocalResourcesDialog({
     const ids = new Set<string>();
     for (const capabilityId of selectedCapabilityIds) {
       const capability = statusByCapabilityId.get(capabilityId);
-      for (const resourceId of capability?.missingResourceIds ?? []) {
+      for (const resourceId of
+        (capability && missingResourceIdsByCapability.get(capability.id)) ?? []) {
         ids.add(resourceId);
       }
     }
     return ids;
-  }, [selectedCapabilityIds, statusByCapabilityId]);
+  }, [missingResourceIdsByCapability, selectedCapabilityIds, statusByCapabilityId]);
 
   const selectedDownloadBytes = [...selectedResourceIds].reduce(
     (total, resourceId) =>
-      total + (resourceById.get(resourceId)?.artifact?.size ?? 0),
+      total + resourceDownloadBytes(resourceById.get(resourceId)),
     0,
   );
   const selectedInstalledBytes = [...selectedResourceIds].reduce(
@@ -200,6 +257,9 @@ export function LocalResourcesDialog({
     );
   const selectionPreparing = selectedCapabilities.some(
     (capability) => capability.state === "preparing",
+  );
+  const selectionUnavailable = selectedCapabilities.some(
+    (capability) => !capabilityInstallable(capability),
   );
 
   const visibleTasks = tasks.filter(
@@ -261,11 +321,21 @@ export function LocalResourcesDialog({
         if (!locationPlan) {
           throw new Error("需要先选择并核对保存位置。");
         }
-        await controller.confirmLocation(locationPlan.selectedParent);
+        const configured = await controller.confirmLocation(locationPlan.selectedParent);
+        if (configured.preferredProfile !== selectedProfileId) {
+          await controller.selectProfile(selectedProfileId);
+        }
       }
       await prepareSelection();
       onNotice("本地功能已开始准备，可以继续查看下载进度。");
     });
+
+  const selectProfile = (profileId: string) => {
+    setSelectedProfileId(profileId);
+    if (status?.configured) {
+      void runAction(`profile:${profileId}`, () => controller.selectProfile(profileId));
+    }
+  };
 
   const toggleCapability = (capabilityId: string) => {
     if (pendingAction?.capabilityId === capabilityId) {
@@ -393,14 +463,52 @@ export function LocalResourcesDialog({
                   </button>
                 ) : null}
               </div>
+              {catalog?.profiles.length ? (
+                <fieldset className="local-resource-profiles">
+                  <legend>字幕识别方式</legend>
+                  <p>方式只影响字幕识别。下载量按可信资源清单计算，并直接展示真实大小。</p>
+                  <div>
+                    {catalog.profiles.map((profile) => {
+                      const modelBytes = profile.resourceIds.reduce(
+                        (total, resourceId) =>
+                          total + resourceDownloadBytes(resourceById.get(resourceId)),
+                        0,
+                      );
+                      return (
+                        <label key={profile.id}>
+                          <input
+                            type="radio"
+                            name="local-resource-profile"
+                            value={profile.id}
+                            checked={selectedProfileId === profile.id}
+                            disabled={previewMode || busyAction !== null}
+                            onChange={() => selectProfile(profile.id)}
+                          />
+                          <span>
+                            <strong>
+                              {profile.title}
+                              {profile.recommended ? "（推荐）" : ""}
+                            </strong>
+                            <small>
+                              识别模型下载 {formatBytes(modelBytes)}；完整准备量见下方汇总
+                            </small>
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </fieldset>
+              ) : null}
               <div className="local-capability-list">
                 {capabilityStatuses.map((capability) => {
                   const installable = capabilityInstallable(capability);
                   const selected = selectedCapabilityIds.has(capability.id);
                   const locked = pendingAction?.capabilityId === capability.id;
-                  const downloadBytes = capability.missingResourceIds.reduce(
+                  const missingResourceIds =
+                    missingResourceIdsByCapability.get(capability.id) ?? [];
+                  const downloadBytes = missingResourceIds.reduce(
                     (total, resourceId) =>
-                      total + (resourceById.get(resourceId)?.artifact?.size ?? 0),
+                      total + resourceDownloadBytes(resourceById.get(resourceId)),
                     0,
                   );
                   return (
@@ -516,7 +624,9 @@ export function LocalResourcesDialog({
                       ? "开始准备所选功能"
                       : selectionPreparing
                         ? "正在准备所选功能"
-                      : "所选功能已准备"}
+                        : selectionUnavailable
+                          ? "当前不能开始准备"
+                          : "所选功能已准备"}
               </button>
             </section>
           </>
@@ -656,7 +766,11 @@ export function LocalResourcesDialog({
                   <dl>
                     <div>
                       <dt>下载大小</dt>
-                      <dd>{formatBytes(resource.artifact?.size)}</dd>
+                      <dd>
+                        {formatBytes(
+                          resource.artifact?.size ?? resource.expectedDownloadSize,
+                        )}
+                      </dd>
                     </div>
                     <div>
                       <dt>安装后大小</dt>

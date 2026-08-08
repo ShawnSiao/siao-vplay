@@ -16,6 +16,7 @@ import {
   repairLocalResource,
   resumeResourceDownload,
   retryResourceDownload,
+  setLocalResourceProfile,
 } from "../../lib/desktop";
 import type {
   CapabilityPreparation,
@@ -49,6 +50,7 @@ export type LocalResourcesController = {
   clearError: () => void;
   chooseLocation: () => Promise<LocalResourceLocationPlan | null>;
   confirmLocation: (parentPath: string) => Promise<LocalResourceStatus>;
+  selectProfile: (profileId: string) => Promise<LocalResourceStatus>;
   prepareCapability: (
     capabilityId: string,
     pendingActionId?: string,
@@ -271,6 +273,17 @@ export function useLocalResources(): LocalResourcesController {
     confirmLocation: async (parentPath) => {
       try {
         const nextStatus = await configureLocalResourceRoot(parentPath, true);
+        setStatus(nextStatus);
+        setError(null);
+        return nextStatus;
+      } catch (cause) {
+        captureError(cause);
+        throw cause;
+      }
+    },
+    selectProfile: async (profileId) => {
+      try {
+        const nextStatus = await setLocalResourceProfile(profileId);
         setStatus(nextStatus);
         setError(null);
         return nextStatus;

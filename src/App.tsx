@@ -232,13 +232,13 @@ export default function App() {
       capabilityId: string,
       label: string,
       resume: () => Promise<void> | void,
+      profileId?: "fast" | "standard",
     ) => {
       if (!isDesktopApp) {
         await resume();
         return;
       }
-      const currentStatus =
-        localResourceStatus ?? (await refreshLocalResources());
+      const currentStatus = await refreshLocalResources();
       const capability = currentStatus.capabilities.find(
         (item) => item.id === capabilityId,
       );
@@ -250,6 +250,7 @@ export default function App() {
         id: crypto.randomUUID(),
         capabilityId,
         label,
+        profileId,
         resume,
       };
       pendingResourceResumeRef.current = pending;
@@ -257,11 +258,12 @@ export default function App() {
         id: pending.id,
         capabilityId: pending.capabilityId,
         label: pending.label,
+        profileId: pending.profileId,
       });
       setFirstRunResourceSetup(false);
       setLocalResourcesOpen(true);
     },
-    [localResourceStatus, refreshLocalResources],
+    [refreshLocalResources],
   );
 
   const closeLocalResources = useCallback(() => {
@@ -1167,6 +1169,20 @@ export default function App() {
           }
           onClose={() => setSubtitleDialogOpen(false)}
           onTranscriptionTracked={setTrackedTranscriptionJobId}
+          localResourceCatalog={localResources.catalog}
+          localResourceStatus={localResources.status}
+          onPrepareTranscriptionResources={async (profileId) => {
+            if (localResources.status?.configured) {
+              await localResources.selectProfile(profileId);
+            }
+            setSubtitleDialogOpen(false);
+            await requestCapability(
+              "local_transcription",
+              "继续生成原文字幕",
+              () => setSubtitleDialogOpen(true),
+              profileId,
+            );
+          }}
           onImported={(version) => {
             void handleSubtitleVersionCreated(
               version,

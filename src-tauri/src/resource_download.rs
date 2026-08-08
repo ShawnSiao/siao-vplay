@@ -1170,6 +1170,20 @@ fn run_health_check(
             }
             Ok(())
         }
+        "whisper-runtime-metadata-and-timeline" => {
+            let backend = match resource.id.as_str() {
+                "whisper-cpu" => "cpu",
+                "whisper-vulkan" => "vulkan",
+                _ => {
+                    return Err(ResourceDownloadError::HealthCheck(format!(
+                        "{} 不能使用字幕识别运行时检查",
+                        resource.id
+                    )));
+                }
+            };
+            crate::transcription::verify_managed_runtime(backend, staged_payload)
+                .map_err(|error| ResourceDownloadError::HealthCheck(error.to_string()))
+        }
         "sha256" => Ok(()),
         other => Err(ResourceDownloadError::HealthCheck(format!(
             "{} 使用暂未实现的检查 {other}",

@@ -21,6 +21,7 @@ use crate::{
     local_resources::{
         self, ConfigureLocalResourceRootInput, LocalResourceCatalog, LocalResourceError,
         LocalResourceLocationPlan, LocalResourceStatus, PlanLocalResourceLocationInput,
+        SetLocalResourceProfileInput,
     },
     media::{self, MediaError, MediaInspection, MediaPreparation, MediaRuntimeStatus},
     remote_media::{
@@ -358,6 +359,7 @@ impl From<LocalResourceError> for CommandError {
             LocalResourceError::RootUnavailable(_) => "root_unavailable",
             LocalResourceError::ResourceNotReady(_) => "local_resource_not_ready",
             LocalResourceError::UnknownCapability(_) => "local_resource_capability_invalid",
+            LocalResourceError::UnknownProfile(_) => "local_resource_profile_invalid",
             LocalResourceError::UnknownResource(_) => "local_resource_invalid",
             LocalResourceError::InvalidCatalog(_) => "local_resource_catalog_invalid",
             LocalResourceError::InvalidReceipt(_) => "local_resource_receipt_invalid",
@@ -595,6 +597,13 @@ pub fn configure_local_resource_root(
     let status = local_resources::configure_location(&input.parent_path, input.confirmed)?;
     resource_download::bind_configured_root()?;
     Ok(status)
+}
+
+#[tauri::command]
+pub fn set_local_resource_profile(
+    input: SetLocalResourceProfileInput,
+) -> Result<LocalResourceStatus, CommandError> {
+    local_resources::set_preferred_profile(&input.profile_id).map_err(Into::into)
 }
 
 #[tauri::command]
