@@ -22,18 +22,15 @@ describe("chooseLocalResourceParent", () => {
     Reflect.deleteProperty(window, "__TAURI_INTERNALS__");
   });
 
-  it("opens the native directory picker at the current resource parent", async () => {
+  it("opens the native directory picker without a Windows starting path", async () => {
     openDialog.mockResolvedValue("E:\\Local resources");
     const { chooseLocalResourceParent } = await import("./desktop");
 
-    await expect(
-      chooseLocalResourceParent("W:\\see-cut-play"),
-    ).resolves.toBe("E:\\Local resources");
+    await expect(chooseLocalResourceParent()).resolves.toBe("E:\\Local resources");
     expect(openDialog).toHaveBeenCalledWith({
       directory: true,
       multiple: false,
       title: "选择本地功能资源保存位置",
-      defaultPath: "W:\\see-cut-play",
     });
   });
 
@@ -41,8 +38,6 @@ describe("chooseLocalResourceParent", () => {
     openDialog.mockResolvedValue(null);
     const { chooseLocalResourceParent } = await import("./desktop");
 
-    await expect(
-      chooseLocalResourceParent("W:\\see-cut-play"),
-    ).resolves.toBeNull();
+    await expect(chooseLocalResourceParent()).resolves.toBeNull();
   });
 });
