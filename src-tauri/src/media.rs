@@ -972,10 +972,7 @@ fn resolve_runtime_tool(
     environment_variable: &str,
     file_name: &str,
 ) -> Result<PathBuf, MediaError> {
-    if let Some(path) = env::var_os(environment_variable)
-        .filter(|value| !value.is_empty())
-        .map(PathBuf::from)
-    {
+    if let Some(path) = crate::local_resources::development_path_override(environment_variable) {
         if path.is_file() {
             return Ok(path);
         }
@@ -984,10 +981,17 @@ fn resolve_runtime_tool(
             path.display()
         )));
     }
-    let runtime_root = env::var_os("SIAOVPLAY_RUNTIME_DIR")
-        .filter(|value| !value.is_empty())
-        .map(PathBuf::from)
-        .or_else(crate::runtime::configured_runtime_root);
+    let managed_entrypoint = match file_name {
+        "ffmpeg.exe" => "ffmpeg",
+        "ffprobe.exe" => "ffprobe",
+        _ => file_name,
+    };
+    if let Some(path) = crate::local_resources::resolve_entrypoint("ffmpeg-cpu", managed_entrypoint)
+    {
+        return Ok(path);
+    }
+    let runtime_root = crate::local_resources::development_path_override("SIAOVPLAY_RUNTIME_DIR")
+        .or_else(crate::runtime::legacy_runtime_root);
     let executable_path = env::current_exe().ok();
     let candidates = runtime_tool_candidates(
         file_name,

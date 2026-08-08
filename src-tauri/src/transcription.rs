@@ -358,16 +358,21 @@ fn runtime_directory(backend: &str) -> Result<PathBuf, TranscriptionError> {
     } else {
         "SIAOVPLAY_WHISPER_CPU_DIR"
     };
-    if let Some(path) = env::var_os(override_name)
-        .filter(|value| !value.is_empty())
-        .map(PathBuf::from)
-    {
+    if let Some(path) = crate::local_resources::development_path_override(override_name) {
         return Ok(path);
     }
-    let runtime_root = env::var_os("SIAOVPLAY_RUNTIME_DIR")
-        .filter(|value| !value.is_empty())
-        .map(PathBuf::from)
-        .or_else(crate::runtime::configured_runtime_root);
+    let managed_resource = if backend == "vulkan" {
+        "whisper-vulkan"
+    } else {
+        "whisper-cpu"
+    };
+    if let Some(path) = crate::local_resources::resolve_entrypoint(managed_resource, "whisperCli")
+        && let Some(directory) = path.parent()
+    {
+        return Ok(directory.to_path_buf());
+    }
+    let runtime_root = crate::local_resources::development_path_override("SIAOVPLAY_RUNTIME_DIR")
+        .or_else(crate::runtime::legacy_runtime_root);
     let executable_path = env::current_exe().ok();
     resolve_runtime_directory(backend, runtime_root.as_deref(), executable_path.as_deref())
 }
@@ -547,16 +552,18 @@ fn model_path(kind: TranscriptionModelKind) -> Result<PathBuf, TranscriptionErro
         TranscriptionModelKind::Small => "SIAOVPLAY_WHISPER_SMALL_MODEL",
         TranscriptionModelKind::Base => "SIAOVPLAY_WHISPER_BASE_MODEL",
     };
-    if let Some(path) = env::var_os(override_name)
-        .filter(|value| !value.is_empty())
-        .map(PathBuf::from)
-    {
+    if let Some(path) = crate::local_resources::development_path_override(override_name) {
         return Ok(path);
     }
-    let model_root = env::var_os("SIAOVPLAY_MODEL_DIR")
-        .filter(|value| !value.is_empty())
-        .map(PathBuf::from)
-        .or_else(crate::runtime::configured_model_root);
+    let managed_resource = match kind {
+        TranscriptionModelKind::Small => "whisper-model-small",
+        TranscriptionModelKind::Base => "whisper-model-base",
+    };
+    if let Some(path) = crate::local_resources::resolve_entrypoint(managed_resource, "model") {
+        return Ok(path);
+    }
+    let model_root = crate::local_resources::development_path_override("SIAOVPLAY_MODEL_DIR")
+        .or_else(crate::runtime::legacy_model_root);
     let executable_path = env::current_exe().ok();
     resolve_model_path(kind, model_root.as_deref(), executable_path.as_deref())
 }
@@ -657,16 +664,18 @@ fn verify_model(kind: TranscriptionModelKind) -> Result<ModelBundle, Transcripti
 }
 
 fn vad_model_path() -> Result<PathBuf, TranscriptionError> {
-    if let Some(path) = env::var_os("SIAOVPLAY_WHISPER_VAD_MODEL")
-        .filter(|value| !value.is_empty())
-        .map(PathBuf::from)
+    if let Some(path) =
+        crate::local_resources::development_path_override("SIAOVPLAY_WHISPER_VAD_MODEL")
     {
         return Ok(path);
     }
-    let runtime_root = env::var_os("SIAOVPLAY_RUNTIME_DIR")
-        .filter(|value| !value.is_empty())
-        .map(PathBuf::from)
-        .or_else(crate::runtime::configured_runtime_root);
+    if let Some(path) =
+        crate::local_resources::resolve_entrypoint("whisper-vad-silero-6.2", "model")
+    {
+        return Ok(path);
+    }
+    let runtime_root = crate::local_resources::development_path_override("SIAOVPLAY_RUNTIME_DIR")
+        .or_else(crate::runtime::legacy_runtime_root);
     let executable_path = env::current_exe().ok();
     let cpu_runtime_directory = runtime_directory("cpu").ok();
     resolve_vad_model_path(

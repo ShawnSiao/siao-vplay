@@ -19,6 +19,9 @@ import type {
   LearningCardsExport,
   LearningSelectionKind,
   LearningTask,
+  LocalResourceCatalog,
+  LocalResourceLocationPlan,
+  LocalResourceStatus,
   MediaPreparation,
   MediaRuntimeStatus,
   Project,
@@ -96,6 +99,57 @@ export async function getMediaRuntimeStatus(): Promise<MediaRuntimeStatus> {
     };
   }
   return invoke<MediaRuntimeStatus>("get_media_runtime_status");
+}
+
+export async function getLocalResourceCatalog(): Promise<LocalResourceCatalog> {
+  if (!isDesktopApp) {
+    return {
+      schemaVersion: 1,
+      productId: "siaovplay",
+      updatedAt: "",
+      packageProfile: "app-only",
+      bundlePolicy: {
+        maximumExceptionBytes: 20_000_000,
+        allowlistedResourceIds: [],
+      },
+      capabilities: [],
+      profiles: [],
+      resources: [],
+    };
+  }
+  return invoke<LocalResourceCatalog>("get_local_resource_catalog");
+}
+
+export async function getLocalResourceStatus(): Promise<LocalResourceStatus> {
+  if (!isDesktopApp) {
+    return {
+      configured: false,
+      selectedParent: null,
+      resourceRoot: null,
+      rootState: "setup_required",
+      freeSpaceBytes: null,
+      preferredProfile: "standard",
+      capabilities: [],
+    };
+  }
+  return invoke<LocalResourceStatus>("get_local_resource_status");
+}
+
+export async function planLocalResourceLocation(
+  parentPath: string,
+): Promise<LocalResourceLocationPlan> {
+  return invoke<LocalResourceLocationPlan>("plan_local_resource_location", {
+    input: { parentPath },
+  });
+}
+
+export async function configureLocalResourceRoot(
+  parentPath: string,
+  confirmed: boolean,
+): Promise<LocalResourceStatus> {
+  return invoke<LocalResourceStatus>("configure_local_resource_root", {
+    input: { parentPath, confirmed },
+  });
 }
 
 export async function getRuntimeCatalog(): Promise<RuntimeCatalog> {

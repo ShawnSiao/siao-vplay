@@ -510,6 +510,98 @@ export type RuntimeCatalog = {
   components: RuntimeComponent[];
 };
 
+export type LocalResourceRootState =
+  | "setup_required"
+  | "ready"
+  | "root_unavailable"
+  | "repair_required";
+
+export type LocalResourceCapabilityState =
+  | "setup_required"
+  | "not_ready"
+  | "preparing"
+  | "ready"
+  | "repair_required"
+  | "root_unavailable"
+  | "update_available";
+
+export type LocalResourceCapabilityStatus = {
+  id: string;
+  title: string;
+  state: LocalResourceCapabilityState;
+  requiredResourceIds: string[];
+  missingResourceIds: string[];
+};
+
+export type LocalResourceStatus = {
+  configured: boolean;
+  selectedParent: string | null;
+  resourceRoot: string | null;
+  rootState: LocalResourceRootState;
+  freeSpaceBytes: number | null;
+  preferredProfile: string;
+  capabilities: LocalResourceCapabilityStatus[];
+};
+
+export type LocalResourceLocationPlan = {
+  selectedParent: string;
+  resourceRoot: string;
+  parentExists: boolean;
+  resourceRootExists: boolean;
+  freeSpaceBytes: number | null;
+  confirmationRequired: boolean;
+};
+
+export type LocalResourceArtifact = {
+  url: string;
+  size: number;
+  sha256: string;
+  format: string;
+  stripComponents?: number;
+};
+
+export type LocalResourceDefinition = {
+  id: string;
+  version: string;
+  platform: string;
+  kind: string;
+  bundled: boolean;
+  license: string;
+  sourcePage: string;
+  artifact?: LocalResourceArtifact;
+  entrypoints: Record<string, string>;
+  healthCheck: string;
+  sourceCommit?: string;
+  patchSha256?: string;
+  requires?: string;
+  distribution?: { status: string };
+};
+
+export type LocalResourceCatalog = {
+  schemaVersion: number;
+  productId: string;
+  updatedAt: string;
+  packageProfile: string;
+  bundlePolicy: {
+    maximumExceptionBytes: number;
+    allowlistedResourceIds: string[];
+  };
+  capabilities: Array<{
+    id: string;
+    title: string;
+    resourceIds: string[];
+    profileIds: string[];
+    requiresCapabilityIds: string[];
+  }>;
+  profiles: Array<{
+    id: string;
+    title: string;
+    resourceIds: string[];
+    recommended: boolean;
+  }>;
+  resources: LocalResourceDefinition[];
+};
+
 export type DeleteProjectResult = {
   projectId: string;
   deleted: boolean;

@@ -8,6 +8,7 @@ mod domain;
 mod external_handoff;
 mod learning;
 mod library;
+mod local_resources;
 mod media;
 mod remote_media;
 mod runtime;
@@ -98,6 +99,7 @@ pub fn run() {
                 eprintln!("SiaoVPlay: main window was unavailable during native frame setup");
             }
             let data_directory = resolve_data_directory(app)?;
+            local_resources::initialize(&data_directory)?;
             runtime::initialize(&data_directory)?;
             let database_path = data_directory.join("projects").join("siaovplay.db");
             let store = ProjectStore::open(database_path)?;
@@ -152,6 +154,10 @@ pub fn run() {
             commands::relink_project_media,
             commands::delete_project,
             commands::get_media_runtime_status,
+            commands::get_local_resource_catalog,
+            commands::get_local_resource_status,
+            commands::plan_local_resource_location,
+            commands::configure_local_resource_root,
             commands::get_runtime_catalog,
             commands::set_runtime_storage_root,
             commands::set_preferred_model,
