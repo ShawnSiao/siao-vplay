@@ -38,7 +38,6 @@ const capabilityDescriptions: Record<string, string> = {
   basic_media: "播放更多常见视频格式，并在需要时生成兼容播放版本。",
   url_import: "从公开 HTTPS 地址或公开视频页面保存本地副本。",
   local_transcription: "从英语、泰语、日语和韩语原声生成原文字幕。",
-  accelerated_transcription: "兼容的电脑可以缩短本地字幕识别等待时间。",
 };
 
 function formatBytes(bytes: number | null | undefined): string {

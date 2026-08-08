@@ -28,22 +28,11 @@
       "title": "本地字幕识别",
       "resourceIds": [
         "ffmpeg-cpu",
-        "whisper-cpu",
-        "whisper-vad-silero-6.2"
+        "whisper-cpu"
       ],
       "profileIds": [
         "fast",
         "standard"
-      ]
-    },
-    {
-      "id": "accelerated_transcription",
-      "title": "高性能字幕识别",
-      "resourceIds": [
-        "whisper-vulkan"
-      ],
-      "requiresCapabilityIds": [
-        "local_transcription"
       ]
     }
   ],
@@ -110,61 +99,24 @@
     },
     {
       "id": "whisper-cpu",
-      "version": "1.9.1-siaocut.1",
+      "version": "1.9.1",
       "platform": "windows-x86_64",
-      "kind": "source-built-runtime",
+      "kind": "archive",
       "bundled": false,
-      "installedSize": 9751754,
-      "expectedDownloadSize": 3594453,
+      "installedSize": 20355072,
       "license": "MIT",
       "sourcePage": "https://github.com/ggml-org/whisper.cpp",
-      "sourceCommit": "080bbbe85230f624f0b52127f1ae1218247989f9",
-      "patchSha256": "e8bc54eb4499a2b59cd2b632554d96f45bb7290cc9a37d2b53837be3e9f5fe74",
-      "distribution": {
-        "status": "pending_release_asset"
-      },
-      "entrypoints": {
-        "whisperCli": "whisper-cli.exe"
-      },
-      "healthCheck": "whisper-runtime-metadata-and-timeline"
-    },
-    {
-      "id": "whisper-vulkan",
-      "version": "1.9.1-siaocut.1",
-      "platform": "windows-x86_64",
-      "kind": "source-built-runtime",
-      "bundled": false,
-      "installedSize": 58320931,
-      "expectedDownloadSize": 18571656,
-      "license": "MIT",
-      "sourcePage": "https://github.com/ggml-org/whisper.cpp",
-      "sourceCommit": "080bbbe85230f624f0b52127f1ae1218247989f9",
-      "patchSha256": "e8bc54eb4499a2b59cd2b632554d96f45bb7290cc9a37d2b53837be3e9f5fe74",
-      "requires": "Vulkan 1.2 compatible graphics adapter and driver",
-      "distribution": {
-        "status": "pending_release_asset"
-      },
-      "entrypoints": {
-        "whisperCli": "whisper-cli.exe"
-      },
-      "healthCheck": "whisper-runtime-metadata-and-timeline"
-    },
-    {
-      "id": "whisper-vad-silero-6.2",
-      "version": "6.2.0",
-      "platform": "all",
-      "kind": "file",
-      "bundled": false,
-      "installedSize": 885098,
-      "license": "MIT",
-      "sourcePage": "https://huggingface.co/ggml-org/whisper-vad",
       "artifact": {
-        "url": "https://huggingface.co/ggml-org/whisper-vad/resolve/main/ggml-silero-v6.2.0.bin",
-        "size": 885098,
-        "sha256": "2aa269b785eeb53a82983a20501ddf7c1d9c48e33ab63a41391ac6c9f7fb6987",
-        "format": "file"
+        "url": "https://github.com/ggml-org/whisper.cpp/releases/download/v1.9.1/whisper-bin-x64.zip",
+        "size": 7982101,
+        "sha256": "7d8be46ecd31828e1eb7a2ecdd0d6b314feafd82163038ab6092594b0a063539",
+        "format": "zip",
+        "stripComponents": 1
       },
-      "healthCheck": "sha256"
+      "entrypoints": {
+        "whisperCli": "whisper-cli.exe"
+      },
+      "healthCheck": "whisper-cli-version"
     },
     {
       "id": "whisper-model-base",

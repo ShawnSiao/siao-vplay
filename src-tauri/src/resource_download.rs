@@ -1202,6 +1202,31 @@ pub(crate) fn run_health_check(
             }
             Ok(())
         }
+        "whisper-cli-version" => {
+            let relative = entrypoints.get("whisperCli").ok_or_else(|| {
+                ResourceDownloadError::HealthCheck("缺少 whisperCli 入口".to_owned())
+            })?;
+            let executable = join_safe_relative(staged_payload, relative)?;
+            let output = hidden_command(&executable)
+                .current_dir(executable.parent().unwrap_or(staged_payload))
+                .arg("--version")
+                .output()
+                .map_err(|error| ResourceDownloadError::HealthCheck(error.to_string()))?;
+            let text = format!(
+                "{}\n{}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+            if !output.status.success()
+                || !text.contains(&format!("whisper.cpp version: {}", resource.version))
+            {
+                return Err(ResourceDownloadError::HealthCheck(format!(
+                    "{} 未报告固定版本 {}",
+                    resource.id, resource.version
+                )));
+            }
+            Ok(())
+        }
         "whisper-runtime-metadata-and-timeline" => {
             let backend = match resource.id.as_str() {
                 "whisper-cpu" => "cpu",

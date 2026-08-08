@@ -15,7 +15,7 @@ use zip::ZipArchive;
 use crate::{local_resources, media, transcription, youtube_media};
 
 pub const DEFAULT_MODEL_KIND: &str = "small";
-pub const WHISPER_RUNTIME_VERSION: &str = "1.9.1-siaocut.1";
+pub const LEGACY_WHISPER_RUNTIME_VERSION: &str = "1.9.1-siaocut.1";
 pub const YT_DLP_VERSION: &str = "2026.06.09";
 pub const YT_DLP_SHA256: &str = "3a48cb955d55c8821b60ccbdbbc6f61bc958f2f3d3b7ad5eaf3d83a543293a27";
 
@@ -332,7 +332,7 @@ fn bundled_whisper_component(id: &str, title: &str, backend: &str) -> RuntimeCom
         id: id.to_owned(),
         title: title.to_owned(),
         component_kind: "bundled".to_owned(),
-        version: WHISPER_RUNTIME_VERSION.to_owned(),
+        version: LEGACY_WHISPER_RUNTIME_VERSION.to_owned(),
         available,
         installed_path: path.map(|path| path.to_string_lossy().into_owned()),
         expected_size_bytes: 0,

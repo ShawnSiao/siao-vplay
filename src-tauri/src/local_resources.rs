@@ -1491,20 +1491,24 @@ mod tests {
     fn embedded_catalog_is_valid_and_app_only() {
         let catalog = catalog().expect("catalog should parse");
         validate_catalog(catalog).expect("catalog should validate");
-        assert_eq!(catalog.resources.len(), 7);
+        assert_eq!(catalog.resources.len(), 5);
         assert!(catalog.resources.iter().all(|resource| !resource.bundled));
         let cpu = catalog
             .resources
             .iter()
             .find(|resource| resource.id == "whisper-cpu")
             .expect("CPU runtime should be catalogued");
-        assert_eq!(cpu.expected_download_size, Some(3_594_453));
-        assert_eq!(cpu.installed_size, Some(9_751_754));
-        assert!(cpu.artifact.is_none());
+        assert_eq!(cpu.installed_size, Some(20_355_072));
+        let artifact = cpu
+            .artifact
+            .as_ref()
+            .expect("official CPU runtime should be downloadable");
+        assert_eq!(artifact.size, 7_982_101);
         assert_eq!(
-            cpu.distribution.as_ref().map(|value| value.status.as_str()),
-            Some("pending_release_asset")
+            artifact.sha256,
+            "7d8be46ecd31828e1eb7a2ecdd0d6b314feafd82163038ab6092594b0a063539"
         );
+        assert_eq!(cpu.health_check, "whisper-cli-version");
     }
 
     #[test]
