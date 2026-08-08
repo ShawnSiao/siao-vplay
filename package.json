@@ -12,8 +12,7 @@
     "test": "vitest run",
     "test:e2e": "playwright test",
     "test:watch": "vitest",
-    "desktop:build": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/build-component-store-bundle.ps1",
-    "desktop:build:bridge": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/build-runtime-bundle.ps1",
+    "desktop:build": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/build-runtime-bundle.ps1",
     "tauri": "tauri"
   },
   "dependencies": {

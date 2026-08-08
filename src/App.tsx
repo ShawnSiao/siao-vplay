@@ -32,9 +32,6 @@ import {
   getTranscriptionJob,
   getProject,
   getMediaRuntimeStatus,
-  getComponentCatalogInfo,
-  getComponentStoreRoot,
-  listComponentInstallations,
   getRuntimeCatalog,
   isDesktopApp,
   listProjects,
@@ -52,9 +49,6 @@ import type {
   MediaRuntimeStatus,
   Project,
   RuntimeCatalog,
-  ComponentCatalogInfo,
-  ComponentInstallationStatus,
-  ComponentStoreRootInfo,
   SubtitleVersion,
   TranscriptionJob,
   TranslationTask,
@@ -117,9 +111,6 @@ export default function App() {
   const [runtimeCatalog, setRuntimeCatalog] =
     useState<RuntimeCatalog | null>(null);
   const [runtimeCatalogLoading, setRuntimeCatalogLoading] = useState(false);
-  const [sharedCatalog, setSharedCatalog] = useState<ComponentCatalogInfo | null>(null);
-  const [sharedRoot, setSharedRoot] = useState<ComponentStoreRootInfo | null>(null);
-  const [sharedInstallations, setSharedInstallations] = useState<ComponentInstallationStatus[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [libraryError, setLibraryError] = useState<string | null>(null);
   const [activeProject, setActiveProject] = useState<Project | null>(null);
@@ -165,29 +156,10 @@ export default function App() {
     }
   }, []);
 
-  const refreshSharedComponents = useCallback(async () => {
-    try {
-      const [info, root, installations] = await Promise.all([
-        getComponentCatalogInfo(),
-        getComponentStoreRoot(),
-        listComponentInstallations(),
-      ]);
-      setSharedCatalog(info);
-      setSharedRoot(root);
-      setSharedInstallations(installations);
-    } catch (error) {
-      if (String(error).includes("getComponentCatalogInfo")) {
-        return;
-      }
-      setToast(commandError(error).message);
-    }
-  }, []);
-
   const openRuntimeSettings = useCallback(() => {
     setRuntimeSettingsOpen(true);
     void refreshRuntimeCatalog();
-    void refreshSharedComponents();
-  }, [refreshRuntimeCatalog, refreshSharedComponents]);
+  }, [refreshRuntimeCatalog]);
 
   const handleRuntimeCatalogChange = useCallback((catalog: RuntimeCatalog) => {
     setRuntimeCatalog(catalog);
@@ -1040,10 +1012,6 @@ export default function App() {
           onClose={() => setRuntimeSettingsOpen(false)}
           onCatalogChange={handleRuntimeCatalogChange}
           onError={setToast}
-          sharedCatalog={sharedCatalog}
-          sharedRoot={sharedRoot}
-          sharedInstallations={sharedInstallations}
-          onRefreshShared={refreshSharedComponents}
         />
       ) : null}
 

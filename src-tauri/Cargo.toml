@@ -10,18 +10,10 @@ rust-version = "1.85"
 name = "siao_vplay_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
-[features]
-default = []
-# Only the explicitly named bridge candidate may use the legacy product-local
-# runtime search. The default build always initializes the shared Store.
-bridge = []
-
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-siao-component-store-core = { git = "https://github.com/ShawnSiao/siao-component-store.git", rev = "3617289ebd553209d8b727808e68f08d0c4d9c4b" }
-siao-component-store-catalogs = { git = "https://github.com/ShawnSiao/siao-component-store.git", rev = "3617289ebd553209d8b727808e68f08d0c4d9c4b" }
 dunce = "1.0.5"
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls"] }
 regex = "1.11"

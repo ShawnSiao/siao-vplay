@@ -2,7 +2,6 @@ mod agent_result;
 mod burn;
 mod codex_runner;
 mod commands;
-mod component_manager;
 mod delivery;
 mod desktop_frame;
 mod domain;
@@ -100,14 +99,6 @@ pub fn run() {
             }
             let data_directory = resolve_data_directory(app)?;
             runtime::initialize(&data_directory)?;
-            let component_manager = component_manager::ComponentManager::open()?;
-            // The bridge candidate is an explicit compatibility build. It keeps
-            // the manager in Tauri state for catalog/status UI, but does not
-            // register it as the worker-global resolver, so workers use their
-            // existing product-local runtime search only in that build.
-            #[cfg(not(feature = "bridge"))]
-            component_manager::initialize_global(component_manager.clone())
-                .map_err(|error| error.to_string())?;
             let database_path = data_directory.join("projects").join("siaovplay.db");
             let store = ProjectStore::open(database_path)?;
             store.recover_running_media_artifacts()?;
@@ -117,7 +108,6 @@ pub fn run() {
             learning::recover_learning_tasks(&store)?;
             burn::recover_subtitle_burn_jobs(&store)?;
             app.manage(store);
-            app.manage(component_manager);
             app.manage(StartupMediaPath(resolve_startup_media_path()));
             app.manage(library::LibraryPreviewStore::default());
             app.manage(library::LibraryRecoveryStore::default());
@@ -163,20 +153,6 @@ pub fn run() {
             commands::delete_project,
             commands::get_media_runtime_status,
             commands::get_runtime_catalog,
-            commands::get_component_catalog_info,
-            commands::get_component_store_root,
-            commands::list_component_installations,
-            commands::list_recoverable_component_operations,
-            commands::install_component,
-            commands::verify_component,
-            commands::register_existing_component,
-            commands::get_component_operation,
-            commands::pause_component_operation,
-            commands::resume_component_operation,
-            commands::cancel_component_operation,
-            commands::migrate_component_store,
-            commands::resume_component_store_migration,
-            commands::cleanup_component_store_migration,
             commands::set_runtime_storage_root,
             commands::set_preferred_model,
             commands::download_runtime_component,

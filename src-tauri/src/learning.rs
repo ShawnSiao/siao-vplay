@@ -662,11 +662,10 @@ pub fn create_learning_card(
     store: &ProjectStore,
     input: CreateLearningCardInput,
 ) -> Result<LearningCard, LearningError> {
-    let runtime = media::resolve_runtime()
-        .map_err(|error| LearningError::ScreenshotFailed(error.to_string()))?;
-    let ffmpeg = runtime.ffmpeg();
+    let ffmpeg =
+        media::ffmpeg_path().map_err(|error| LearningError::ScreenshotFailed(error.to_string()))?;
     create_learning_card_with(store, input, |media_path, timestamp_ms, output_path| {
-        extract_scene_screenshot(ffmpeg, media_path, timestamp_ms, output_path)
+        extract_scene_screenshot(&ffmpeg, media_path, timestamp_ms, output_path)
     })
 }
 

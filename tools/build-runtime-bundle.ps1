@@ -55,7 +55,7 @@ try {
         $env:CARGO_TARGET_DIR = $cargoTargetPath
         Set-Location -LiteralPath $repoRoot
         $tauriCli = Join-Path $repoRoot 'node_modules\.bin\tauri.cmd'
-        & $tauriCli build --features bridge --config $configPath
+        & $tauriCli build --config $configPath
         if ($LASTEXITCODE -ne 0) {
             throw "Tauri installer build failed with exit code $LASTEXITCODE"
         }
@@ -79,6 +79,5 @@ if (-not $installers) {
     throw "No NSIS installer found in $(Join-Path $cargoTargetPath 'release\bundle\nsis')"
 }
 
-Write-Host 'Generated explicit legacy bridge NSIS installer:'
-Write-Host 'Bridge mode is compatibility-only and does not represent the shared v2 Store release.'
+Write-Host 'Generated NSIS installer:'
 $installers | ForEach-Object { Write-Host ("- {0} ({1} bytes)" -f $_.FullName, $_.Length) }

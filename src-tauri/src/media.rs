@@ -12,7 +12,6 @@ use sha2::{Digest, Sha256};
 use thiserror::Error;
 
 use crate::{
-    component_manager::{self, ComponentLeaseGuard},
     domain::{MediaArtifact, MediaArtifactStatus, PrepareProjectMediaInput},
     store::{ProjectStore, StoreError},
 };
@@ -158,8 +157,8 @@ pub struct MediaRuntimeStatus {
     pub error_message: Option<String>,
 }
 
-pub(crate) struct MediaRuntime {
-    _lease: Option<ComponentLeaseGuard>,
+#[derive(Clone, Debug)]
+struct MediaRuntime {
     ffmpeg_path: PathBuf,
     ffprobe_path: PathBuf,
     version: String,
@@ -167,36 +166,10 @@ pub(crate) struct MediaRuntime {
 
 impl MediaRuntime {
     fn resolve() -> Result<Self, MediaError> {
-        if let Ok(manager) = component_manager::global() {
-            let lease = manager
-                .resolve_component(
-                    "ffmpeg",
-                    &[
-                        ("platform", "windows"),
-                        ("architecture", "x86_64"),
-                        ("flavor", "lgpl-shared"),
-                    ],
-                )
-                .map_err(|error| MediaError::RuntimeUnavailable(error.to_string()))?;
-            let ffmpeg_path = lease
-                .entrypoint("ffmpeg")
-                .map_err(|error| MediaError::RuntimeUnavailable(error.to_string()))?;
-            let ffprobe_path = lease
-                .entrypoint("ffprobe")
-                .map_err(|error| MediaError::RuntimeUnavailable(error.to_string()))?;
-            let version = tool_version(&ffmpeg_path)?;
-            return Ok(Self {
-                _lease: Some(lease),
-                ffmpeg_path,
-                ffprobe_path,
-                version,
-            });
-        }
         let ffmpeg_path = resolve_runtime_tool("SIAOVPLAY_FFMPEG", "ffmpeg.exe")?;
         let ffprobe_path = resolve_runtime_tool("SIAOVPLAY_FFPROBE", "ffprobe.exe")?;
         let version = tool_version(&ffmpeg_path)?;
         Ok(Self {
-            _lease: None,
             ffmpeg_path,
             ffprobe_path,
             version,
@@ -245,14 +218,6 @@ impl MediaRuntime {
         }
         parse_probe_output(&output.stdout)
     }
-
-    pub(crate) fn ffmpeg(&self) -> &Path {
-        &self.ffmpeg_path
-    }
-
-    pub(crate) fn version(&self) -> &str {
-        &self.version
-    }
 }
 
 pub fn media_runtime_status() -> MediaRuntimeStatus {
@@ -268,13 +233,8 @@ pub(crate) fn validate_media_path(media_path: &Path) -> Result<MediaProbe, Media
     Ok(probe)
 }
 
-#[allow(dead_code)]
 pub(crate) fn ffmpeg_path() -> Result<PathBuf, MediaError> {
     Ok(MediaRuntime::resolve()?.ffmpeg_path)
-}
-
-pub(crate) fn resolve_runtime() -> Result<MediaRuntime, MediaError> {
-    MediaRuntime::resolve()
 }
 
 pub(crate) fn remux_local_hls(playlist_path: &Path, destination: &Path) -> Result<(), MediaError> {
