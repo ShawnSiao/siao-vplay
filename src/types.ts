@@ -646,6 +646,73 @@ export type ResourceRemovalResult = {
   affectedCapabilityIds: string[];
 };
 
+export type ResourceMigrationSource = {
+  kind:
+    | "legacy_settings"
+    | "legacy_installation"
+    | "component_store"
+    | "selected_directory"
+    | "development_override";
+  path: string;
+};
+
+export type ResourceMigrationCandidate = {
+  sourceKind: ResourceMigrationSource["kind"];
+  sourceRoot: string;
+  resourceId: string;
+  resourcePath: string;
+  state: "verified" | "rejected";
+  reusableBytes: number;
+  message: string | null;
+};
+
+export type ResourceMigrationPreview = {
+  sources: ResourceMigrationSource[];
+  candidates: ResourceMigrationCandidate[];
+  verifiedResourceIds: string[];
+  reusableBytes: number;
+  rejectedCount: number;
+};
+
+export type ResourceAdoptionResult = {
+  adoptedResourceIds: string[];
+  alreadyActiveResourceIds: string[];
+  rejectedResourceIds: string[];
+  reusableBytes: number;
+};
+
+export type LocalResourceMovePlan = {
+  previousRoot: string;
+  selectedParent: string;
+  resourceRoot: string;
+  bytesToCopy: number;
+  fileCount: number;
+  freeSpaceBytes: number | null;
+  crossVolume: boolean;
+  destinationExists: boolean;
+  confirmationRequired: boolean;
+};
+
+export type LocalResourceMoveResult = {
+  previousRoot: string;
+  currentRoot: string;
+  copiedBytes: number;
+  verifiedFileCount: number;
+  crossVolume: boolean;
+  previousRootRetained: boolean;
+};
+
+export type UnusedResourceCleanupPlan = {
+  resourceIds: string[];
+  reclaimableBytes: number;
+  confirmationRequired: boolean;
+};
+
+export type UnusedResourceCleanupResult = {
+  removedResourceIds: string[];
+  reclaimedBytes: number;
+};
+
 export type DeleteProjectResult = {
   projectId: string;
   deleted: boolean;

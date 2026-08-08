@@ -12,6 +12,7 @@ mod local_resources;
 mod media;
 mod remote_media;
 mod resource_download;
+mod resource_migration;
 mod runtime;
 mod store;
 mod subtitles;
@@ -160,7 +161,15 @@ pub fn run() {
             commands::get_local_resource_status,
             commands::plan_local_resource_location,
             commands::configure_local_resource_root,
+            commands::repair_local_resource_root,
             commands::set_local_resource_profile,
+            commands::inspect_local_resource_migration,
+            commands::adopt_local_resources,
+            commands::plan_local_resource_move,
+            commands::move_local_resource_root,
+            commands::reconnect_local_resource_root,
+            commands::plan_unused_resource_cleanup,
+            commands::cleanup_unused_resources,
             commands::list_resource_download_tasks,
             commands::prepare_local_capability,
             commands::pause_resource_download,

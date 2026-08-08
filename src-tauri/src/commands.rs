@@ -33,6 +33,13 @@ use crate::{
         RepairLocalResourceInput, ResourceDownloadError, ResourceDownloadTask,
         ResourceDownloadTaskInput, ResourceRemovalResult,
     },
+    resource_migration::{
+        self, AdoptLocalResourcesInput, CleanupUnusedResourcesInput,
+        ConfirmLocalResourceOperationInput, InspectResourceMigrationInput, LocalResourceMovePlan,
+        LocalResourceMoveResult, MoveLocalResourceRootInput, ReconnectLocalResourceRootInput,
+        ResourceAdoptionResult, ResourceMigrationError, ResourceMigrationPreview,
+        UnusedResourceCleanupPlan, UnusedResourceCleanupResult,
+    },
     runtime::{
         self, DownloadRuntimeComponentInput, RuntimeCatalog, RuntimeError, SetPreferredModelInput,
         SetRuntimeStorageRootInput,
@@ -382,6 +389,15 @@ impl From<ResourceDownloadError> for CommandError {
     }
 }
 
+impl From<ResourceMigrationError> for CommandError {
+    fn from(error: ResourceMigrationError) -> Self {
+        Self {
+            code: error.code(),
+            message: error.to_string(),
+        }
+    }
+}
+
 impl From<TranslationError> for CommandError {
     fn from(error: TranslationError) -> Self {
         Self {
@@ -596,7 +612,65 @@ pub fn configure_local_resource_root(
 ) -> Result<LocalResourceStatus, CommandError> {
     let status = local_resources::configure_location(&input.parent_path, input.confirmed)?;
     resource_download::bind_configured_root()?;
+    runtime::sync_managed_root()?;
     Ok(status)
+}
+
+#[tauri::command]
+pub fn repair_local_resource_root(
+    input: ConfirmLocalResourceOperationInput,
+) -> Result<LocalResourceStatus, CommandError> {
+    let status = local_resources::repair_configured_root(input.confirmed)?;
+    resource_download::bind_configured_root()?;
+    runtime::sync_managed_root()?;
+    Ok(status)
+}
+
+#[tauri::command]
+pub fn inspect_local_resource_migration(
+    input: InspectResourceMigrationInput,
+) -> Result<ResourceMigrationPreview, CommandError> {
+    resource_migration::inspect_resource_migration(input).map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn adopt_local_resources(
+    input: AdoptLocalResourcesInput,
+) -> Result<ResourceAdoptionResult, CommandError> {
+    resource_migration::adopt_local_resources(input).map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn plan_local_resource_move(
+    input: PlanLocalResourceLocationInput,
+) -> Result<LocalResourceMovePlan, CommandError> {
+    resource_migration::plan_resource_root_move(&input.parent_path).map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn move_local_resource_root(
+    input: MoveLocalResourceRootInput,
+) -> Result<LocalResourceMoveResult, CommandError> {
+    resource_migration::move_resource_root(input).map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn reconnect_local_resource_root(
+    input: ReconnectLocalResourceRootInput,
+) -> Result<LocalResourceStatus, CommandError> {
+    resource_migration::reconnect_resource_root(input).map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn plan_unused_resource_cleanup() -> Result<UnusedResourceCleanupPlan, CommandError> {
+    resource_migration::plan_unused_resource_cleanup().map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn cleanup_unused_resources(
+    input: CleanupUnusedResourcesInput,
+) -> Result<UnusedResourceCleanupResult, CommandError> {
+    resource_migration::cleanup_unused_resources(input).map_err(Into::into)
 }
 
 #[tauri::command]

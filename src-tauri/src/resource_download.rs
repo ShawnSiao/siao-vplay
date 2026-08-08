@@ -241,6 +241,12 @@ pub fn list_tasks() -> Result<Vec<ResourceDownloadTask>, ResourceDownloadError> 
     with_manager_read(|manager| Ok(manager.tasks.values().cloned().collect()))
 }
 
+pub(crate) fn has_active_tasks() -> Result<bool, ResourceDownloadError> {
+    Ok(list_tasks()?
+        .iter()
+        .any(|task| task.state.is_worker_active()))
+}
+
 pub(crate) fn resource_is_preparing(resource_id: &str) -> bool {
     DOWNLOAD_MANAGER
         .get()
@@ -1121,7 +1127,7 @@ fn verify_entrypoints(
     Ok(())
 }
 
-fn run_health_check(
+pub(crate) fn run_health_check(
     resource: &ResourceDefinition,
     staged_payload: &Path,
 ) -> Result<(), ResourceDownloadError> {
@@ -1192,7 +1198,76 @@ fn run_health_check(
     }
 }
 
-fn activate_staged_resource(
+pub(crate) fn verify_installed_payload(
+    resource: &ResourceDefinition,
+    payload: &Path,
+    expected_manifest: Option<&[ReceiptFile]>,
+) -> Result<Vec<ReceiptFile>, ResourceDownloadError> {
+    if !payload.is_dir() {
+        return Err(ResourceDownloadError::Integrity(format!(
+            "{} 的候选安装目录不存在",
+            resource.id
+        )));
+    }
+    verify_entrypoints(resource, payload)?;
+    let mut actual_manifest = collect_file_manifest(payload)?;
+    if actual_manifest.is_empty() {
+        return Err(ResourceDownloadError::Integrity(format!(
+            "{} 的候选安装目录为空",
+            resource.id
+        )));
+    }
+    let actual_size = actual_manifest
+        .iter()
+        .fold(0_u64, |total, file| total.saturating_add(file.size));
+    if let Some(expected_size) = resource.installed_size
+        && actual_size != expected_size
+    {
+        return Err(ResourceDownloadError::Integrity(format!(
+            "{} 安装后大小为 {actual_size}，预期为 {expected_size}",
+            resource.id
+        )));
+    }
+    if resource.kind == "archive" {
+        let expected_manifest = expected_manifest.ok_or_else(|| {
+            ResourceDownloadError::Integrity(format!(
+                "{} 的已解压候选缺少可信文件清单",
+                resource.id
+            ))
+        })?;
+        let mut expected_manifest = expected_manifest.to_vec();
+        expected_manifest.sort_by(|left, right| left.relative_path.cmp(&right.relative_path));
+        actual_manifest.sort_by(|left, right| left.relative_path.cmp(&right.relative_path));
+        if actual_manifest != expected_manifest {
+            return Err(ResourceDownloadError::Integrity(format!(
+                "{} 的文件清单或哈希不匹配",
+                resource.id
+            )));
+        }
+    } else if let Some(artifact) = resource.artifact.as_ref() {
+        if artifact.format != "file" {
+            return Err(ResourceDownloadError::Integrity(format!(
+                "{} 的候选制品格式不可接管",
+                resource.id
+            )));
+        }
+        let relative = file_artifact_relative_path(resource, artifact)?;
+        verify_downloaded_file(
+            &join_safe_relative(payload, &relative)?,
+            artifact.size,
+            &artifact.sha256,
+        )?;
+    } else if resource.health_check != "whisper-runtime-metadata-and-timeline" {
+        return Err(ResourceDownloadError::Integrity(format!(
+            "{} 没有可用于接管的固定文件身份",
+            resource.id
+        )));
+    }
+    run_health_check(resource, payload)?;
+    Ok(actual_manifest)
+}
+
+pub(crate) fn activate_staged_resource(
     root: &Path,
     resource: &ResourceDefinition,
     staged_payload: &Path,
@@ -1234,7 +1309,7 @@ fn activate_staged_resource(
     Ok(())
 }
 
-fn effective_entrypoints(
+pub(crate) fn effective_entrypoints(
     resource: &ResourceDefinition,
 ) -> Result<BTreeMap<String, String>, ResourceDownloadError> {
     if !resource.entrypoints.is_empty() {
@@ -1292,7 +1367,7 @@ fn file_artifact_relative_path(
     Ok(name.to_owned())
 }
 
-fn install_relative_path(resource: &ResourceDefinition) -> String {
+pub(crate) fn install_relative_path(resource: &ResourceDefinition) -> String {
     let category = if resource.kind == "model" {
         "models"
     } else {
@@ -1301,7 +1376,9 @@ fn install_relative_path(resource: &ResourceDefinition) -> String {
     format!("{category}/{}/{}", resource.id, resource.version)
 }
 
-fn collect_file_manifest(root: &Path) -> Result<Vec<ReceiptFile>, ResourceDownloadError> {
+pub(crate) fn collect_file_manifest(
+    root: &Path,
+) -> Result<Vec<ReceiptFile>, ResourceDownloadError> {
     let mut paths = Vec::new();
     collect_files(root, root, &mut paths)?;
     paths.sort();
@@ -1471,7 +1548,7 @@ fn ensure_available_space(
     Ok(())
 }
 
-fn file_digest(path: &Path) -> Result<(u64, String), ResourceDownloadError> {
+pub(crate) fn file_digest(path: &Path) -> Result<(u64, String), ResourceDownloadError> {
     let file = File::open(path)?;
     let mut reader = BufReader::new(file);
     let mut hasher = Sha256::new();
@@ -1488,7 +1565,10 @@ fn file_digest(path: &Path) -> Result<(u64, String), ResourceDownloadError> {
     Ok((size, format!("{:x}", hasher.finalize())))
 }
 
-fn join_safe_relative(root: &Path, relative: &str) -> Result<PathBuf, ResourceDownloadError> {
+pub(crate) fn join_safe_relative(
+    root: &Path,
+    relative: &str,
+) -> Result<PathBuf, ResourceDownloadError> {
     let path = Path::new(relative);
     if path.as_os_str().is_empty()
         || path.is_absolute()

@@ -209,6 +209,15 @@ pub fn preferred_model_kind() -> String {
     settings_snapshot().preferred_model
 }
 
+pub(crate) fn sync_managed_root() -> Result<(), RuntimeError> {
+    let root = local_resources::configured_root()
+        .ok_or_else(|| RuntimeError::InvalidStorageRoot("本地资源目录尚未配置".to_owned()))?;
+    update_settings(|settings| {
+        settings.storage_root = Some(root.to_string_lossy().into_owned());
+    })?;
+    Ok(())
+}
+
 pub fn download_component(component_id: &str) -> Result<RuntimeCatalog, RuntimeError> {
     let _guard = DOWNLOAD_LOCK
         .get_or_init(|| Mutex::new(()))

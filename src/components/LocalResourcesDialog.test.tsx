@@ -126,6 +126,33 @@ function makeController(
       resourceRoot: "W:\\SiaoVPlay\\SiaoVPlay",
       rootState: "ready",
     }),
+    inspectLegacyResources: vi.fn().mockResolvedValue({
+      sources: [],
+      candidates: [],
+      verifiedResourceIds: [],
+      reusableBytes: 0,
+      rejectedCount: 0,
+    }),
+    chooseExistingResources: vi.fn().mockResolvedValue(null),
+    adoptResources: vi.fn().mockResolvedValue({
+      adoptedResourceIds: [],
+      alreadyActiveResourceIds: [],
+      rejectedResourceIds: [],
+      reusableBytes: 0,
+    }),
+    chooseMoveLocation: vi.fn().mockResolvedValue(null),
+    moveLocation: vi.fn(),
+    repairRoot: vi.fn(),
+    reconnectRoot: vi.fn().mockResolvedValue(null),
+    planCleanup: vi.fn().mockResolvedValue({
+      resourceIds: [],
+      reclaimableBytes: 0,
+      confirmationRequired: true,
+    }),
+    cleanupUnused: vi.fn().mockResolvedValue({
+      removedResourceIds: [],
+      reclaimedBytes: 0,
+    }),
     selectProfile: vi.fn().mockResolvedValue(setupStatus),
     prepareCapability: vi.fn().mockResolvedValue({
       capabilityId: "basic_media",
@@ -280,6 +307,122 @@ describe("LocalResourcesDialog", () => {
     expect(screen.getByText(/2.0 MB\/秒/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "暂停" }));
     await waitFor(() => expect(pauseTask).toHaveBeenCalledWith(task.id));
+  });
+
+  it("supports verified adoption, copy-before-switch moves, and unavailable-root recovery", async () => {
+    const readyStatus: LocalResourceStatus = {
+      ...setupStatus,
+      configured: true,
+      selectedParent: "W:\\SiaoVPlay",
+      resourceRoot: "W:\\SiaoVPlay\\SiaoVPlay",
+      rootState: "ready",
+    };
+    const inspectLegacyResources = vi.fn().mockResolvedValue({
+      sources: [{ kind: "legacy_settings", path: "W:\\Legacy" }],
+      candidates: [
+        {
+          sourceKind: "legacy_settings",
+          sourceRoot: "W:\\Legacy",
+          resourceId: "yt-dlp",
+          resourcePath: "W:\\Legacy\\yt-dlp.exe",
+          state: "verified",
+          reusableBytes: 18_202_192,
+          message: null,
+        },
+      ],
+      verifiedResourceIds: ["yt-dlp"],
+      reusableBytes: 18_202_192,
+      rejectedCount: 0,
+    });
+    const adoptResources = vi.fn().mockResolvedValue({
+      adoptedResourceIds: ["yt-dlp"],
+      alreadyActiveResourceIds: [],
+      rejectedResourceIds: [],
+      reusableBytes: 18_202_192,
+    });
+    const chooseMoveLocation = vi.fn().mockResolvedValue({
+      previousRoot: "W:\\SiaoVPlay\\SiaoVPlay",
+      selectedParent: "E:\\Resources",
+      resourceRoot: "E:\\Resources\\SiaoVPlay",
+      bytesToCopy: 194_129_082,
+      fileCount: 12,
+      freeSpaceBytes: 500_000_000_000,
+      crossVolume: true,
+      destinationExists: false,
+      confirmationRequired: true,
+    });
+    const moveLocation = vi.fn().mockResolvedValue({
+      previousRoot: "W:\\SiaoVPlay\\SiaoVPlay",
+      currentRoot: "E:\\Resources\\SiaoVPlay",
+      copiedBytes: 194_129_082,
+      verifiedFileCount: 12,
+      crossVolume: true,
+      previousRootRetained: true,
+    });
+    const controller = makeController({
+      status: readyStatus,
+      inspectLegacyResources,
+      adoptResources,
+      chooseMoveLocation,
+      moveLocation,
+    });
+    render(
+      <LocalResourcesDialog
+        controller={controller}
+        firstRun={false}
+        pendingAction={null}
+        previewMode={false}
+        onClose={() => undefined}
+        onDismissFirstRun={() => undefined}
+        onNotice={() => undefined}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "检查旧版资源" }));
+    expect(await screen.findByText("发现 1 项可复用资源")).toBeInTheDocument();
+    expect(screen.getByText(/不会读取 Component Store 数据库或租约/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "接管已验证资源" }));
+    await waitFor(() => expect(adoptResources).toHaveBeenCalledWith(undefined));
+
+    fireEvent.click(screen.getByRole("button", { name: "移动保存位置" }));
+    expect(await screen.findByText("E:\\Resources\\SiaoVPlay")).toBeInTheDocument();
+    expect(screen.getByText(/切换成功后原目录仍保留/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "确认复制并切换" }));
+    await waitFor(() => expect(moveLocation).toHaveBeenCalledWith("E:\\Resources"));
+  });
+
+  it("keeps records when the resource disk is unavailable and offers repair or reconnect", async () => {
+    const repairRoot = vi.fn();
+    const reconnectRoot = vi.fn();
+    render(
+      <LocalResourcesDialog
+        controller={makeController({
+          status: {
+            ...setupStatus,
+            configured: true,
+            resourceRoot: "W:\\SiaoVPlay\\SiaoVPlay",
+            rootState: "root_unavailable",
+          },
+          repairRoot,
+          reconnectRoot,
+        })}
+        firstRun={false}
+        pendingAction={null}
+        previewMode={false}
+        onClose={() => undefined}
+        onDismissFirstRun={() => undefined}
+        onNotice={() => undefined}
+      />,
+    );
+
+    expect(screen.getByText("原资源位置当前不可用")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "重新连接目录" }));
+    await waitFor(() => expect(reconnectRoot).toHaveBeenCalledOnce());
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "在原位置修复" })).toBeEnabled(),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "在原位置修复" }));
+    await waitFor(() => expect(repairRoot).toHaveBeenCalledOnce());
   });
 
   it("shows real transcription profile sizes and keeps unpublished runtimes disabled", async () => {

@@ -23,6 +23,8 @@ import type {
   LearningTask,
   LocalResourceCatalog,
   LocalResourceLocationPlan,
+  LocalResourceMovePlan,
+  LocalResourceMoveResult,
   LocalResourceStatus,
   MediaPreparation,
   MediaRuntimeStatus,
@@ -30,7 +32,11 @@ import type {
   RemoteMediaPreview,
   RuntimeCatalog,
   ResourceDownloadTask,
+  ResourceAdoptionResult,
+  ResourceMigrationPreview,
   ResourceRemovalResult,
+  UnusedResourceCleanupPlan,
+  UnusedResourceCleanupResult,
   SubtitleGlobalReplacement,
   SubtitleBurnJob,
   SubtitleBurnMode,
@@ -334,6 +340,73 @@ export async function configureLocalResourceRoot(
 ): Promise<LocalResourceStatus> {
   return invoke<LocalResourceStatus>("configure_local_resource_root", {
     input: { parentPath, confirmed },
+  });
+}
+
+export async function repairLocalResourceRoot(): Promise<LocalResourceStatus> {
+  return invoke<LocalResourceStatus>("repair_local_resource_root", {
+    input: { confirmed: true },
+  });
+}
+
+export async function inspectLocalResourceMigration(
+  sourcePath?: string,
+  sourceKind: "selected_directory" | "component_store" | "legacy_installation" =
+    "selected_directory",
+): Promise<ResourceMigrationPreview> {
+  return invoke<ResourceMigrationPreview>("inspect_local_resource_migration", {
+    input: {
+      sourcePath: sourcePath ?? null,
+      sourceKind: sourcePath ? sourceKind : null,
+    },
+  });
+}
+
+export async function adoptLocalResources(
+  sourcePath?: string,
+  sourceKind: "selected_directory" | "component_store" | "legacy_installation" =
+    "selected_directory",
+): Promise<ResourceAdoptionResult> {
+  return invoke<ResourceAdoptionResult>("adopt_local_resources", {
+    input: {
+      sourcePath: sourcePath ?? null,
+      sourceKind: sourcePath ? sourceKind : null,
+      confirmed: true,
+    },
+  });
+}
+
+export async function planLocalResourceMove(
+  parentPath: string,
+): Promise<LocalResourceMovePlan> {
+  return invoke<LocalResourceMovePlan>("plan_local_resource_move", {
+    input: { parentPath },
+  });
+}
+
+export async function moveLocalResourceRoot(
+  parentPath: string,
+): Promise<LocalResourceMoveResult> {
+  return invoke<LocalResourceMoveResult>("move_local_resource_root", {
+    input: { parentPath, confirmed: true },
+  });
+}
+
+export async function reconnectLocalResourceRoot(
+  parentPath: string,
+): Promise<LocalResourceStatus> {
+  return invoke<LocalResourceStatus>("reconnect_local_resource_root", {
+    input: { parentPath, confirmed: true },
+  });
+}
+
+export async function planUnusedResourceCleanup(): Promise<UnusedResourceCleanupPlan> {
+  return invoke<UnusedResourceCleanupPlan>("plan_unused_resource_cleanup");
+}
+
+export async function cleanupUnusedResources(): Promise<UnusedResourceCleanupResult> {
+  return invoke<UnusedResourceCleanupResult>("cleanup_unused_resources", {
+    input: { confirmed: true },
   });
 }
 

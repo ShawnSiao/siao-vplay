@@ -1,30 +1,44 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
+  adoptLocalResources,
   cancelResourceDownload,
   chooseLocalResourceParent,
+  cleanupUnusedResources,
   commandError,
   configureLocalResourceRoot,
   getLocalResourceCatalog,
   getLocalResourceStatus,
+  inspectLocalResourceMigration,
   listenResourceDownloadTasks,
   listResourceDownloadTasks,
   pauseResourceDownload,
+  planLocalResourceMove,
   planLocalResourceLocation,
+  planUnusedResourceCleanup,
   prepareLocalCapability,
   removeLocalResource,
+  reconnectLocalResourceRoot,
   repairLocalResource,
+  repairLocalResourceRoot,
   resumeResourceDownload,
   retryResourceDownload,
   setLocalResourceProfile,
+  moveLocalResourceRoot,
 } from "../../lib/desktop";
 import type {
   CapabilityPreparation,
   LocalResourceCatalog,
   LocalResourceLocationPlan,
+  LocalResourceMovePlan,
+  LocalResourceMoveResult,
   LocalResourceStatus,
+  ResourceAdoptionResult,
   ResourceDownloadTask,
+  ResourceMigrationPreview,
   ResourceRemovalResult,
+  UnusedResourceCleanupPlan,
+  UnusedResourceCleanupResult,
 } from "../../types";
 
 const activeTaskStates = new Set<ResourceDownloadTask["state"]>([
@@ -50,6 +64,18 @@ export type LocalResourcesController = {
   clearError: () => void;
   chooseLocation: () => Promise<LocalResourceLocationPlan | null>;
   confirmLocation: (parentPath: string) => Promise<LocalResourceStatus>;
+  inspectLegacyResources: () => Promise<ResourceMigrationPreview>;
+  chooseExistingResources: () => Promise<{
+    sourcePath: string;
+    preview: ResourceMigrationPreview;
+  } | null>;
+  adoptResources: (sourcePath?: string) => Promise<ResourceAdoptionResult>;
+  chooseMoveLocation: () => Promise<LocalResourceMovePlan | null>;
+  moveLocation: (parentPath: string) => Promise<LocalResourceMoveResult>;
+  repairRoot: () => Promise<LocalResourceStatus>;
+  reconnectRoot: () => Promise<LocalResourceStatus | null>;
+  planCleanup: () => Promise<UnusedResourceCleanupPlan>;
+  cleanupUnused: () => Promise<UnusedResourceCleanupResult>;
   selectProfile: (profileId: string) => Promise<LocalResourceStatus>;
   prepareCapability: (
     capabilityId: string,
@@ -276,6 +302,116 @@ export function useLocalResources(): LocalResourcesController {
         setStatus(nextStatus);
         setError(null);
         return nextStatus;
+      } catch (cause) {
+        captureError(cause);
+        throw cause;
+      }
+    },
+    inspectLegacyResources: async () => {
+      try {
+        const preview = await inspectLocalResourceMigration();
+        setError(null);
+        return preview;
+      } catch (cause) {
+        captureError(cause);
+        throw cause;
+      }
+    },
+    chooseExistingResources: async () => {
+      try {
+        const sourcePath = await chooseLocalResourceParent();
+        if (!sourcePath) {
+          return null;
+        }
+        const preview = await inspectLocalResourceMigration(sourcePath);
+        setError(null);
+        return { sourcePath, preview };
+      } catch (cause) {
+        captureError(cause);
+        throw cause;
+      }
+    },
+    adoptResources: async (sourcePath) => {
+      try {
+        const result = await adoptLocalResources(sourcePath);
+        setStatus(await getLocalResourceStatus());
+        setError(null);
+        return result;
+      } catch (cause) {
+        captureError(cause);
+        throw cause;
+      }
+    },
+    chooseMoveLocation: async () => {
+      try {
+        const parentPath = await chooseLocalResourceParent();
+        if (!parentPath) {
+          return null;
+        }
+        const plan = await planLocalResourceMove(parentPath);
+        setError(null);
+        return plan;
+      } catch (cause) {
+        captureError(cause);
+        throw cause;
+      }
+    },
+    moveLocation: async (parentPath) => {
+      try {
+        const result = await moveLocalResourceRoot(parentPath);
+        setStatus(await getLocalResourceStatus());
+        replaceTasks(await listResourceDownloadTasks());
+        setError(null);
+        return result;
+      } catch (cause) {
+        captureError(cause);
+        throw cause;
+      }
+    },
+    repairRoot: async () => {
+      try {
+        const nextStatus = await repairLocalResourceRoot();
+        setStatus(nextStatus);
+        replaceTasks(await listResourceDownloadTasks());
+        setError(null);
+        return nextStatus;
+      } catch (cause) {
+        captureError(cause);
+        throw cause;
+      }
+    },
+    reconnectRoot: async () => {
+      try {
+        const parentPath = await chooseLocalResourceParent();
+        if (!parentPath) {
+          return null;
+        }
+        const nextStatus = await reconnectLocalResourceRoot(parentPath);
+        setStatus(nextStatus);
+        replaceTasks(await listResourceDownloadTasks());
+        setError(null);
+        return nextStatus;
+      } catch (cause) {
+        captureError(cause);
+        throw cause;
+      }
+    },
+    planCleanup: async () => {
+      try {
+        const plan = await planUnusedResourceCleanup();
+        setError(null);
+        return plan;
+      } catch (cause) {
+        captureError(cause);
+        throw cause;
+      }
+    },
+    cleanupUnused: async () => {
+      try {
+        const result = await cleanupUnusedResources();
+        setStatus(await getLocalResourceStatus());
+        setError(null);
+        return result;
       } catch (cause) {
         captureError(cause);
         throw cause;

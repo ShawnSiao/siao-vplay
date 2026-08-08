@@ -150,6 +150,8 @@ pub struct LocalResourceConfiguration {
     pub preferred_profile: String,
     #[serde(default)]
     pub active_resources: BTreeMap<String, String>,
+    #[serde(default)]
+    pub legacy_candidate_roots: Vec<String>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -253,6 +255,18 @@ struct LocalResourceManager {
     configuration: Option<LocalResourceConfiguration>,
 }
 
+#[derive(Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct LegacyRuntimeSettingsFile {
+    storage_root: Option<String>,
+    preferred_model: Option<String>,
+}
+
+struct LegacyRuntimeSettings {
+    storage_root: Option<PathBuf>,
+    preferred_model: Option<String>,
+}
+
 static MANAGER: OnceLock<RwLock<LocalResourceManager>> = OnceLock::new();
 static CATALOG: OnceLock<Result<LocalResourceCatalog, String>> = OnceLock::new();
 
@@ -290,6 +304,10 @@ pub fn configure_location(
     confirmed: bool,
 ) -> Result<LocalResourceStatus, LocalResourceError> {
     with_manager_write(|manager| manager.configure_location(parent, confirmed))
+}
+
+pub fn repair_configured_root(confirmed: bool) -> Result<LocalResourceStatus, LocalResourceError> {
+    with_manager_write(|manager| manager.repair_configured_root(confirmed))
 }
 
 pub fn set_preferred_profile(profile_id: &str) -> Result<LocalResourceStatus, LocalResourceError> {
@@ -347,6 +365,50 @@ pub(crate) fn deactivate_resource(
     with_manager_write(|manager| manager.deactivate_resource(resource_id))
 }
 
+pub(crate) fn configuration_snapshot() -> Option<LocalResourceConfiguration> {
+    MANAGER
+        .get()
+        .and_then(|state| state.read().ok())
+        .and_then(|manager| manager.configuration.clone())
+}
+
+pub(crate) fn replace_configuration(
+    configuration: LocalResourceConfiguration,
+) -> Result<LocalResourceStatus, LocalResourceError> {
+    with_manager_write(|manager| manager.replace_configuration(configuration))
+}
+
+pub(crate) fn configured_legacy_candidate_roots() -> Vec<PathBuf> {
+    configuration_snapshot()
+        .map(|configuration| {
+            configuration
+                .legacy_candidate_roots
+                .into_iter()
+                .map(PathBuf::from)
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+pub(crate) fn resource_subdirectories() -> &'static [&'static str] {
+    &RESOURCE_SUBDIRECTORIES
+}
+
+pub(crate) fn available_space_for(path: &Path) -> Option<u64> {
+    available_space(path)
+}
+
+pub(crate) fn selected_location_paths(raw: &str) -> Result<(PathBuf, PathBuf), LocalResourceError> {
+    resolve_selected_location(raw)
+}
+
+pub(crate) fn validate_external_receipt(
+    receipt: &ResourceReceipt,
+    resource: &ResourceDefinition,
+) -> Result<(), LocalResourceError> {
+    validate_receipt(receipt, &resource.id, &resource.version)
+}
+
 pub(crate) fn development_path_override(name: &str) -> Option<PathBuf> {
     if cfg!(any(test, debug_assertions)) {
         std::env::var_os(name)
@@ -380,7 +442,7 @@ fn with_manager_write<T>(
 impl LocalResourceManager {
     fn load(data_directory: &Path) -> Result<Self, LocalResourceError> {
         let config_path = data_directory.join(CONFIG_FILE_NAME);
-        let configuration = if config_path.is_file() {
+        let mut configuration = if config_path.is_file() {
             let configuration =
                 serde_json::from_slice::<LocalResourceConfiguration>(&fs::read(&config_path)?)?;
             validate_configuration(&configuration)?;
@@ -388,6 +450,26 @@ impl LocalResourceManager {
         } else {
             None
         };
+        let legacy_settings = load_legacy_runtime_settings(data_directory);
+        let mut changed = false;
+        if let Some(legacy_root) = legacy_settings.storage_root {
+            if let Some(existing) = configuration.as_mut() {
+                if Path::new(&existing.resource_root) != legacy_root
+                    && push_unique_path(&mut existing.legacy_candidate_roots, &legacy_root)
+                {
+                    changed = true;
+                }
+            } else if let Some(migrated) = migrate_legacy_configuration(
+                &legacy_root,
+                legacy_settings.preferred_model.as_deref(),
+            ) {
+                configuration = Some(migrated);
+                changed = true;
+            }
+        }
+        if changed && let Some(configuration) = configuration.as_ref() {
+            persist_json(&config_path, configuration)?;
+        }
         Ok(Self {
             config_path,
             configuration,
@@ -395,8 +477,7 @@ impl LocalResourceManager {
     }
 
     fn plan_location(&self, parent: &str) -> Result<LocalResourceLocationPlan, LocalResourceError> {
-        let parent = validate_parent(parent)?;
-        let root = parent.join(RESOURCE_DIRECTORY_NAME);
+        let (parent, root) = resolve_selected_location(parent)?;
         Ok(LocalResourceLocationPlan {
             selected_parent: path_string(&parent),
             resource_root: path_string(&root),
@@ -415,8 +496,7 @@ impl LocalResourceManager {
         if !confirmed {
             return Err(LocalResourceError::ConfirmationRequired);
         }
-        let parent = validate_parent(parent)?;
-        let root = parent.join(RESOURCE_DIRECTORY_NAME);
+        let (parent, root) = resolve_selected_location(parent)?;
         fs::create_dir_all(&root)?;
         for relative in RESOURCE_SUBDIRECTORIES {
             fs::create_dir_all(root.join(relative))?;
@@ -426,6 +506,19 @@ impl LocalResourceManager {
             .configuration
             .as_ref()
             .filter(|configuration| configuration_root(configuration) == root);
+        let mut legacy_candidate_roots = self
+            .configuration
+            .as_ref()
+            .map(|configuration| configuration.legacy_candidate_roots.clone())
+            .unwrap_or_default();
+        if let Some(previous) = self
+            .configuration
+            .as_ref()
+            .map(configuration_root)
+            .filter(|previous| previous != &root)
+        {
+            push_unique_path(&mut legacy_candidate_roots, &previous);
+        }
         let configuration = LocalResourceConfiguration {
             schema_version: CONFIG_SCHEMA_VERSION,
             selected_parent: path_string(&parent),
@@ -436,7 +529,57 @@ impl LocalResourceManager {
             active_resources: existing_configuration
                 .map(|configuration| configuration.active_resources.clone())
                 .unwrap_or_default(),
+            legacy_candidate_roots,
         };
+        persist_json(&self.config_path, &configuration)?;
+        self.configuration = Some(configuration);
+        self.status()
+    }
+
+    fn repair_configured_root(
+        &mut self,
+        confirmed: bool,
+    ) -> Result<LocalResourceStatus, LocalResourceError> {
+        if !confirmed {
+            return Err(LocalResourceError::ConfirmationRequired);
+        }
+        let configuration = self
+            .configuration
+            .as_mut()
+            .ok_or(LocalResourceError::ConfirmationRequired)?;
+        let root = configuration_root(configuration);
+        let root_was_missing = !root.exists();
+        fs::create_dir_all(&root)?;
+        for relative in RESOURCE_SUBDIRECTORIES {
+            fs::create_dir_all(root.join(relative))?;
+        }
+        verify_writable(&root.join("state"))?;
+        if root_was_missing {
+            configuration.active_resources.clear();
+            persist_json(&self.config_path, configuration)?;
+        }
+        self.status()
+    }
+
+    fn replace_configuration(
+        &mut self,
+        mut configuration: LocalResourceConfiguration,
+    ) -> Result<LocalResourceStatus, LocalResourceError> {
+        configuration.schema_version = CONFIG_SCHEMA_VERSION;
+        validate_configuration(&configuration)?;
+        let root = configuration_root(&configuration);
+        if !root.is_dir() {
+            return Err(LocalResourceError::RootUnavailable(path_string(&root)));
+        }
+        for relative in RESOURCE_SUBDIRECTORIES {
+            if !root.join(relative).is_dir() {
+                return Err(LocalResourceError::RootUnavailable(format!(
+                    "资源目录缺少 {relative}：{}",
+                    root.display()
+                )));
+            }
+        }
+        verify_writable(&root.join("state"))?;
         persist_json(&self.config_path, &configuration)?;
         self.configuration = Some(configuration);
         self.status()
@@ -727,6 +870,74 @@ fn collect_capability_resources(
     Ok(())
 }
 
+fn load_legacy_runtime_settings(data_directory: &Path) -> LegacyRuntimeSettings {
+    let path = data_directory.join("runtime-settings.json");
+    let parsed = fs::read(&path)
+        .ok()
+        .and_then(|contents| serde_json::from_slice::<LegacyRuntimeSettingsFile>(&contents).ok())
+        .unwrap_or_default();
+    let storage_root = parsed
+        .storage_root
+        .map(|value| value.trim().to_owned())
+        .filter(|value| !value.is_empty())
+        .map(PathBuf::from)
+        .filter(|path| path.is_absolute() && !path.is_file())
+        .map(|path| dunce::canonicalize(&path).unwrap_or(path));
+    LegacyRuntimeSettings {
+        storage_root,
+        preferred_model: parsed.preferred_model,
+    }
+}
+
+fn migrate_legacy_configuration(
+    legacy_root: &Path,
+    preferred_model: Option<&str>,
+) -> Option<LocalResourceConfiguration> {
+    if !legacy_root.is_absolute() {
+        return None;
+    }
+    let is_resource_root = legacy_root
+        .file_name()
+        .and_then(|value| value.to_str())
+        .is_some_and(|value| value.eq_ignore_ascii_case(RESOURCE_DIRECTORY_NAME));
+    let (selected_parent, resource_root) = if is_resource_root {
+        (
+            legacy_root.parent()?.to_path_buf(),
+            legacy_root.to_path_buf(),
+        )
+    } else {
+        (
+            legacy_root.to_path_buf(),
+            legacy_root.join(RESOURCE_DIRECTORY_NAME),
+        )
+    };
+    Some(LocalResourceConfiguration {
+        schema_version: CONFIG_SCHEMA_VERSION,
+        selected_parent: path_string(&selected_parent),
+        resource_root: path_string(&resource_root),
+        preferred_profile: if preferred_model == Some("base") {
+            "fast".to_owned()
+        } else {
+            DEFAULT_PROFILE.to_owned()
+        },
+        active_resources: BTreeMap::new(),
+        legacy_candidate_roots: vec![path_string(legacy_root)],
+    })
+}
+
+fn push_unique_path(paths: &mut Vec<String>, path: &Path) -> bool {
+    let value = path_string(path);
+    if paths
+        .iter()
+        .any(|existing| existing.eq_ignore_ascii_case(&value))
+    {
+        false
+    } else {
+        paths.push(value);
+        true
+    }
+}
+
 fn capability_statuses(
     catalog: &LocalResourceCatalog,
     preferred_profile: &str,
@@ -909,6 +1120,13 @@ fn validate_configuration(
         validate_identifier(resource_id, "活动资源 ID")?;
         validate_identifier(version, "活动资源版本")?;
     }
+    for candidate in &configuration.legacy_candidate_roots {
+        if !Path::new(candidate).is_absolute() {
+            return Err(LocalResourceError::InvalidReceipt(
+                "旧资源候选目录不是绝对路径".to_owned(),
+            ));
+        }
+    }
     Ok(())
 }
 
@@ -962,6 +1180,23 @@ fn validate_parent(raw: &str) -> Result<PathBuf, LocalResourceError> {
         )));
     }
     dunce::canonicalize(&path).map_err(LocalResourceError::from)
+}
+
+fn resolve_selected_location(raw: &str) -> Result<(PathBuf, PathBuf), LocalResourceError> {
+    let selected = validate_parent(raw)?;
+    let selected_is_root = selected
+        .file_name()
+        .and_then(|value| value.to_str())
+        .is_some_and(|value| value.eq_ignore_ascii_case(RESOURCE_DIRECTORY_NAME));
+    if selected_is_root {
+        let parent = selected.parent().ok_or_else(|| {
+            LocalResourceError::InvalidParent("资源根目录没有可用的父目录".to_owned())
+        })?;
+        Ok((parent.to_path_buf(), selected))
+    } else {
+        let root = selected.join(RESOURCE_DIRECTORY_NAME);
+        Ok((selected, root))
+    }
 }
 
 fn validate_identifier(value: &str, label: &str) -> Result<(), LocalResourceError> {
@@ -1151,6 +1386,97 @@ mod tests {
         assert!(plan.resource_root.ends_with(RESOURCE_DIRECTORY_NAME));
         assert!(!parent.path().join(RESOURCE_DIRECTORY_NAME).exists());
         assert!(!data.path().join(CONFIG_FILE_NAME).exists());
+    }
+
+    #[test]
+    fn legacy_runtime_settings_migration_matrix_is_safe_and_preserves_user_choice() {
+        let missing = tempdir().expect("missing settings fixture");
+        assert!(
+            LocalResourceManager::load(missing.path())
+                .expect("missing settings should load")
+                .configuration
+                .is_none()
+        );
+
+        let malformed = tempdir().expect("malformed settings fixture");
+        fs::write(malformed.path().join("runtime-settings.json"), b"{not-json")
+            .expect("malformed settings should write");
+        assert!(
+            LocalResourceManager::load(malformed.path())
+                .expect("malformed settings should be ignored")
+                .configuration
+                .is_none()
+        );
+
+        for value in ["", "relative/runtime"] {
+            let fixture = tempdir().expect("invalid path fixture");
+            fs::write(
+                fixture.path().join("runtime-settings.json"),
+                serde_json::to_vec(&serde_json::json!({
+                    "storageRoot": value,
+                    "preferredModel": "small"
+                }))
+                .expect("settings should serialize"),
+            )
+            .expect("settings should write");
+            assert!(
+                LocalResourceManager::load(fixture.path())
+                    .expect("invalid path should be ignored")
+                    .configuration
+                    .is_none()
+            );
+        }
+
+        let fixture = tempdir().expect("legacy root fixture");
+        let legacy_root = fixture.path().join("runtime-storage");
+        fs::create_dir_all(&legacy_root).expect("legacy root should create");
+        fs::write(
+            fixture.path().join("runtime-settings.json"),
+            serde_json::to_vec(&serde_json::json!({
+                "storageRoot": legacy_root,
+                "preferredModel": "base"
+            }))
+            .expect("settings should serialize"),
+        )
+        .expect("settings should write");
+        let migrated = LocalResourceManager::load(fixture.path())
+            .expect("legacy settings should migrate")
+            .configuration
+            .expect("migration should create configuration");
+        assert_eq!(Path::new(&migrated.selected_parent), legacy_root);
+        assert_eq!(
+            Path::new(&migrated.resource_root),
+            legacy_root.join(RESOURCE_DIRECTORY_NAME)
+        );
+        assert_eq!(migrated.preferred_profile, "fast");
+        assert_eq!(
+            migrated.legacy_candidate_roots,
+            vec![path_string(&legacy_root)]
+        );
+        assert!(fixture.path().join(CONFIG_FILE_NAME).is_file());
+
+        let root_named_fixture = tempdir().expect("named root fixture");
+        let named_root = root_named_fixture.path().join(RESOURCE_DIRECTORY_NAME);
+        fs::create_dir_all(&named_root).expect("named root should create");
+        fs::write(
+            root_named_fixture.path().join("runtime-settings.json"),
+            serde_json::to_vec(&serde_json::json!({
+                "storageRoot": named_root,
+                "preferredModel": "small"
+            }))
+            .expect("settings should serialize"),
+        )
+        .expect("settings should write");
+        let migrated = LocalResourceManager::load(root_named_fixture.path())
+            .expect("named root should migrate")
+            .configuration
+            .expect("migration should create configuration");
+        assert_eq!(Path::new(&migrated.resource_root), named_root);
+        assert_eq!(
+            Path::new(&migrated.selected_parent),
+            named_root.parent().expect("named root has parent")
+        );
+        assert_eq!(migrated.preferred_profile, DEFAULT_PROFILE);
     }
 
     #[test]

@@ -4,7 +4,10 @@ import type { LocalResourcesController } from "../features/resources/useLocalRes
 import type {
   LocalResourceCapabilityStatus,
   LocalResourceLocationPlan,
+  LocalResourceMovePlan,
   ResourceDownloadTask,
+  ResourceMigrationPreview,
+  UnusedResourceCleanupPlan,
 } from "../types";
 import { Dialog } from "./Dialog";
 
@@ -134,6 +137,12 @@ export function LocalResourcesDialog({
   );
   const [locationPlan, setLocationPlan] =
     useState<LocalResourceLocationPlan | null>(null);
+  const [migrationSourcePath, setMigrationSourcePath] = useState<string | undefined>();
+  const [migrationPreview, setMigrationPreview] =
+    useState<ResourceMigrationPreview | null>(null);
+  const [movePlan, setMovePlan] = useState<LocalResourceMovePlan | null>(null);
+  const [cleanupPlan, setCleanupPlan] =
+    useState<UnusedResourceCleanupPlan | null>(null);
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
 
@@ -298,6 +307,85 @@ export function LocalResourcesDialog({
       if (plan) {
         setLocationPlan(plan);
       }
+    });
+
+  const inspectLegacyResources = () =>
+    runAction("inspect-legacy", async () => {
+      const preview = await controller.inspectLegacyResources();
+      setMigrationSourcePath(undefined);
+      setMigrationPreview(preview);
+    });
+
+  const chooseExistingResources = () =>
+    runAction("inspect-existing", async () => {
+      const selection = await controller.chooseExistingResources();
+      if (selection) {
+        setMigrationSourcePath(selection.sourcePath);
+        setMigrationPreview(selection.preview);
+      }
+    });
+
+  const adoptExistingResources = () =>
+    runAction("adopt-existing", async () => {
+      const result = await controller.adoptResources(migrationSourcePath);
+      setMigrationPreview(null);
+      onNotice(
+        result.adoptedResourceIds.length > 0
+          ? `已接管 ${result.adoptedResourceIds.length} 项本地功能资源，无需重复下载。`
+          : "没有需要接管的新资源。",
+      );
+    });
+
+  const chooseMoveLocation = () =>
+    runAction("plan-move", async () => {
+      const plan = await controller.chooseMoveLocation();
+      if (plan) {
+        setMovePlan(plan);
+      }
+    });
+
+  const confirmMoveLocation = () =>
+    runAction("move-location", async () => {
+      if (!movePlan) {
+        return;
+      }
+      await controller.moveLocation(movePlan.selectedParent);
+      setMovePlan(null);
+      onNotice("资源已复制、校验并切换到新位置；原目录仍保留，可确认后自行清理。");
+    });
+
+  const repairRoot = () =>
+    runAction("repair-root", async () => {
+      await controller.repairRoot();
+      onNotice("资源目录结构已修复，媒体库和项目数据未改变。");
+    });
+
+  const reconnectRoot = () =>
+    runAction("reconnect-root", async () => {
+      const result = await controller.reconnectRoot();
+      if (result) {
+        onNotice("已重新连接并验证现有资源目录。");
+      }
+    });
+
+  const inspectCleanup = () =>
+    runAction("plan-cleanup", async () => {
+      const plan = await controller.planCleanup();
+      setCleanupPlan(plan);
+      if (plan.resourceIds.length === 0) {
+        onNotice("当前没有未使用的本地功能资源。");
+      }
+    });
+
+  const confirmCleanup = () =>
+    runAction("cleanup-unused", async () => {
+      const result = await controller.cleanupUnused();
+      setCleanupPlan(null);
+      onNotice(
+        result.removedResourceIds.length > 0
+          ? `已清理 ${result.removedResourceIds.length} 项未使用资源。`
+          : "当前没有需要清理的资源。",
+      );
     });
 
   const prepareSelection = async () => {
@@ -605,6 +693,113 @@ export function LocalResourcesDialog({
                   <p>核对实际保存位置和空间后，再确认并开始准备。</p>
                 </div>
               ) : null}
+              {status.configured && status.rootState !== "ready" ? (
+                <div className="notice danger" role="status">
+                  <strong>
+                    {status.rootState === "root_unavailable"
+                      ? "原资源位置当前不可用"
+                      : "资源目录需要修复"}
+                  </strong>
+                  <p>不会删除任何记录。可以重新连接已有目录，或在原位置重建目录结构。</p>
+                  <div className="local-resource-location-actions">
+                    <button
+                      className="button quiet"
+                      type="button"
+                      disabled={previewMode || busyAction !== null}
+                      onClick={() => void reconnectRoot()}
+                    >
+                      {busyAction === "reconnect-root" ? "正在验证…" : "重新连接目录"}
+                    </button>
+                    <button
+                      className="button quiet"
+                      type="button"
+                      disabled={previewMode || busyAction !== null}
+                      onClick={() => void repairRoot()}
+                    >
+                      {busyAction === "repair-root" ? "正在修复…" : "在原位置修复"}
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+              {status.configured && status.rootState === "ready" ? (
+                <div className="local-resource-location-actions">
+                  <button
+                    className="button quiet"
+                    type="button"
+                    disabled={previewMode || busyAction !== null}
+                    onClick={() => void inspectLegacyResources()}
+                  >
+                    {busyAction === "inspect-legacy" ? "正在检查…" : "检查旧版资源"}
+                  </button>
+                  <button
+                    className="button quiet"
+                    type="button"
+                    disabled={previewMode || busyAction !== null}
+                    onClick={() => void chooseExistingResources()}
+                  >
+                    {busyAction === "inspect-existing"
+                      ? "正在验证…"
+                      : "选择现有资源目录"}
+                  </button>
+                  <button
+                    className="button quiet"
+                    type="button"
+                    disabled={previewMode || busyAction !== null}
+                    onClick={() => void chooseMoveLocation()}
+                  >
+                    {busyAction === "plan-move" ? "正在计算…" : "移动保存位置"}
+                  </button>
+                </div>
+              ) : null}
+              {migrationPreview ? (
+                <div className="notice local-resources-confirmation" role="status">
+                  <strong>
+                    {migrationPreview.verifiedResourceIds.length > 0
+                      ? `发现 ${migrationPreview.verifiedResourceIds.length} 项可复用资源`
+                      : "没有发现可接管的资源"}
+                  </strong>
+                  <p>
+                    {migrationPreview.verifiedResourceIds.length > 0
+                      ? `已按当前清单验证，可复用 ${formatBytes(
+                          migrationPreview.reusableBytes,
+                        )}，不会读取 Component Store 数据库或租约。`
+                      : "候选文件未通过当前版本、大小、哈希、文件清单或健康检查。"}
+                  </p>
+                  {migrationPreview.verifiedResourceIds.length > 0 ? (
+                    <button
+                      className="button quiet"
+                      type="button"
+                      disabled={previewMode || busyAction !== null}
+                      onClick={() => void adoptExistingResources()}
+                    >
+                      {busyAction === "adopt-existing" ? "正在接管…" : "接管已验证资源"}
+                    </button>
+                  ) : null}
+                </div>
+              ) : null}
+              {movePlan ? (
+                <div className="notice local-resources-confirmation" role="status">
+                  <strong>核对新的保存位置</strong>
+                  <p>{movePlan.resourceRoot}</p>
+                  <p>
+                    复制并校验 {formatBytes(movePlan.bytesToCopy)}；切换成功后原目录仍保留。
+                  </p>
+                  <button
+                    className="button quiet"
+                    type="button"
+                    disabled={
+                      previewMode ||
+                      busyAction !== null ||
+                      movePlan.destinationExists ||
+                      (movePlan.freeSpaceBytes !== null &&
+                        movePlan.freeSpaceBytes < movePlan.bytesToCopy)
+                    }
+                    onClick={() => void confirmMoveLocation()}
+                  >
+                    {busyAction === "move-location" ? "正在复制并校验…" : "确认复制并切换"}
+                  </button>
+                </div>
+              ) : null}
               <button
                 className="button primary local-resources-primary-action"
                 type="button"
@@ -805,6 +1000,28 @@ export function LocalResourcesDialog({
                   ) : null}
                 </article>
               ))}
+            </div>
+            <div className="local-resource-location-actions">
+              <button
+                className="button quiet"
+                type="button"
+                disabled={previewMode || busyAction !== null}
+                onClick={() => void inspectCleanup()}
+              >
+                {busyAction === "plan-cleanup" ? "正在计算…" : "检查未使用资源"}
+              </button>
+              {cleanupPlan && cleanupPlan.resourceIds.length > 0 ? (
+                <button
+                  className="text-button danger"
+                  type="button"
+                  disabled={previewMode || busyAction !== null}
+                  onClick={() => void confirmCleanup()}
+                >
+                  {busyAction === "cleanup-unused"
+                    ? "正在清理…"
+                    : `清理 ${formatBytes(cleanupPlan.reclaimableBytes)}`}
+                </button>
+              ) : null}
             </div>
           </details>
         ) : null}
