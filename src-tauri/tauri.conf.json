@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "SiaoVPlay",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "identifier": "app.siaovplay.desktop",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -32,8 +32,14 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all",
+    "targets": [
+      "nsis"
+    ],
     "useLocalToolsDir": true,
+    "resources": [
+      "resources/local-resource-catalog.json",
+      "resources/third-party-notices/THIRD-PARTY-NOTICES.md"
+    ],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

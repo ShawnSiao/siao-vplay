@@ -621,7 +621,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   desktopMocks.getAppStatus.mockResolvedValue({
     appName: "SiaoVPlay",
-    version: "0.2.0",
+    version: "0.3.0",
     platform: "windows-desktop",
     dataDirectory: "W:\\SiaoVPlay\\app-data",
     startupMediaPath: null,
@@ -2020,7 +2020,7 @@ describe("App", () => {
   it("opens a local video passed by the desktop process", async () => {
     desktopMocks.getAppStatus.mockResolvedValue({
       appName: "SiaoVPlay",
-      version: "0.2.0",
+      version: "0.3.0",
       platform: "windows-desktop",
       dataDirectory: "W:\\SiaoVPlay\\app-data",
       startupMediaPath: project.mediaSource.locator,
