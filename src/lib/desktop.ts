@@ -1,4 +1,5 @@
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 
 import { supportedVideoExtensions } from "./mediaFiles";
@@ -56,6 +57,37 @@ const browserStatus: AppStatus = {
   dataDirectory: "仅桌面应用可用",
   startupMediaPath: null,
 };
+
+const browserResourceCapabilities = [
+  {
+    id: "basic_media",
+    title: "基础视频支持",
+    resourceIds: ["ffmpeg-cpu"],
+    profileIds: [],
+    requiresCapabilityIds: [],
+  },
+  {
+    id: "url_import",
+    title: "在线视频导入",
+    resourceIds: ["ffmpeg-cpu", "yt-dlp"],
+    profileIds: [],
+    requiresCapabilityIds: [],
+  },
+  {
+    id: "local_transcription",
+    title: "本地字幕识别",
+    resourceIds: ["ffmpeg-cpu", "whisper-cpu"],
+    profileIds: ["standard"],
+    requiresCapabilityIds: [],
+  },
+  {
+    id: "accelerated_transcription",
+    title: "高性能字幕识别",
+    resourceIds: ["whisper-vulkan"],
+    profileIds: [],
+    requiresCapabilityIds: ["local_transcription"],
+  },
+];
 
 export function commandError(error: unknown): DesktopCommandError {
   if (
@@ -115,9 +147,53 @@ export async function getLocalResourceCatalog(): Promise<LocalResourceCatalog> {
         maximumExceptionBytes: 20_000_000,
         allowlistedResourceIds: [],
       },
-      capabilities: [],
-      profiles: [],
-      resources: [],
+      capabilities: browserResourceCapabilities,
+      profiles: [
+        {
+          id: "standard",
+          title: "标准",
+          resourceIds: ["whisper-model-small"],
+          recommended: true,
+        },
+      ],
+      resources: [
+        {
+          id: "ffmpeg-cpu",
+          version: "8.1",
+          platform: "windows-x86_64",
+          kind: "archive",
+          bundled: false,
+          installedSize: 175_926_890,
+          license: "LGPL-2.1-or-later",
+          sourcePage: "https://github.com/BtbN/FFmpeg-Builds",
+          artifact: {
+            url: "https://example.invalid/ffmpeg.zip",
+            size: 70_510_962,
+            sha256: "0".repeat(64),
+            format: "zip",
+          },
+          entrypoints: {},
+          healthCheck: "ffmpeg-version",
+        },
+        {
+          id: "yt-dlp",
+          version: "2026.06.09",
+          platform: "windows-x86_64",
+          kind: "file",
+          bundled: false,
+          installedSize: 18_202_192,
+          license: "GPL-3.0-or-later",
+          sourcePage: "https://github.com/yt-dlp/yt-dlp",
+          artifact: {
+            url: "https://example.invalid/yt-dlp.exe",
+            size: 18_202_192,
+            sha256: "0".repeat(64),
+            format: "file",
+          },
+          entrypoints: {},
+          healthCheck: "yt-dlp-version",
+        },
+      ],
     };
   }
   return invoke<LocalResourceCatalog>("get_local_resource_catalog");
@@ -132,10 +208,28 @@ export async function getLocalResourceStatus(): Promise<LocalResourceStatus> {
       rootState: "setup_required",
       freeSpaceBytes: null,
       preferredProfile: "standard",
-      capabilities: [],
+      capabilities: browserResourceCapabilities.map((capability) => ({
+        id: capability.id,
+        title: capability.title,
+        state: "setup_required" as const,
+        requiredResourceIds: capability.resourceIds,
+        missingResourceIds: capability.resourceIds,
+      })),
     };
   }
   return invoke<LocalResourceStatus>("get_local_resource_status");
+}
+
+export async function chooseLocalResourceParent(): Promise<string | null> {
+  if (!isDesktopApp) {
+    return null;
+  }
+  const selected = await open({
+    directory: true,
+    multiple: false,
+    title: "选择本地功能资源保存位置",
+  });
+  return typeof selected === "string" ? selected : null;
 }
 
 export async function planLocalResourceLocation(
@@ -164,11 +258,24 @@ export async function listResourceDownloadTasks(): Promise<
   return invoke<ResourceDownloadTask[]>("list_resource_download_tasks");
 }
 
+export async function listenResourceDownloadTasks(
+  listener: (task: ResourceDownloadTask) => void,
+): Promise<UnlistenFn> {
+  if (!isDesktopApp) {
+    return () => undefined;
+  }
+  return listen<ResourceDownloadTask>(
+    "local-resource-task-updated",
+    (event) => listener(event.payload),
+  );
+}
+
 export async function prepareLocalCapability(
   capabilityId: string,
+  pendingActionId?: string,
 ): Promise<CapabilityPreparation> {
   return invoke<CapabilityPreparation>("prepare_local_capability", {
-    input: { capabilityId },
+    input: { capabilityId, pendingActionId: pendingActionId ?? null },
   });
 }
 

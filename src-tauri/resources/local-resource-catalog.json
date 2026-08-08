@@ -72,6 +72,7 @@
       "platform": "windows-x86_64",
       "kind": "archive",
       "bundled": false,
+      "installedSize": 175926890,
       "license": "LGPL-2.1-or-later",
       "sourcePage": "https://github.com/BtbN/FFmpeg-Builds",
       "artifact": {
@@ -93,6 +94,7 @@
       "platform": "windows-x86_64",
       "kind": "file",
       "bundled": false,
+      "installedSize": 18202192,
       "license": "GPL-3.0-or-later for the combined Windows executable; yt-dlp source is Unlicense",
       "sourcePage": "https://github.com/yt-dlp/yt-dlp",
       "artifact": {
@@ -143,6 +145,7 @@
       "platform": "all",
       "kind": "file",
       "bundled": false,
+      "installedSize": 885098,
       "license": "MIT",
       "sourcePage": "https://huggingface.co/ggml-org/whisper-vad",
       "artifact": {
@@ -159,6 +162,7 @@
       "platform": "all",
       "kind": "model",
       "bundled": false,
+      "installedSize": 147951465,
       "license": "MIT",
       "sourcePage": "https://huggingface.co/ggerganov/whisper.cpp",
       "artifact": {
@@ -175,6 +179,7 @@
       "platform": "all",
       "kind": "model",
       "bundled": false,
+      "installedSize": 487601967,
       "license": "MIT",
       "sourcePage": "https://huggingface.co/ggerganov/whisper.cpp",
       "artifact": {

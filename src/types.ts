@@ -566,6 +566,7 @@ export type LocalResourceDefinition = {
   platform: string;
   kind: string;
   bundled: boolean;
+  installedSize?: number;
   license: string;
   sourcePage: string;
   artifact?: LocalResourceArtifact;
@@ -620,6 +621,7 @@ export type ResourceDownloadTask = {
   downloadedBytes: number;
   totalBytes: number;
   requestedByCapabilityIds: string[];
+  pendingActionIds: string[];
   attempt: number;
   errorCode: string | null;
   errorMessage: string | null;
@@ -630,6 +632,7 @@ export type ResourceDownloadTask = {
 
 export type CapabilityPreparation = {
   capabilityId: string;
+  pendingActionId: string | null;
   state: "ready" | "preparing";
   resourceIds: string[];
   readyResourceIds: string[];

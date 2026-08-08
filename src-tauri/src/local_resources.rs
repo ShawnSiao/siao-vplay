@@ -101,6 +101,8 @@ pub struct ResourceDefinition {
     pub platform: String,
     pub kind: String,
     pub bundled: bool,
+    #[serde(default)]
+    pub installed_size: Option<u64>,
     pub license: String,
     pub source_page: String,
     #[serde(default)]
@@ -803,9 +805,10 @@ fn validate_catalog(catalog: &LocalResourceCatalog) -> Result<(), LocalResourceE
             if !artifact.url.starts_with("https://")
                 || artifact.size == 0
                 || !is_sha256(&artifact.sha256)
+                || resource.installed_size.unwrap_or(0) == 0
             {
                 return Err(LocalResourceError::InvalidCatalog(format!(
-                    "{} 的下载地址、大小或 SHA-256 无效",
+                    "{} 的下载地址、下载大小、安装后大小或 SHA-256 无效",
                     resource.id
                 )));
             }

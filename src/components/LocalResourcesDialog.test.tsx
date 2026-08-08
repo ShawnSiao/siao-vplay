@@ -1,0 +1,318 @@
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+
+import type { LocalResourcesController } from "../features/resources/useLocalResources";
+import type {
+  LocalResourceCatalog,
+  LocalResourceStatus,
+  ResourceDownloadTask,
+} from "../types";
+import { LocalResourcesDialog } from "./LocalResourcesDialog";
+
+const catalog: LocalResourceCatalog = {
+  schemaVersion: 1,
+  productId: "siaovplay",
+  updatedAt: "2026-08-08",
+  packageProfile: "app-only",
+  bundlePolicy: {
+    maximumExceptionBytes: 20_000_000,
+    allowlistedResourceIds: [],
+  },
+  capabilities: [
+    {
+      id: "basic_media",
+      title: "基础视频支持",
+      resourceIds: ["ffmpeg-cpu"],
+      profileIds: [],
+      requiresCapabilityIds: [],
+    },
+    {
+      id: "url_import",
+      title: "在线视频导入",
+      resourceIds: ["ffmpeg-cpu", "yt-dlp"],
+      profileIds: [],
+      requiresCapabilityIds: [],
+    },
+  ],
+  profiles: [],
+  resources: [
+    {
+      id: "ffmpeg-cpu",
+      version: "8.1",
+      platform: "windows-x86_64",
+      kind: "archive",
+      bundled: false,
+      installedSize: 175_926_890,
+      license: "LGPL-2.1-or-later",
+      sourcePage: "https://example.com/ffmpeg",
+      artifact: {
+        url: "https://example.com/ffmpeg.zip",
+        size: 70_510_962,
+        sha256: "a".repeat(64),
+        format: "zip",
+      },
+      entrypoints: {},
+      healthCheck: "ffmpeg-version",
+    },
+    {
+      id: "yt-dlp",
+      version: "2026.06.09",
+      platform: "windows-x86_64",
+      kind: "file",
+      bundled: false,
+      installedSize: 18_202_192,
+      license: "GPL-3.0-or-later",
+      sourcePage: "https://example.com/yt-dlp",
+      artifact: {
+        url: "https://example.com/yt-dlp.exe",
+        size: 18_202_192,
+        sha256: "b".repeat(64),
+        format: "file",
+      },
+      entrypoints: {},
+      healthCheck: "yt-dlp-version",
+    },
+  ],
+};
+
+const setupStatus: LocalResourceStatus = {
+  configured: false,
+  selectedParent: null,
+  resourceRoot: null,
+  rootState: "setup_required",
+  freeSpaceBytes: null,
+  preferredProfile: "standard",
+  capabilities: [
+    {
+      id: "basic_media",
+      title: "基础视频支持",
+      state: "setup_required",
+      requiredResourceIds: ["ffmpeg-cpu"],
+      missingResourceIds: ["ffmpeg-cpu"],
+    },
+    {
+      id: "url_import",
+      title: "在线视频导入",
+      state: "setup_required",
+      requiredResourceIds: ["ffmpeg-cpu", "yt-dlp"],
+      missingResourceIds: ["ffmpeg-cpu", "yt-dlp"],
+    },
+  ],
+};
+
+function makeController(
+  overrides: Partial<LocalResourcesController> = {},
+): LocalResourcesController {
+  return {
+    catalog,
+    status: setupStatus,
+    tasks: [],
+    taskMetrics: {},
+    loading: false,
+    error: null,
+    refresh: vi.fn().mockResolvedValue(setupStatus),
+    clearError: vi.fn(),
+    chooseLocation: vi.fn().mockResolvedValue({
+      selectedParent: "W:\\SiaoVPlay",
+      resourceRoot: "W:\\SiaoVPlay\\SiaoVPlay",
+      parentExists: true,
+      resourceRootExists: false,
+      freeSpaceBytes: 500_000_000_000,
+      confirmationRequired: true,
+    }),
+    confirmLocation: vi.fn().mockResolvedValue({
+      ...setupStatus,
+      configured: true,
+      resourceRoot: "W:\\SiaoVPlay\\SiaoVPlay",
+      rootState: "ready",
+    }),
+    prepareCapability: vi.fn().mockResolvedValue({
+      capabilityId: "basic_media",
+      pendingActionId: null,
+      state: "preparing",
+      resourceIds: ["ffmpeg-cpu"],
+      readyResourceIds: [],
+      taskIds: ["00000000-0000-4000-8000-000000000001"],
+    }),
+    pauseTask: vi.fn(),
+    resumeTask: vi.fn(),
+    cancelTask: vi.fn(),
+    retryTask: vi.fn(),
+    repairResource: vi.fn(),
+    removeResource: vi.fn(),
+    ...overrides,
+  };
+}
+
+describe("LocalResourcesDialog", () => {
+  it("offers the three first-run choices without exposing technical details", () => {
+    const onDismissFirstRun = vi.fn();
+    render(
+      <LocalResourcesDialog
+        controller={makeController()}
+        firstRun
+        pendingAction={null}
+        previewMode={false}
+        onClose={() => undefined}
+        onDismissFirstRun={onDismissFirstRun}
+        onNotice={() => undefined}
+      />,
+    );
+
+    expect(
+      screen.getByRole("button", { name: /使用推荐配置/ }),
+    ).toBeEnabled();
+    expect(
+      screen.getByRole("button", { name: /选择需要的功能/ }),
+    ).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: /稍后设置/ }));
+    expect(onDismissFirstRun).toHaveBeenCalledOnce();
+    expect(screen.getByText("ffmpeg-cpu")).not.toBeVisible();
+    expect(screen.getAllByText(/SHA-256/)[0]).not.toBeVisible();
+  });
+
+  it("shows exact location and size estimates before explicit confirmation", async () => {
+    const controller = makeController();
+    render(
+      <LocalResourcesDialog
+        controller={controller}
+        firstRun
+        pendingAction={null}
+        previewMode={false}
+        onClose={() => undefined}
+        onDismissFirstRun={() => undefined}
+        onNotice={() => undefined}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /使用推荐配置/ }));
+    expect(screen.getByText("88.7 MB")).toBeInTheDocument();
+    expect(screen.getByText("194 MB")).toBeInTheDocument();
+    expect(controller.prepareCapability).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "选择位置" }));
+    expect(
+      await screen.findByText("W:\\SiaoVPlay\\SiaoVPlay"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("下载尚未开始")).toBeInTheDocument();
+    expect(controller.confirmLocation).not.toHaveBeenCalled();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "确认位置并开始准备" }),
+    );
+    await waitFor(() =>
+      expect(controller.confirmLocation).toHaveBeenCalledWith(
+        "W:\\SiaoVPlay",
+      ),
+    );
+    expect(controller.prepareCapability).toHaveBeenCalledWith(
+      "basic_media",
+      undefined,
+    );
+    expect(controller.prepareCapability).toHaveBeenCalledWith(
+      "url_import",
+      undefined,
+    );
+  });
+
+  it("associates a pending action and exposes task controls with accessible progress", async () => {
+    const task: ResourceDownloadTask = {
+      id: "00000000-0000-4000-8000-000000000001",
+      resourceId: "yt-dlp",
+      version: "2026.06.09",
+      state: "downloading",
+      downloadedBytes: 9_101_096,
+      totalBytes: 18_202_192,
+      requestedByCapabilityIds: ["url_import"],
+      pendingActionIds: ["00000000-0000-4000-8000-000000000099"],
+      attempt: 1,
+      errorCode: null,
+      errorMessage: null,
+      createdAtMs: 1,
+      updatedAtMs: 2,
+      forceReinstall: false,
+    };
+    const pauseTask = vi.fn().mockResolvedValue({ ...task, state: "paused" });
+    const controller = makeController({
+      status: {
+        ...setupStatus,
+        configured: true,
+        resourceRoot: "W:\\SiaoVPlay\\SiaoVPlay",
+        rootState: "ready",
+        capabilities: setupStatus.capabilities.map((capability) => ({
+          ...capability,
+          state: capability.id === "basic_media" ? "ready" : "preparing",
+          missingResourceIds:
+            capability.id === "basic_media" ? [] : ["yt-dlp"],
+        })),
+      },
+      tasks: [task],
+      taskMetrics: {
+        [task.id]: { bytesPerSecond: 2_000_000, remainingSeconds: 4.6 },
+      },
+      pauseTask,
+    });
+    render(
+      <LocalResourcesDialog
+        controller={controller}
+        firstRun={false}
+        pendingAction={{
+          id: "00000000-0000-4000-8000-000000000099",
+          capabilityId: "url_import",
+          label: "继续打开在线视频",
+        }}
+        previewMode={false}
+        onClose={() => undefined}
+        onDismissFirstRun={() => undefined}
+        onNotice={() => undefined}
+      />,
+    );
+
+    expect(screen.getByText("继续打开在线视频")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "正在准备所选功能" }),
+    ).toBeDisabled();
+    const progress = screen.getByRole("progressbar", {
+      name: "在线视频导入准备进度",
+    });
+    expect(progress).toHaveAttribute("aria-valuenow", "50");
+    expect(screen.getByText(/2.0 MB\/秒/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "暂停" }));
+    await waitFor(() => expect(pauseTask).toHaveBeenCalledWith(task.id));
+  });
+
+  it("keeps versions, hashes, sources, and repair actions inside advanced diagnostics", () => {
+    const readyStatus: LocalResourceStatus = {
+      ...setupStatus,
+      configured: true,
+      resourceRoot: "W:\\SiaoVPlay\\SiaoVPlay",
+      rootState: "ready",
+      capabilities: setupStatus.capabilities.map((capability) => ({
+        ...capability,
+        state: "ready",
+        missingResourceIds: [],
+      })),
+    };
+    render(
+      <LocalResourcesDialog
+        controller={makeController({ status: readyStatus })}
+        firstRun={false}
+        pendingAction={null}
+        previewMode={false}
+        onClose={() => undefined}
+        onDismissFirstRun={() => undefined}
+        onNotice={() => undefined}
+      />,
+    );
+
+    const details = screen.getByText("高级诊断与第三方许可").closest("details");
+    expect(details).not.toHaveAttribute("open");
+    expect(screen.getByText("ffmpeg-cpu")).not.toBeVisible();
+    expect(screen.getAllByText(/SHA-256/)[0]).not.toBeVisible();
+    fireEvent.click(within(details as HTMLElement).getByText("高级诊断与第三方许可"));
+    expect(screen.getByText("ffmpeg-cpu")).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "修复 ffmpeg-cpu" }),
+    ).toBeVisible();
+  });
+});

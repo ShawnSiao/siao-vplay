@@ -607,7 +607,12 @@ pub fn prepare_local_capability(
     app: AppHandle,
     input: PrepareLocalCapabilityInput,
 ) -> Result<CapabilityPreparation, CommandError> {
-    resource_download::prepare_capability(&input.capability_id, Some(app)).map_err(Into::into)
+    resource_download::prepare_capability(
+        &input.capability_id,
+        input.pending_action_id.as_deref(),
+        Some(app),
+    )
+    .map_err(Into::into)
 }
 
 #[tauri::command]

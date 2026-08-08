@@ -53,6 +53,8 @@ pub enum ResourceDownloadError {
     TaskNotFound(String),
     #[error("资源下载任务状态不允许该操作：{0}")]
     InvalidTaskState(String),
+    #[error("待恢复操作 ID 无效：{0}")]
+    InvalidPendingAction(String),
     #[error("资源尚无可信下载制品：{0}")]
     ArtifactUnavailable(String),
     #[error("资源下载失败：{0}")]
@@ -87,6 +89,7 @@ impl ResourceDownloadError {
             Self::Serialization(_) => "local_resource_serialization_error",
             Self::TaskNotFound(_) => "local_resource_task_not_found",
             Self::InvalidTaskState(_) => "local_resource_task_state_invalid",
+            Self::InvalidPendingAction(_) => "pending_action_invalid",
             Self::ArtifactUnavailable(_) => "local_resource_artifact_unavailable",
             Self::Network(_) => "local_resource_download_failed",
             Self::Integrity(_) => "local_resource_integrity_failed",
@@ -135,6 +138,8 @@ pub struct ResourceDownloadTask {
     pub downloaded_bytes: u64,
     pub total_bytes: u64,
     pub requested_by_capability_ids: Vec<String>,
+    #[serde(default)]
+    pub pending_action_ids: Vec<String>,
     pub attempt: u32,
     pub error_code: Option<String>,
     pub error_message: Option<String>,
@@ -148,6 +153,7 @@ pub struct ResourceDownloadTask {
 #[serde(rename_all = "camelCase")]
 pub struct CapabilityPreparation {
     pub capability_id: String,
+    pub pending_action_id: Option<String>,
     pub state: String,
     pub resource_ids: Vec<String>,
     pub ready_resource_ids: Vec<String>,
@@ -158,6 +164,8 @@ pub struct CapabilityPreparation {
 #[serde(rename_all = "camelCase")]
 pub struct PrepareLocalCapabilityInput {
     pub capability_id: String,
+    #[serde(default)]
+    pub pending_action_id: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -247,8 +255,14 @@ pub(crate) fn resource_is_preparing(resource_id: &str) -> bool {
 
 pub fn prepare_capability(
     capability_id: &str,
+    pending_action_id: Option<&str>,
     app: Option<AppHandle>,
 ) -> Result<CapabilityPreparation, ResourceDownloadError> {
+    if let Some(pending_action_id) = pending_action_id {
+        Uuid::parse_str(pending_action_id).map_err(|_| {
+            ResourceDownloadError::InvalidPendingAction(pending_action_id.to_owned())
+        })?;
+    }
     let resource_ids = local_resources::required_resource_ids(capability_id)?;
     let mut ready_resource_ids = Vec::new();
     let mut pending_resources = Vec::new();
@@ -269,7 +283,8 @@ pub fn prepare_capability(
     with_manager_write(|manager| {
         manager.ensure_root_available()?;
         for resource in pending_resources {
-            let (task_id, created) = manager.ensure_task_record(&resource, capability_id, false)?;
+            let (task_id, created) =
+                manager.ensure_task_record(&resource, capability_id, pending_action_id, false)?;
             task_ids.push(task_id.clone());
             if created {
                 new_task_ids.push(task_id);
@@ -283,6 +298,7 @@ pub fn prepare_capability(
     }
     Ok(CapabilityPreparation {
         capability_id: capability_id.to_owned(),
+        pending_action_id: pending_action_id.map(str::to_owned),
         state: if task_ids.is_empty() {
             "ready".to_owned()
         } else {
@@ -412,7 +428,7 @@ pub fn repair_resource(
     }
     let (task_id, created) = with_manager_write(|manager| {
         manager.ensure_root_available()?;
-        let result = manager.ensure_task_record(&resource, "repair", true)?;
+        let result = manager.ensure_task_record(&resource, "repair", None, true)?;
         manager.persist()?;
         Ok(result)
     })?;
@@ -566,6 +582,7 @@ impl DownloadManager {
         &mut self,
         resource: &ResourceDefinition,
         capability_id: &str,
+        pending_action_id: Option<&str>,
         force_reinstall: bool,
     ) -> Result<(String, bool), ResourceDownloadError> {
         if let Some(task) = self.tasks.values_mut().find(|task| {
@@ -586,6 +603,15 @@ impl DownloadManager {
                     .push(capability_id.to_owned());
                 task.requested_by_capability_ids.sort();
             }
+            if let Some(pending_action_id) = pending_action_id
+                && !task
+                    .pending_action_ids
+                    .iter()
+                    .any(|value| value == pending_action_id)
+            {
+                task.pending_action_ids.push(pending_action_id.to_owned());
+                task.pending_action_ids.sort();
+            }
             return Ok((task.id.clone(), false));
         }
         let artifact = resource
@@ -604,6 +630,7 @@ impl DownloadManager {
                 downloaded_bytes: 0,
                 total_bytes: artifact.size,
                 requested_by_capability_ids: vec![capability_id.to_owned()],
+                pending_action_ids: pending_action_id.into_iter().map(str::to_owned).collect(),
                 attempt: 1,
                 error_code: None,
                 error_message: None,
@@ -1362,6 +1389,10 @@ fn validate_task_record(task: &ResourceDownloadTask) -> Result<(), ResourceDownl
     if resource.version != task.version
         || task.total_bytes != artifact.size
         || task.downloaded_bytes > task.total_bytes
+        || task
+            .pending_action_ids
+            .iter()
+            .any(|pending_action_id| Uuid::parse_str(pending_action_id).is_err())
     {
         return Err(ResourceDownloadError::Integrity(format!(
             "下载任务 {} 与可信目录清单不一致",
@@ -1822,6 +1853,16 @@ mod tests {
     }
 
     #[test]
+    fn pending_action_id_must_be_a_uuid_before_a_task_is_created() {
+        let error = prepare_capability("basic_media", Some("../not-an-id"), None)
+            .expect_err("invalid pending action should fail before task creation");
+        assert!(matches!(
+            error,
+            ResourceDownloadError::InvalidPendingAction(_)
+        ));
+    }
+
+    #[test]
     fn interrupted_tasks_are_recovered_as_paused() {
         let root = tempdir().expect("resource root");
         fs::create_dir_all(root.path().join("state")).expect("state directory should create");
@@ -1840,6 +1881,7 @@ mod tests {
             downloaded_bytes: 10,
             total_bytes,
             requested_by_capability_ids: vec!["basic_media".to_owned()],
+            pending_action_ids: Vec::new(),
             attempt: 1,
             error_code: None,
             error_message: None,
@@ -1884,6 +1926,7 @@ mod tests {
                     downloaded_bytes: 0,
                     total_bytes,
                     requested_by_capability_ids: vec!["basic_media".to_owned()],
+                    pending_action_ids: Vec::new(),
                     attempt: 1,
                     error_code: None,
                     error_message: None,
@@ -1911,10 +1954,20 @@ mod tests {
             tasks: BTreeMap::new(),
         };
         let (first, first_created) = manager
-            .ensure_task_record(&resource, "basic_media", false)
+            .ensure_task_record(
+                &resource,
+                "basic_media",
+                Some("00000000-0000-4000-8000-000000000010"),
+                false,
+            )
             .expect("first task should create");
         let (second, second_created) = manager
-            .ensure_task_record(&resource, "url_import", false)
+            .ensure_task_record(
+                &resource,
+                "url_import",
+                Some("00000000-0000-4000-8000-000000000011"),
+                false,
+            )
             .expect("second request should reuse");
         assert!(first_created);
         assert!(!second_created);
@@ -1923,6 +1976,13 @@ mod tests {
         assert_eq!(
             manager.tasks[&first].requested_by_capability_ids,
             vec!["basic_media".to_owned(), "url_import".to_owned()]
+        );
+        assert_eq!(
+            manager.tasks[&first].pending_action_ids,
+            vec![
+                "00000000-0000-4000-8000-000000000010".to_owned(),
+                "00000000-0000-4000-8000-000000000011".to_owned(),
+            ]
         );
     }
 
@@ -1946,11 +2006,11 @@ mod tests {
         .expect("resource root should configure");
         initialize().expect("download manager should initialize");
         resume_failed_tasks(
-            prepare_capability("basic_media", None).expect("basic media should start"),
+            prepare_capability("basic_media", None, None).expect("basic media should start"),
         );
         wait_for_capability("basic_media", Duration::from_secs(900));
         resume_failed_tasks(
-            prepare_capability("url_import", None).expect("URL import should start"),
+            prepare_capability("url_import", None, None).expect("URL import should start"),
         );
         wait_for_capability("url_import", Duration::from_secs(900));
         let status = local_resources::status().expect("resource status should resolve");
@@ -1990,7 +2050,8 @@ mod tests {
         assert!(removal.removed);
         assert!(local_resources::resolve_entrypoint("yt-dlp", "ytDlp").is_none());
         resume_failed_tasks(
-            prepare_capability("url_import", None).expect("URL import reinstall should start"),
+            prepare_capability("url_import", None, None)
+                .expect("URL import reinstall should start"),
         );
         wait_for_capability("url_import", Duration::from_secs(900));
         let status = local_resources::status().expect("final resource status should resolve");

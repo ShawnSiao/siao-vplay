@@ -3,7 +3,7 @@ import { useEffect, useRef, type ReactNode } from "react";
 import type {
   AppStatus,
   LibrarySearchResult,
-  MediaRuntimeStatus,
+  LocalResourceStatus,
 } from "../../types";
 import type { LibrarySection } from "../library/useLibraryController";
 import type { MediaDropFeedback } from "./useDesktopMediaDrop";
@@ -15,7 +15,7 @@ type DesktopShellProps = {
   drawerTab: ShellDrawerTab | null;
   dropFeedback: MediaDropFeedback | null;
   appStatus: AppStatus | null;
-  runtimeStatus: MediaRuntimeStatus | null;
+  localResourceStatus: LocalResourceStatus | null;
   previewMode: boolean;
   mediaTitle: string | null;
   currentSubtitleCount: number | null;
@@ -57,7 +57,7 @@ export function DesktopShell({
   drawerTab,
   dropFeedback,
   appStatus,
-  runtimeStatus,
+  localResourceStatus,
   previewMode,
   mediaTitle,
   currentSubtitleCount,
@@ -87,11 +87,20 @@ export function DesktopShell({
 }: DesktopShellProps) {
   const searchInputRef = useRef<HTMLInputElement>(null);
   const playerActive = activeView === "player";
-  const runtimeLabel = previewMode
+  const readyCapabilityCount =
+    localResourceStatus?.capabilities.filter(
+      (capability) => capability.state === "ready",
+    ).length ?? 0;
+  const basicMediaReady = localResourceStatus?.capabilities.some(
+    (capability) => capability.id === "basic_media" && capability.state === "ready",
+  );
+  const localResourceLabel = previewMode
     ? "浏览器预览"
-    : runtimeStatus?.available
-      ? "本地媒体工具可用"
-      : "正在检查媒体工具";
+    : localResourceStatus === null
+      ? "正在检查本地功能"
+      : readyCapabilityCount > 0
+        ? `${readyCapabilityCount} 项本地功能已准备`
+        : "本地功能按需准备";
 
   useEffect(() => {
     const focusSearch = (event: KeyboardEvent) => {
@@ -320,7 +329,7 @@ export function DesktopShell({
             aria-label="设置"
             className="shell-icon-command"
             type="button"
-            title="运行时与模型设置"
+            title="本地功能资源"
             onClick={onOpenSettings}
           >
             ⚙
@@ -406,10 +415,10 @@ export function DesktopShell({
           <div className="desktop-navigation-note">
             <strong>
               <span
-                className={`navigation-status-dot ${runtimeStatus?.available ? "ready" : "warning"}`}
+                className={`navigation-status-dot ${basicMediaReady ? "ready" : "warning"}`}
                 aria-hidden="true"
               />
-              {runtimeLabel}
+              {localResourceLabel}
             </strong>
             <span>
               已授权 {libraryCounts.folders ?? 0} 个本地文件夹。
