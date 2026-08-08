@@ -10,6 +10,7 @@ import {
   getLocalResourceCatalog,
   getLocalResourceDiagnostics,
   getLocalResourceDiagnosticSummary,
+  getLocalResourceNetworkStatus,
   getLocalResourceStatus,
   getLocalResourceThirdPartyNotices,
   inspectLocalResourceMigration,
@@ -29,6 +30,7 @@ import {
   resumeResourceDownload,
   retryResourceDownload,
   setLocalResourceProfile,
+  setLocalResourceProxy,
   moveLocalResourceRoot,
   updateLocalResource,
   cleanupOldResourceVersions,
@@ -43,6 +45,7 @@ import type {
   LocalResourceStatus,
   ResourceAdoptionResult,
   ResourceDownloadTask,
+  ResourceNetworkStatus,
   ResourceMigrationPreview,
   ResourceRemovalResult,
   ResourceRollbackResult,
@@ -69,6 +72,7 @@ export type LocalResourcesController = {
   status: LocalResourceStatus | null;
   tasks: ResourceDownloadTask[];
   taskMetrics: Record<string, ResourceTaskMetric>;
+  networkStatus: ResourceNetworkStatus | null;
   loading: boolean;
   error: string | null;
   refresh: () => Promise<LocalResourceStatus>;
@@ -100,6 +104,7 @@ export type LocalResourcesController = {
   planOldVersionCleanup: () => Promise<OldResourceVersionCleanupPlan>;
   cleanupOldVersions: () => Promise<OldResourceVersionCleanupResult>;
   selectProfile: (profileId: string) => Promise<LocalResourceStatus>;
+  setProxy: (proxyUrl: string | null) => Promise<ResourceNetworkStatus>;
   prepareCapability: (
     capabilityId: string,
     pendingActionId?: string,
@@ -128,6 +133,7 @@ export function useLocalResources(): LocalResourcesController {
   const [taskMetrics, setTaskMetrics] = useState<
     Record<string, ResourceTaskMetric>
   >({});
+  const [networkStatus, setNetworkStatus] = useState<ResourceNetworkStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const initializedRef = useRef(false);
@@ -203,14 +209,20 @@ export function useLocalResources(): LocalResourcesController {
       setLoading(true);
     }
     try {
-      const [nextCatalog, nextStatus, nextTasks] = await Promise.all([
+      const [nextCatalog, nextStatus, nextTasks, nextNetworkStatus] = await Promise.all([
         getLocalResourceCatalog(),
         getLocalResourceStatus(),
         listResourceDownloadTasks(),
+        getLocalResourceNetworkStatus().catch(() => ({
+          mode: "direct" as const,
+          proxySource: "direct" as const,
+          proxyAddress: null,
+        })),
       ]);
       setCatalog(nextCatalog);
       setStatus(nextStatus);
       replaceTasks(nextTasks);
+      setNetworkStatus(nextNetworkStatus);
       setError(null);
       initializedRef.current = true;
       return nextStatus;
@@ -301,6 +313,7 @@ export function useLocalResources(): LocalResourcesController {
     status,
     tasks,
     taskMetrics,
+    networkStatus,
     loading,
     error,
     refresh,
@@ -501,6 +514,17 @@ export function useLocalResources(): LocalResourcesController {
       try {
         const nextStatus = await setLocalResourceProfile(profileId);
         setStatus(nextStatus);
+        setError(null);
+        return nextStatus;
+      } catch (cause) {
+        captureError(cause);
+        throw cause;
+      }
+    },
+    setProxy: async (proxyUrl) => {
+      try {
+        const nextStatus = await setLocalResourceProxy(proxyUrl);
+        setNetworkStatus(nextStatus);
         setError(null);
         return nextStatus;
       } catch (cause) {

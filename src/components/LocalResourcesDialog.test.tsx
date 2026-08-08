@@ -108,6 +108,11 @@ function makeController(
     status: setupStatus,
     tasks: [],
     taskMetrics: {},
+    networkStatus: {
+      mode: "proxy",
+      proxySource: "windows_system",
+      proxyAddress: "http://127.0.0.1:7897",
+    },
     loading: false,
     error: null,
     refresh: vi.fn().mockResolvedValue(setupStatus),
@@ -181,6 +186,11 @@ function makeController(
       reclaimedBytes: 0,
     }),
     selectProfile: vi.fn().mockResolvedValue(setupStatus),
+    setProxy: vi.fn().mockResolvedValue({
+      mode: "proxy",
+      proxySource: "custom",
+      proxyAddress: "http://127.0.0.1:7897",
+    }),
     prepareCapability: vi.fn().mockResolvedValue({
       capabilityId: "basic_media",
       pendingActionId: null,
@@ -200,7 +210,7 @@ function makeController(
 }
 
 describe("LocalResourcesDialog", () => {
-  it("offers the three first-run choices without exposing technical details", () => {
+  it("keeps first run limited to an optional save location", () => {
     const onDismissFirstRun = vi.fn();
     render(
       <LocalResourcesDialog
@@ -214,20 +224,19 @@ describe("LocalResourcesDialog", () => {
       />,
     );
 
-    expect(
-      screen.getByRole("button", { name: /使用推荐配置/ }),
-    ).toBeEnabled();
-    expect(
-      screen.getByRole("button", { name: /选择需要的功能/ }),
-    ).toBeEnabled();
+    expect(screen.getByRole("heading", { name: "选择本地功能的保存位置" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "选择保存位置" })).toBeEnabled();
+    expect(screen.queryByText("基础视频支持")).not.toBeInTheDocument();
+    expect(screen.getByText(/此步骤不会下载依赖包或模型/)).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: /稍后设置/ }));
     expect(onDismissFirstRun).toHaveBeenCalledOnce();
     expect(screen.getByText("ffmpeg-cpu")).not.toBeVisible();
     expect(screen.getAllByText(/SHA-256/)[0]).not.toBeVisible();
   });
 
-  it("shows exact location and size estimates before explicit confirmation", async () => {
+  it("saves the first-run location without downloading dependencies", async () => {
     const controller = makeController();
+    const onDismissFirstRun = vi.fn();
     render(
       <LocalResourcesDialog
         controller={controller}
@@ -235,39 +244,28 @@ describe("LocalResourcesDialog", () => {
         pendingAction={null}
         previewMode={false}
         onClose={() => undefined}
-        onDismissFirstRun={() => undefined}
+        onDismissFirstRun={onDismissFirstRun}
         onNotice={() => undefined}
       />,
     );
-
-    fireEvent.click(screen.getByRole("button", { name: /使用推荐配置/ }));
-    expect(screen.getByText("88.7 MB")).toBeInTheDocument();
-    expect(screen.getByText("194 MB")).toBeInTheDocument();
-    expect(controller.prepareCapability).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("button", { name: "选择保存位置" }));
     expect(
       await screen.findByText("W:\\SiaoVPlay\\SiaoVPlay"),
     ).toBeInTheDocument();
-    expect(screen.getByText("下载尚未开始")).toBeInTheDocument();
+    expect(screen.getByText("0 B")).toBeInTheDocument();
     expect(controller.confirmLocation).not.toHaveBeenCalled();
 
     fireEvent.click(
-      screen.getByRole("button", { name: "确认位置并开始准备" }),
+      screen.getByRole("button", { name: "保存位置并进入" }),
     );
     await waitFor(() =>
       expect(controller.confirmLocation).toHaveBeenCalledWith(
         "W:\\SiaoVPlay",
       ),
     );
-    expect(controller.prepareCapability).toHaveBeenCalledWith(
-      "basic_media",
-      undefined,
-    );
-    expect(controller.prepareCapability).toHaveBeenCalledWith(
-      "url_import",
-      undefined,
-    );
+    expect(controller.prepareCapability).not.toHaveBeenCalled();
+    expect(onDismissFirstRun).toHaveBeenCalledOnce();
   });
 
   it("shows directory selection errors before the scrollable setup content", async () => {
@@ -475,7 +473,7 @@ describe("LocalResourcesDialog", () => {
     await waitFor(() => expect(repairRoot).toHaveBeenCalledOnce());
   });
 
-  it("shows real transcription profile sizes and keeps unpublished runtimes disabled", async () => {
+  it("shows light and standard transcription sizes with a downloadable CPU runtime", async () => {
     const transcriptionCatalog: LocalResourceCatalog = {
       ...catalog,
       capabilities: [
@@ -483,7 +481,7 @@ describe("LocalResourcesDialog", () => {
         {
           id: "local_transcription",
           title: "本地字幕识别",
-          resourceIds: ["ffmpeg-cpu", "whisper-cpu", "whisper-vad-silero-6.2"],
+          resourceIds: ["ffmpeg-cpu", "whisper-cpu"],
           profileIds: ["fast", "standard"],
           requiresCapabilityIds: [],
         },
@@ -506,35 +504,21 @@ describe("LocalResourcesDialog", () => {
         ...catalog.resources,
         {
           id: "whisper-cpu",
-          version: "1.9.1-siaocut.1",
+          version: "1.9.1",
           platform: "windows-x86_64",
           kind: "archive",
           bundled: false,
-          installedSize: 9_751_754,
-          expectedDownloadSize: 3_594_453,
+          installedSize: 20_355_072,
           license: "MIT",
           sourcePage: "https://example.com/whisper-cpu",
-          distribution: { status: "pending_release_asset" },
-          entrypoints: {},
-          healthCheck: "whisper-runtime-metadata-and-timeline",
-        },
-        {
-          id: "whisper-vad-silero-6.2",
-          version: "6.2.0",
-          platform: "any",
-          kind: "file",
-          bundled: false,
-          installedSize: 864_680,
-          license: "MIT",
-          sourcePage: "https://example.com/vad",
           artifact: {
-            url: "https://example.com/ggml-silero-v6.2.0.bin",
-            size: 864_680,
-            sha256: "e".repeat(64),
-            format: "file",
+            url: "https://example.com/whisper-bin-x64.zip",
+            size: 7_982_101,
+            sha256: "f".repeat(64),
+            format: "zip",
           },
           entrypoints: {},
-          healthCheck: "whisper-vad-magic",
+          healthCheck: "whisper-cli-version",
         },
         {
           id: "whisper-model-base",
@@ -588,12 +572,10 @@ describe("LocalResourcesDialog", () => {
           requiredResourceIds: [
             "ffmpeg-cpu",
             "whisper-cpu",
-            "whisper-vad-silero-6.2",
             "whisper-model-small",
           ],
           missingResourceIds: [
             "whisper-cpu",
-            "whisper-vad-silero-6.2",
             "whisper-model-small",
           ],
         },
@@ -622,15 +604,13 @@ describe("LocalResourcesDialog", () => {
     );
 
     expect(screen.getByText(/直接展示真实大小/)).toBeInTheDocument();
-    expect(screen.queryByText(/轻量/)).not.toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: /轻量/ })).toBeEnabled();
     expect(screen.getByText(/识别模型下载 488 MB/)).toBeInTheDocument();
     expect(screen.getByText(/识别模型下载 148 MB/)).toBeInTheDocument();
-    expect(screen.getByText("当前不能开始下载")).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "当前不能开始准备" }),
-    ).toBeDisabled();
+    expect(screen.getByText(/需下载 496 MB/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "开始准备所选功能" })).toBeEnabled();
 
-    fireEvent.click(screen.getByRole("radio", { name: /快速/ }));
+    fireEvent.click(screen.getByRole("radio", { name: /轻量/ }));
     await waitFor(() => expect(selectProfile).toHaveBeenCalledWith("fast"));
   });
 
@@ -667,6 +647,41 @@ describe("LocalResourcesDialog", () => {
     expect(
       screen.getByRole("button", { name: "修复 ffmpeg-cpu" }),
     ).toBeVisible();
+  });
+
+  it("shows Windows proxy status and allows a simple custom override", async () => {
+    const readyStatus: LocalResourceStatus = {
+      ...setupStatus,
+      configured: true,
+      resourceRoot: "W:\\SiaoVPlay\\SiaoVPlay",
+      rootState: "ready",
+    };
+    const setProxy = vi.fn().mockResolvedValue({
+      mode: "proxy",
+      proxySource: "custom",
+      proxyAddress: "http://127.0.0.1:8899",
+    });
+    render(
+      <LocalResourcesDialog
+        controller={makeController({ status: readyStatus, setProxy })}
+        firstRun={false}
+        pendingAction={null}
+        previewMode={false}
+        onClose={() => undefined}
+        onDismissFirstRun={() => undefined}
+        onNotice={() => undefined}
+      />,
+    );
+
+    fireEvent.click(screen.getByText("高级诊断与第三方许可"));
+    expect(screen.getByText("跟随 Windows 系统代理")).toBeVisible();
+    fireEvent.change(screen.getByLabelText("指定 HTTP(S) 代理（可选）"), {
+      target: { value: "http://127.0.0.1:8899" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "使用指定代理" }));
+    await waitFor(() =>
+      expect(setProxy).toHaveBeenCalledWith("http://127.0.0.1:8899"),
+    );
   });
 
   it("loads version history, supports safe update and rollback, and copies a redacted summary", async () => {

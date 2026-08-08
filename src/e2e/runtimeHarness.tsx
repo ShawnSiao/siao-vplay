@@ -214,6 +214,11 @@ export function RuntimeHarness() {
       taskMetrics: {
         [initialTask.id]: { bytesPerSecond: 0, remainingSeconds: null },
       },
+      networkStatus: {
+        mode: "proxy",
+        proxySource: "windows_system",
+        proxyAddress: "http://127.0.0.1:7897",
+      },
       loading: false,
       error: null,
       refresh: async () => status,
@@ -326,6 +331,11 @@ export function RuntimeHarness() {
       selectProfile: async (profileId) => ({
         ...status,
         preferredProfile: profileId,
+      }),
+      setProxy: async (proxyUrl) => ({
+        mode: proxyUrl ? "proxy" : "direct",
+        proxySource: proxyUrl ? "custom" : "direct",
+        proxyAddress: proxyUrl,
       }),
       prepareCapability: async (capabilityId, pendingActionId) => ({
         capabilityId,

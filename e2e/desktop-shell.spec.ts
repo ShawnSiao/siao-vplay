@@ -370,7 +370,7 @@ test("local resources stay product-focused, accessible, and scrollable at 1280 b
   await expect(dialog.getByRole("button", { name: "选择现有资源目录" })).toBeVisible();
   await expect(dialog.getByRole("button", { name: "更改保存位置" })).toBeVisible();
   expect(await dialog.evaluate((element) => (element as HTMLElement).innerText)).not.toMatch(
-    /FFmpeg|yt-dlp|Whisper|SHA-256|https:\/\/|SIAOVPLAY_|轻量/i,
+    /FFmpeg|yt-dlp|Whisper|SHA-256|https:\/\/|SIAOVPLAY_/i,
   );
   await expect(dialog.getByText("ffmpeg-cpu", { exact: true })).toBeHidden();
   await expect(dialog.getByText(/SHA-256/).first()).toBeHidden();

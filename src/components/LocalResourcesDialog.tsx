@@ -30,8 +30,6 @@ type LocalResourcesDialogProps = {
   onNotice: (message: string) => void;
 };
 
-type SetupChoice = "recommended" | "custom" | null;
-
 const recommendedCapabilityIds = ["basic_media", "url_import"];
 
 const capabilityDescriptions: Record<string, string> = {
@@ -93,7 +91,7 @@ function capabilityStateLabel(
     case "update_available":
       return "可更新";
     default:
-      return installable ? "按需准备" : "下载资源尚未发布";
+      return installable ? "按需准备" : "暂不可用";
   }
 }
 
@@ -118,6 +116,19 @@ function taskStateLabel(task: ResourceDownloadTask): string {
   }
 }
 
+function networkSourceLabel(source: string | undefined): string {
+  switch (source) {
+    case "custom":
+      return "使用指定代理";
+    case "environment":
+      return "使用应用启动环境中的代理";
+    case "windows_system":
+      return "跟随 Windows 系统代理";
+    default:
+      return "当前直连";
+  }
+}
+
 export function LocalResourcesDialog({
   controller,
   firstRun,
@@ -127,9 +138,6 @@ export function LocalResourcesDialog({
   onDismissFirstRun,
   onNotice,
 }: LocalResourcesDialogProps) {
-  const [setupChoice, setSetupChoice] = useState<SetupChoice>(
-    firstRun && !pendingAction ? null : "custom",
-  );
   const [selectedCapabilityIds, setSelectedCapabilityIds] = useState(
     new Set(pendingAction ? [pendingAction.capabilityId] : recommendedCapabilityIds),
   );
@@ -150,6 +158,7 @@ export function LocalResourcesDialog({
     useState<OldResourceVersionCleanupPlan | null>(null);
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
+  const [proxyInput, setProxyInput] = useState("");
 
   const { catalog, status, tasks, taskMetrics } = controller;
 
@@ -165,23 +174,6 @@ export function LocalResourcesDialog({
     () => new Map((catalog?.resources ?? []).map((resource) => [resource.id, resource])),
     [catalog],
   );
-  const recommendedTotals = useMemo(() => {
-    const resourceIds = new Set(
-      (catalog?.capabilities ?? [])
-        .filter((capability) => recommendedCapabilityIds.includes(capability.id))
-        .flatMap((capability) => capability.resourceIds),
-    );
-    return [...resourceIds].reduce(
-      (totals, resourceId) => {
-        const resource = resourceById.get(resourceId);
-        return {
-          downloadBytes: totals.downloadBytes + resourceDownloadBytes(resource),
-          installedBytes: totals.installedBytes + (resource?.installedSize ?? 0),
-        };
-      },
-      { downloadBytes: 0, installedBytes: 0 },
-    );
-  }, [catalog?.capabilities, resourceById]);
 
   const missingResourceIdsByCapability = useMemo(() => {
     const result = new Map<string, string[]>();
@@ -490,6 +482,29 @@ export function LocalResourcesDialog({
       onNotice("本地功能已开始准备，可以继续查看下载进度。");
     });
 
+  const confirmFirstRunLocation = () =>
+    runAction("first-run-location", async () => {
+      if (!locationPlan) {
+        throw new Error("请先选择保存位置。");
+      }
+      await controller.confirmLocation(locationPlan.selectedParent);
+      onNotice("本地功能保存位置已设置；需要其他能力时再按需下载。");
+      onDismissFirstRun();
+    });
+
+  const applyProxy = (proxyUrl: string | null) =>
+    runAction("proxy", async () => {
+      const result = await controller.setProxy(proxyUrl);
+      if (proxyUrl === null) {
+        setProxyInput("");
+      }
+      onNotice(
+        result.proxySource === "custom"
+          ? "已使用指定代理，后续下载任务会采用新设置。"
+          : "已恢复自动网络设置。",
+      );
+    });
+
   const selectProfile = (profileId: string) => {
     setSelectedProfileId(profileId);
     if (status?.configured) {
@@ -556,52 +571,64 @@ export function LocalResourcesDialog({
           </div>
         ) : null}
 
-        {firstRun && setupChoice === null ? (
+        {firstRun && !pendingAction ? (
           <section className="local-resources-welcome" aria-labelledby="resource-welcome-title">
-            <h3 id="resource-welcome-title">先选择需要准备的功能</h3>
+            <h3 id="resource-welcome-title">选择本地功能的保存位置</h3>
             <p>
-              产品本体已经可以使用。其他功能只在需要时下载，并保存到确认的位置。
+              SiaoVPlay 产品本体已经可以使用。以后需要的视频兼容、在线导入或字幕识别内容，会按需下载到这里。
             </p>
-            <div className="local-resources-choice-grid">
-              <button
-                className="local-resources-choice recommended"
-                type="button"
-                onClick={() => {
-                  setSelectedCapabilityIds(new Set(recommendedCapabilityIds));
-                  setSetupChoice("recommended");
-                }}
+            <div className="local-resources-first-run-location">
+              <div
+                className="local-resources-path"
+                title={locationPlan?.resourceRoot ?? undefined}
               >
-                <strong>使用推荐配置</strong>
-                <span>准备基础视频支持和在线视频导入。</span>
-                <small>
-                  {catalog
-                    ? `下载约 ${formatBytes(
-                        recommendedTotals.downloadBytes,
-                      )}，安装后约占用 ${formatBytes(
-                        recommendedTotals.installedBytes,
-                      )}`
-                    : "正在计算下载量"}
-                </small>
+                {locationPlan?.resourceRoot ?? "尚未选择保存位置"}
+              </div>
+              <button
+                className="button quiet"
+                type="button"
+                disabled={previewMode || busyAction !== null}
+                onClick={() => void chooseLocation()}
+              >
+                {busyAction === "location" ? "正在打开…" : "选择保存位置"}
+              </button>
+            </div>
+            {locationPlan ? (
+              <dl className="local-resources-space-summary">
+                <div>
+                  <dt>磁盘可用</dt>
+                  <dd>{formatBytes(locationPlan.freeSpaceBytes)}</dd>
+                </div>
+                <div>
+                  <dt>现在下载</dt>
+                  <dd>0 B</dd>
+                </div>
+                <div>
+                  <dt>以后下载</dt>
+                  <dd>按需确认</dd>
+                </div>
+              </dl>
+            ) : null}
+            <div className="local-resource-location-actions">
+              <button
+                className="button primary"
+                type="button"
+                disabled={previewMode || busyAction !== null || !locationPlan}
+                onClick={() => void confirmFirstRunLocation()}
+              >
+                {busyAction === "first-run-location" ? "正在保存…" : "保存位置并进入"}
               </button>
               <button
-                className="local-resources-choice"
-                type="button"
-                onClick={() => setSetupChoice("custom")}
-              >
-                <strong>选择需要的功能</strong>
-                <span>按实际用途选择，之后仍可调整。</span>
-                <small>下载量随选择即时计算</small>
-              </button>
-              <button
-                className="local-resources-choice later"
+                className="button quiet"
                 type="button"
                 onClick={onDismissFirstRun}
               >
-                <strong>稍后设置</strong>
-                <span>直接进入媒体库，需要时再准备。</span>
-                <small>不会开始下载</small>
+                稍后设置
               </button>
             </div>
+            <small className="local-resources-first-run-note">
+              此步骤不会下载依赖包或模型；每项功能会在首次使用前单独显示下载量并再次确认。
+            </small>
           </section>
         ) : null}
 
@@ -612,23 +639,14 @@ export function LocalResourcesDialog({
           </div>
         ) : null}
 
-        {status && (!firstRun || setupChoice !== null || pendingAction) ? (
+        {status && (!firstRun || pendingAction) ? (
           <>
-            <section className="local-resources-section" aria-labelledby="capability-heading">
+            <section className="local-resources-section local-resources-capabilities-section" aria-labelledby="capability-heading">
               <div className="local-resources-section-head">
                 <div>
                   <h3 id="capability-heading">需要的功能</h3>
                   <p>只下载所选功能缺少的内容，共享内容不会重复下载。</p>
                 </div>
-                {firstRun && !pendingAction ? (
-                  <button
-                    className="text-button"
-                    type="button"
-                    onClick={() => setSetupChoice(null)}
-                  >
-                    返回选择方式
-                  </button>
-                ) : null}
               </div>
               {catalog?.profiles.length ? (
                 <fieldset className="local-resource-profiles">
@@ -653,7 +671,7 @@ export function LocalResourcesDialog({
                           />
                           <span>
                             <strong>
-                              {profile.title}
+                              {profile.id === "fast" ? "轻量" : profile.title}
                               {profile.recommended ? "（推荐）" : ""}
                             </strong>
                             <small>
@@ -728,7 +746,7 @@ export function LocalResourcesDialog({
               </div>
             </section>
 
-            <section className="local-resources-section" aria-labelledby="location-heading">
+            <section className="local-resources-section local-resources-location-section" aria-labelledby="location-heading">
               <div className="local-resources-section-head">
                 <div>
                   <h3 id="location-heading">保存位置</h3>
@@ -907,7 +925,7 @@ export function LocalResourcesDialog({
         ) : null}
 
         {visibleTasks.length > 0 ? (
-          <section className="local-resources-section" aria-labelledby="downloads-heading">
+          <section className="local-resources-section local-resources-downloads-section" aria-labelledby="downloads-heading">
             <div className="local-resources-section-head">
               <div>
                 <h3 id="downloads-heading">准备进度</h3>
@@ -1037,6 +1055,48 @@ export function LocalResourcesDialog({
             <p>
               以下信息用于核对资源版本、完整性和许可证。普通使用不需要修改这些内容。
             </p>
+            <section className="local-resource-network-settings" aria-labelledby="network-settings-heading">
+              <div>
+                <strong id="network-settings-heading">下载网络</strong>
+                <span>{networkSourceLabel(controller.networkStatus?.proxySource)}</span>
+                {controller.networkStatus?.proxyAddress ? (
+                  <code>{controller.networkStatus.proxyAddress}</code>
+                ) : null}
+              </div>
+              <label>
+                <span>指定 HTTP(S) 代理（可选）</span>
+                <input
+                  type="url"
+                  value={proxyInput}
+                  placeholder="例如 http://127.0.0.1:7897"
+                  disabled={previewMode || busyAction !== null || !status.configured}
+                  onChange={(event) => setProxyInput(event.target.value)}
+                />
+              </label>
+              <div className="local-resource-location-actions">
+                <button
+                  className="button quiet"
+                  type="button"
+                  disabled={
+                    previewMode ||
+                    busyAction !== null ||
+                    !status.configured ||
+                    proxyInput.trim().length === 0
+                  }
+                  onClick={() => void applyProxy(proxyInput.trim())}
+                >
+                  {busyAction === "proxy" ? "正在保存…" : "使用指定代理"}
+                </button>
+                <button
+                  className="text-button"
+                  type="button"
+                  disabled={previewMode || busyAction !== null || !status.configured}
+                  onClick={() => void applyProxy(null)}
+                >
+                  恢复自动设置
+                </button>
+              </div>
+            </section>
             {diagnostics ? (
               <div className="notice" role="status">
                 <strong>当前使用内置可信目录清单</strong>

@@ -30,6 +30,8 @@ const desktopMocks = vi.hoisted(() => ({
   getRuntimeCatalog: vi.fn(),
   getLocalResourceCatalog: vi.fn(),
   getLocalResourceStatus: vi.fn(),
+  getLocalResourceNetworkStatus: vi.fn(),
+  setLocalResourceProxy: vi.fn(),
   listResourceDownloadTasks: vi.fn(),
   listenResourceDownloadTasks: vi.fn(),
   chooseLocalResourceParent: vi.fn(),
@@ -219,7 +221,7 @@ const localResourceCatalog: LocalResourceCatalog = {
     {
       id: "local_transcription",
       title: "本地字幕识别",
-      resourceIds: ["ffmpeg-cpu", "whisper-cpu", "whisper-vad-silero-6.2"],
+      resourceIds: ["ffmpeg-cpu", "whisper-cpu"],
       profileIds: ["fast", "standard"],
       requiresCapabilityIds: [],
     },
@@ -274,6 +276,24 @@ const localResourceCatalog: LocalResourceCatalog = {
       },
       entrypoints: {},
       healthCheck: "yt-dlp-version",
+    },
+    {
+      id: "whisper-cpu",
+      version: "1.9.1",
+      platform: "windows-x86_64",
+      kind: "archive",
+      bundled: false,
+      installedSize: 20_355_072,
+      license: "MIT",
+      sourcePage: "https://example.com/whisper-cpu",
+      artifact: {
+        url: "https://example.com/whisper-bin-x64.zip",
+        size: 7_982_101,
+        sha256: "e".repeat(64),
+        format: "zip",
+      },
+      entrypoints: {},
+      healthCheck: "whisper-cli-version",
     },
     {
       id: "whisper-model-base",
@@ -343,7 +363,6 @@ const readyLocalResourceStatus: LocalResourceStatus = {
       requiredResourceIds: [
         "ffmpeg-cpu",
         "whisper-cpu",
-        "whisper-vad-silero-6.2",
         "whisper-model-small",
       ],
       missingResourceIds: [],
@@ -833,6 +852,16 @@ beforeEach(() => {
   });
   desktopMocks.getLocalResourceCatalog.mockResolvedValue(localResourceCatalog);
   desktopMocks.getLocalResourceStatus.mockResolvedValue(readyLocalResourceStatus);
+  desktopMocks.getLocalResourceNetworkStatus.mockResolvedValue({
+    mode: "proxy",
+    proxySource: "windows_system",
+    proxyAddress: "http://127.0.0.1:7897",
+  });
+  desktopMocks.setLocalResourceProxy.mockResolvedValue({
+    mode: "proxy",
+    proxySource: "custom",
+    proxyAddress: "http://127.0.0.1:7897",
+  });
   desktopMocks.listResourceDownloadTasks.mockResolvedValue([]);
   desktopMocks.listenResourceDownloadTasks.mockResolvedValue(() => undefined);
   desktopMocks.chooseLocalResourceParent.mockResolvedValue(null);
@@ -2261,7 +2290,7 @@ describe("App", () => {
     );
   });
 
-  it("offers recommended, custom, and later choices on first resource setup", async () => {
+  it("offers an optional save location without downloading on first setup", async () => {
     desktopMocks.getLocalResourceStatus.mockResolvedValue(
       setupRequiredLocalResourceStatus,
     );
@@ -2271,12 +2300,9 @@ describe("App", () => {
     const dialog = await screen.findByRole("dialog", {
       name: "准备 SiaoVPlay",
     });
-    expect(
-      within(dialog).getByRole("button", { name: /使用推荐配置/ }),
-    ).toBeEnabled();
-    expect(
-      within(dialog).getByRole("button", { name: /选择需要的功能/ }),
-    ).toBeEnabled();
+    expect(within(dialog).getByRole("button", { name: "选择保存位置" })).toBeEnabled();
+    expect(within(dialog).getByText(/此步骤不会下载依赖包或模型/)).toBeVisible();
+    expect(desktopMocks.prepareLocalCapability).not.toHaveBeenCalled();
     fireEvent.click(
       within(dialog).getByRole("button", { name: /稍后设置/ }),
     );
