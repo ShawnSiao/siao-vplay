@@ -1,7 +1,7 @@
 use super::{
     catalog, config,
     error::AiError,
-    types::{AiServiceProbeInput, ResolvedAiService},
+    types::{AiExecutionTarget, AiServiceProbeInput, ResolvedAiService},
 };
 
 pub fn resolve_probe(input: &AiServiceProbeInput) -> Result<ResolvedAiService, AiError> {
@@ -36,6 +36,34 @@ pub fn resolve_probe(input: &AiServiceProbeInput) -> Result<ResolvedAiService, A
         base_url: config::normalize_endpoint(base_url)?,
         model_id: normalized(input.model_id.as_deref()),
         api_key: secret(input.api_key.as_deref(), None)?,
+    })
+}
+
+pub fn resolve_execution(
+    execution: &AiExecutionTarget,
+    expected_revision: Option<u64>,
+) -> Result<ResolvedAiService, AiError> {
+    let AiExecutionTarget::Api {
+        service_config_id,
+        model_id,
+    } = execution
+    else {
+        return Err(AiError::Validation("当前执行方式不是 API 服务".to_owned()));
+    };
+    let store = config::store()?;
+    let service = store.configured_service(service_config_id)?;
+    if expected_revision != Some(service.revision) {
+        return Err(AiError::RevisionConflict);
+    }
+    let model_id = normalized(Some(model_id))
+        .ok_or_else(|| AiError::Validation("请选择或填写模型".to_owned()))?;
+    Ok(ResolvedAiService {
+        service_config_id: Some(service.id.clone()),
+        provider_id: service.provider_id,
+        protocol: service.protocol,
+        base_url: service.base_url,
+        model_id: Some(model_id),
+        api_key: secret(None, store.stored_credential(service_config_id)?)?,
     })
 }
 

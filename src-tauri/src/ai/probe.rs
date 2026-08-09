@@ -5,10 +5,74 @@ use super::{
     error::{AiCommandError, AiError},
     providers::{self, GenerationInput, ProviderFailure},
     types::{
-        AiModelInfo, AiModelList, AiServiceCapabilities, AiServiceProbeInput, AiServiceTestResult,
-        ConnectionState,
+        AiExecutionPreview, AiExecutionTarget, AiModelInfo, AiModelList, AiServiceCapabilities,
+        AiServiceProbeInput, AiServiceTestResult, ConnectionState, PreviewAiExecutionInput,
     },
 };
+
+pub fn preview_execution(
+    input: PreviewAiExecutionInput,
+) -> Result<AiExecutionPreview, AiCommandError> {
+    validate_authorization(
+        input.authorization.subtitles,
+        input.authorization.current_question,
+    )?;
+    match &input.execution {
+        AiExecutionTarget::Manual => Ok(local_preview("manual", "手动方式", input)),
+        AiExecutionTarget::Codex => Ok(local_preview("codex", "本机 Codex", input)),
+        AiExecutionTarget::Api { model_id, .. } => {
+            let service = connection::resolve_execution(
+                &input.execution,
+                input.authorization.service_revision,
+            )?;
+            let configured = config::store()?
+                .configured_service(service.service_config_id.as_deref().unwrap_or_default())?;
+            let frames_effective =
+                input.authorization.frames && providers::model_supports_vision(&service, model_id);
+            Ok(AiExecutionPreview {
+                execution_kind: "api".to_owned(),
+                service_config_id: service.service_config_id,
+                provider_id: Some(service.provider_id),
+                display_name: configured.display_name,
+                model_id: Some(model_id.clone()),
+                subtitles: true,
+                current_question: true,
+                frames_requested: input.authorization.frames,
+                frames_effective,
+                service_revision: Some(configured.revision),
+            })
+        }
+    }
+}
+
+fn local_preview(
+    kind: &str,
+    display_name: &str,
+    input: PreviewAiExecutionInput,
+) -> AiExecutionPreview {
+    AiExecutionPreview {
+        execution_kind: kind.to_owned(),
+        service_config_id: None,
+        provider_id: None,
+        display_name: display_name.to_owned(),
+        model_id: None,
+        subtitles: true,
+        current_question: true,
+        frames_requested: input.authorization.frames,
+        frames_effective: input.authorization.frames,
+        service_revision: None,
+    }
+}
+
+fn validate_authorization(subtitles: bool, question: bool) -> Result<(), AiError> {
+    if subtitles && question {
+        Ok(())
+    } else {
+        Err(AiError::Validation(
+            "理解和学习任务必须明确授权当前字幕与当前问题".to_owned(),
+        ))
+    }
+}
 
 pub fn list_models(input: AiServiceProbeInput) -> Result<AiModelList, AiCommandError> {
     let service = connection::resolve_probe(&input)?;
@@ -129,5 +193,12 @@ mod tests {
         assert!(validate_connection_output(r#"{"ok":true}"#).is_ok());
         assert!(validate_connection_output(r#"{"ok":false}"#).is_err());
         assert!(validate_connection_output("not-json").is_err());
+    }
+
+    #[test]
+    fn material_authorization_requires_subtitles_and_current_question() {
+        assert!(validate_authorization(true, true).is_ok());
+        assert!(validate_authorization(true, false).is_err());
+        assert!(validate_authorization(false, true).is_err());
     }
 }

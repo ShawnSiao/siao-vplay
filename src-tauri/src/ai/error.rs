@@ -96,4 +96,18 @@ impl AiCommandError {
         self.provider_request_id = request_id;
         self
     }
+
+    pub(crate) fn task(
+        code: &'static str,
+        message: String,
+        retryable: bool,
+        provider_request_id: Option<String>,
+    ) -> Self {
+        Self {
+            code,
+            message,
+            retryable,
+            provider_request_id,
+        }
+    }
 }

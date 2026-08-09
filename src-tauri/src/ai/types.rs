@@ -12,6 +12,20 @@ pub enum AiProviderId {
     Custom,
 }
 
+impl AiProviderId {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Openai => "openai",
+            Self::Anthropic => "anthropic",
+            Self::Gemini => "gemini",
+            Self::Deepseek => "deepseek",
+            Self::Kimi => "kimi",
+            Self::Glm => "glm",
+            Self::Custom => "custom",
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AiProtocol {
@@ -203,4 +217,72 @@ pub struct AiServiceTestResult {
     pub minimal_request_used: bool,
     pub may_incur_usage: bool,
     pub provider_request_id: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(
+    tag = "kind",
+    rename_all = "snake_case",
+    rename_all_fields = "camelCase"
+)]
+pub enum AiExecutionTarget {
+    Manual,
+    Codex,
+    Api {
+        service_config_id: String,
+        model_id: String,
+    },
+}
+
+impl AiExecutionTarget {
+    pub fn kind(&self) -> &'static str {
+        match self {
+            Self::Manual => "manual",
+            Self::Codex => "codex",
+            Self::Api { .. } => "api",
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiMaterialAuthorization {
+    pub subtitles: bool,
+    pub current_question: bool,
+    pub frames: bool,
+    pub service_revision: Option<u64>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiTaskExecutionInfo {
+    pub kind: String,
+    pub service_config_id: Option<String>,
+    pub service_revision: Option<u64>,
+    pub provider_id: Option<String>,
+    pub model_id: Option<String>,
+    pub provider_request_id: Option<String>,
+    pub usage: Option<serde_json::Value>,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct PreviewAiExecutionInput {
+    pub execution: AiExecutionTarget,
+    pub authorization: AiMaterialAuthorization,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiExecutionPreview {
+    pub execution_kind: String,
+    pub service_config_id: Option<String>,
+    pub provider_id: Option<AiProviderId>,
+    pub display_name: String,
+    pub model_id: Option<String>,
+    pub subtitles: bool,
+    pub current_question: bool,
+    pub frames_requested: bool,
+    pub frames_effective: bool,
+    pub service_revision: Option<u64>,
 }

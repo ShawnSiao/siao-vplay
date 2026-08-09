@@ -86,6 +86,16 @@ pub fn generate(
     }
 }
 
+pub fn model_supports_vision(service: &ResolvedAiService, model_id: &str) -> bool {
+    service.provider_id != AiProviderId::Custom
+        && catalog::provider(service.provider_id).is_ok_and(|provider| {
+            provider
+                .vision_model_prefixes
+                .iter()
+                .any(|prefix| model_id.starts_with(prefix))
+        })
+}
+
 pub(super) fn client() -> Result<Client, ProviderFailure> {
     client_with_timeout(Duration::from_secs(90))
 }

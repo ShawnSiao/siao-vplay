@@ -8,12 +8,17 @@ use std::{
 use rusqlite::{OptionalExtension, TransactionBehavior, params};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
-use sha2::{Digest, Sha256};
 use thiserror::Error;
 use uuid::Uuid;
 
 use crate::{
-    agent_result, media,
+    agent_result,
+    agent_task_files::{
+        self, TaskFile, hash_bytes, hash_file, read_small_utf8 as read_task_file, write_json_file,
+        write_text_file,
+    },
+    ai::AiTaskExecutionInfo,
+    media,
     store::{ProjectStore, StoreError},
     subtitles::{self, SubtitleError, SubtitleSegment, SubtitleVersion},
 };
@@ -64,10 +69,8 @@ pub enum LearningError {
     ScreenshotFailed(String),
     #[error("学习卡片导出失败：{0}")]
     ExportFailed(String),
-    #[error("学习任务文件超过大小上限")]
-    FileTooLarge,
-    #[error("学习任务文件不是 UTF-8 文本")]
-    UnsupportedEncoding,
+    #[error(transparent)]
+    TaskFile(#[from] agent_task_files::TaskFileError),
 }
 
 impl LearningError {
@@ -94,9 +97,15 @@ impl LearningError {
             Self::InvalidResult(_) => "learning_result_invalid",
             Self::ScreenshotFailed(_) => "learning_screenshot_failed",
             Self::ExportFailed(_) => "learning_export_failed",
-            Self::FileTooLarge => "learning_file_too_large",
-            Self::UnsupportedEncoding => "learning_file_encoding_invalid",
-            Self::Serialization(_) => "learning_serialization_failed",
+            Self::TaskFile(agent_task_files::TaskFileError::TooLarge) => "learning_file_too_large",
+            Self::TaskFile(agent_task_files::TaskFileError::UnsupportedEncoding) => {
+                "learning_file_encoding_invalid"
+            }
+            Self::Serialization(_)
+            | Self::TaskFile(agent_task_files::TaskFileError::Serialization(_)) => {
+                "learning_serialization_failed"
+            }
+            Self::TaskFile(agent_task_files::TaskFileError::FileSystem(_)) => "filesystem_error",
         }
     }
 }
@@ -131,6 +140,7 @@ pub struct LearningTask {
     pub id: String,
     pub project_id: String,
     pub handoff_kind: String,
+    pub execution: AiTaskExecutionInfo,
     pub protocol_version: String,
     pub status: String,
     pub stage: String,
@@ -289,14 +299,6 @@ struct QueryMaterial {
     playback_position_ms: i64,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
-struct TaskFile {
-    path: String,
-    sha256: String,
-    content_type: String,
-    purpose: String,
-}
-
 struct TaskBaseline {
     project_revision: i64,
     media_sha256: String,
@@ -317,6 +319,7 @@ pub fn prepare_learning_task(
             "手动选择的外部 Agent",
         ),
         "codex" => ("queued", "queued", "本机 Codex"),
+        "api" => ("queued", "queued", "已选择的 AI 服务"),
         value => return Err(LearningError::InvalidHandoff(value.to_owned())),
     };
     let project = store.get_project(&input.project_id)?;
@@ -404,6 +407,7 @@ pub fn prepare_learning_task(
             "taskType": "contextual_dictionary_lookup",
             "projectId": &project.id,
             "handoffKind": &input.handoff_kind,
+            "executionKind": &input.handoff_kind,
             "receiverLabel": receiver_label,
             "materialScope": &material_scope,
             "sourceVersionId": &baseline.source.id,
@@ -454,25 +458,32 @@ pub fn prepare_learning_task(
             baseline.translation.as_ref().map(|value| value.id.as_str()),
         )?;
         ensure_no_active_agent_task_in_transaction(&transaction, &project.id)?;
+        let legacy_handoff_kind = if input.handoff_kind == "api" {
+            "manual"
+        } else {
+            input.handoff_kind.as_str()
+        };
         transaction.execute(
             "INSERT INTO learning_tasks (
-                id, project_id, handoff_kind, protocol_version, status, stage,
+                id, project_id, handoff_kind, execution_kind,
+                protocol_version, status, stage,
                 progress, receiver_label, material_scope_json, source_version_id,
                 translation_version_id, source_segment_id, selected_text,
                 selection_kind, playback_position_ms, expected_project_revision,
                 expected_media_sha256, material_manifest_sha256,
                 created_at_ms, updated_at_ms
              ) VALUES (
-                ?1, ?2, ?3, ?4, ?5, ?6,
-                0.0, ?7, ?8, ?9,
-                ?10, ?11, ?12,
-                ?13, ?14, ?15,
-                ?16, ?17,
-                ?18, ?18
+                ?1, ?2, ?3, ?4, ?5, ?6, ?7,
+                0.0, ?8, ?9, ?10,
+                ?11, ?12, ?13,
+                ?14, ?15, ?16,
+                ?17, ?18,
+                ?19, ?19
              )",
             params![
                 task_id,
                 project.id,
+                legacy_handoff_kind,
                 input.handoff_kind,
                 PROTOCOL_VERSION,
                 status,
@@ -510,12 +521,14 @@ pub fn get_learning_task(
     connection
         .query_row(
             "SELECT
-                id, project_id, handoff_kind, protocol_version, status, stage,
+                id, project_id, execution_kind, protocol_version, status, stage,
                 progress, receiver_label, material_scope_json, source_version_id,
                 translation_version_id, source_segment_id, selected_text,
                 selection_kind, playback_position_ms, expected_project_revision,
                 output_dictionary_entry_id, error_code, error_message,
-                created_at_ms, updated_at_ms, started_at_ms, completed_at_ms
+                created_at_ms, updated_at_ms, started_at_ms, completed_at_ms,
+                service_config_id, service_revision, provider_id, model_id,
+                provider_request_id, usage_json
              FROM learning_tasks
              WHERE id = ?1",
             params![task_id],
@@ -524,6 +537,27 @@ pub fn get_learning_task(
                     id: row.get(0)?,
                     project_id: row.get(1)?,
                     handoff_kind: row.get(2)?,
+                    execution: AiTaskExecutionInfo {
+                        kind: row.get(2)?,
+                        service_config_id: row.get(23)?,
+                        service_revision: row
+                            .get::<_, Option<i64>>(24)?
+                            .and_then(|value| u64::try_from(value).ok()),
+                        provider_id: row.get(25)?,
+                        model_id: row.get(26)?,
+                        provider_request_id: row.get(27)?,
+                        usage: row
+                            .get::<_, Option<String>>(28)?
+                            .map(|value| serde_json::from_str(&value))
+                            .transpose()
+                            .map_err(|error| {
+                                rusqlite::Error::FromSqlConversionFailure(
+                                    28,
+                                    rusqlite::types::Type::Text,
+                                    Box::new(error),
+                                )
+                            })?,
+                    },
                     protocol_version: row.get(3)?,
                     status: row.get(4)?,
                     stage: row.get(5)?,
@@ -1048,7 +1082,7 @@ pub fn import_learning_result(
     let result_path = canonical_result_path(&input.result_path)?;
     let raw = read_small_utf8(&result_path)?;
     set_task_validating(store, &task.id, "awaiting_external_result")?;
-    match validate_and_apply_result(store, &task.id, &raw) {
+    match validate_and_apply_result(store, &task.id, &raw, true) {
         Ok(application) => Ok(application),
         Err(error) => {
             let _ = restore_manual_task_after_error(store, &task.id, &error);
@@ -1070,7 +1104,7 @@ pub(crate) fn apply_staged_manual_result(
             return Err(error);
         }
     };
-    let result = validate_and_apply_result(store, task_id, &raw);
+    let result = validate_and_apply_result(store, task_id, &raw, true);
     if let Err(error) = &result {
         let _ = restore_manual_task_after_error(store, task_id, error);
     }
@@ -1083,13 +1117,23 @@ pub(crate) fn apply_codex_result(
     raw: &str,
 ) -> Result<LearningApplication, LearningError> {
     set_task_validating(store, task_id, "running")?;
-    validate_and_apply_result(store, task_id, raw)
+    validate_and_apply_result(store, task_id, raw, true)
+}
+
+pub(crate) fn apply_api_result(
+    store: &ProjectStore,
+    task_id: &str,
+    raw: &str,
+) -> Result<LearningApplication, LearningError> {
+    set_task_validating(store, task_id, "running")?;
+    validate_and_apply_result(store, task_id, raw, false)
 }
 
 fn validate_and_apply_result(
     store: &ProjectStore,
     task_id: &str,
     raw: &str,
+    persist_normalized_output: bool,
 ) -> Result<LearningApplication, LearningError> {
     let task = get_learning_task(store, task_id)?;
     if task.status != "validating" {
@@ -1100,7 +1144,13 @@ fn validate_and_apply_result(
     let normalized_raw =
         agent_result::normalize_external_result(raw).map_err(LearningError::InvalidResult)?;
     let result = validate_result(&task, &normalized_raw)?;
-    persist_learning_result(store, &task, &normalized_raw, result)
+    persist_learning_result(
+        store,
+        &task,
+        &normalized_raw,
+        result,
+        persist_normalized_output,
+    )
 }
 
 fn validate_result(task: &LearningTask, raw: &str) -> Result<LearningResult, LearningError> {
@@ -1140,20 +1190,26 @@ fn persist_learning_result(
     task: &LearningTask,
     raw: &str,
     result: LearningResult,
+    persist_normalized_output: bool,
 ) -> Result<LearningApplication, LearningError> {
     let directory = task_directory(store, &task.id)?;
     let query = serde_json::from_str::<QueryMaterial>(&read_small_utf8(
         &directory.join("input/query.json"),
     )?)?;
-    let output_directory = directory.join("output");
-    fs::create_dir_all(&output_directory)?;
-    let output_path = output_directory.join("result.json");
-    let temporary_output = output_directory.join(format!("result-{}.part", Uuid::new_v4()));
-    fs::write(&temporary_output, raw.as_bytes())?;
-    if output_path.exists() {
-        fs::remove_file(&output_path)?;
-    }
-    fs::rename(&temporary_output, &output_path)?;
+    let output_path = if persist_normalized_output {
+        let output_directory = directory.join("output");
+        fs::create_dir_all(&output_directory)?;
+        let output_path = output_directory.join("result.json");
+        let temporary_output = output_directory.join(format!("result-{}.part", Uuid::new_v4()));
+        fs::write(&temporary_output, raw.as_bytes())?;
+        if output_path.exists() {
+            fs::remove_file(&output_path)?;
+        }
+        fs::rename(&temporary_output, &output_path)?;
+        Some(output_path)
+    } else {
+        None
+    };
 
     let result_sha256 = hash_bytes(raw.as_bytes());
     let validation_json = serde_json::to_string(&json!({
@@ -1234,7 +1290,9 @@ fn persist_learning_result(
         Ok(())
     })();
     if let Err(error) = persistence {
-        let _ = fs::remove_file(&output_path);
+        if let Some(output_path) = output_path {
+            let _ = fs::remove_file(output_path);
+        }
         return Err(error);
     }
     Ok(LearningApplication {
@@ -1291,7 +1349,7 @@ pub(crate) fn recover_learning_tasks(store: &ProjectStore) -> Result<usize, Lear
              error_code = 'app_restarted',
              error_message = '应用退出前词义查询尚未完成，可以重新开始',
              completed_at_ms = ?1, updated_at_ms = ?1
-         WHERE handoff_kind = 'codex'
+         WHERE (execution_kind IN ('codex', 'api') OR handoff_kind = 'codex')
            AND status IN ('queued', 'running', 'validating')",
         params![timestamp],
     )?;
@@ -1302,7 +1360,7 @@ pub(crate) fn recover_learning_tasks(store: &ProjectStore) -> Result<usize, Lear
              error_code = 'app_restarted',
              error_message = '结果导入被应用退出中断，请重新选择结果文件',
              completed_at_ms = NULL, updated_at_ms = ?1
-         WHERE handoff_kind = 'manual' AND status = 'validating'",
+         WHERE execution_kind = 'manual' AND status = 'validating'",
         params![timestamp],
     )?;
     transaction.commit()?;
@@ -1900,59 +1958,9 @@ fn build_prompt(
     ))
 }
 
-fn write_json_file(
-    root: &Path,
-    relative_path: &str,
-    value: &Value,
-    purpose: &str,
-) -> Result<TaskFile, LearningError> {
-    let bytes = serde_json::to_vec_pretty(value)?;
-    write_package_file(root, relative_path, &bytes, "application/json", purpose)
-}
-
-fn write_text_file(
-    root: &Path,
-    relative_path: &str,
-    value: &str,
-    purpose: &str,
-) -> Result<TaskFile, LearningError> {
-    write_package_file(
-        root,
-        relative_path,
-        value.as_bytes(),
-        "text/markdown; charset=utf-8",
-        purpose,
-    )
-}
-
-fn write_package_file(
-    root: &Path,
-    relative_path: &str,
-    bytes: &[u8],
-    content_type: &str,
-    purpose: &str,
-) -> Result<TaskFile, LearningError> {
-    let path = root.join(relative_path);
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)?;
-    }
-    fs::write(path, bytes)?;
-    Ok(TaskFile {
-        path: relative_path.replace('\\', "/"),
-        sha256: hash_bytes(bytes),
-        content_type: content_type.to_owned(),
-        purpose: purpose.to_owned(),
-    })
-}
-
 fn read_small_utf8(path: &Path) -> Result<String, LearningError> {
-    let metadata = fs::metadata(path)?;
-    if metadata.len() > MAX_PACKAGE_FILE_BYTES {
-        return Err(LearningError::FileTooLarge);
-    }
-    String::from_utf8(fs::read(path)?).map_err(|_| LearningError::UnsupportedEncoding)
+    Ok(read_task_file(path, MAX_PACKAGE_FILE_BYTES)?)
 }
-
 fn canonical_result_path(value: &str) -> Result<PathBuf, LearningError> {
     if value.trim().is_empty() {
         return Err(LearningError::InvalidResult(
@@ -1966,14 +1974,6 @@ fn canonical_result_path(value: &str) -> Result<PathBuf, LearningError> {
         ));
     }
     Ok(path)
-}
-
-fn hash_file(path: &Path) -> Result<String, LearningError> {
-    Ok(hash_bytes(&fs::read(path)?))
-}
-
-fn hash_bytes(bytes: &[u8]) -> String {
-    format!("{:x}", Sha256::digest(bytes))
 }
 
 fn validate_uuid(value: &str, label: &str) -> Result<(), LearningError> {

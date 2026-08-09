@@ -1,5 +1,7 @@
 mod agent_result;
+mod agent_task_files;
 mod ai;
+mod ai_migration;
 mod burn;
 mod codex_runner;
 mod commands;
@@ -194,6 +196,11 @@ pub fn run() {
             ai::commands::set_default_ai_service,
             ai::commands::list_ai_service_models,
             ai::commands::test_ai_service,
+            ai::commands::preview_ai_execution,
+            ai::commands::start_explanation_task,
+            ai::commands::resume_explanation_task,
+            ai::commands::start_learning_task,
+            ai::commands::resume_learning_task,
             ai::commands::get_network_settings,
             ai::commands::set_network_settings,
             commands::rollback_local_resource,
