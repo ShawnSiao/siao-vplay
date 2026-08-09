@@ -192,6 +192,17 @@
   display: none;
 }
 
+@media (max-width: 1179px) {
+  .environment-navigation-trigger {
+    grid-template-columns: 1fr;
+    padding: 6px;
+  }
+
+  .environment-navigation-trigger > span:last-child {
+    display: none;
+  }
+}
+
 @media (max-width: 1040px) {
   .environment-settings-scrim { padding: 8px 12px; }
   .environment-settings-dialog { width: calc(100vw - 24px); height: calc(100vh - 16px); }

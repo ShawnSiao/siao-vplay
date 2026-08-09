@@ -68,6 +68,8 @@ test("media home uses a compact responsive desktop shell", async ({ page }) => {
   );
   await expect(page.locator(".desktop-navigation-section")).toBeHidden();
   await expect(page.locator(".desktop-navigation-note")).toBeHidden();
+  await expect(page.locator(".environment-navigation-trigger > span:last-child"))
+    .toBeHidden();
 });
 
 test("media library scrolls to its last row above the status bar", async ({ page }) => {
@@ -114,6 +116,13 @@ test("folder recovery requires confirmation and blocks unsafe relocation", async
   await expect(rescan.getByLabel("恢复结果分组")).toContainText("保持不变");
   await expect(rescan.getByLabel("恢复结果分组")).toContainText("需要确认");
   await expect(rescan.getByLabel("恢复结果分组")).toContainText("暂时离线");
+  await expect
+    .poll(() =>
+      rescan.locator(".dialog-body").evaluate(
+        (element) => element.scrollWidth <= element.clientWidth,
+      ),
+    )
+    .toBe(true);
   const applyRescan = rescan.getByRole("button", { name: "应用扫描结果" });
   await expect(applyRescan).toBeDisabled();
   await rescan.getByRole("checkbox", { name: /确认将根目录与全部单集标记为离线/ }).check();

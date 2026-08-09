@@ -1,9 +1,10 @@
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vitest/config";
+import { resolve } from "node:path";
 
 const host = process.env.TAURI_DEV_HOST;
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   plugins: [react()],
   clearScreen: false,
   server: {
@@ -27,4 +28,17 @@ export default defineConfig({
     include: ["src/**/*.{test,spec}.{ts,tsx}"],
     css: true,
   },
-});
+  build: mode === "e2e"
+    ? {
+        rollupOptions: {
+          input: {
+            main: resolve(__dirname, "index.html"),
+            library: resolve(__dirname, "e2e/library.html"),
+            player: resolve(__dirname, "e2e/player.html"),
+            dialog: resolve(__dirname, "e2e/dialog.html"),
+            runtime: resolve(__dirname, "e2e/runtime.html"),
+          },
+        },
+      }
+    : undefined,
+}));

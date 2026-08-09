@@ -1,3 +1,16 @@
+.dialog:has(.library-recovery-dialog) {
+  width: min(960px, calc(100vw - 64px));
+}
+
+.dialog .library-recovery-dialog {
+  width: 100%;
+  min-width: 0;
+}
+
+.dialog:has(.library-recovery-dialog) .dialog-body {
+  overflow-x: hidden;
+}
+
 .library-recovery-groups {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -27,3 +40,9 @@
 .library-recovery-groups .stable strong { color: #b6ee72; }
 .library-recovery-groups .review strong { color: #ffc878; }
 .library-recovery-groups .offline strong { color: #ff9f9f; }
+
+@media (max-width: 720px) {
+  .library-recovery-groups {
+    grid-template-columns: 1fr;
+  }
+}
