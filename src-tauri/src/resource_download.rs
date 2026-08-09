@@ -928,7 +928,7 @@ fn build_download_client() -> Result<Client, ResourceDownloadError> {
         .map_err(|error| ResourceDownloadError::Network(error.to_string()))
 }
 
-fn effective_proxy() -> (Option<String>, &'static str) {
+pub(crate) fn effective_proxy() -> (Option<String>, &'static str) {
     if let Some(proxy_url) = local_resources::configured_proxy_url() {
         return (Some(proxy_url), "custom");
     }
