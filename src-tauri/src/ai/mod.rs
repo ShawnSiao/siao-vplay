@@ -3,8 +3,11 @@ pub mod network;
 
 mod catalog;
 mod config;
+mod connection;
 mod credentials;
 mod error;
+mod probe;
+mod providers;
 mod storage;
 mod types;
 

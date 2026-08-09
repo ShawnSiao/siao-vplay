@@ -192,6 +192,8 @@ pub fn run() {
             ai::commands::save_ai_service,
             ai::commands::delete_ai_service,
             ai::commands::set_default_ai_service,
+            ai::commands::list_ai_service_models,
+            ai::commands::test_ai_service,
             ai::commands::get_network_settings,
             ai::commands::set_network_settings,
             commands::rollback_local_resource,

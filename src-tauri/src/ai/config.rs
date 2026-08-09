@@ -180,6 +180,41 @@ impl AiServiceStore {
         self.snapshot()
     }
 
+    pub(crate) fn configured_service(&self, id: &str) -> Result<AiServiceConfig, AiError> {
+        let settings = self.load()?;
+        settings
+            .services
+            .into_iter()
+            .find(|service| service.id == id)
+            .ok_or(AiError::ServiceNotFound)
+    }
+
+    pub(crate) fn stored_credential(&self, id: &str) -> Result<Option<String>, AiError> {
+        self.credentials.read(id)
+    }
+
+    pub(crate) fn mark_connection_ready(
+        &self,
+        service_id: &str,
+        model_id: Option<&str>,
+    ) -> Result<(), AiError> {
+        let _guard = self
+            .mutation_lock
+            .lock()
+            .map_err(|_| AiError::ConfigurationWrite)?;
+        let mut settings = self.load()?;
+        let service = settings
+            .services
+            .iter_mut()
+            .find(|service| service.id == service_id)
+            .ok_or(AiError::ServiceNotFound)?;
+        service.connection_state = ConnectionState::Ready;
+        service.model_id = normalized_model(model_id).or_else(|| service.model_id.clone());
+        service.revision += 1;
+        settings.revision += 1;
+        self.persist(&settings)
+    }
+
     fn summary(
         &self,
         service: &AiServiceConfig,
@@ -304,6 +339,13 @@ fn ensure_revision(actual: u64, expected: u64) -> Result<(), AiError> {
     }
 }
 
+fn normalized_model(value: Option<&str>) -> Option<String> {
+    value
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_owned)
+}
+
 fn restore_secret(credentials: &dyn CredentialStore, id: &str, secret: Option<&str>) {
     let _ = match secret {
         Some(secret) => credentials.write(id, secret),
@@ -327,57 +369,5 @@ pub fn store() -> Result<&'static AiServiceStore, AiError> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::{super::credentials::tests_support::MemoryCredentialStore, *};
-    use tempfile::tempdir;
-
-    fn save_input(revision: u64) -> SaveAiServiceInput {
-        SaveAiServiceInput {
-            expected_revision: revision,
-            id: None,
-            provider_id: AiProviderId::Openai,
-            display_name: "OpenAI".to_owned(),
-            protocol: super::super::types::AiProtocol::OpenaiResponses,
-            base_url: None,
-            model_id: None,
-            api_key: Some("test-secret".to_owned()),
-        }
-    }
-
-    #[test]
-    fn saves_metadata_atomically_without_persisting_the_api_key() {
-        let data = tempdir().expect("tempdir");
-        let credentials = Arc::new(MemoryCredentialStore::default());
-        let store = AiServiceStore::new(data.path().join(SETTINGS_FILE_NAME), credentials.clone());
-        let snapshot = store.save(save_input(0)).expect("save");
-        assert_eq!(snapshot.revision, 1);
-        assert_eq!(
-            snapshot.services[0].credential_state,
-            CredentialState::Stored
-        );
-        let contents = std::fs::read_to_string(data.path().join(SETTINGS_FILE_NAME)).expect("file");
-        assert!(!contents.contains("test-secret"));
-        assert_eq!(
-            credentials
-                .read(&snapshot.services[0].id)
-                .expect("credential"),
-            Some("test-secret".to_owned())
-        );
-    }
-
-    #[test]
-    fn rejects_stale_revisions_and_unsafe_remote_http() {
-        let data = tempdir().expect("tempdir");
-        let store = AiServiceStore::new(
-            data.path().join(SETTINGS_FILE_NAME),
-            Arc::new(MemoryCredentialStore::default()),
-        );
-        store.save(save_input(0)).expect("first save");
-        assert!(matches!(
-            store.save(save_input(0)),
-            Err(AiError::RevisionConflict)
-        ));
-        assert!(normalize_endpoint("http://api.example.com/v1").is_err());
-        assert!(normalize_endpoint("http://127.0.0.1:11434/v1").is_ok());
-    }
-}
+#[path = "config_tests.rs"]
+mod tests;

@@ -1,10 +1,11 @@
 use super::{
     config,
     error::AiCommandError,
-    network,
+    network, probe,
     types::{
-        AiServiceSettings, DeleteAiServiceInput, NetworkSettings, SaveAiServiceInput,
-        SetDefaultAiServiceInput, SetNetworkSettingsInput,
+        AiModelList, AiServiceProbeInput, AiServiceSettings, AiServiceTestResult,
+        DeleteAiServiceInput, NetworkSettings, SaveAiServiceInput, SetDefaultAiServiceInput,
+        SetNetworkSettingsInput,
     },
 };
 use crate::{
@@ -35,6 +36,16 @@ pub fn set_default_ai_service(
 }
 
 #[tauri::command]
+pub fn list_ai_service_models(input: AiServiceProbeInput) -> Result<AiModelList, AiCommandError> {
+    probe::list_models(input)
+}
+
+#[tauri::command]
+pub fn test_ai_service(input: AiServiceProbeInput) -> Result<AiServiceTestResult, AiCommandError> {
+    probe::test_service(input)
+}
+
+#[tauri::command]
 pub fn get_network_settings() -> Result<NetworkSettings, AiCommandError> {
     network::settings().map_err(Into::into)
 }
@@ -58,6 +69,8 @@ pub fn set_local_resource_proxy(
     local_resources::set_proxy_url(input.proxy_url.as_deref()).map_err(|error| AiCommandError {
         code: "local_resource_proxy_invalid",
         message: error.to_string(),
+        retryable: false,
+        provider_request_id: None,
     })?;
     network::set_custom_proxy_compat(input.proxy_url.as_deref()).map_err(AiCommandError::from)?;
     Ok(resource_download::network_status())
