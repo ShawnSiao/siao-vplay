@@ -430,7 +430,7 @@ describe("LocalResourcesDialog", () => {
       expect(adoptResources).toHaveBeenCalledWith("W:\\LegacySiaoVPlay"),
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "更改保存位置" }));
+    fireEvent.click(screen.getByRole("button", { name: "移动保存位置" }));
     expect(await screen.findByText("E:\\Resources\\SiaoVPlay")).toBeInTheDocument();
     expect(screen.getByText(/切换成功后原目录仍保留/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "确认复制并切换" }));

@@ -21,7 +21,7 @@ use crate::{
     local_resources::{
         self, ConfigureLocalResourceRootInput, LocalResourceCatalog, LocalResourceError,
         LocalResourceLocationPlan, LocalResourceStatus, PlanLocalResourceLocationInput,
-        SetLocalResourceProfileInput, SetLocalResourceProxyInput,
+        SetLocalResourceProfileInput,
     },
     media::{self, MediaError, MediaInspection, MediaPreparation, MediaRuntimeStatus},
     remote_media::{
@@ -36,7 +36,7 @@ use crate::{
     resource_download::{
         self, CapabilityPreparation, PrepareLocalCapabilityInput, RemoveLocalResourceInput,
         RepairLocalResourceInput, ResourceDownloadError, ResourceDownloadTask,
-        ResourceDownloadTaskInput, ResourceNetworkStatus, ResourceRemovalResult,
+        ResourceDownloadTaskInput, ResourceRemovalResult,
     },
     resource_migration::{
         self, AdoptLocalResourcesInput, CleanupUnusedResourcesInput,
@@ -693,19 +693,6 @@ pub fn set_local_resource_profile(
     input: SetLocalResourceProfileInput,
 ) -> Result<LocalResourceStatus, CommandError> {
     local_resources::set_preferred_profile(&input.profile_id).map_err(Into::into)
-}
-
-#[tauri::command]
-pub fn get_local_resource_network_status() -> ResourceNetworkStatus {
-    resource_download::network_status()
-}
-
-#[tauri::command]
-pub fn set_local_resource_proxy(
-    input: SetLocalResourceProxyInput,
-) -> Result<ResourceNetworkStatus, CommandError> {
-    local_resources::set_proxy_url(input.proxy_url.as_deref())?;
-    Ok(resource_download::network_status())
 }
 
 #[tauri::command]

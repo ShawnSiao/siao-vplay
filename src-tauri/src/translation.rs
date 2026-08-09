@@ -448,7 +448,7 @@ pub fn prepare_translation_task(
         }
         transaction.execute(
             "INSERT INTO agent_tasks (
-                id, project_id, task_type, handoff_kind, protocol_version,
+                id, project_id, task_type, handoff_kind, execution_kind, protocol_version,
                 status, stage, progress, receiver_label, material_scope_json,
                 source_version_id, source_language_code, target_language_code,
                 authorized_segment_ids_json, segment_count,
@@ -456,7 +456,7 @@ pub fn prepare_translation_task(
                 material_manifest_sha256, base_translation_version_id,
                 created_at_ms, updated_at_ms
              ) VALUES (
-                ?1, ?2, 'subtitle_translation', ?3, ?4,
+                ?1, ?2, 'subtitle_translation', ?3, ?3, ?4,
                 ?5, ?6, 0.0, ?7, ?8,
                 ?9, ?10, ?11, ?12, ?13,
                 ?14, ?15, ?16, ?17, ?18, ?18

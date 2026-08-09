@@ -8,6 +8,7 @@ import type {
 import type { LibrarySection } from "../library/useLibraryController";
 import type { MediaDropFeedback } from "./useDesktopMediaDrop";
 import type { ShellDrawerTab, ShellView } from "./useShellController";
+import { EnvironmentSettingsTrigger } from "./EnvironmentSettingsTrigger";
 
 type DesktopShellProps = {
   activeView: ShellView;
@@ -325,15 +326,6 @@ export function DesktopShell({
               </div>
             ) : null}
           </div>
-          <button
-            aria-label="设置"
-            className="shell-icon-command"
-            type="button"
-            title="本地功能资源"
-            onClick={onOpenSettings}
-          >
-            ⚙
-          </button>
         </div>
       </header>
 
@@ -412,18 +404,24 @@ export function DesktopShell({
               </span>
             </button>
           </nav>
-          <div className="desktop-navigation-note">
-            <strong>
-              <span
-                className={`navigation-status-dot ${basicMediaReady ? "ready" : "warning"}`}
-                aria-hidden="true"
-              />
-              {localResourceLabel}
-            </strong>
-            <span>
-              已授权 {libraryCounts.folders ?? 0} 个本地文件夹。
-              {appStatus ? ` · v${appStatus.version}` : ""}
-            </span>
+          <div className="desktop-navigation-bottom">
+            <EnvironmentSettingsTrigger
+              status={localResourceLabel}
+              onOpen={onOpenSettings}
+            />
+            <div className="desktop-navigation-note">
+              <strong>
+                <span
+                  className={`navigation-status-dot ${basicMediaReady ? "ready" : "warning"}`}
+                  aria-hidden="true"
+                />
+                {localResourceLabel}
+              </strong>
+              <span>
+                已授权 {libraryCounts.folders ?? 0} 个本地文件夹。
+                {appStatus ? ` · v${appStatus.version}` : ""}
+              </span>
+            </div>
           </div>
         </aside>
         <section className="desktop-content" aria-label="当前内容">

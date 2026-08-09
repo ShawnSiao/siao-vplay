@@ -81,9 +81,10 @@ function Assert-NoForbiddenPayload([string]$Root, [string]$Label) {
 $sourceRootPath = Resolve-ExistingDirectory $SourceRoot 'Source root'
 $tauriConfigPath = Join-Path $sourceRootPath 'src-tauri\tauri.conf.json'
 $catalogPath = Join-Path $sourceRootPath 'src-tauri\resources\local-resource-catalog.json'
+$providerCatalogPath = Join-Path $sourceRootPath 'src-tauri\resources\ai-provider-catalog.json'
 $noticePath = Join-Path $sourceRootPath 'src-tauri\resources\third-party-notices\THIRD-PARTY-NOTICES.md'
 
-foreach ($requiredPath in @($tauriConfigPath, $catalogPath, $noticePath)) {
+foreach ($requiredPath in @($tauriConfigPath, $catalogPath, $providerCatalogPath, $noticePath)) {
     if (-not (Test-Path -LiteralPath $requiredPath -PathType Leaf)) {
         throw "Required app-only package file is missing: $requiredPath"
     }
@@ -146,6 +147,7 @@ foreach ($resource in @($catalog.resources)) {
 }
 
 $allowedResources = @(
+    'resources/ai-provider-catalog.json',
     'resources/local-resource-catalog.json',
     'resources/third-party-notices/THIRD-PARTY-NOTICES.md'
 )
@@ -182,9 +184,11 @@ if (-not [string]::IsNullOrWhiteSpace($InstallRoot)) {
     }
     Assert-NoForbiddenPayload $installRootPath 'Installed application'
     $installedCatalogPath = Join-Path $installRootPath 'resources\local-resource-catalog.json'
+    $installedProviderCatalogPath = Join-Path $installRootPath 'resources\ai-provider-catalog.json'
     $installedNoticePath = Join-Path $installRootPath 'resources\third-party-notices\THIRD-PARTY-NOTICES.md'
     foreach ($pair in @(
         @($catalogPath, $installedCatalogPath),
+        @($providerCatalogPath, $installedProviderCatalogPath),
         @($noticePath, $installedNoticePath)
     )) {
         if (-not (Test-Path -LiteralPath $pair[1] -PathType Leaf)) {

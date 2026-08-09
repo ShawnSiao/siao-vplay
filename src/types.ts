@@ -1055,7 +1055,7 @@ export type CodexRuntimeStatus = {
   errorCode: string | null;
   errorMessage: string | null;
 };
-
+export type AiTaskExecutionInfo = { kind: "manual" | "codex" | "api"; serviceConfigId: string | null; serviceRevision: number | null; providerId: string | null; modelId: string | null; providerRequestId: string | null; usage: Record<string, unknown> | null };
 export type ExplanationFrame = {
   id: string;
   ordinal: number;
@@ -1067,7 +1067,8 @@ export type ExplanationFrame = {
 export type ExplanationTask = {
   id: string;
   projectId: string;
-  handoffKind: "manual" | "codex";
+  handoffKind: "manual" | "codex" | "api";
+  execution?: AiTaskExecutionInfo;
   protocolVersion: string;
   status:
     | "awaiting_external_result"
@@ -1097,7 +1098,6 @@ export type ExplanationTask = {
   completedAtMs: number | null;
   frames: ExplanationFrame[];
 };
-
 export type Explanation = {
   id: string;
   projectId: string;
@@ -1122,7 +1122,8 @@ export type LearningSelectionKind = "word" | "phrase" | "sentence";
 export type LearningTask = {
   id: string;
   projectId: string;
-  handoffKind: "manual" | "codex";
+  handoffKind: "manual" | "codex" | "api";
+  execution?: AiTaskExecutionInfo;
   protocolVersion: string;
   status:
     | "awaiting_external_result"
@@ -1152,7 +1153,6 @@ export type LearningTask = {
   startedAtMs: number | null;
   completedAtMs: number | null;
 };
-
 export type DictionaryEntry = {
   id: string;
   projectId: string;

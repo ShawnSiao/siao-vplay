@@ -9,12 +9,16 @@ use std::{
 use rusqlite::{OptionalExtension, TransactionBehavior, params};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
-use sha2::{Digest, Sha256};
 use thiserror::Error;
 use uuid::Uuid;
 
 use crate::{
     agent_result,
+    agent_task_files::{
+        self, TaskFile, hash_bytes, hash_file, read_small_utf8 as read_task_file, write_json_file,
+        write_text_file,
+    },
+    ai::AiTaskExecutionInfo,
     media::{self, MediaError, MediaProbe},
     store::{ProjectStore, StoreError},
     subtitles::{self, SubtitleError, SubtitleSegment, SubtitleVersion},
@@ -65,10 +69,8 @@ pub enum UnderstandingError {
     TaskIntegrity(String),
     #[error("解释结果无效：{0}")]
     InvalidResult(String),
-    #[error("解释任务文件超过大小上限")]
-    FileTooLarge,
-    #[error("解释任务文件不是 UTF-8 文本")]
-    UnsupportedEncoding,
+    #[error(transparent)]
+    TaskFile(#[from] agent_task_files::TaskFileError),
 }
 
 impl UnderstandingError {
@@ -95,9 +97,17 @@ impl UnderstandingError {
             Self::FrameExtractionFailed(_) => "keyframe_extraction_failed",
             Self::TaskIntegrity(_) => "explanation_task_integrity",
             Self::InvalidResult(_) => "explanation_result_invalid",
-            Self::FileTooLarge => "explanation_file_too_large",
-            Self::UnsupportedEncoding => "explanation_file_encoding_invalid",
-            Self::Serialization(_) => "explanation_serialization_failed",
+            Self::TaskFile(agent_task_files::TaskFileError::TooLarge) => {
+                "explanation_file_too_large"
+            }
+            Self::TaskFile(agent_task_files::TaskFileError::UnsupportedEncoding) => {
+                "explanation_file_encoding_invalid"
+            }
+            Self::Serialization(_)
+            | Self::TaskFile(agent_task_files::TaskFileError::Serialization(_)) => {
+                "explanation_serialization_failed"
+            }
+            Self::TaskFile(agent_task_files::TaskFileError::FileSystem(_)) => "filesystem_error",
         }
     }
 }
@@ -139,6 +149,7 @@ pub struct ExplanationTask {
     pub id: String,
     pub project_id: String,
     pub handoff_kind: String,
+    pub execution: AiTaskExecutionInfo,
     pub protocol_version: String,
     pub status: String,
     pub stage: String,
@@ -215,15 +226,6 @@ struct TaskFrame {
     path: String,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct TaskFile {
-    path: String,
-    sha256: String,
-    content_type: String,
-    purpose: String,
-}
-
 struct MediaBaseline {
     path: PathBuf,
     sha256: String,
@@ -255,6 +257,7 @@ where
             "手动选择的外部 Agent",
         ),
         "codex" => ("queued", "queued", "本机 Codex"),
+        "api" => ("queued", "queued", "已选择的 AI 服务"),
         value => return Err(UnderstandingError::InvalidHandoff(value.to_owned())),
     };
     if input.playback_cutoff_ms <= 0 {
@@ -436,6 +439,7 @@ where
             "taskType": "scene_explanation",
             "projectId": &project.id,
             "handoffKind": &input.handoff_kind,
+            "executionKind": &input.handoff_kind,
             "receiverLabel": receiver_label,
             "materialScope": &material_scope,
             "sourceVersionId": &source.id,
@@ -499,25 +503,32 @@ where
             return Err(UnderstandingError::MediaChanged);
         }
         ensure_no_active_agent_task_in_transaction(&transaction, &project.id)?;
+        let legacy_handoff_kind = if input.handoff_kind == "api" {
+            "manual"
+        } else {
+            input.handoff_kind.as_str()
+        };
         transaction.execute(
             "INSERT INTO explanation_tasks (
-                id, project_id, handoff_kind, protocol_version, status, stage,
+                id, project_id, handoff_kind, execution_kind,
+                protocol_version, status, stage,
                 progress, receiver_label, material_scope_json, source_version_id,
                 translation_version_id, authorized_segment_ids_json,
                 playback_cutoff_ms, scene_start_ms, expected_project_revision,
                 expected_media_sha256, material_manifest_sha256,
                 created_at_ms, updated_at_ms
              ) VALUES (
-                ?1, ?2, ?3, ?4, ?5, ?6,
-                0.0, ?7, ?8, ?9,
-                ?10, ?11,
-                ?12, ?13, ?14,
-                ?15, ?16,
-                ?17, ?17
+                ?1, ?2, ?3, ?4, ?5, ?6, ?7,
+                0.0, ?8, ?9, ?10,
+                ?11, ?12,
+                ?13, ?14, ?15,
+                ?16, ?17,
+                ?18, ?18
              )",
             params![
                 task_id,
                 project.id,
+                legacy_handoff_kind,
                 input.handoff_kind,
                 PROTOCOL_VERSION,
                 status,
@@ -572,12 +583,14 @@ pub fn get_explanation_task(
     let task = connection
         .query_row(
             "SELECT
-                id, project_id, handoff_kind, protocol_version, status, stage,
+                id, project_id, execution_kind, protocol_version, status, stage,
                 progress, receiver_label, material_scope_json, source_version_id,
                 translation_version_id, authorized_segment_ids_json,
                 playback_cutoff_ms, scene_start_ms, expected_project_revision,
                 output_explanation_id, error_code, error_message,
-                created_at_ms, updated_at_ms, started_at_ms, completed_at_ms
+                created_at_ms, updated_at_ms, started_at_ms, completed_at_ms,
+                service_config_id, service_revision, provider_id, model_id,
+                provider_request_id, usage_json
              FROM explanation_tasks
              WHERE id = ?1",
             params![task_id],
@@ -605,6 +618,12 @@ pub fn get_explanation_task(
                     row.get::<_, i64>(19)?,
                     row.get::<_, Option<i64>>(20)?,
                     row.get::<_, Option<i64>>(21)?,
+                    row.get::<_, Option<String>>(22)?,
+                    row.get::<_, Option<i64>>(23)?,
+                    row.get::<_, Option<String>>(24)?,
+                    row.get::<_, Option<String>>(25)?,
+                    row.get::<_, Option<String>>(26)?,
+                    row.get::<_, Option<String>>(27)?,
                 ))
             },
         )
@@ -614,7 +633,19 @@ pub fn get_explanation_task(
     Ok(ExplanationTask {
         id: task.0,
         project_id: task.1,
-        handoff_kind: task.2,
+        handoff_kind: task.2.clone(),
+        execution: AiTaskExecutionInfo {
+            kind: task.2.clone(),
+            service_config_id: task.22,
+            service_revision: task.23.and_then(|value| u64::try_from(value).ok()),
+            provider_id: task.24,
+            model_id: task.25,
+            provider_request_id: task.26,
+            usage: task
+                .27
+                .map(|value| serde_json::from_str(&value))
+                .transpose()?,
+        },
         protocol_version: task.3,
         status: task.4,
         stage: task.5,
@@ -793,7 +824,7 @@ pub fn import_explanation_result(
     let raw = read_small_utf8(&result_path)?;
 
     set_task_validating(store, &task.id, "awaiting_external_result")?;
-    match validate_and_apply_result(store, &task.id, &raw) {
+    match validate_and_apply_result(store, &task.id, &raw, true) {
         Ok(application) => Ok(application),
         Err(error) => {
             let _ = restore_manual_task_after_error(store, &task.id, &error);
@@ -815,7 +846,7 @@ pub(crate) fn apply_staged_manual_result(
             return Err(error);
         }
     };
-    let result = validate_and_apply_result(store, task_id, &raw);
+    let result = validate_and_apply_result(store, task_id, &raw, true);
     if let Err(error) = &result {
         let _ = restore_manual_task_after_error(store, task_id, error);
     }
@@ -828,13 +859,23 @@ pub(crate) fn apply_codex_result(
     raw: &str,
 ) -> Result<ExplanationApplication, UnderstandingError> {
     set_task_validating(store, task_id, "running")?;
-    validate_and_apply_result(store, task_id, raw)
+    validate_and_apply_result(store, task_id, raw, true)
+}
+
+pub(crate) fn apply_api_result(
+    store: &ProjectStore,
+    task_id: &str,
+    raw: &str,
+) -> Result<ExplanationApplication, UnderstandingError> {
+    set_task_validating(store, task_id, "running")?;
+    validate_and_apply_result(store, task_id, raw, false)
 }
 
 fn validate_and_apply_result(
     store: &ProjectStore,
     task_id: &str,
     raw: &str,
+    persist_normalized_output: bool,
 ) -> Result<ExplanationApplication, UnderstandingError> {
     let task = get_explanation_task(store, task_id)?;
     if task.status != "validating" {
@@ -844,7 +885,13 @@ fn validate_and_apply_result(
     let normalized_raw =
         agent_result::normalize_external_result(raw).map_err(UnderstandingError::InvalidResult)?;
     let result = validate_result(&task, &normalized_raw)?;
-    persist_explanation_result(store, &task, &normalized_raw, result)
+    persist_explanation_result(
+        store,
+        &task,
+        &normalized_raw,
+        result,
+        persist_normalized_output,
+    )
 }
 
 fn validate_result(
@@ -941,16 +988,22 @@ fn persist_explanation_result(
     task: &ExplanationTask,
     raw: &str,
     result: ExplanationResult,
+    persist_normalized_output: bool,
 ) -> Result<ExplanationApplication, UnderstandingError> {
-    let output_directory = task_directory(store, &task.id)?.join("output");
-    fs::create_dir_all(&output_directory)?;
-    let output_path = output_directory.join("result.json");
-    let temporary_output = output_directory.join(format!("result-{}.part", Uuid::new_v4()));
-    fs::write(&temporary_output, raw.as_bytes())?;
-    if output_path.exists() {
-        fs::remove_file(&output_path)?;
-    }
-    fs::rename(&temporary_output, &output_path)?;
+    let output_path = if persist_normalized_output {
+        let output_directory = task_directory(store, &task.id)?.join("output");
+        fs::create_dir_all(&output_directory)?;
+        let output_path = output_directory.join("result.json");
+        let temporary_output = output_directory.join(format!("result-{}.part", Uuid::new_v4()));
+        fs::write(&temporary_output, raw.as_bytes())?;
+        if output_path.exists() {
+            fs::remove_file(&output_path)?;
+        }
+        fs::rename(&temporary_output, &output_path)?;
+        Some(output_path)
+    } else {
+        None
+    };
 
     let result_sha256 = hash_bytes(raw.as_bytes());
     let validation = json!({
@@ -1059,7 +1112,9 @@ fn persist_explanation_result(
         Ok(())
     })();
     if let Err(error) = persistence {
-        let _ = fs::remove_file(&output_path);
+        if let Some(output_path) = output_path {
+            let _ = fs::remove_file(output_path);
+        }
         return Err(error);
     }
     Ok(ExplanationApplication {
@@ -1117,7 +1172,7 @@ pub(crate) fn recover_explanation_tasks(store: &ProjectStore) -> Result<usize, U
              error_code = 'app_restarted',
              error_message = '应用退出前解释任务尚未完成，可以重新开始',
              completed_at_ms = ?1, updated_at_ms = ?1
-         WHERE handoff_kind = 'codex'
+         WHERE (execution_kind IN ('codex', 'api') OR handoff_kind = 'codex')
            AND status IN ('queued', 'running', 'validating')",
         params![timestamp],
     )?;
@@ -1128,7 +1183,7 @@ pub(crate) fn recover_explanation_tasks(store: &ProjectStore) -> Result<usize, U
              error_code = 'app_restarted',
              error_message = '结果导入被应用退出中断，请重新选择结果文件',
              completed_at_ms = NULL, updated_at_ms = ?1
-         WHERE handoff_kind = 'manual' AND status = 'validating'",
+         WHERE execution_kind = 'manual' AND status = 'validating'",
         params![timestamp],
     )?;
     transaction.commit()?;
@@ -1567,57 +1622,8 @@ fn build_prompt(
     ))
 }
 
-fn write_json_file(
-    root: &Path,
-    relative_path: &str,
-    value: &Value,
-    purpose: &str,
-) -> Result<TaskFile, UnderstandingError> {
-    let bytes = serde_json::to_vec_pretty(value)?;
-    write_package_file(root, relative_path, &bytes, "application/json", purpose)
-}
-
-fn write_text_file(
-    root: &Path,
-    relative_path: &str,
-    value: &str,
-    purpose: &str,
-) -> Result<TaskFile, UnderstandingError> {
-    write_package_file(
-        root,
-        relative_path,
-        value.as_bytes(),
-        "text/markdown; charset=utf-8",
-        purpose,
-    )
-}
-
-fn write_package_file(
-    root: &Path,
-    relative_path: &str,
-    bytes: &[u8],
-    content_type: &str,
-    purpose: &str,
-) -> Result<TaskFile, UnderstandingError> {
-    let path = root.join(relative_path);
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)?;
-    }
-    fs::write(path, bytes)?;
-    Ok(TaskFile {
-        path: relative_path.replace('\\', "/"),
-        sha256: hash_bytes(bytes),
-        content_type: content_type.to_owned(),
-        purpose: purpose.to_owned(),
-    })
-}
-
 fn read_small_utf8(path: &Path) -> Result<String, UnderstandingError> {
-    let metadata = fs::metadata(path)?;
-    if metadata.len() > MAX_PACKAGE_FILE_BYTES {
-        return Err(UnderstandingError::FileTooLarge);
-    }
-    String::from_utf8(fs::read(path)?).map_err(|_| UnderstandingError::UnsupportedEncoding)
+    Ok(read_task_file(path, MAX_PACKAGE_FILE_BYTES)?)
 }
 
 fn canonical_result_path(input: &str) -> Result<PathBuf, UnderstandingError> {
@@ -1633,14 +1639,6 @@ fn canonical_result_path(input: &str) -> Result<PathBuf, UnderstandingError> {
         ));
     }
     Ok(path)
-}
-
-fn hash_file(path: &Path) -> Result<String, UnderstandingError> {
-    Ok(hash_bytes(&fs::read(path)?))
-}
-
-fn hash_bytes(bytes: &[u8]) -> String {
-    format!("{:x}", Sha256::digest(bytes))
 }
 
 fn modified_at_ms(metadata: &fs::Metadata) -> Result<Option<i64>, UnderstandingError> {

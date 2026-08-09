@@ -32,6 +32,13 @@ import type {
   SubtitleSegment,
   SubtitleVersion,
 } from "../types";
+import { AiTaskExecutionSetup } from "../features/ai-tasks/AiTaskExecutionSetup";
+import { resumeLearningTask, startLearningTask } from "../features/ai-tasks/gateway";
+import {
+  authorizationForTask,
+  executionForTask,
+  useAiExecutionChoice,
+} from "../features/ai-tasks/useAiExecutionChoice";
 
 type LearningPanelProps = {
   projectId: string;
@@ -45,8 +52,6 @@ type LearningPanelProps = {
   embedded?: boolean;
   onJump: (positionMs: number) => void;
 };
-
-type HandoffKind = "codex" | "manual";
 
 type SelectablePart = {
   text: string;
@@ -153,7 +158,7 @@ export function LearningPanel({
     [sourceSegment?.text, sourceVersion?.languageCode],
   );
   const [selectedText, setSelectedText] = useState(sourceSegment?.text ?? "");
-  const [handoff, setHandoff] = useState<HandoffKind>("codex");
+  const executionChoice = useAiExecutionChoice(false);
   const [runtime, setRuntime] = useState<CodexRuntimeStatus | null>(null);
   const [task, setTask] = useState<LearningTask | null>(null);
   const [entry, setEntry] = useState<DictionaryEntry | null>(null);
@@ -196,7 +201,6 @@ export function LearningPanel({
         );
         if (activeTask) {
           setTask(activeTask);
-          setHandoff(activeTask.handoffKind);
           setSelectedText(activeTask.selectedText);
         } else {
           setEntry(
@@ -328,19 +332,17 @@ export function LearningPanel({
     setNotice(null);
     try {
       const normalized = selectedText.trim();
-      const prepared = await prepareLearningTask(
-        projectId,
-        handoff,
-        sourceSegment.id,
-        normalized,
-        selectionKind(normalized, sourceSegment.text, selectableParts),
-        playbackPositionMs,
-      );
+      const choice = executionChoice.kind === "api" ? await executionChoice.preview() : null;
+      const kind = selectionKind(normalized, sourceSegment.text, selectableParts);
+      const prepared = choice ? await startLearningTask({
+        projectId, sourceSegmentId: sourceSegment.id, selectedText: normalized,
+        selectionKind: kind, playbackPositionMs, execution: choice.execution, authorization: choice.authorization,
+      }) : await prepareLearningTask(projectId, executionChoice.kind === "manual" ? "manual" : "codex", sourceSegment.id, normalized, kind, playbackPositionMs);
       setTask(prepared);
       setEntry(null);
-      if (handoff === "codex") {
+      if (executionChoice.kind === "codex") {
         setTask(await startCodexLearningTask(prepared.id));
-      } else {
+      } else if (executionChoice.kind === "manual") {
         setPrompt(await readLearningPrompt(prepared.id));
         setPromptExpanded(true);
       }
@@ -350,7 +352,6 @@ export function LearningPanel({
       const activeTask = tasks.find((item) => activeStatuses.has(item.status));
       if (activeTask) {
         setTask(activeTask);
-        setHandoff(activeTask.handoffKind);
         setSelectedText(activeTask.selectedText);
       }
     } finally {
@@ -380,7 +381,9 @@ export function LearningPanel({
     setOperation("resume");
     setError(null);
     try {
-      setTask(await resumeCodexLearningTask(task.id));
+      setTask(task.handoffKind === "api" ? await resumeLearningTask(
+        task.id, executionForTask(task.execution, task.handoffKind), authorizationForTask(task.execution, false),
+      ) : await resumeCodexLearningTask(task.id));
     } catch (cause) {
       setError(commandError(cause).message);
     } finally {
@@ -522,13 +525,12 @@ export function LearningPanel({
   };
 
   const busy = operation !== null;
-  const runtimeReady =
-    runtime?.available && runtime.authenticated && runtime.supported;
   const running =
     task && ["queued", "running", "validating"].includes(task.status);
-  const canResume =
-    task?.handoffKind === "codex" &&
-    ["failed", "cancelled", "interrupted"].includes(task.status);
+  const canResume = Boolean(
+    task && task.handoffKind !== "manual" &&
+    ["failed", "cancelled", "interrupted"].includes(task.status),
+  );
   const savedEntry = entry
     ? cards.some((card) => card.dictionaryEntryId === entry.id)
     : false;
@@ -673,58 +675,19 @@ export function LearningPanel({
               </section>
             ) : !task ? (
               <section className="learning-setup">
-                <div className="learning-handoff" aria-label="词义查询方式">
-                  <button
-                    className={handoff === "codex" ? "selected" : ""}
-                    type="button"
-                    onClick={() => setHandoff("codex")}
-                  >
-                    <strong>本机 Codex</strong>
-                    <small>完成后自动检查结果</small>
-                  </button>
-                  <button
-                    className={handoff === "manual" ? "selected" : ""}
-                    type="button"
-                    onClick={() => setHandoff("manual")}
-                  >
-                    <strong>复制提示词</strong>
-                    <small>交给自行选择的工具</small>
-                  </button>
-                </div>
-                {handoff === "codex" && runtime && !runtimeReady ? (
-                  <div className="learning-runtime">
-                    <strong>本机 Codex 当前不可用</strong>
-                    <span>{runtime.errorMessage}</span>
-                  </div>
-                ) : null}
-                <div className="learning-scope">
-                  <div>
-                    <span>接收方</span>
-                    <strong>
-                      {handoff === "codex" ? "本机 Codex" : "自行选择的工具"}
-                    </strong>
-                  </div>
-                  <ul>
-                    <li>所选原文和当前完整台词</li>
-                    {translationVersion && translationSegment ? (
-                      <li>当前台词对应的简体中文字幕</li>
-                    ) : null}
-                    <li>字幕语言、版本标识和播放位置</li>
-                  </ul>
-                  <p>不包含视频、音频、本机媒体路径、数据库或凭证。</p>
-                </div>
-                <button
-                  className="button primary learning-primary"
-                  type="button"
-                  disabled={
-                    busy ||
-                    !selectionValid ||
-                    (handoff === "codex" && !runtimeReady)
-                  }
-                  onClick={() => void prepare()}
-                >
-                  {operation === "prepare" ? "正在准备…" : "确认范围并查询"}
-                </button>
+                <AiTaskExecutionSetup
+                  controller={executionChoice}
+                  runtime={runtime}
+                  allowFrames={false}
+                  translationAvailable={Boolean(translationVersion && translationSegment)}
+                  taskLabel="学习辅助"
+                  actionLabel="确认范围并查询"
+                  operationLabel="正在准备…"
+                  buttonClassName="learning-primary"
+                  busy={operation === "prepare"}
+                  blocked={busy || !selectionValid}
+                  onStart={() => void prepare()}
+                />
               </section>
             ) : task.status === "awaiting_external_result" ? (
               <section className="learning-manual">
@@ -823,7 +786,9 @@ export function LearningPanel({
                 <p>
                   {task.handoffKind === "manual"
                     ? "已自动检测到 result.json，正在核对任务、版本和所选文本。"
-                    : "可以继续观看；关闭面板不会中断本机处理。"}
+                    : task.handoffKind === "api"
+                      ? "可以继续观看；关闭面板不会中断当前 API 请求。"
+                      : "可以继续观看；关闭面板不会中断本机处理。"}
                 </p>
                 <div
                   aria-label="词义查询进度"

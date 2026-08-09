@@ -1,6 +1,15 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 
 import type { LocalResourcesController } from "../features/resources/useLocalResources";
+import {
+  capabilityDescriptions,
+  capabilityStateLabel,
+  formatBytes,
+  formatRemaining,
+  networkSourceLabel,
+  resourceDownloadBytes,
+  taskStateLabel,
+} from "../features/environment-settings/localResourcePresentation";
 import type {
   LocalResourceCapabilityStatus,
   LocalResourceDiagnostics,
@@ -23,6 +32,7 @@ export type PendingResourceAction = {
 type LocalResourcesDialogProps = {
   controller: LocalResourcesController;
   firstRun: boolean;
+  embedded?: boolean;
   pendingAction: PendingResourceAction | null;
   previewMode: boolean;
   onClose: () => void;
@@ -32,106 +42,10 @@ type LocalResourcesDialogProps = {
 
 const recommendedCapabilityIds = ["basic_media", "url_import"];
 
-const capabilityDescriptions: Record<string, string> = {
-  basic_media: "播放更多常见视频格式，并在需要时生成兼容播放版本。",
-  url_import: "从公开 HTTPS 地址或公开视频页面保存本地副本。",
-  local_transcription: "从英语、泰语、日语和韩语原声生成原文字幕。",
-};
-
-function formatBytes(bytes: number | null | undefined): string {
-  if (bytes === null || bytes === undefined) {
-    return "待确认";
-  }
-  if (bytes < 1_000) {
-    return `${bytes} B`;
-  }
-  if (bytes < 1_000_000) {
-    return `${(bytes / 1_000).toFixed(1)} KB`;
-  }
-  if (bytes < 1_000_000_000) {
-    return `${(bytes / 1_000_000).toFixed(bytes >= 100_000_000 ? 0 : 1)} MB`;
-  }
-  return `${(bytes / 1_000_000_000).toFixed(1)} GB`;
-}
-
-function resourceDownloadBytes(
-  resource: { artifact?: { size: number }; expectedDownloadSize?: number } | undefined,
-): number {
-  return resource?.artifact?.size ?? resource?.expectedDownloadSize ?? 0;
-}
-
-function formatRemaining(seconds: number | null): string {
-  if (seconds === null || !Number.isFinite(seconds)) {
-    return "正在估算剩余时间";
-  }
-  if (seconds < 60) {
-    return `预计不到 1 分钟`;
-  }
-  if (seconds < 3_600) {
-    return `预计 ${Math.ceil(seconds / 60)} 分钟`;
-  }
-  const hours = Math.floor(seconds / 3_600);
-  const minutes = Math.ceil((seconds % 3_600) / 60);
-  return `预计 ${hours} 小时 ${minutes} 分钟`;
-}
-
-function capabilityStateLabel(
-  capability: LocalResourceCapabilityStatus,
-  installable: boolean,
-): string {
-  switch (capability.state) {
-    case "ready":
-      return "已准备";
-    case "preparing":
-      return "准备中";
-    case "repair_required":
-      return "需要修复";
-    case "root_unavailable":
-      return "保存位置不可用";
-    case "update_available":
-      return "可更新";
-    default:
-      return installable ? "按需准备" : "暂不可用";
-  }
-}
-
-function taskStateLabel(task: ResourceDownloadTask): string {
-  switch (task.state) {
-    case "queued":
-      return "等待下载";
-    case "downloading":
-      return "正在下载";
-    case "paused":
-      return "已暂停";
-    case "verifying":
-      return "正在检查";
-    case "installing":
-      return "正在启用";
-    case "completed":
-      return "已完成";
-    case "failed":
-      return "准备失败";
-    case "cancelled":
-      return "已取消";
-  }
-}
-
-function networkSourceLabel(source: string | undefined): string {
-  switch (source) {
-    case "custom":
-      return "使用指定代理";
-    case "environment":
-      return "使用应用启动环境中的代理";
-    case "windows_system":
-      return "跟随 Windows 系统代理";
-    default:
-      return "当前直连";
-  }
-}
-
 export function LocalResourcesDialog({
   controller,
   firstRun,
+  embedded = false,
   pendingAction,
   previewMode,
   onClose,
@@ -153,13 +67,14 @@ export function LocalResourcesDialog({
   const [cleanupPlan, setCleanupPlan] =
     useState<UnusedResourceCleanupPlan | null>(null);
   const [diagnostics, setDiagnostics] = useState<LocalResourceDiagnostics | null>(null);
+  const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
+  const diagnosticsRef = useRef<HTMLDetailsElement>(null);
   const [thirdPartyNotices, setThirdPartyNotices] = useState<string | null>(null);
   const [oldVersionCleanupPlan, setOldVersionCleanupPlan] =
     useState<OldResourceVersionCleanupPlan | null>(null);
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
   const [proxyInput, setProxyInput] = useState("");
-
   const { catalog, status, tasks, taskMetrics } = controller;
 
   const capabilityStatuses = useMemo(
@@ -388,6 +303,13 @@ export function LocalResourcesDialog({
       setThirdPartyNotices(result.thirdPartyNotices);
     });
 
+  const revealDiagnostics = () => {
+    setDiagnosticsOpen(true);
+    window.requestAnimationFrame(() => {
+      diagnosticsRef.current?.scrollIntoView({ block: "start" });
+    });
+  };
+
   const copyDiagnosticSummary = () =>
     runAction("copy-diagnostics", async () => {
       const summary = await controller.diagnosticSummary();
@@ -527,19 +449,8 @@ export function LocalResourcesDialog({
       ),
     ),
   );
-
-  return (
-    <Dialog
-      title={firstRun ? "准备 SiaoVPlay" : "本地功能资源"}
-      eyebrow={pendingAction ? "继续上一步操作" : "按需下载 · 本机保存"}
-      onClose={onClose}
-      actions={
-        <button className="button quiet" type="button" onClick={onClose}>
-          {pendingAction ? "取消此次操作" : "完成"}
-        </button>
-      }
-    >
-      <div className="local-resources-dialog">
+  const content = (
+      <div className={`local-resources-dialog ${embedded ? "local-resources-embedded" : ""}`}>
         {previewMode ? (
           <div className="notice" role="status">
             <strong>当前为界面预览</strong>
@@ -756,7 +667,7 @@ export function LocalResourcesDialog({
                   {busyAction === "location" || busyAction === "plan-move"
                     ? "正在打开…"
                     : status.configured
-                      ? "更改保存位置"
+                      ? "移动保存位置"
                       : "选择保存位置"}
                 </button>
               </div>
@@ -830,6 +741,25 @@ export function LocalResourcesDialog({
                     {busyAction === "inspect-existing"
                       ? "正在验证…"
                       : "选择现有资源目录"}
+                  </button>
+                  <button
+                    className="button quiet"
+                    type="button"
+                    disabled={previewMode || busyAction !== null}
+                    onClick={revealDiagnostics}
+                  >
+                    检查与修复
+                  </button>
+                  <button
+                    className="button quiet"
+                    type="button"
+                    disabled={previewMode || busyAction !== null}
+                    onClick={() => {
+                      revealDiagnostics();
+                      void inspectOldVersionCleanup();
+                    }}
+                  >
+                    清理旧版本
                   </button>
                 </div>
               ) : null}
@@ -1029,8 +959,11 @@ export function LocalResourcesDialog({
 
         {catalog && status ? (
           <details
+            ref={diagnosticsRef}
             className="local-resource-diagnostics"
+            open={diagnosticsOpen}
             onToggle={(event) => {
+              setDiagnosticsOpen(event.currentTarget.open);
               if (event.currentTarget.open && !diagnostics && busyAction === null) {
                 void loadDiagnostics();
               }
@@ -1281,8 +1214,18 @@ export function LocalResourcesDialog({
             ) : null}
           </details>
         ) : null}
-
       </div>
+  );
+  return embedded ? content : (
+    <Dialog
+      title={firstRun ? "准备 SiaoVPlay" : "本地功能资源"}
+      eyebrow={pendingAction ? "继续上一步操作" : "按需下载 · 本机保存"}
+      onClose={onClose}
+      actions={<button className="button quiet" type="button" onClick={onClose}>
+        {pendingAction ? "取消此次操作" : "完成"}
+      </button>}
+    >
+      {content}
     </Dialog>
   );
 }

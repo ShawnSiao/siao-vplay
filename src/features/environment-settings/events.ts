@@ -1,0 +1,25 @@
+export type EnvironmentSettingsTab = "local" | "ai";
+
+const eventName = "siaovplay:open-environment-settings";
+
+function emit(tab: EnvironmentSettingsTab): void {
+  window.dispatchEvent(new CustomEvent(eventName, { detail: { tab } }));
+}
+
+export function openEnvironmentSettings(tab: EnvironmentSettingsTab): void {
+  const trigger = document.querySelector<HTMLButtonElement>(".environment-navigation-trigger");
+  trigger?.click();
+  emit(tab);
+  window.setTimeout(() => emit(tab), 0);
+}
+
+export function listenEnvironmentSettings(
+  listener: (tab: EnvironmentSettingsTab) => void,
+): () => void {
+  const handler = (event: Event) => {
+    const tab = (event as CustomEvent<{ tab?: EnvironmentSettingsTab }>).detail?.tab;
+    listener(tab === "ai" ? "ai" : "local");
+  };
+  window.addEventListener(eventName, handler);
+  return () => window.removeEventListener(eventName, handler);
+}

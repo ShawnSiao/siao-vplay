@@ -358,10 +358,11 @@ pub fn cancel_learning_task(
     let timestamp = now_ms()?;
     let mut connection = store.connect()?;
     let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
-    let immediate = matches!(
-        task.status.as_str(),
-        "awaiting_external_result" | "queued" | "validating"
-    );
+    let immediate = task.handoff_kind == "api"
+        || matches!(
+            task.status.as_str(),
+            "awaiting_external_result" | "queued" | "validating"
+        );
     let changed = if immediate {
         transaction.execute(
             "UPDATE learning_tasks
@@ -369,7 +370,7 @@ pub fn cancel_learning_task(
                  cancel_requested_at_ms = ?2, completed_at_ms = ?2,
                  error_code = NULL, error_message = NULL, updated_at_ms = ?2
              WHERE id = ?1
-               AND status IN ('awaiting_external_result', 'queued', 'validating')",
+               AND status IN ('awaiting_external_result', 'queued', 'running', 'validating')",
             params![task_id, timestamp],
         )?
     } else {
@@ -392,7 +393,6 @@ pub fn cancel_learning_task(
     }
     learning::get_learning_task(store, task_id).map_err(Into::into)
 }
-
 pub fn cancel_explanation_task(
     store: &ProjectStore,
     task_id: &str,
@@ -407,10 +407,11 @@ pub fn cancel_explanation_task(
     let timestamp = now_ms()?;
     let mut connection = store.connect()?;
     let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
-    let immediate = matches!(
-        task.status.as_str(),
-        "awaiting_external_result" | "queued" | "validating"
-    );
+    let immediate = task.handoff_kind == "api"
+        || matches!(
+            task.status.as_str(),
+            "awaiting_external_result" | "queued" | "validating"
+        );
     let changed = if immediate {
         transaction.execute(
             "UPDATE explanation_tasks
@@ -418,7 +419,7 @@ pub fn cancel_explanation_task(
                  cancel_requested_at_ms = ?2, completed_at_ms = ?2,
                  error_code = NULL, error_message = NULL, updated_at_ms = ?2
              WHERE id = ?1
-               AND status IN ('awaiting_external_result', 'queued', 'validating')",
+               AND status IN ('awaiting_external_result', 'queued', 'running', 'validating')",
             params![task_id, timestamp],
         )?
     } else {
@@ -441,7 +442,6 @@ pub fn cancel_explanation_task(
     }
     understanding::get_explanation_task(store, task_id).map_err(Into::into)
 }
-
 pub fn cancel_translation_task(
     store: &ProjectStore,
     task_id: &str,

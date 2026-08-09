@@ -1,4 +1,7 @@
 mod agent_result;
+mod agent_task_files;
+mod ai;
+mod ai_migration;
 mod burn;
 mod codex_runner;
 mod commands;
@@ -103,6 +106,8 @@ pub fn run() {
             }
             let data_directory = resolve_data_directory(app)?;
             local_resources::initialize(&data_directory)?;
+            let legacy_proxy = local_resources::configured_proxy_url();
+            ai::initialize(&data_directory, legacy_proxy.as_deref())?;
             resource_download::initialize()?;
             runtime::initialize(&data_directory)?;
             let database_path = data_directory.join("projects").join("siaovplay.db");
@@ -164,8 +169,8 @@ pub fn run() {
             commands::configure_local_resource_root,
             commands::repair_local_resource_root,
             commands::set_local_resource_profile,
-            commands::get_local_resource_network_status,
-            commands::set_local_resource_proxy,
+            ai::commands::get_local_resource_network_status,
+            ai::commands::set_local_resource_proxy,
             commands::inspect_local_resource_migration,
             commands::adopt_local_resources,
             commands::plan_local_resource_move,
@@ -185,6 +190,19 @@ pub fn run() {
             commands::get_local_resource_diagnostics,
             commands::get_local_resource_diagnostic_summary,
             commands::get_local_resource_third_party_notices,
+            ai::commands::get_ai_service_settings,
+            ai::commands::save_ai_service,
+            ai::commands::delete_ai_service,
+            ai::commands::set_default_ai_service,
+            ai::commands::list_ai_service_models,
+            ai::commands::test_ai_service,
+            ai::commands::preview_ai_execution,
+            ai::commands::start_explanation_task,
+            ai::commands::resume_explanation_task,
+            ai::commands::start_learning_task,
+            ai::commands::resume_learning_task,
+            ai::commands::get_network_settings,
+            ai::commands::set_network_settings,
             commands::rollback_local_resource,
             commands::plan_old_resource_version_cleanup,
             commands::cleanup_old_resource_versions,

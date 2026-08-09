@@ -1,8 +1,8 @@
 import { StrictMode, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 
-import { LocalResourcesDialog } from "../components/LocalResourcesDialog";
 import type { LocalResourcesController } from "../features/resources/useLocalResources";
+import { RuntimeView } from "./RuntimeView";
 import type {
   LocalResourceCatalog,
   LocalResourceStatus,
@@ -373,17 +373,7 @@ export function RuntimeHarness() {
     }),
     [tasks],
   );
-  return (
-    <LocalResourcesDialog
-      controller={controller}
-      firstRun={false}
-      pendingAction={null}
-      previewMode={false}
-      onClose={() => undefined}
-      onDismissFirstRun={() => undefined}
-      onNotice={() => undefined}
-    />
-  );
+  return <RuntimeView controller={controller} />;
 }
 
 const root = document.getElementById("root");
