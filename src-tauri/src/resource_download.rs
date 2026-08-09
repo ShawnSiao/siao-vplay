@@ -1299,6 +1299,26 @@ pub(crate) fn run_health_check(
                     )));
                 }
             }
+            let ffmpeg_relative = entrypoints
+                .get("ffmpeg")
+                .ok_or_else(|| ResourceDownloadError::HealthCheck("缺少 ffmpeg 入口".to_owned()))?;
+            let output = hidden_command(&join_safe_relative(staged_payload, ffmpeg_relative)?)
+                .args(["-hide_banner", "-encoders"])
+                .output()
+                .map_err(|error| ResourceDownloadError::HealthCheck(error.to_string()))?;
+            let text = format!(
+                "{}\n{}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+            for encoder in ["libopenh264", "aac"] {
+                if !output.status.success() || !encoder_list_contains(&text, encoder) {
+                    return Err(ResourceDownloadError::HealthCheck(format!(
+                        "{} 缺少所需编码器 {encoder}",
+                        resource.id
+                    )));
+                }
+            }
             Ok(())
         }
         "yt-dlp-version" => {
@@ -1363,6 +1383,13 @@ pub(crate) fn run_health_check(
             resource.id
         ))),
     }
+}
+
+fn encoder_list_contains(value: &str, expected: &str) -> bool {
+    value.lines().any(|line| {
+        let mut fields = line.split_whitespace();
+        fields.next().is_some() && fields.next() == Some(expected)
+    })
 }
 
 pub(crate) fn verify_installed_payload(
@@ -2132,6 +2159,28 @@ mod tests {
         let error = run_health_check(&yt_dlp, directory.path())
             .expect_err("unknown health check should fail");
         assert!(matches!(error, ResourceDownloadError::HealthCheck(_)));
+    }
+
+    #[test]
+    fn encoder_list_parser_requires_an_exact_encoder_name() {
+        let fixture = " V..... libopenh264 OpenH264 H.264 encoder\n A..... aac AAC encoder";
+
+        assert!(encoder_list_contains(fixture, "libopenh264"));
+        assert!(encoder_list_contains(fixture, "aac"));
+        assert!(!encoder_list_contains(fixture, "openh264"));
+        assert!(!encoder_list_contains(fixture, "libx264"));
+    }
+
+    #[test]
+    #[ignore = "requires SIAOVPLAY_FFMPEG_PAYLOAD"]
+    fn managed_ffmpeg_payload_has_required_encoders() {
+        let payload = std::env::var_os("SIAOVPLAY_FFMPEG_PAYLOAD")
+            .map(PathBuf::from)
+            .expect("SIAOVPLAY_FFMPEG_PAYLOAD must be set");
+        let resource = local_resources::resource_definition("ffmpeg-cpu")
+            .expect("FFmpeg resource should exist");
+
+        run_health_check(&resource, &payload).expect("FFmpeg health check should pass");
     }
 
     #[test]

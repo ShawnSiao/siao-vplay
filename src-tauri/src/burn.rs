@@ -563,6 +563,7 @@ fn run_job(
     let media_path = validate_baseline(store, &job)?;
     verify_runtime(&job)?;
     verify_subtitle(&job)?;
+    let media_probe = media::validate_media_path(&media_path)?;
     check_cancelled(store, job_id, cancellation)?;
     if job.intended_output_path.exists() || job.intended_manifest_path.exists() {
         return Err(SubtitleBurnError::BurnFailed(
@@ -599,15 +600,8 @@ fn run_job(
         .arg(&media_path)
         .args(["-map", "0:v:0", "-map", "0:a?", "-vf"])
         .arg(filter)
+        .args(media::h264_video_encode_args(&media_probe))
         .args([
-            "-c:v",
-            "libx264",
-            "-preset",
-            "medium",
-            "-crf",
-            "20",
-            "-pix_fmt",
-            "yuv420p",
             "-c:a",
             "aac",
             "-b:a",
