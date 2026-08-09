@@ -2525,7 +2525,7 @@ describe("App", () => {
       nextOffset: null,
     }));
     render(<App />);
-    fireEvent.click(await screen.findByRole("button", { name: "媒体库：未归类视频" }));
+    fireEvent.click(await screen.findByRole("button", { name: "媒体库：未分类视频" }));
     fireEvent.click(await screen.findByLabelText("雨站台 的更多操作"));
     fireEvent.click(await screen.findByRole("menuitem", { name: "删除视频" }));
 

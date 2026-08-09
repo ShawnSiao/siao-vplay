@@ -374,14 +374,14 @@ export function DesktopShell({
               )}
             </button>
             <button
-              aria-label="媒体库：未归类视频"
+              aria-label="媒体库：未分类视频"
               type="button"
-              title="未归类视频"
+              title="未分类视频"
               className={activeView === "library" && librarySection === "unclassified" ? "active" : ""}
               onClick={() => onSelectLibrarySection("unclassified")}
             >
               <span aria-hidden="true">▸</span>
-              <span className="desktop-navigation-label">未归类</span>
+              <span className="desktop-navigation-label">未分类</span>
               <span className="desktop-navigation-count">
                 {libraryCounts.unclassified}
               </span>

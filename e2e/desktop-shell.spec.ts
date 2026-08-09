@@ -75,7 +75,7 @@ test("media home uses a compact responsive desktop shell", async ({ page }) => {
 test("media library scrolls to its last row above the status bar", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 720 });
   await page.goto("/e2e/library.html", { waitUntil: "domcontentloaded" });
-  await page.getByRole("button", { name: "媒体库：未归类视频" }).click();
+  await page.getByRole("button", { name: "媒体库：未分类视频" }).click();
 
   const scroll = page.locator(".library-scroll");
   const statusbar = page.getByRole("contentinfo", { name: "媒体库状态" });
@@ -148,7 +148,7 @@ test("direct media lists remove successful classification changes", async ({ pag
   await page.getByRole("menuitem", { name: "取消稍后观看" }).click();
   await expect(page.getByText("还没有稍后观看的视频")).toBeVisible();
 
-  await page.getByRole("button", { name: "媒体库：未归类视频" }).click();
+  await page.getByRole("button", { name: "媒体库：未分类视频" }).click();
   await expect(page.getByRole("heading", { name: "未分类" })).toBeVisible();
   await expect(page.getByText("共 12 个视频，已加载 12 个。")).toBeVisible();
   await page.getByLabel("雨站台 1 的更多操作").click();
