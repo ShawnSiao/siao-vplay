@@ -267,6 +267,30 @@ export function LibraryHarness() {
       <LibraryScreen
         home={libraryHome}
         section={section}
+        sectionPages={{
+          continue_watching: {
+            items: libraryHome.continueWatching,
+            totalCount: libraryHome.continueWatching.length,
+            nextOffset: null,
+            initialized: true,
+            loading: false,
+            loadingMore: false,
+            error: null,
+          },
+          watch_later: {
+            items: [], totalCount: 0, nextOffset: null, initialized: true,
+            loading: false, loadingMore: false, error: null,
+          },
+          unclassified: {
+            items: libraryHome.unclassified,
+            totalCount: libraryHome.unclassifiedCount,
+            nextOffset: null,
+            initialized: true,
+            loading: false,
+            loadingMore: false,
+            error: null,
+          },
+        }}
         currentCollection={null}
         currentEpisodes={[]}
         selectedSeason={null}
@@ -304,6 +328,7 @@ export function LibraryHarness() {
         onDelete={() => undefined}
         onOpenLocation={() => undefined}
         onSelectSection={setSection}
+        onLoadMoreSection={() => undefined}
         onOpenCollection={() => undefined}
         onCloseCollection={() => undefined}
         onSelectSeason={() => undefined}

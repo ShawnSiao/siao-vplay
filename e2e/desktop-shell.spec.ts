@@ -2,18 +2,15 @@ import { expect, test } from "@playwright/test";
 
 test("media home uses a compact responsive desktop shell", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.goto("/e2e/library.html");
+  await page.goto("/e2e/library.html", { waitUntil: "domcontentloaded" });
 
   await expect(page.getByRole("banner", { name: "应用命令栏" })).toHaveCSS(
     "height",
     "44px",
   );
-  const openFolder = page.getByRole("button", { name: "打开剧集文件夹" }).first();
+  await page.getByText("添加视频", { exact: true }).first().click();
+  const openFolder = page.getByRole("menuitem", { name: /添加剧集文件夹/ });
   await expect(openFolder).toBeEnabled();
-  await expect(openFolder).toHaveCSS(
-    "background-image",
-    "linear-gradient(rgb(195, 241, 135), rgb(169, 220, 105))",
-  );
   await expect(
     page.getByRole("heading", { name: "专注观看，需要时再理解。" }),
   ).toHaveCount(0);
@@ -21,22 +18,19 @@ test("media home uses a compact responsive desktop shell", async ({ page }) => {
     "width",
     "220px",
   );
-  await expect(page.locator(".continue-item")).toHaveCount(1);
-  await expect(page.getByText("00:42 / 03:00").first()).toBeVisible();
-  await expect(page.getByRole("heading", { name: "剧集" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "查看全部 ›" })).toBeEnabled();
+  await expect(page.locator(".library-continue-hero")).toHaveCount(1);
+  await expect(page.getByText("00:42", { exact: true })).toBeVisible();
+  await expect(page.getByText("03:00", { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "剧集概览" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "查看全部" })).toBeEnabled();
   await expect(page.getByRole("heading", { name: "最近加入" })).toBeVisible();
   await expect(
     page.getByRole("button", {
       name: "媒体库：稍后观看",
     }),
   ).toBeEnabled();
-  await expect(
-    page.getByRole("button", { name: "字幕，需要打开视频后使用" }),
-  ).toBeDisabled();
-  await expect(
-    page.getByRole("button", { name: "更多命令，需要打开视频后使用" }),
-  ).toBeDisabled();
+  await expect(page.getByText("字幕", { exact: true })).toHaveCount(0);
+  await expect(page.getByLabel("更多字幕与交付命令")).toHaveCount(0);
   await expect(
     page.getByRole("searchbox", { name: "搜索媒体库" }),
   ).toBeEnabled();
@@ -51,7 +45,7 @@ test("media home uses a compact responsive desktop shell", async ({ page }) => {
   await expect(page.getByRole("contentinfo", { name: "媒体库状态" })).toContainText(
     "1 个授权文件夹",
   );
-  await expect(page.locator(".library-item-list")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "未分类" })).toHaveCount(0);
   await expect(page.locator(".project-card")).toHaveCount(0);
 
   await openFolder.click();
@@ -78,11 +72,12 @@ test("media home uses a compact responsive desktop shell", async ({ page }) => {
 
 test("media library scrolls to its last row above the status bar", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 720 });
-  await page.goto("/e2e/library.html");
+  await page.goto("/e2e/library.html", { waitUntil: "domcontentloaded" });
+  await page.getByRole("button", { name: "媒体库：未归类视频" }).click();
 
   const scroll = page.locator(".library-scroll");
   const statusbar = page.getByRole("contentinfo", { name: "媒体库状态" });
-  const lastItem = page.locator(".library-item-open").last();
+  const lastItem = page.locator(".library-media-item").last();
   const before = await scroll.evaluate((element) => ({
     clientHeight: element.clientHeight,
     scrollHeight: element.scrollHeight,
@@ -108,7 +103,7 @@ test("media library scrolls to its last row above the status bar", async ({ page
 
 test("folder recovery requires confirmation and blocks unsafe relocation", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.goto("/e2e/library.html");
+  await page.goto("/e2e/library.html", { waitUntil: "domcontentloaded" });
   await page.getByRole("button", { name: "媒体库：文件夹" }).click();
   await expect(page.getByRole("heading", { name: "授权文件夹", level: 1 })).toBeVisible();
   await expect(page.getByText("W:\\Series\\Rain")).toBeVisible();

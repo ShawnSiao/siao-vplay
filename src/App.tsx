@@ -78,6 +78,7 @@ export default function App() {
     state: libraryState,
     refresh: refreshLibrary,
     setSection: setLibrarySection,
+    loadMoreSection,
     setSearchQuery,
     openCollection,
     closeCollection,
@@ -999,7 +1000,10 @@ export default function App() {
         canReviseSubtitles={Boolean(currentSubtitle)}
         canDeliverSubtitles={Boolean(currentSubtitle || currentTranslation)}
         libraryCounts={{
-          continueWatching: libraryState.home.continueWatching.length,
+          continueWatching:
+            libraryState.home.continueWatchingCount ??
+            libraryState.sectionPages.continue_watching.totalCount ??
+            libraryState.home.continueWatching.length,
           episodeFiles: libraryState.home.totalProjectCount,
           series: libraryState.home.collections.filter(
             (collection) => collection.systemKey === null,
@@ -1037,6 +1041,7 @@ export default function App() {
           <LibraryScreen
             home={libraryState.home}
             section={libraryState.section}
+            sectionPages={libraryState.sectionPages}
             currentCollection={libraryState.currentCollection}
             currentEpisodes={libraryState.currentEpisodes}
             selectedSeason={libraryState.selectedSeason}
@@ -1063,6 +1068,7 @@ export default function App() {
               )
             }
             onSelectSection={selectLibrarySection}
+            onLoadMoreSection={(section) => void loadMoreSection(section)}
             onOpenCollection={(collectionId) =>
               void openCollection(collectionId)
             }
