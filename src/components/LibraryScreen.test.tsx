@@ -109,6 +109,7 @@ function renderScreen(
       onOpenLocation: () => undefined,
       onSelectSection: () => undefined,
       onLoadMoreSection: () => undefined,
+      onReloadSection: () => undefined,
       onOpenCollection: () => undefined,
       onCloseCollection: () => undefined,
       onSelectSeason: () => undefined,
@@ -174,7 +175,7 @@ describe("LibraryScreen library lifecycle", () => {
 
     expect(screen.getByText("待重建")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "重建剧集 Rain" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "撤销授权 Rain" })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "撤销授权" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "扫描更新 Rain" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "更换位置 Rain" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "重建剧集 Rain" }));

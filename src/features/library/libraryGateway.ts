@@ -16,6 +16,7 @@ import type {
   LibraryMediaSummary,
   LibraryMediaSection,
   LibrarySectionPage,
+  ListLibrarySectionInput,
   LibraryScanPreview,
   LibraryScanProgress,
   LibraryImportResult,
@@ -81,9 +82,8 @@ export async function listLibrarySection(
   if (!isDesktopApp) {
     return { items: [], totalCount: 0, nextOffset: null };
   }
-  return invoke<LibrarySectionPage>("list_library_section", {
-    input: { section, offset },
-  });
+  const input: ListLibrarySectionInput = { section, offset };
+  return invoke<LibrarySectionPage>("list_library_section", { input });
 }
 
 export async function searchLibrary(query: string): Promise<LibrarySearchResult[]> {

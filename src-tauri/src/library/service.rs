@@ -1,14 +1,13 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use uuid::Uuid;
-
 use crate::store::ProjectStore;
+use uuid::Uuid;
 
 use super::{
     AddProjectToCollectionInput, Collection, CollectionDetail, CollectionKind, CollectionSortMode,
     CreateCollectionInput, EpisodeNeighbors, LibraryCollectionDeletionResult, LibraryError,
-    LibraryHome, LibraryMediaSection, LibraryRootRevokeResult, LibraryRootStatus,
-    LibrarySectionPage, ListLibrarySectionInput, MediaSummary, SearchResult, UpdateCollectionInput,
+    LibraryHome, LibraryRootRevokeResult, LibraryRootStatus, MediaSummary, SearchResult,
+    UpdateCollectionInput,
     repository::{LibraryRepository, NewMembership},
 };
 
@@ -17,13 +16,12 @@ const WATCH_LATER_TITLE: &str = "稍后观看";
 const HOME_CONTINUE_LIMIT: i64 = 12;
 const HOME_UNCLASSIFIED_LIMIT: i64 = 24;
 const HOME_RECENTLY_ADDED_LIMIT: i64 = 5;
-const LIBRARY_SECTION_PAGE_LIMIT: i64 = 24;
 const SEARCH_LIMIT: i64 = 50;
 const MAX_TITLE_CHARS: usize = 200;
 
 #[derive(Clone, Debug)]
 pub(crate) struct LibraryService {
-    store: ProjectStore,
+    pub(super) store: ProjectStore,
 }
 
 impl LibraryService {
@@ -46,55 +44,6 @@ impl LibraryService {
             total_project_count,
             collection_item_count,
             unclassified_count,
-        })
-    }
-
-    pub(crate) fn list_section(
-        &self,
-        input: ListLibrarySectionInput,
-    ) -> Result<LibrarySectionPage, LibraryError> {
-        if input.offset < 0 {
-            return Err(LibraryError::Validation(
-                "媒体库分页位置不能小于 0".to_owned(),
-            ));
-        }
-        let connection = self.store.connect()?;
-        let repository = LibraryRepository::new(&connection);
-        let (items, total_count) = match input.section {
-            LibraryMediaSection::ContinueWatching => (
-                repository.list_continue_watching_page(LIBRARY_SECTION_PAGE_LIMIT, input.offset)?,
-                repository.continue_watching_count()?,
-            ),
-            LibraryMediaSection::WatchLater => {
-                let Some(collection) = repository.get_system_collection(WATCH_LATER_KEY)? else {
-                    return Ok(LibrarySectionPage {
-                        items: Vec::new(),
-                        total_count: 0,
-                        next_offset: None,
-                    });
-                };
-                (
-                    repository.list_watch_later_page(
-                        &collection.id,
-                        LIBRARY_SECTION_PAGE_LIMIT,
-                        input.offset,
-                    )?,
-                    repository.collection_item_count(&collection.id)?,
-                )
-            }
-            LibraryMediaSection::Unclassified => {
-                let (_, _, total_count) = repository.counts()?;
-                (
-                    repository.list_unclassified_page(LIBRARY_SECTION_PAGE_LIMIT, input.offset)?,
-                    total_count,
-                )
-            }
-        };
-        let loaded = input.offset + items.len() as i64;
-        Ok(LibrarySectionPage {
-            items,
-            total_count,
-            next_offset: (loaded < total_count).then_some(loaded),
         })
     }
 
@@ -589,7 +538,7 @@ mod tests {
                 .expect("membership should be added");
         }
     }
-
+    include!("section_service_tests.rs");
     #[test]
     fn collection_crud_preserves_projects_and_updates_home_counts() {
         let fixture = Fixture::new();
@@ -643,104 +592,6 @@ mod tests {
                 .unclassified_count,
             1
         );
-    }
-
-    #[test]
-    fn library_sections_page_without_truncating_totals() {
-        let fixture = Fixture::new();
-        let projects = (0..26)
-            .map(|index| fixture.project(&format!("video-{index:02}.mp4")))
-            .collect::<Vec<_>>();
-
-        let first = fixture
-            .service
-            .list_section(ListLibrarySectionInput {
-                section: LibraryMediaSection::Unclassified,
-                offset: 0,
-            })
-            .expect("first page should load");
-        assert_eq!(first.total_count, 26);
-        assert_eq!(first.items.len(), 24);
-        assert_eq!(first.next_offset, Some(24));
-
-        let second = fixture
-            .service
-            .list_section(ListLibrarySectionInput {
-                section: LibraryMediaSection::Unclassified,
-                offset: 24,
-            })
-            .expect("second page should load");
-        assert_eq!(second.total_count, 26);
-        assert_eq!(second.items.len(), 2);
-        assert_eq!(second.next_offset, None);
-        assert!(first.items.iter().all(|item| {
-            second
-                .items
-                .iter()
-                .all(|other| other.project_id != item.project_id)
-        }));
-
-        fixture
-            .service
-            .set_watch_later(&projects[0].id, true)
-            .expect("watch later should add");
-        let watch_later = fixture
-            .service
-            .list_section(ListLibrarySectionInput {
-                section: LibraryMediaSection::WatchLater,
-                offset: 0,
-            })
-            .expect("watch later should load");
-        assert_eq!(watch_later.total_count, 1);
-        assert_eq!(watch_later.items[0].project_id, projects[0].id);
-    }
-
-    #[test]
-    fn continue_watching_count_is_not_limited_to_the_home_preview() {
-        let fixture = Fixture::new();
-        for index in 0..13 {
-            let project = fixture.project(&format!("continue-{index:02}.mp4"));
-            let connection = fixture
-                .service
-                .store
-                .connect()
-                .expect("store should connect");
-            connection
-                .execute(
-                    "UPDATE playback_states
-                     SET position_ms = 1000, duration_ms = 10000, completed_at_ms = NULL
-                     WHERE project_id = ?1",
-                    params![project.id],
-                )
-                .expect("playback should update");
-        }
-
-        let home = fixture.service.get_home().expect("home should load");
-        assert_eq!(home.continue_watching.len(), 12);
-        assert_eq!(home.continue_watching_count, 13);
-        let page = fixture
-            .service
-            .list_section(ListLibrarySectionInput {
-                section: LibraryMediaSection::ContinueWatching,
-                offset: 12,
-            })
-            .expect("continuation page should load");
-        assert_eq!(page.total_count, 13);
-        assert_eq!(page.items.len(), 1);
-        assert_eq!(page.next_offset, None);
-    }
-
-    #[test]
-    fn library_section_rejects_negative_offset() {
-        let fixture = Fixture::new();
-        let error = fixture
-            .service
-            .list_section(ListLibrarySectionInput {
-                section: LibraryMediaSection::Unclassified,
-                offset: -1,
-            })
-            .expect_err("negative offset should fail");
-        assert!(matches!(error, LibraryError::Validation(_)));
     }
 
     #[test]

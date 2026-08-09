@@ -1,0 +1,22 @@
+.shell-add-media {
+  position: relative;
+}
+
+.shell-add-media > summary {
+  list-style: none;
+  cursor: default;
+}
+
+.shell-add-media > summary::-webkit-details-marker {
+  display: none;
+}
+
+.shell-add-media[open] > summary {
+  border-color: #caef9d;
+  box-shadow: 0 0 0 2px rgb(182 238 114 / 16%);
+}
+
+.shell-add-media-menu {
+  width: 244px;
+  border-radius: 8px;
+}

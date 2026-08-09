@@ -1,0 +1,129 @@
+.library-screen {
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  color: var(--text-primary);
+  background:
+    radial-gradient(circle at 72% -30%, rgb(182 238 114 / 6%), transparent 35%),
+    #0d1014;
+}
+
+.library-screen .library-scroll {
+  overflow: auto;
+  height: 100%;
+  scrollbar-gutter: stable;
+}
+
+.library-screen .library-page {
+  width: min(100%, 1460px);
+  margin: 0 auto;
+  padding: 34px 38px 60px;
+  font-size: 14px;
+}
+
+.library-screen .library-page-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 30px;
+}
+
+.library-screen .library-page-heading h1 {
+  margin: 2px 0 7px;
+  font-size: clamp(26px, 2.2vw, 38px);
+  font-weight: 680;
+  letter-spacing: -0.025em;
+}
+
+.library-screen .library-page-heading p,
+.library-screen .library-section-heading p,
+.library-screen .library-empty-panel p,
+.library-screen .library-empty-resume p {
+  margin: 0;
+  color: #929da7;
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.library-screen .library-eyebrow,
+.library-screen .library-resume-label {
+  margin: 0;
+  color: #b6ee72;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+
+.library-screen button,
+.library-screen select,
+.library-screen input {
+  font: inherit;
+}
+
+.library-screen button:focus-visible,
+.library-screen summary:focus-visible,
+.library-screen select:focus-visible,
+.library-screen input:focus-visible {
+  outline: 2px solid #b6ee72;
+  outline-offset: 2px;
+}
+
+.library-screen .library-heading-primary,
+.library-screen .library-continue-footer button,
+.library-screen .library-primary-action,
+.library-screen .library-empty-resume > button {
+  min-height: 38px;
+  padding: 0 15px;
+  border: 1px solid #a8db6c;
+  border-radius: 9px;
+  color: #16200e;
+  background: #b6ee72;
+  font-weight: 700;
+}
+
+.library-screen .library-heading-primary:hover,
+.library-screen .library-continue-footer button:hover,
+.library-screen .library-primary-action:hover,
+.library-screen .library-empty-resume > button:hover {
+  background: #c6f58f;
+}
+
+.library-screen .library-section {
+  margin-top: 36px;
+}
+
+.library-screen .library-section-heading {
+  display: flex;
+  min-width: 0;
+  align-items: end;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 15px;
+}
+
+.library-screen .library-section-heading h2 {
+  margin: 0 0 4px;
+  font-size: 19px;
+  font-weight: 650;
+}
+
+.library-screen .library-section-heading > button,
+.library-screen .library-back-button,
+.library-screen .library-collection-heading-actions > button {
+  min-height: 34px;
+  padding: 0 11px;
+  border: 1px solid #39434d;
+  border-radius: 8px;
+  color: #cbd3da;
+  background: #171c22;
+}
+
+.library-screen .library-section-heading > button:hover,
+.library-screen .library-back-button:hover,
+.library-screen .library-collection-heading-actions > button:hover {
+  border-color: #5a6671;
+  color: #fff;
+  background: #212830;
+}

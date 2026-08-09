@@ -3,6 +3,10 @@ import { useState } from "react";
 import { playbackUrl } from "../../../lib/desktop";
 import { fileExtension, formatDuration, formatRecentTime } from "../../../lib/format";
 import type { CollectionSummary, LibraryMediaSummary } from "../../../types";
+import {
+  libraryMediaNeedsRelink,
+  libraryMediaProgress,
+} from "./libraryMediaPresentation";
 
 export type LibraryMediaItemContext =
   | { kind: "collection"; collectionId: string; canRemove: boolean }
@@ -22,21 +26,6 @@ type LibraryMediaItemProps = {
   onRemoveFromCollection: (collectionId: string, projectId: string) => Promise<unknown>;
   onSetWatchLater: (projectId: string, enabled: boolean) => Promise<unknown>;
 };
-
-export function libraryMediaNeedsRelink(media: LibraryMediaSummary): boolean {
-  return (
-    !media.mediaAvailable ||
-    (media.itemAvailability !== null && media.itemAvailability !== "available")
-  );
-}
-
-export function libraryMediaProgress(media: LibraryMediaSummary): number {
-  return media.durationMs && media.durationMs > 0
-    ? Math.round(
-        Math.max(0, Math.min(100, (media.positionMs / media.durationMs) * 100)),
-      )
-    : 0;
-}
 
 function episodeCode(media: LibraryMediaSummary): string | null {
   if (media.seasonNumber === null && media.episodeNumber === null) {

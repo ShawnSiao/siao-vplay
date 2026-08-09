@@ -1,0 +1,29 @@
+.library-recovery-groups {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.library-recovery-groups > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-panel);
+}
+
+.library-recovery-groups span,
+.library-recovery-groups small {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.library-recovery-groups strong {
+  font-size: 22px;
+}
+
+.library-recovery-groups .stable strong { color: #b6ee72; }
+.library-recovery-groups .review strong { color: #ffc878; }
+.library-recovery-groups .offline strong { color: #ff9f9f; }

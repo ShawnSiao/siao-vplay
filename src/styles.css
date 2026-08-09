@@ -5732,30 +5732,16 @@ h3 {
   white-space: nowrap;
 }
 
-.shell-overflow,
-.shell-add-media {
+.shell-overflow {
   position: relative;
 }
-
-.shell-overflow > summary,
-.shell-add-media > summary {
+.shell-overflow > summary {
   list-style: none;
   cursor: default;
 }
 
-.shell-overflow > summary::-webkit-details-marker,
-.shell-add-media > summary::-webkit-details-marker {
+.shell-overflow > summary::-webkit-details-marker {
   display: none;
-}
-
-.shell-add-media[open] > summary {
-  border-color: #caef9d;
-  box-shadow: 0 0 0 2px rgb(182 238 114 / 16%);
-}
-
-.shell-add-media-menu {
-  width: 244px;
-  border-radius: 8px;
 }
 
 .shell-overflow-menu {

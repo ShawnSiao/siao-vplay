@@ -9,6 +9,7 @@ import type { LibrarySection } from "../library/useLibraryController";
 import type { MediaDropFeedback } from "./useDesktopMediaDrop";
 import type { ShellDrawerTab, ShellView } from "./useShellController";
 import { EnvironmentSettingsTrigger } from "./EnvironmentSettingsTrigger";
+import { LibraryAddMediaMenu } from "./LibraryAddMediaMenu";
 
 type DesktopShellProps = {
   activeView: ShellView;
@@ -261,51 +262,11 @@ export function DesktopShell({
                 </>
               ) : null}
             </>
-          ) : (
-            <details className="shell-add-media">
-              <summary className="shell-command shell-command-primary">
-                <span aria-hidden="true">＋</span>
-                <span>添加视频</span>
-              </summary>
-              <div className="shell-overflow-menu shell-add-media-menu" role="menu">
-                <button
-                  aria-keyshortcuts="Control+O"
-                  type="button"
-                  role="menuitem"
-                  onClick={(event) => {
-                    event.currentTarget.closest("details")?.removeAttribute("open");
-                    onOpenFile();
-                  }}
-                >
-                  <span>打开视频</span>
-                  <small>Ctrl+O</small>
-                </button>
-                <button
-                  aria-keyshortcuts="Control+Shift+O"
-                  type="button"
-                  role="menuitem"
-                  onClick={(event) => {
-                    event.currentTarget.closest("details")?.removeAttribute("open");
-                    onOpenFolder();
-                  }}
-                >
-                  <span>添加剧集文件夹</span>
-                  <small>Ctrl+Shift+O</small>
-                </button>
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={(event) => {
-                    event.currentTarget.closest("details")?.removeAttribute("open");
-                    onOpenUrl();
-                  }}
-                >
-                  <span>从 URL 导入</span>
-                  <small>公开媒体地址</small>
-                </button>
-              </div>
-            </details>
-          )}
+          ) : <LibraryAddMediaMenu
+            onOpenFile={onOpenFile}
+            onOpenFolder={onOpenFolder}
+            onOpenUrl={onOpenUrl}
+          />}
         </div>
         {playerActive && drawerTab ? (
           <div className="desktop-commandbar-context" title={mediaTitle ?? undefined}>

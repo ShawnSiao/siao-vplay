@@ -55,18 +55,12 @@ import type {
   EpisodeReference,
 } from "./types";
 
-const activeTranscriptionStatuses = new Set<TranscriptionJob["status"]>([
-  "queued",
-  "extracting",
-  "transcribing",
-  "validating",
-]);
+const activeTranscriptionStatuses = new Set<TranscriptionJob["status"]>(
+  ["queued", "extracting", "transcribing", "validating"],
+);
 
 const firstRunResourceDismissedKey = "siaovplay.local-resources.first-run-dismissed.v1";
-
-type PendingResourceResume = PendingResourceAction & {
-  resume: () => Promise<void> | void;
-};
+type PendingResourceResume = PendingResourceAction & { resume: () => Promise<void> | void };
 
 export default function App() {
   const shellController = useShellController();
@@ -78,6 +72,7 @@ export default function App() {
     state: libraryState,
     refresh: refreshLibrary,
     setSection: setLibrarySection,
+    loadSectionPage,
     loadMoreSection,
     setSearchQuery,
     openCollection,
@@ -1069,6 +1064,7 @@ export default function App() {
             }
             onSelectSection={selectLibrarySection}
             onLoadMoreSection={(section) => void loadMoreSection(section)}
+            onReloadSection={(section) => void loadSectionPage(section, 0)}
             onOpenCollection={(collectionId) =>
               void openCollection(collectionId)
             }

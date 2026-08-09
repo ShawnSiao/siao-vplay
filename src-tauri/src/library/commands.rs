@@ -18,7 +18,6 @@ use super::{
 };
 
 const LIBRARY_SCAN_PROGRESS_EVENT: &str = "library-scan-progress";
-
 #[tauri::command]
 pub(crate) fn get_library_home(
     app: AppHandle,
@@ -30,7 +29,6 @@ pub(crate) fn get_library_home(
     allow_home_posters(&app, &home)?;
     Ok(home)
 }
-
 #[tauri::command]
 pub(crate) fn list_library_section(
     app: AppHandle,

@@ -68,7 +68,6 @@ const mediaSummary: LibraryMediaSummary = {
   episodeTitle: null,
   itemAvailability: null,
 };
-
 const unclassifiedItems = Array.from({ length: 12 }, (_, index) => ({
   ...mediaSummary,
   projectId: `e2e-library-project-${index + 1}`,
@@ -196,10 +195,12 @@ const offlineRecovery: LibraryRecoveryState = {
 };
 
 export function LibraryHarness() {
-  const [folderImport, setFolderImport] = useState<LibraryFolderImportState | null>(null);
-  const [section, setSection] = useState<LibrarySection>("home");
+  const [folderImport, setFolderImport] = useState<LibraryFolderImportState | null>(null); const [section, setSection] = useState<LibrarySection>("home");
   const [recovery, setRecovery] = useState<LibraryRecoveryState | null>(null);
+  const [watchLaterItems, setWatchLaterItems] = useState([mediaSummary]);
+  const [uncategorizedItems, setUncategorizedItems] = useState(unclassifiedItems);
   const openFolderImport = () => setFolderImport(folderPreview);
+  const visibleHome = { ...libraryHome, unclassified: uncategorizedItems, unclassifiedCount: uncategorizedItems.length };
   return (
     <>
       <DesktopShell
@@ -242,8 +243,8 @@ export function LibraryHarness() {
         episodeFiles: 1,
         series: 1,
         folders: 1,
-        watchLater: 0,
-        unclassified: 1,
+        watchLater: watchLaterItems.length,
+        unclassified: uncategorizedItems.length,
       }}
       librarySection={section}
       searchQuery=""
@@ -265,7 +266,7 @@ export function LibraryHarness() {
       onOpenSettings={() => undefined}
     >
       <LibraryScreen
-        home={libraryHome}
+        home={visibleHome}
         section={section}
         sectionPages={{
           continue_watching: {
@@ -278,12 +279,13 @@ export function LibraryHarness() {
             error: null,
           },
           watch_later: {
-            items: [], totalCount: 0, nextOffset: null, initialized: true,
+            items: watchLaterItems, totalCount: watchLaterItems.length,
+            nextOffset: null, initialized: true,
             loading: false, loadingMore: false, error: null,
           },
           unclassified: {
-            items: libraryHome.unclassified,
-            totalCount: libraryHome.unclassifiedCount,
+            items: uncategorizedItems,
+            totalCount: uncategorizedItems.length,
             nextOffset: null,
             initialized: true,
             loading: false,
@@ -329,15 +331,28 @@ export function LibraryHarness() {
         onOpenLocation={() => undefined}
         onSelectSection={setSection}
         onLoadMoreSection={() => undefined}
+        onReloadSection={() => undefined}
         onOpenCollection={() => undefined}
         onCloseCollection={() => undefined}
         onSelectSeason={() => undefined}
         onCreateCollection={async () => undefined}
         onUpdateCollection={async () => undefined}
         onDeleteCollection={async () => null}
-        onAddToCollection={async () => undefined}
+        onAddToCollection={async (_collectionId, projectId) => {
+          setUncategorizedItems((items) => items.filter((item) => item.projectId !== projectId));
+        }}
         onRemoveFromCollection={async () => undefined}
-        onSetWatchLater={async () => undefined}
+        onSetWatchLater={async (projectId, enabled) => {
+          if (enabled) {
+            const item = uncategorizedItems.find((candidate) => candidate.projectId === projectId);
+            if (item) {
+              setWatchLaterItems((items) => [...items, item]);
+              setUncategorizedItems((items) => items.filter((candidate) => candidate.projectId !== projectId));
+            }
+          } else {
+            setWatchLaterItems((items) => items.filter((item) => item.projectId !== projectId));
+          }
+        }}
       />
       </DesktopShell>
       {folderImport ? (

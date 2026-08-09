@@ -1,8 +1,8 @@
 import { useState } from "react";
 
-import { formatRecentTime } from "../lib/format";
+import { LibraryFoldersView } from "../features/library/components/LibraryFoldersView";
 import { LibraryHomeView } from "../features/library/components/LibraryHomeView";
-import { LibraryMediaItem } from "../features/library/components/LibraryMediaItem";
+import { LibraryMediaListView } from "../features/library/components/LibraryMediaListView";
 import { LibrarySeriesView } from "../features/library/components/LibrarySeriesView";
 import type {
   LibrarySection,
@@ -44,6 +44,9 @@ type LibraryScreenProps = {
   onLoadMoreSection: (
     section: "continue_watching" | "watch_later" | "unclassified",
   ) => void;
+  onReloadSection: (
+    section: "continue_watching" | "watch_later" | "unclassified",
+  ) => void;
   onOpenCollection: (collectionId: string) => void;
   onCloseCollection: () => void;
   onSelectSeason: (season: number | null) => void;
@@ -68,10 +71,6 @@ export function LibraryScreen(props: LibraryScreenProps) {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [revokeRootId, setRevokeRootId] = useState<string | null>(null);
   const [deleteNotice, setDeleteNotice] = useState<string | null>(null);
-  const watchLater = props.home.collections.find(
-    (collection) => collection.systemKey === "watch_later",
-  );
-
   const commonMediaProps = {
     collections: props.home.collections,
     mutationPending: props.mutationPending,
@@ -142,52 +141,34 @@ export function LibraryScreen(props: LibraryScreenProps) {
         ) : null}
 
         {props.section === "folders" && !props.currentCollection ? (
-          <div className="library-page">
-            <header className="library-page-heading">
-              <div><p className="library-eyebrow">媒体库</p><h1>文件夹</h1><p>管理本地剧集目录的授权与关联状态。</p></div>
-              <button className="library-heading-primary" type="button" onClick={props.onImportFolder}>添加剧集文件夹</button>
-            </header>
-            <section className="library-section">
-              <div className="library-section-heading"><div><h2>授权文件夹</h2><p>源文件保持在原位置。</p></div><span>{props.home.folders.length} 个</span></div>
-              {props.home.folders.length ? (
-                <div className="library-folder-list">
-                  {props.home.folders.map((folder) => (
-                    <article className="library-folder-row" key={folder.id}>
-                      <span className="library-folder-icon" aria-hidden="true">▰</span>
-                      <span className="library-folder-copy"><strong>{folder.displayName}</strong><small title={folder.path}>{folder.path}</small></span>
-                      <span>{folder.itemCount} 集</span>
-                      <span className={folder.status === "linked" ? "ready" : "warning"}>{folder.status === "linked" ? "已关联" : folder.status === "orphaned" ? "待重建" : "需要人工整理"}</span>
-                      <small>{folder.lastScannedAtMs ? `上次扫描 ${formatRecentTime(folder.lastScannedAtMs)}` : "尚未扫描"}</small>
-                      <div className="library-folder-actions">
-                        {folder.status === "linked" ? <button type="button" aria-label={`扫描更新 ${folder.displayName}`} onClick={() => props.onRescanRoot(folder.id)}>扫描更新</button> : null}
-                        {folder.status === "orphaned" ? <button type="button" aria-label={`${folder.availability === "available" ? "重建剧集" : "选择位置并重建"} ${folder.displayName}`} onClick={() => props.onRebuildRoot(folder.id, folder.availability !== "available")}>{folder.availability === "available" ? "重建剧集" : "选择位置并重建"}</button> : null}
-                        {folder.status === "linked" ? <button type="button" aria-label={`更换位置 ${folder.displayName}`} onClick={() => props.onRelocateRoot(folder.id)}>更换位置</button> : null}
-                        {folder.status === "orphaned" ? <button type="button" aria-label={`撤销授权 ${folder.displayName}`} onClick={() => setRevokeRootId(folder.id)}>撤销授权</button> : null}
-                      </div>
-                    </article>
-                  ))}
-                </div>
-              ) : <div className="library-empty-panel"><strong>还没有授权文件夹</strong><p>添加文件夹后会先预检识别结果，再确认导入。</p></div>}
-            </section>
-          </div>
+          <LibraryFoldersView
+            folders={props.home.folders}
+            onImportFolder={props.onImportFolder}
+            onRescanRoot={props.onRescanRoot}
+            onRelocateRoot={props.onRelocateRoot}
+            onRebuildRoot={props.onRebuildRoot}
+            onRequestRevoke={setRevokeRootId}
+          />
         ) : null}
 
         {props.section === "watch_later" && !props.currentCollection ? (
-          <div className="library-page">
-            <header className="library-page-heading"><div><p className="library-eyebrow">媒体库</p><h1>稍后观看</h1><p>{watchLater ? `${watchLater.itemCount} 个视频` : "还没有稍后观看的视频"}</p></div></header>
-            {watchLater ? <button className="library-legacy-collection" type="button" onClick={() => props.onOpenCollection(watchLater.id)}><strong>{watchLater.title}</strong><span>{watchLater.itemCount} 个视频</span><span>打开列表 ›</span></button> : <div className="library-empty-panel">可从「未分类」将视频加入稍后观看。</div>}
-          </div>
+          <LibraryMediaListView
+            kind="watch_later"
+            page={props.sectionPages.watch_later}
+            onRetry={() => props.onReloadSection("watch_later")}
+            onLoadMore={() => props.onLoadMoreSection("watch_later")}
+            {...commonMediaProps}
+          />
         ) : null}
 
         {props.section === "unclassified" && !props.currentCollection ? (
-          <div className="library-page">
-            <header className="library-page-heading"><div><p className="library-eyebrow">媒体库</p><h1>未分类</h1><p>{props.home.unclassifiedCount} 个视频尚未加入任何合集。</p></div></header>
-            {props.loading ? <div className="library-loading"><span className="spinner" />正在读取视频…</div> : props.home.unclassified.length ? (
-              <div className="library-media-list">
-                {props.home.unclassified.map((media) => <LibraryMediaItem key={media.projectId} media={media} context={{ kind: "unclassified" }} {...commonMediaProps} />)}
-              </div>
-            ) : <div className="library-empty-panel"><strong>{props.home.totalProjectCount ? "所有视频都已分类" : "还没有本地视频"}</strong><p>可通过顶部「添加视频」导入本地媒体。</p></div>}
-          </div>
+          <LibraryMediaListView
+            kind="unclassified"
+            page={props.sectionPages.unclassified}
+            onRetry={() => props.onReloadSection("unclassified")}
+            onLoadMore={() => props.onLoadMoreSection("unclassified")}
+            {...commonMediaProps}
+          />
         ) : null}
       </div>
 

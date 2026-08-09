@@ -2,7 +2,7 @@ import { playbackUrl } from "../../../lib/desktop";
 import { fileExtension, formatDuration, formatRecentTime } from "../../../lib/format";
 import type { CollectionSummary, LibraryHome, LibraryMediaSummary } from "../../../types";
 import type { LibrarySectionPageState } from "../useLibraryController";
-import { libraryMediaProgress } from "./LibraryMediaItem";
+import { libraryMediaProgress } from "./libraryMediaPresentation";
 
 type LibraryHomeViewProps = {
   home: LibraryHome;

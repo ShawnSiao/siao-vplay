@@ -9,6 +9,9 @@ mod recovery_store;
 mod repository;
 mod scan_service;
 mod scanner;
+mod section_model;
+mod section_repository;
+mod section_service;
 mod service;
 
 pub(crate) use error::LibraryError;
@@ -18,4 +21,5 @@ pub(crate) use preview_store::LibraryPreviewStore;
 pub(crate) use recovery_service::LibraryRecoveryService;
 pub(crate) use recovery_store::LibraryRecoveryStore;
 pub(crate) use scan_service::LibraryScanService;
+pub(crate) use section_model::*;
 pub(crate) use service::LibraryService;
