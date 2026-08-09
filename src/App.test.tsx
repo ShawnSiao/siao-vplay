@@ -1224,10 +1224,10 @@ describe("App", () => {
     expect(settingsButton).toBeEnabled();
     fireEvent.click(settingsButton);
     expect(
-      await screen.findByRole("dialog", { name: "本地功能资源" }),
+      await screen.findByRole("dialog", { name: "环境配置" }),
     ).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "完成" }));
-    expect(screen.queryByRole("dialog", { name: "本地功能资源" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "关闭" }));
+    expect(screen.queryByRole("dialog", { name: "环境配置" })).toBeNull();
     fireEvent.click(
       screen.getByRole("button", { name: "折叠媒体库导航" }),
     );
@@ -1867,7 +1867,7 @@ describe("App", () => {
     expect(await screen.findByLabelText("场景理解")).toBeInTheDocument();
     expect(screen.getByText("仅使用 00:42 之前")).toBeInTheDocument();
     expect(
-      screen.getByText("不包含完整视频、音频、源媒体路径、数据库或凭证。"),
+      screen.getByText("不包含完整视频、音频、本机媒体路径、数据库或凭证。"),
     ).toBeInTheDocument();
     expect(screen.getAllByText("本机 Codex")).toHaveLength(2);
 
@@ -2012,7 +2012,7 @@ describe("App", () => {
     expect(await screen.findByLabelText("语言学习")).toBeInTheDocument();
     expect(screen.getByLabelText("要查询的原文")).toHaveValue("待っていたの？");
     expect(
-      screen.getByText("不包含视频、音频、本机媒体路径、数据库或凭证。"),
+      screen.getByText("不包含完整视频、音频、本机媒体路径、数据库或凭证。"),
     ).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "确认范围并查询" }));
@@ -2298,17 +2298,17 @@ describe("App", () => {
     render(<App />);
 
     const dialog = await screen.findByRole("dialog", {
-      name: "准备 SiaoVPlay",
+      name: "环境配置",
     });
-    expect(within(dialog).getByRole("button", { name: "选择保存位置" })).toBeEnabled();
-    expect(within(dialog).getByText(/此步骤不会下载依赖包或模型/)).toBeVisible();
+    expect(within(dialog).getByRole("button", { name: "选择位置" })).toBeEnabled();
+    expect(within(dialog).getByText(/选择位置不会开始下载/)).toBeVisible();
     expect(desktopMocks.prepareLocalCapability).not.toHaveBeenCalled();
     fireEvent.click(
-      within(dialog).getByRole("button", { name: /稍后设置/ }),
+      within(dialog).getByRole("button", { name: /稍后配置/ }),
     );
 
     expect(
-      screen.queryByRole("dialog", { name: "准备 SiaoVPlay" }),
+      screen.queryByRole("dialog", { name: "环境配置" }),
     ).toBeNull();
     expect(
       window.localStorage.getItem(
@@ -2356,15 +2356,13 @@ describe("App", () => {
     );
 
     const resources = await screen.findByRole("dialog", {
-      name: "本地功能资源",
+      name: "环境配置",
     });
     expect(resources).toHaveTextContent("继续打开在线视频");
     expect(screen.queryByLabelText("视频 URL")).toBeNull();
-    fireEvent.click(
-      within(resources).getByRole("button", {
-        name: "开始准备所选功能",
-      }),
-    );
+    const urlCapability = within(resources).getByText("在线视频导入").closest("article");
+    expect(urlCapability).not.toBeNull();
+    fireEvent.click(within(urlCapability!).getByRole("button", { name: "准备" }));
 
     await waitFor(() =>
       expect(desktopMocks.prepareLocalCapability).toHaveBeenCalledWith(
@@ -2412,15 +2410,13 @@ describe("App", () => {
     fireEvent.click(await screen.findByRole("button", { name: "打开文件" }));
 
     const resources = await screen.findByRole("dialog", {
-      name: "本地功能资源",
+      name: "环境配置",
     });
     expect(resources).toHaveTextContent("继续打开本地视频");
     expect(desktopMocks.createLocalProject).not.toHaveBeenCalled();
-    fireEvent.click(
-      within(resources).getByRole("button", {
-        name: "开始准备所选功能",
-      }),
-    );
+    const mediaCapability = within(resources).getByText("基础视频支持").closest("article");
+    expect(mediaCapability).not.toBeNull();
+    fireEvent.click(within(mediaCapability!).getByRole("button", { name: "准备" }));
 
     await waitFor(() =>
       expect(desktopMocks.prepareLocalCapability).toHaveBeenCalledWith(

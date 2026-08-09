@@ -24,7 +24,13 @@ import type {
   ExplanationTask,
   SubtitleVersion,
 } from "../types";
-import type { AiHandoffKind } from "../features/ai-tasks/execution";
+import { AiTaskExecutionSetup } from "../features/ai-tasks/AiTaskExecutionSetup";
+import { resumeExplanationTask, startExplanationTask } from "../features/ai-tasks/gateway";
+import {
+  authorizationForTask,
+  executionForTask,
+  useAiExecutionChoice,
+} from "../features/ai-tasks/useAiExecutionChoice";
 
 type UnderstandingPanelProps = {
   projectId: string;
@@ -77,7 +83,7 @@ export function UnderstandingPanel({
 }: UnderstandingPanelProps) {
   const handledCompletionRef = useRef<string | null>(null);
   const initialCutoffRef = useRef(playbackCutoffMs);
-  const [handoff, setHandoff] = useState<AiHandoffKind>("codex");
+  const executionChoice = useAiExecutionChoice(true);
   const [runtime, setRuntime] = useState<CodexRuntimeStatus | null>(null);
   const [task, setTask] = useState<ExplanationTask | null>(null);
   const [explanation, setExplanation] = useState<Explanation | null>(null);
@@ -110,7 +116,6 @@ export function UnderstandingPanel({
         );
         if (activeTask) {
           setTask(activeTask);
-          setHandoff(activeTask.handoffKind);
         }
         const latestVisible =
           explanations.find(
@@ -242,16 +247,15 @@ export function UnderstandingPanel({
     setOperation("prepare");
     setError(null);
     try {
-      const prepared = await prepareExplanationTask(
-        projectId,
-        handoff,
-        playbackCutoffMs,
-      );
+      const choice = executionChoice.kind === "api" ? await executionChoice.preview() : null;
+      const prepared = choice ? await startExplanationTask({
+        projectId, playbackCutoffMs, execution: choice.execution, authorization: choice.authorization,
+      }) : await prepareExplanationTask(projectId, executionChoice.kind === "manual" ? "manual" : "codex", playbackCutoffMs);
       setTask(prepared);
       setExplanation(null);
-      if (handoff === "codex") {
+      if (executionChoice.kind === "codex") {
         setTask(await startCodexExplanationTask(prepared.id));
-      } else {
+      } else if (executionChoice.kind === "manual") {
         setPrompt(await readExplanationPrompt(prepared.id));
         setPromptExpanded(true);
       }
@@ -261,7 +265,6 @@ export function UnderstandingPanel({
       const activeTask = tasks.find((item) => activeStatuses.has(item.status));
       if (activeTask) {
         setTask(activeTask);
-        setHandoff(activeTask.handoffKind);
       }
     } finally {
       setOperation(null);
@@ -290,7 +293,9 @@ export function UnderstandingPanel({
     setOperation("resume");
     setError(null);
     try {
-      setTask(await resumeCodexExplanationTask(task.id));
+      setTask(task.handoffKind === "api" ? await resumeExplanationTask(
+        task.id, executionForTask(task.execution, task.handoffKind), authorizationForTask(task.execution, task.frames.length > 0),
+      ) : await resumeCodexExplanationTask(task.id));
     } catch (cause) {
       setError(commandError(cause).message);
     } finally {
@@ -368,13 +373,12 @@ export function UnderstandingPanel({
   };
 
   const busy = operation !== null;
-  const runtimeReady =
-    runtime?.available && runtime.authenticated && runtime.supported;
   const running =
     task && ["queued", "running", "validating"].includes(task.status);
-  const canResume =
-    task?.handoffKind === "codex" &&
-    ["failed", "cancelled", "interrupted"].includes(task.status);
+  const canResume = Boolean(
+    task && task.handoffKind !== "manual" &&
+    ["failed", "cancelled", "interrupted"].includes(task.status),
+  );
   const visibleFacts = explanation
     ? explanation.confirmedFacts.slice(0, factsExpanded ? undefined : 3)
     : [];
@@ -518,56 +522,19 @@ export function UnderstandingPanel({
               <strong>理解人物此刻为什么这样说</strong>
               <p>根据最近的字幕和最多三张关键帧，区分已确认事实与可能解读。</p>
             </div>
-            <div className="understanding-handoff" aria-label="理解方式">
-              <button
-                className={handoff === "codex" ? "selected" : ""}
-                type="button"
-                onClick={() => setHandoff("codex")}
-              >
-                <strong>本机 Codex</strong>
-                <small>完成后自动检查结果</small>
-              </button>
-              <button
-                className={handoff === "manual" ? "selected" : ""}
-                type="button"
-                onClick={() => setHandoff("manual")}
-              >
-                <strong>复制提示词</strong>
-                <small>交给自行选择的工具</small>
-              </button>
-            </div>
-            {handoff === "codex" && runtime && !runtimeReady ? (
-              <div className="understanding-runtime">
-                <strong>本机 Codex 当前不可用</strong>
-                <span>{runtime.errorMessage}</span>
-              </div>
-            ) : null}
-            <div className="understanding-scope">
-              <div>
-                <span>接收方</span>
-                <strong>
-                  {handoff === "codex" ? "本机 Codex" : "自行选择的工具"}
-                </strong>
-              </div>
-              <ul>
-                <li>最近 60 秒内的原文字幕</li>
-                {translationVersion ? <li>已有的简体中文字幕</li> : null}
-                <li>不晚于当前播放点的最多三张关键帧</li>
-              </ul>
-              <p>不包含完整视频、音频、源媒体路径、数据库或凭证。</p>
-            </div>
-            <button
-              className="button primary understanding-primary"
-              type="button"
-              disabled={
-                busy ||
-                playbackCutoffMs <= 0 ||
-                (handoff === "codex" && !runtimeReady)
-              }
-              onClick={() => void prepare()}
-            >
-              {operation === "prepare" ? "正在准备…" : "确认范围并理解当前场景"}
-            </button>
+            <AiTaskExecutionSetup
+              controller={executionChoice}
+              runtime={runtime}
+              allowFrames
+              translationAvailable={Boolean(translationVersion)}
+              taskLabel="场景理解"
+              actionLabel="确认范围并理解当前场景"
+              operationLabel="正在准备…"
+              buttonClassName="understanding-primary"
+              busy={operation === "prepare"}
+              blocked={busy || playbackCutoffMs <= 0}
+              onStart={() => void prepare()}
+            />
           </div>
         ) : task.status === "awaiting_external_result" ? (
           <div className="understanding-manual">
@@ -680,7 +647,9 @@ export function UnderstandingPanel({
             <p>
               {task.handoffKind === "manual"
                 ? "已自动检测到 result.json，正在核对播放范围和结果完整性。"
-                : "可以继续观看；关闭面板不会中断本机处理。"}
+                : task.handoffKind === "api"
+                  ? "可以继续观看；关闭面板不会中断当前 API 请求。"
+                  : "可以继续观看；关闭面板不会中断本机处理。"}
             </p>
             <div
               aria-label="场景理解进度"

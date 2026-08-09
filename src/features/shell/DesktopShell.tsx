@@ -326,7 +326,6 @@ export function DesktopShell({
               </div>
             ) : null}
           </div>
-          <EnvironmentSettingsTrigger onOpen={onOpenSettings} />
         </div>
       </header>
 
@@ -405,6 +404,10 @@ export function DesktopShell({
               </span>
             </button>
           </nav>
+          <EnvironmentSettingsTrigger
+            status={localResourceLabel}
+            onOpen={onOpenSettings}
+          />
           <div className="desktop-navigation-note">
             <strong>
               <span

@@ -13,10 +13,8 @@ import {
 } from "./features/library/useEpisodeNavigation";
 import { PreparationScreen } from "./components/PreparationScreen";
 import { RemoteUrlDialog } from "./components/RemoteUrlDialog";
-import {
-  LocalFeaturesDialog,
-  type PendingResourceAction,
-} from "./features/environment-settings/LocalFeaturesDialog";
+import { EnvironmentSettingsDialog } from "./features/environment-settings/EnvironmentSettingsDialog";
+import type { PendingResourceAction } from "./features/environment-settings/LocalFeaturesDialog";
 import { SubtitleImportDialog } from "./components/SubtitleImportDialog";
 import { SubtitleDeliveryDialog } from "./components/SubtitleDeliveryDialog";
 import { SubtitleRevisionDialog } from "./components/SubtitleRevisionDialog";
@@ -1122,8 +1120,8 @@ export default function App() {
       </DesktopShell>
 
       {localResourcesOpen ? (
-        <LocalFeaturesDialog
-          controller={localResources}
+        <EnvironmentSettingsDialog
+          localResources={localResources}
           firstRun={firstRunResourceSetup}
           pendingAction={pendingResourceAction}
           previewMode={!isDesktopApp}
