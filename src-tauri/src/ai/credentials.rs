@@ -178,4 +178,47 @@ mod tests {
         );
         assert!(target_name("../secret").is_err());
     }
+
+    #[cfg(windows)]
+    #[test]
+    #[ignore = "writes and deletes a temporary Windows Credential Manager entry"]
+    fn windows_credential_manager_round_trip() {
+        struct Cleanup<'a> {
+            store: &'a WindowsCredentialStore,
+            service_id: &'a str,
+        }
+
+        impl Drop for Cleanup<'_> {
+            fn drop(&mut self) {
+                let _ = self.store.delete(self.service_id);
+            }
+        }
+
+        let store = WindowsCredentialStore;
+        let service_id = format!("acceptance-{}", std::process::id());
+        let _cleanup = Cleanup {
+            store: &store,
+            service_id: &service_id,
+        };
+        store.delete(&service_id).expect("clear stale credential");
+        store
+            .write(&service_id, "temporary-one")
+            .expect("write credential");
+        assert_eq!(
+            store.read(&service_id).expect("read credential").as_deref(),
+            Some("temporary-one")
+        );
+        store
+            .write(&service_id, "temporary-two")
+            .expect("replace credential");
+        assert_eq!(
+            store
+                .read(&service_id)
+                .expect("read replaced credential")
+                .as_deref(),
+            Some("temporary-two")
+        );
+        store.delete(&service_id).expect("delete credential");
+        assert_eq!(store.read(&service_id).expect("confirm deletion"), None);
+    }
 }
