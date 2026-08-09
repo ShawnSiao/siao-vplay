@@ -13,7 +13,7 @@ use std::{
 };
 
 use reqwest::{
-    Proxy, StatusCode,
+    StatusCode,
     blocking::Client,
     header::{CONTENT_RANGE, RANGE},
 };
@@ -27,8 +27,12 @@ use url::Url;
 use uuid::Uuid;
 use zip::ZipArchive;
 
-use crate::local_resources::{
-    self, LocalResourceError, ReceiptFile, ResourceArtifact, ResourceDefinition, ResourceReceipt,
+use crate::{
+    ai,
+    local_resources::{
+        self, LocalResourceError, ReceiptFile, ResourceArtifact, ResourceDefinition,
+        ResourceReceipt,
+    },
 };
 
 const TASK_STORE_SCHEMA_VERSION: u32 = 1;
@@ -910,100 +914,18 @@ fn execute_task_inner(
 }
 
 fn build_download_client() -> Result<Client, ResourceDownloadError> {
-    let (proxy_url, _) = effective_proxy();
-    let mut builder = Client::builder()
+    let builder = Client::builder()
         .user_agent(format!(
             "SiaoVPlay local resource manager/{}",
             env!("CARGO_PKG_VERSION")
         ))
         .connect_timeout(Duration::from_secs(30))
         .timeout(Duration::from_secs(2 * 60 * 60));
-    if let Some(proxy_url) = proxy_url {
-        let proxy = Proxy::all(&proxy_url)
-            .map_err(|error| ResourceDownloadError::Network(error.to_string()))?;
-        builder = builder.proxy(proxy);
-    }
-    builder
-        .build()
-        .map_err(|error| ResourceDownloadError::Network(error.to_string()))
+    ai::network::build_client(builder).map_err(ResourceDownloadError::Network)
 }
 
 pub(crate) fn effective_proxy() -> (Option<String>, &'static str) {
-    if let Some(proxy_url) = local_resources::configured_proxy_url() {
-        return (Some(proxy_url), "custom");
-    }
-    if environment_proxy_configured() {
-        return (None, "environment");
-    }
-    if let Some(proxy_url) = windows_system_proxy() {
-        return (Some(proxy_url), "windows_system");
-    }
-    (None, "direct")
-}
-
-fn environment_proxy_configured() -> bool {
-    [
-        "HTTPS_PROXY",
-        "https_proxy",
-        "HTTP_PROXY",
-        "http_proxy",
-        "ALL_PROXY",
-        "all_proxy",
-    ]
-    .iter()
-    .any(|name| std::env::var_os(name).is_some_and(|value| !value.is_empty()))
-}
-
-#[cfg(windows)]
-fn windows_system_proxy() -> Option<String> {
-    use winreg::{RegKey, enums::HKEY_CURRENT_USER};
-
-    let settings = RegKey::predef(HKEY_CURRENT_USER)
-        .open_subkey("Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings")
-        .ok()?;
-    let enabled = settings.get_value::<u32, _>("ProxyEnable").ok()?;
-    if enabled == 0 {
-        return None;
-    }
-    let raw = settings.get_value::<String, _>("ProxyServer").ok()?;
-    parse_windows_proxy_server(&raw)
-}
-
-#[cfg(not(windows))]
-fn windows_system_proxy() -> Option<String> {
-    None
-}
-
-fn parse_windows_proxy_server(raw: &str) -> Option<String> {
-    let raw = raw.trim();
-    let candidate = if raw.contains('=') {
-        let entries = raw
-            .split(';')
-            .filter_map(|entry| entry.split_once('='))
-            .map(|(scheme, address)| (scheme.trim().to_ascii_lowercase(), address.trim()))
-            .collect::<Vec<_>>();
-        entries
-            .iter()
-            .find(|(scheme, _)| scheme == "https")
-            .or_else(|| entries.iter().find(|(scheme, _)| scheme == "http"))
-            .map(|(_, address)| *address)?
-    } else {
-        raw
-    };
-    let with_scheme = if candidate.contains("://") {
-        candidate.to_owned()
-    } else {
-        format!("http://{candidate}")
-    };
-    let parsed = Url::parse(&with_scheme).ok()?;
-    if !matches!(parsed.scheme(), "http" | "https")
-        || parsed.host_str().is_none()
-        || parsed.username() != ""
-        || parsed.password().is_some()
-    {
-        return None;
-    }
-    Some(parsed.to_string().trim_end_matches('/').to_owned())
+    ai::network::effective_proxy()
 }
 
 fn download_artifact(
@@ -1903,19 +1825,6 @@ mod tests {
     };
     use tempfile::tempdir;
     use zip::{ZipWriter, write::SimpleFileOptions};
-
-    #[test]
-    fn windows_proxy_parser_prefers_https_and_normalizes_address() {
-        assert_eq!(
-            parse_windows_proxy_server("http=127.0.0.1:8080;https=127.0.0.1:7897"),
-            Some("http://127.0.0.1:7897".to_owned())
-        );
-        assert_eq!(
-            parse_windows_proxy_server("http://proxy.example:3128"),
-            Some("http://proxy.example:3128".to_owned())
-        );
-        assert_eq!(parse_windows_proxy_server("socks=127.0.0.1:1080"), None);
-    }
 
     #[test]
     fn network_errors_have_actionable_stable_codes() {

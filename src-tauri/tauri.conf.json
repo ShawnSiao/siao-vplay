@@ -23,7 +23,7 @@
       }
     ],
     "security": {
-      "csp": null,
+      "csp": "default-src 'self' customprotocol: asset:; connect-src 'self' ipc: http://ipc.localhost; img-src 'self' asset: http://asset.localhost blob: data:; media-src 'self' asset: http://asset.localhost blob: data:; style-src 'self' 'unsafe-inline'; script-src 'self'",
       "assetProtocol": {
         "enable": true,
         "scope": []
@@ -38,6 +38,7 @@
     "useLocalToolsDir": true,
     "resources": [
       "resources/local-resource-catalog.json",
+      "resources/ai-provider-catalog.json",
       "resources/third-party-notices/THIRD-PARTY-NOTICES.md"
     ],
     "icon": [
