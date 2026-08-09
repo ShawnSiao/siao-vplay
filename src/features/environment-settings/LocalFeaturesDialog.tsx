@@ -17,4 +17,3 @@ type LocalFeaturesDialogProps = ComponentProps<typeof LocalResourcesDialog>;
 export function LocalFeaturesDialog(props: LocalFeaturesDialogProps) {
   return <LocalResourcesDialog {...props} />;
 }
-
