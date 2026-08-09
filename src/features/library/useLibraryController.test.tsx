@@ -6,6 +6,7 @@ import type {
   LibraryCollection,
   LibraryHome,
   LibraryImportResult,
+  LibraryMediaSummary,
   LibraryRescanPreview,
   LibraryRescanResult,
   LibraryRootRelocationPreview,
@@ -15,6 +16,7 @@ import type {
 
 const gatewayMocks = vi.hoisted(() => ({
   getLibraryHome: vi.fn(),
+  listLibrarySection: vi.fn(),
   searchLibrary: vi.fn(),
   createCollection: vi.fn(),
   updateCollection: vi.fn(),
@@ -57,6 +59,31 @@ function libraryHome(totalProjectCount: number): LibraryHome {
     totalProjectCount,
     collectionItemCount: 0,
     unclassifiedCount: totalProjectCount,
+  };
+}
+
+function mediaSummary(projectId: string): LibraryMediaSummary {
+  return {
+    projectId,
+    projectTitle: `视频 ${projectId}`,
+    displayName: `${projectId}.mp4`,
+    mediaLocator: `W:\\media\\${projectId}.mp4`,
+    mediaAvailable: true,
+    posterPath: null,
+    positionMs: 0,
+    durationMs: 10_000,
+    completedAtMs: null,
+    lastOpenedAtMs: 1,
+    createdAtMs: 1,
+    originalSubtitleAvailable: false,
+    chineseTranslationAvailable: false,
+    collectionId: null,
+    collectionTitle: null,
+    seasonNumber: null,
+    episodeNumber: null,
+    absoluteOrder: null,
+    episodeTitle: null,
+    itemAvailability: null,
   };
 }
 
@@ -134,7 +161,13 @@ const importedDetail: CollectionDetail = {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  window.localStorage.clear();
   gatewayMocks.searchLibrary.mockResolvedValue([]);
+  gatewayMocks.listLibrarySection.mockResolvedValue({
+    items: [],
+    totalCount: 0,
+    nextOffset: null,
+  });
   gatewayMocks.listenLibraryScanProgress.mockResolvedValue(() => undefined);
 });
 
@@ -143,6 +176,45 @@ afterEach(() => {
 });
 
 describe("useLibraryController", () => {
+  it("restores a valid section and appends paged media without duplicates", async () => {
+    window.localStorage.setItem("siaovplay-library-section", "watch_later");
+    gatewayMocks.getLibraryHome.mockResolvedValue(libraryHome(0));
+    gatewayMocks.listLibrarySection
+      .mockResolvedValueOnce({
+        items: [mediaSummary("first")],
+        totalCount: 2,
+        nextOffset: 1,
+      })
+      .mockResolvedValueOnce({
+        items: [mediaSummary("first"), mediaSummary("second")],
+        totalCount: 2,
+        nextOffset: null,
+      });
+    const { result } = renderHook(() => useLibraryController());
+
+    await waitFor(() =>
+      expect(result.current.state.sectionPages.watch_later.items).toHaveLength(1),
+    );
+    expect(result.current.state.section).toBe("watch_later");
+    await act(async () => {
+      await result.current.loadMoreSection("watch_later");
+    });
+    expect(
+      result.current.state.sectionPages.watch_later.items.map((item) => item.projectId),
+    ).toEqual(["first", "second"]);
+    expect(result.current.state.sectionPages.watch_later.nextOffset).toBeNull();
+  });
+
+  it("persists section selection and rejects an unknown stored section", async () => {
+    window.localStorage.setItem("siaovplay-library-section", "unknown");
+    gatewayMocks.getLibraryHome.mockResolvedValue(libraryHome(0));
+    const { result } = renderHook(() => useLibraryController());
+    expect(result.current.state.section).toBe("home");
+
+    act(() => result.current.setSection("folders"));
+    expect(window.localStorage.getItem("siaovplay-library-section")).toBe("folders");
+  });
+
   it("ignores a late home response after a newer refresh completes", async () => {
     const first = deferred<LibraryHome>();
     const second = deferred<LibraryHome>();

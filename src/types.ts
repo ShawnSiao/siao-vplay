@@ -112,6 +112,7 @@ export type LibraryMediaSummary = {
 
 export type LibraryHome = {
   continueWatching: LibraryMediaSummary[];
+  continueWatchingCount?: number;
   collections: CollectionSummary[];
   folders: LibraryRootSummary[];
   unclassified: LibraryMediaSummary[];
@@ -119,6 +120,17 @@ export type LibraryHome = {
   totalProjectCount: number;
   collectionItemCount: number;
   unclassifiedCount: number;
+};
+
+export type LibraryMediaSection =
+  | "continue_watching"
+  | "watch_later"
+  | "unclassified";
+
+export type LibrarySectionPage = {
+  items: LibraryMediaSummary[];
+  totalCount: number;
+  nextOffset: number | null;
 };
 
 export type SeasonSummary = {

@@ -13,8 +13,8 @@ use super::{
     LibraryRecoveryStore, LibraryRescanPreview, LibraryRescanResult, LibraryRootRebuildPreview,
     LibraryRootRebuildResult, LibraryRootRelocationPreview, LibraryRootRelocationResult,
     LibraryRootRevokeResult, LibraryScanPhase, LibraryScanPreview, LibraryScanProgress,
-    LibraryScanService, LibraryService, MediaSummary, ScanLibraryFolderInput, SearchResult,
-    UpdateCollectionInput,
+    LibraryScanService, LibrarySectionPage, LibraryService, ListLibrarySectionInput, MediaSummary,
+    ScanLibraryFolderInput, SearchResult, UpdateCollectionInput,
 };
 
 const LIBRARY_SCAN_PROGRESS_EVENT: &str = "library-scan-progress";
@@ -29,6 +29,19 @@ pub(crate) fn get_library_home(
         .map_err(CommandError::from)?;
     allow_home_posters(&app, &home)?;
     Ok(home)
+}
+
+#[tauri::command]
+pub(crate) fn list_library_section(
+    app: AppHandle,
+    store: State<'_, ProjectStore>,
+    input: ListLibrarySectionInput,
+) -> Result<LibrarySectionPage, CommandError> {
+    let page = LibraryService::new(store.inner().clone())
+        .list_section(input)
+        .map_err(CommandError::from)?;
+    allow_media_posters(&app, &page.items)?;
+    Ok(page)
 }
 
 #[tauri::command]

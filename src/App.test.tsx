@@ -129,6 +129,7 @@ const desktopMocks = vi.hoisted(() => ({
 
 const libraryGatewayMocks = vi.hoisted(() => ({
   getLibraryHome: vi.fn(),
+  listLibrarySection: vi.fn(),
   searchLibrary: vi.fn(),
   createCollection: vi.fn(),
   updateCollection: vi.fn(),
@@ -829,6 +830,11 @@ const burnJob: SubtitleBurnJob = {
 beforeEach(() => {
   vi.clearAllMocks();
   window.localStorage.clear();
+  libraryGatewayMocks.listLibrarySection.mockResolvedValue({
+    items: [],
+    totalCount: 0,
+    nextOffset: null,
+  });
   desktopMocks.getAppStatus.mockResolvedValue({
     appName: "SiaoVPlay",
     version: "0.3.0",

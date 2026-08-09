@@ -136,6 +136,7 @@ pub fn run() {
             commands::cancel_youtube_import,
             commands::list_projects,
             library::commands::get_library_home,
+            library::commands::list_library_section,
             library::commands::search_library,
             library::commands::create_collection,
             library::commands::update_collection,

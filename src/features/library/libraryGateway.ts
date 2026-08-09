@@ -14,6 +14,8 @@ import type {
   LibraryCollectionDeletionResult,
   LibraryHome,
   LibraryMediaSummary,
+  LibraryMediaSection,
+  LibrarySectionPage,
   LibraryScanPreview,
   LibraryScanProgress,
   LibraryImportResult,
@@ -55,6 +57,7 @@ export type ScanLibraryFolderInput = {
 
 export const emptyLibraryHome: LibraryHome = {
   continueWatching: [],
+  continueWatchingCount: 0,
   collections: [],
   folders: [],
   unclassified: [],
@@ -69,6 +72,18 @@ export async function getLibraryHome(): Promise<LibraryHome> {
     return emptyLibraryHome;
   }
   return invoke<LibraryHome>("get_library_home");
+}
+
+export async function listLibrarySection(
+  section: LibraryMediaSection,
+  offset: number,
+): Promise<LibrarySectionPage> {
+  if (!isDesktopApp) {
+    return { items: [], totalCount: 0, nextOffset: null };
+  }
+  return invoke<LibrarySectionPage>("list_library_section", {
+    input: { section, offset },
+  });
 }
 
 export async function searchLibrary(query: string): Promise<LibrarySearchResult[]> {
