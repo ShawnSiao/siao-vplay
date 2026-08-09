@@ -10,6 +10,8 @@ import {
 } from "../lib/desktop";
 import type {
   EmbeddedSubtitlePreview,
+  LocalResourceCatalog,
+  LocalResourceStatus,
   SubtitleImportPreview,
   SubtitleStream,
   SubtitleVersion,
@@ -35,6 +37,11 @@ type SubtitleImportDialogProps = {
   onClose: () => void;
   onImported: (version: SubtitleVersion) => void;
   onTranscriptionTracked: (jobId: string) => void;
+  localResourceCatalog?: LocalResourceCatalog | null;
+  localResourceStatus?: LocalResourceStatus | null;
+  onPrepareTranscriptionResources?: (
+    profileId: "fast" | "standard",
+  ) => Promise<void> | void;
 };
 
 const languageOptions = [
@@ -81,6 +88,9 @@ export function SubtitleImportDialog({
   onClose,
   onImported,
   onTranscriptionTracked,
+  localResourceCatalog,
+  localResourceStatus,
+  onPrepareTranscriptionResources,
 }: SubtitleImportDialogProps) {
   const [workflow, setWorkflow] = useState<"import" | "transcribe">("import");
   const [selection, setSelection] = useState<SubtitleSelection | null>(null);
@@ -459,6 +469,9 @@ export function SubtitleImportDialog({
           currentVersion={currentVersion}
           onJobTracked={onTranscriptionTracked}
           onVersionReady={onImported}
+          localResourceCatalog={localResourceCatalog}
+          localResourceStatus={localResourceStatus}
+          onPrepareResources={onPrepareTranscriptionResources}
         />
       )}
     </Dialog>

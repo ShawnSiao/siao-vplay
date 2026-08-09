@@ -3072,7 +3072,7 @@ checksum = "f8fadd59c855ef2080decdef8ff161eb6661b86933c9d82e5ba29dc602a55aba"
 
 [[package]]
 name = "siao-vplay"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "dunce",
  "regex",
@@ -3089,6 +3089,7 @@ dependencies = [
  "url",
  "uuid",
  "windows-sys 0.61.2",
+ "winreg",
  "zip",
 ]
 

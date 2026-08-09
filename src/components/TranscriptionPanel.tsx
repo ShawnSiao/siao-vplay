@@ -5,13 +5,14 @@ import {
   commandError,
   getTranscriptionJob,
   getTranscriptionRuntimeStatus,
-  getRuntimeCatalog,
   listSubtitleVersions,
   listTranscriptionJobs,
   resumeTranscriptionJob,
   startTranscription,
 } from "../lib/desktop";
 import type {
+  LocalResourceCatalog,
+  LocalResourceStatus,
   SubtitleVersion,
   TranscriptionJob,
   TranscriptionRuntimeStatus,
@@ -22,6 +23,9 @@ type TranscriptionPanelProps = {
   currentVersion: SubtitleVersion | null;
   onJobTracked: (jobId: string) => void;
   onVersionReady: (version: SubtitleVersion) => void;
+  localResourceCatalog?: LocalResourceCatalog | null;
+  localResourceStatus?: LocalResourceStatus | null;
+  onPrepareResources?: (profileId: "fast" | "standard") => Promise<void> | void;
 };
 
 const languageOptions = [
@@ -38,6 +42,23 @@ const activeStatuses = new Set<TranscriptionJob["status"]>([
   "transcribing",
   "validating",
 ]);
+
+const profileOptions = [
+  { id: "standard", modelKind: "small", title: "标准识别（推荐）" },
+  { id: "fast", modelKind: "base", title: "快速识别" },
+] as const;
+
+function modelKindForProfile(profileId: "fast" | "standard"): "small" | "base" {
+  return profileId === "standard" ? "small" : "base";
+}
+
+function profileForModelKind(modelKind: "small" | "base"): "fast" | "standard" {
+  return modelKind === "small" ? "standard" : "fast";
+}
+
+function formatDownloadBytes(bytes: number): string {
+  return `${(bytes / 1_000_000).toFixed(bytes >= 100_000_000 ? 0 : 1)} MB`;
+}
 
 function stageLabel(job: TranscriptionJob): string {
   if (job.stage === "cancelling") {
@@ -117,6 +138,9 @@ export function TranscriptionPanel({
   currentVersion,
   onJobTracked,
   onVersionReady,
+  localResourceCatalog,
+  localResourceStatus,
+  onPrepareResources,
 }: TranscriptionPanelProps) {
   const reportedVersionRef = useRef<string | null>(null);
   const [runtimeStatus, setRuntimeStatus] =
@@ -124,7 +148,9 @@ export function TranscriptionPanel({
   const [runtimeLoading, setRuntimeLoading] = useState(true);
   const [language, setLanguage] =
     useState<(typeof languageOptions)[number][0] | "">("");
-  const [modelKind, setModelKind] = useState<"small" | "base">("small");
+  const [profileId, setProfileId] = useState<"fast" | "standard">(
+    localResourceStatus?.preferredProfile === "fast" ? "fast" : "standard",
+  );
   const [replaceConfirmed, setReplaceConfirmed] = useState(false);
   const [job, setJob] = useState<TranscriptionJob | null>(null);
   const [operation, setOperation] = useState<
@@ -137,9 +163,8 @@ export function TranscriptionPanel({
     void Promise.all([
       getTranscriptionRuntimeStatus(),
       listTranscriptionJobs(projectId),
-      getRuntimeCatalog().catch(() => null),
     ])
-      .then(([status, jobs, catalog]) => {
+      .then(([status, jobs]) => {
         if (!active) {
           return;
         }
@@ -163,9 +188,9 @@ export function TranscriptionPanel({
               ? unfinished.languageCode
               : "",
           );
-          setModelKind(unfinished.modelKind);
-        } else if (catalog) {
-          setModelKind(catalog.settings.preferredModel);
+          setProfileId(profileForModelKind(unfinished.modelKind));
+        } else if (localResourceStatus?.preferredProfile === "fast") {
+          setProfileId("fast");
         }
       })
       .catch((cause: unknown) => {
@@ -181,7 +206,7 @@ export function TranscriptionPanel({
     return () => {
       active = false;
     };
-  }, [currentVersion, projectId]);
+  }, [currentVersion, localResourceStatus?.preferredProfile, projectId]);
 
   useEffect(() => {
     if (job && activeStatuses.has(job.status)) {
@@ -237,11 +262,20 @@ export function TranscriptionPanel({
       });
   }, [job, onVersionReady, projectId]);
 
+  const modelKind = modelKindForProfile(profileId);
   const selectedModel = runtimeStatus?.models.find(
     (model) => model.modelKind === modelKind,
   );
+  const managedCapability = localResourceStatus?.capabilities.find(
+    (capability) => capability.id === "local_transcription",
+  );
+  const managedResourcesReady =
+    localResourceStatus === undefined ||
+    (localResourceStatus?.preferredProfile === profileId &&
+      managedCapability?.state === "ready");
   const canStart =
     !runtimeLoading &&
+    managedResourcesReady &&
     runtimeStatus?.available === true &&
     selectedModel?.available === true &&
     language !== "" &&
@@ -346,7 +380,7 @@ export function TranscriptionPanel({
           </div>
           <div>
             <dt>识别模式</dt>
-            <dd>{job.modelKind === "small" ? "标准" : "轻量"}</dd>
+            <dd>{job.modelKind === "small" ? "标准" : "快速"}</dd>
           </div>
           <div>
             <dt>数据位置</dt>
@@ -408,10 +442,20 @@ export function TranscriptionPanel({
         </div>
       </div>
 
-      {!runtimeStatus?.available ? (
+      {!managedResourcesReady || !runtimeStatus?.available ? (
         <div className="notice danger" role="alert">
           <strong>本地语音能力尚未就绪</strong>
-          <p>需要先准备应用随附的语音组件和至少一种识别资源。</p>
+          <p>选择识别方式后，按实际下载量准备所需内容；完成后会回到这里。</p>
+          {onPrepareResources ? (
+            <button
+              className="button"
+              type="button"
+              disabled={operation !== null}
+              onClick={() => void onPrepareResources(profileId)}
+            >
+              准备本地字幕识别
+            </button>
+          ) : null}
         </div>
       ) : null}
 
@@ -443,31 +487,52 @@ export function TranscriptionPanel({
 
       <fieldset className="transcription-models">
         <legend>识别模式</legend>
-        {(["small", "base"] as const).map((kind) => {
+        {profileOptions.map((profile) => {
+          const kind = profile.modelKind;
           const available = runtimeStatus?.models.find(
             (model) => model.modelKind === kind,
           )?.available;
+          const profileDefinition = localResourceCatalog?.profiles.find(
+            (item) => item.id === profile.id,
+          );
+          const modelDownloadBytes = (profileDefinition?.resourceIds ?? []).reduce(
+            (total, resourceId) => {
+              const resource = localResourceCatalog?.resources.find(
+                (item) => item.id === resourceId,
+              );
+              return (
+                total +
+                (resource?.artifact?.size ?? resource?.expectedDownloadSize ?? 0)
+              );
+            },
+            0,
+          );
+          const prepared =
+            managedResourcesReady &&
+            localResourceStatus?.preferredProfile === profile.id &&
+            available;
           return (
-            <label key={kind} className={!available ? "disabled" : ""}>
+            <label key={profile.id}>
               <input
                 type="radio"
                 name="transcription-model"
-                value={kind}
-                checked={modelKind === kind}
-                disabled={!available || operation !== null}
-                onChange={() => setModelKind(kind)}
+                value={profile.id}
+                checked={profileId === profile.id}
+                disabled={operation !== null}
+                onChange={() => setProfileId(profile.id)}
               />
               <span>
-                <strong>
-                  {kind === "small" ? "标准识别（推荐）" : "轻量识别"}
-                </strong>
+                <strong>{profile.title}</strong>
                 <small>
                   {kind === "small"
                     ? "更适合人名、称谓和小语种对白"
-                    : "占用更少空间，准确度可能下降"}
+                    : "速度优先，准确度可能低于标准识别"}
+                  {modelDownloadBytes > 0
+                    ? ` · 识别模型下载 ${formatDownloadBytes(modelDownloadBytes)}`
+                    : ""}
                 </small>
               </span>
-              {!available ? <em>未准备</em> : null}
+              {!prepared ? <em>未准备</em> : null}
             </label>
           );
         })}

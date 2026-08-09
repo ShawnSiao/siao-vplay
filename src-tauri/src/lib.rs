@@ -8,8 +8,12 @@ mod domain;
 mod external_handoff;
 mod learning;
 mod library;
+mod local_resources;
 mod media;
 mod remote_media;
+mod resource_diagnostics;
+mod resource_download;
+mod resource_migration;
 mod runtime;
 mod store;
 mod subtitles;
@@ -98,6 +102,8 @@ pub fn run() {
                 eprintln!("SiaoVPlay: main window was unavailable during native frame setup");
             }
             let data_directory = resolve_data_directory(app)?;
+            local_resources::initialize(&data_directory)?;
+            resource_download::initialize()?;
             runtime::initialize(&data_directory)?;
             let database_path = data_directory.join("projects").join("siaovplay.db");
             let store = ProjectStore::open(database_path)?;
@@ -152,6 +158,36 @@ pub fn run() {
             commands::relink_project_media,
             commands::delete_project,
             commands::get_media_runtime_status,
+            commands::get_local_resource_catalog,
+            commands::get_local_resource_status,
+            commands::plan_local_resource_location,
+            commands::configure_local_resource_root,
+            commands::repair_local_resource_root,
+            commands::set_local_resource_profile,
+            commands::get_local_resource_network_status,
+            commands::set_local_resource_proxy,
+            commands::inspect_local_resource_migration,
+            commands::adopt_local_resources,
+            commands::plan_local_resource_move,
+            commands::move_local_resource_root,
+            commands::reconnect_local_resource_root,
+            commands::plan_unused_resource_cleanup,
+            commands::cleanup_unused_resources,
+            commands::list_resource_download_tasks,
+            commands::prepare_local_capability,
+            commands::pause_resource_download,
+            commands::resume_resource_download,
+            commands::cancel_resource_download,
+            commands::retry_resource_download,
+            commands::repair_local_resource,
+            commands::update_local_resource,
+            commands::remove_local_resource,
+            commands::get_local_resource_diagnostics,
+            commands::get_local_resource_diagnostic_summary,
+            commands::get_local_resource_third_party_notices,
+            commands::rollback_local_resource,
+            commands::plan_old_resource_version_cleanup,
+            commands::cleanup_old_resource_versions,
             commands::get_runtime_catalog,
             commands::set_runtime_storage_root,
             commands::set_preferred_model,

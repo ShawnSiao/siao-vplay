@@ -1,10 +1,12 @@
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 
 import { supportedVideoExtensions } from "./mediaFiles";
 
 import type {
   AppStatus,
+  CapabilityPreparation,
   DeleteProjectResult,
   DesktopCommandError,
   EmbeddedSubtitlePreview,
@@ -19,11 +21,27 @@ import type {
   LearningCardsExport,
   LearningSelectionKind,
   LearningTask,
+  LocalResourceCatalog,
+  LocalResourceLocationPlan,
+  LocalResourceMovePlan,
+  LocalResourceMoveResult,
+  LocalResourceDiagnostics,
+  LocalResourceStatus,
   MediaPreparation,
   MediaRuntimeStatus,
   Project,
   RemoteMediaPreview,
   RuntimeCatalog,
+  ResourceDownloadTask,
+  ResourceNetworkStatus,
+  ResourceAdoptionResult,
+  ResourceMigrationPreview,
+  ResourceRemovalResult,
+  ResourceRollbackResult,
+  OldResourceVersionCleanupPlan,
+  OldResourceVersionCleanupResult,
+  UnusedResourceCleanupPlan,
+  UnusedResourceCleanupResult,
   SubtitleGlobalReplacement,
   SubtitleBurnJob,
   SubtitleBurnMode,
@@ -45,11 +63,35 @@ export const isDesktopApp = "__TAURI_INTERNALS__" in window;
 
 const browserStatus: AppStatus = {
   appName: "SiaoVPlay",
-  version: "0.2.0",
+  version: "0.3.0",
   platform: "browser-preview",
   dataDirectory: "仅桌面应用可用",
   startupMediaPath: null,
 };
+
+const browserResourceCapabilities = [
+  {
+    id: "basic_media",
+    title: "基础视频支持",
+    resourceIds: ["ffmpeg-cpu"],
+    profileIds: [],
+    requiresCapabilityIds: [],
+  },
+  {
+    id: "url_import",
+    title: "在线视频导入",
+    resourceIds: ["ffmpeg-cpu", "yt-dlp"],
+    profileIds: [],
+    requiresCapabilityIds: [],
+  },
+  {
+    id: "local_transcription",
+    title: "本地字幕识别",
+    resourceIds: ["ffmpeg-cpu", "whisper-cpu"],
+    profileIds: ["fast", "standard"],
+    requiresCapabilityIds: [],
+  },
+];
 
 export function commandError(error: unknown): DesktopCommandError {
   if (
@@ -96,6 +138,388 @@ export async function getMediaRuntimeStatus(): Promise<MediaRuntimeStatus> {
     };
   }
   return invoke<MediaRuntimeStatus>("get_media_runtime_status");
+}
+
+export async function getLocalResourceCatalog(): Promise<LocalResourceCatalog> {
+  if (!isDesktopApp) {
+    return {
+      schemaVersion: 1,
+      productId: "siaovplay",
+      updatedAt: "",
+      packageProfile: "app-only",
+      bundlePolicy: {
+        maximumExceptionBytes: 20_000_000,
+        allowlistedResourceIds: [],
+      },
+      capabilities: browserResourceCapabilities,
+      profiles: [
+        {
+          id: "fast",
+          title: "快速",
+          resourceIds: ["whisper-model-base"],
+          recommended: false,
+        },
+        {
+          id: "standard",
+          title: "标准",
+          resourceIds: ["whisper-model-small"],
+          recommended: true,
+        },
+      ],
+      resources: [
+        {
+          id: "ffmpeg-cpu",
+          version: "8.1",
+          platform: "windows-x86_64",
+          kind: "archive",
+          bundled: false,
+          installedSize: 175_926_890,
+          license: "LGPL-2.1-or-later",
+          sourcePage: "https://github.com/BtbN/FFmpeg-Builds",
+          artifact: {
+            url: "https://example.invalid/ffmpeg.zip",
+            size: 70_510_962,
+            sha256: "0".repeat(64),
+            format: "zip",
+          },
+          entrypoints: {},
+          healthCheck: "ffmpeg-version",
+        },
+        {
+          id: "yt-dlp",
+          version: "2026.06.09",
+          platform: "windows-x86_64",
+          kind: "file",
+          bundled: false,
+          installedSize: 18_202_192,
+          license: "GPL-3.0-or-later",
+          sourcePage: "https://github.com/yt-dlp/yt-dlp",
+          artifact: {
+            url: "https://example.invalid/yt-dlp.exe",
+            size: 18_202_192,
+            sha256: "0".repeat(64),
+            format: "file",
+          },
+          entrypoints: {},
+          healthCheck: "yt-dlp-version",
+        },
+        {
+          id: "whisper-cpu",
+          version: "1.9.1",
+          platform: "windows-x86_64",
+          kind: "archive",
+          bundled: false,
+          installedSize: 20_355_072,
+          license: "MIT",
+          sourcePage: "https://github.com/ggml-org/whisper.cpp",
+          artifact: {
+            url: "https://example.invalid/whisper-bin-x64.zip",
+            size: 7_982_101,
+            sha256: "0".repeat(64),
+            format: "zip",
+            stripComponents: 1,
+          },
+          entrypoints: { whisperCli: "whisper-cli.exe" },
+          healthCheck: "whisper-cli-version",
+        },
+        {
+          id: "whisper-model-base",
+          version: "whisper.cpp-base",
+          platform: "all",
+          kind: "model",
+          bundled: false,
+          installedSize: 147_951_465,
+          license: "MIT",
+          sourcePage: "https://huggingface.co/ggerganov/whisper.cpp",
+          artifact: {
+            url: "https://example.invalid/base.bin",
+            size: 147_951_465,
+            sha256: "0".repeat(64),
+            format: "file",
+          },
+          entrypoints: {},
+          healthCheck: "sha256",
+        },
+        {
+          id: "whisper-model-small",
+          version: "whisper.cpp-small",
+          platform: "all",
+          kind: "model",
+          bundled: false,
+          installedSize: 487_601_967,
+          license: "MIT",
+          sourcePage: "https://huggingface.co/ggerganov/whisper.cpp",
+          artifact: {
+            url: "https://example.invalid/small.bin",
+            size: 487_601_967,
+            sha256: "0".repeat(64),
+            format: "file",
+          },
+          entrypoints: {},
+          healthCheck: "sha256",
+        },
+      ],
+    };
+  }
+  return invoke<LocalResourceCatalog>("get_local_resource_catalog");
+}
+
+export async function getLocalResourceStatus(): Promise<LocalResourceStatus> {
+  if (!isDesktopApp) {
+    return {
+      configured: false,
+      selectedParent: null,
+      resourceRoot: null,
+      rootState: "setup_required",
+      freeSpaceBytes: null,
+      preferredProfile: "standard",
+      capabilities: browserResourceCapabilities.map((capability) => ({
+        id: capability.id,
+        title: capability.title,
+        state: "setup_required" as const,
+        requiredResourceIds: capability.resourceIds,
+        missingResourceIds: capability.resourceIds,
+      })),
+    };
+  }
+  return invoke<LocalResourceStatus>("get_local_resource_status");
+}
+
+export async function chooseLocalResourceParent(): Promise<string | null> {
+  if (!isDesktopApp) {
+    return null;
+  }
+  const selected = await open({
+    directory: true,
+    multiple: false,
+    title: "选择本地功能资源保存位置",
+  });
+  return typeof selected === "string" ? selected : null;
+}
+
+export async function planLocalResourceLocation(
+  parentPath: string,
+): Promise<LocalResourceLocationPlan> {
+  return invoke<LocalResourceLocationPlan>("plan_local_resource_location", {
+    input: { parentPath },
+  });
+}
+
+export async function configureLocalResourceRoot(
+  parentPath: string,
+  confirmed: boolean,
+): Promise<LocalResourceStatus> {
+  return invoke<LocalResourceStatus>("configure_local_resource_root", {
+    input: { parentPath, confirmed },
+  });
+}
+
+export async function repairLocalResourceRoot(): Promise<LocalResourceStatus> {
+  return invoke<LocalResourceStatus>("repair_local_resource_root", {
+    input: { confirmed: true },
+  });
+}
+
+export async function inspectLocalResourceMigration(
+  sourcePath?: string,
+): Promise<ResourceMigrationPreview> {
+  return invoke<ResourceMigrationPreview>("inspect_local_resource_migration", {
+    input: {
+      sourcePath: sourcePath ?? null,
+      sourceKind: sourcePath ? "selected_directory" : null,
+    },
+  });
+}
+
+export async function adoptLocalResources(
+  sourcePath?: string,
+): Promise<ResourceAdoptionResult> {
+  return invoke<ResourceAdoptionResult>("adopt_local_resources", {
+    input: {
+      sourcePath: sourcePath ?? null,
+      sourceKind: sourcePath ? "selected_directory" : null,
+      confirmed: true,
+    },
+  });
+}
+
+export async function planLocalResourceMove(
+  parentPath: string,
+): Promise<LocalResourceMovePlan> {
+  return invoke<LocalResourceMovePlan>("plan_local_resource_move", {
+    input: { parentPath },
+  });
+}
+
+export async function moveLocalResourceRoot(
+  parentPath: string,
+): Promise<LocalResourceMoveResult> {
+  return invoke<LocalResourceMoveResult>("move_local_resource_root", {
+    input: { parentPath, confirmed: true },
+  });
+}
+
+export async function reconnectLocalResourceRoot(
+  parentPath: string,
+): Promise<LocalResourceStatus> {
+  return invoke<LocalResourceStatus>("reconnect_local_resource_root", {
+    input: { parentPath, confirmed: true },
+  });
+}
+
+export async function planUnusedResourceCleanup(): Promise<UnusedResourceCleanupPlan> {
+  return invoke<UnusedResourceCleanupPlan>("plan_unused_resource_cleanup");
+}
+
+export async function cleanupUnusedResources(): Promise<UnusedResourceCleanupResult> {
+  return invoke<UnusedResourceCleanupResult>("cleanup_unused_resources", {
+    input: { confirmed: true },
+  });
+}
+
+export async function setLocalResourceProfile(
+  profileId: string,
+): Promise<LocalResourceStatus> {
+  if (!isDesktopApp) {
+    const status = await getLocalResourceStatus();
+    return { ...status, preferredProfile: profileId };
+  }
+  return invoke<LocalResourceStatus>("set_local_resource_profile", {
+    input: { profileId },
+  });
+}
+
+export async function listResourceDownloadTasks(): Promise<
+  ResourceDownloadTask[]
+> {
+  if (!isDesktopApp) {
+    return [];
+  }
+  return invoke<ResourceDownloadTask[]>("list_resource_download_tasks");
+}
+
+export async function getLocalResourceNetworkStatus(): Promise<ResourceNetworkStatus> {
+  if (!isDesktopApp) {
+    return { mode: "direct", proxySource: "direct", proxyAddress: null };
+  }
+  return invoke<ResourceNetworkStatus>("get_local_resource_network_status");
+}
+
+export async function setLocalResourceProxy(
+  proxyUrl: string | null,
+): Promise<ResourceNetworkStatus> {
+  return invoke<ResourceNetworkStatus>("set_local_resource_proxy", {
+    input: { proxyUrl },
+  });
+}
+
+export async function listenResourceDownloadTasks(
+  listener: (task: ResourceDownloadTask) => void,
+): Promise<UnlistenFn> {
+  if (!isDesktopApp) {
+    return () => undefined;
+  }
+  return listen<ResourceDownloadTask>(
+    "local-resource-task-updated",
+    (event) => listener(event.payload),
+  );
+}
+
+export async function prepareLocalCapability(
+  capabilityId: string,
+  pendingActionId?: string,
+): Promise<CapabilityPreparation> {
+  return invoke<CapabilityPreparation>("prepare_local_capability", {
+    input: { capabilityId, pendingActionId: pendingActionId ?? null },
+  });
+}
+
+export async function pauseResourceDownload(
+  taskId: string,
+): Promise<ResourceDownloadTask> {
+  return invoke<ResourceDownloadTask>("pause_resource_download", {
+    input: { taskId },
+  });
+}
+
+export async function resumeResourceDownload(
+  taskId: string,
+): Promise<ResourceDownloadTask> {
+  return invoke<ResourceDownloadTask>("resume_resource_download", {
+    input: { taskId },
+  });
+}
+
+export async function cancelResourceDownload(
+  taskId: string,
+): Promise<ResourceDownloadTask> {
+  return invoke<ResourceDownloadTask>("cancel_resource_download", {
+    input: { taskId },
+  });
+}
+
+export async function retryResourceDownload(
+  taskId: string,
+): Promise<ResourceDownloadTask> {
+  return invoke<ResourceDownloadTask>("retry_resource_download", {
+    input: { taskId },
+  });
+}
+
+export async function repairLocalResource(
+  resourceId: string,
+): Promise<ResourceDownloadTask> {
+  return invoke<ResourceDownloadTask>("repair_local_resource", {
+    input: { resourceId },
+  });
+}
+
+export async function updateLocalResource(
+  resourceId: string,
+): Promise<ResourceDownloadTask> {
+  return invoke<ResourceDownloadTask>("update_local_resource", {
+    input: { resourceId },
+  });
+}
+
+export async function removeLocalResource(
+  resourceId: string,
+  confirmed: boolean,
+): Promise<ResourceRemovalResult> {
+  return invoke<ResourceRemovalResult>("remove_local_resource", {
+    input: { resourceId, confirmed },
+  });
+}
+
+export async function getLocalResourceDiagnostics(): Promise<LocalResourceDiagnostics> {
+  return invoke<LocalResourceDiagnostics>("get_local_resource_diagnostics");
+}
+
+export async function getLocalResourceDiagnosticSummary(): Promise<string> {
+  return invoke<string>("get_local_resource_diagnostic_summary");
+}
+
+export async function getLocalResourceThirdPartyNotices(): Promise<string> {
+  return invoke<string>("get_local_resource_third_party_notices");
+}
+
+export async function rollbackLocalResource(
+  resourceId: string,
+  version: string,
+): Promise<ResourceRollbackResult> {
+  return invoke<ResourceRollbackResult>("rollback_local_resource", {
+    input: { resourceId, version, confirmed: true },
+  });
+}
+
+export async function planOldResourceVersionCleanup(): Promise<OldResourceVersionCleanupPlan> {
+  return invoke<OldResourceVersionCleanupPlan>("plan_old_resource_version_cleanup");
+}
+
+export async function cleanupOldResourceVersions(): Promise<OldResourceVersionCleanupResult> {
+  return invoke<OldResourceVersionCleanupResult>("cleanup_old_resource_versions", {
+    input: { confirmed: true },
+  });
 }
 
 export async function getRuntimeCatalog(): Promise<RuntimeCatalog> {

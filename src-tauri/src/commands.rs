@@ -18,10 +18,32 @@ use crate::{
         LearningError, LearningTask, PrepareLearningTaskInput,
     },
     library::LibraryError,
+    local_resources::{
+        self, ConfigureLocalResourceRootInput, LocalResourceCatalog, LocalResourceError,
+        LocalResourceLocationPlan, LocalResourceStatus, PlanLocalResourceLocationInput,
+        SetLocalResourceProfileInput, SetLocalResourceProxyInput,
+    },
     media::{self, MediaError, MediaInspection, MediaPreparation, MediaRuntimeStatus},
     remote_media::{
         self, CancelRemoteMediaImportInput, ImportRemoteMediaUrlInput, InspectRemoteMediaUrlInput,
         RemoteMediaError, RemoteMediaPreview,
+    },
+    resource_diagnostics::{
+        self, CleanupOldResourceVersionsInput, LocalResourceDiagnostics,
+        OldResourceVersionCleanupPlan, OldResourceVersionCleanupResult, ResourceDiagnosticsError,
+        ResourceRollbackResult, RollbackLocalResourceInput,
+    },
+    resource_download::{
+        self, CapabilityPreparation, PrepareLocalCapabilityInput, RemoveLocalResourceInput,
+        RepairLocalResourceInput, ResourceDownloadError, ResourceDownloadTask,
+        ResourceDownloadTaskInput, ResourceNetworkStatus, ResourceRemovalResult,
+    },
+    resource_migration::{
+        self, AdoptLocalResourcesInput, CleanupUnusedResourcesInput,
+        ConfirmLocalResourceOperationInput, InspectResourceMigrationInput, LocalResourceMovePlan,
+        LocalResourceMoveResult, MoveLocalResourceRootInput, ReconnectLocalResourceRootInput,
+        ResourceAdoptionResult, ResourceMigrationError, ResourceMigrationPreview,
+        UnusedResourceCleanupPlan, UnusedResourceCleanupResult,
     },
     runtime::{
         self, DownloadRuntimeComponentInput, RuntimeCatalog, RuntimeError, SetPreferredModelInput,
@@ -340,6 +362,57 @@ impl From<RuntimeError> for CommandError {
     }
 }
 
+impl From<LocalResourceError> for CommandError {
+    fn from(error: LocalResourceError) -> Self {
+        let code = match &error {
+            LocalResourceError::NotInitialized => "local_resource_not_initialized",
+            LocalResourceError::ConfirmationRequired => "local_resource_confirmation_required",
+            LocalResourceError::InvalidParent(_) => "local_resource_parent_invalid",
+            LocalResourceError::RootUnavailable(_) => "root_unavailable",
+            LocalResourceError::ResourceNotReady(_) => "local_resource_not_ready",
+            LocalResourceError::UnknownCapability(_) => "local_resource_capability_invalid",
+            LocalResourceError::UnknownProfile(_) => "local_resource_profile_invalid",
+            LocalResourceError::UnknownResource(_) => "local_resource_invalid",
+            LocalResourceError::InvalidProxy(_) => "local_resource_proxy_invalid",
+            LocalResourceError::InvalidCatalog(_) => "local_resource_catalog_invalid",
+            LocalResourceError::InvalidReceipt(_) => "local_resource_receipt_invalid",
+            LocalResourceError::FileSystem(_) => "local_resource_filesystem_error",
+            LocalResourceError::Serialization(_) => "local_resource_serialization_error",
+        };
+        Self {
+            code,
+            message: error.to_string(),
+        }
+    }
+}
+
+impl From<ResourceDownloadError> for CommandError {
+    fn from(error: ResourceDownloadError) -> Self {
+        Self {
+            code: error.code(),
+            message: error.to_string(),
+        }
+    }
+}
+
+impl From<ResourceDiagnosticsError> for CommandError {
+    fn from(error: ResourceDiagnosticsError) -> Self {
+        Self {
+            code: error.code(),
+            message: error.to_string(),
+        }
+    }
+}
+
+impl From<ResourceMigrationError> for CommandError {
+    fn from(error: ResourceMigrationError) -> Self {
+        Self {
+            code: error.code(),
+            message: error.to_string(),
+        }
+    }
+}
+
 impl From<TranslationError> for CommandError {
     fn from(error: TranslationError) -> Self {
         Self {
@@ -529,6 +602,215 @@ pub fn delete_project(
 #[tauri::command]
 pub fn get_media_runtime_status() -> MediaRuntimeStatus {
     media::media_runtime_status()
+}
+
+#[tauri::command]
+pub fn get_local_resource_catalog() -> Result<LocalResourceCatalog, CommandError> {
+    local_resources::catalog().cloned().map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn get_local_resource_status() -> Result<LocalResourceStatus, CommandError> {
+    local_resources::status().map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn plan_local_resource_location(
+    input: PlanLocalResourceLocationInput,
+) -> Result<LocalResourceLocationPlan, CommandError> {
+    local_resources::plan_location(&input.parent_path).map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn configure_local_resource_root(
+    input: ConfigureLocalResourceRootInput,
+) -> Result<LocalResourceStatus, CommandError> {
+    let status = local_resources::configure_location(&input.parent_path, input.confirmed)?;
+    resource_download::bind_configured_root()?;
+    runtime::sync_managed_root()?;
+    Ok(status)
+}
+
+#[tauri::command]
+pub fn repair_local_resource_root(
+    input: ConfirmLocalResourceOperationInput,
+) -> Result<LocalResourceStatus, CommandError> {
+    let status = local_resources::repair_configured_root(input.confirmed)?;
+    resource_download::bind_configured_root()?;
+    runtime::sync_managed_root()?;
+    Ok(status)
+}
+
+#[tauri::command]
+pub fn inspect_local_resource_migration(
+    input: InspectResourceMigrationInput,
+) -> Result<ResourceMigrationPreview, CommandError> {
+    resource_migration::inspect_resource_migration(input).map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn adopt_local_resources(
+    input: AdoptLocalResourcesInput,
+) -> Result<ResourceAdoptionResult, CommandError> {
+    resource_migration::adopt_local_resources(input).map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn plan_local_resource_move(
+    input: PlanLocalResourceLocationInput,
+) -> Result<LocalResourceMovePlan, CommandError> {
+    resource_migration::plan_resource_root_move(&input.parent_path).map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn move_local_resource_root(
+    input: MoveLocalResourceRootInput,
+) -> Result<LocalResourceMoveResult, CommandError> {
+    resource_migration::move_resource_root(input).map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn reconnect_local_resource_root(
+    input: ReconnectLocalResourceRootInput,
+) -> Result<LocalResourceStatus, CommandError> {
+    resource_migration::reconnect_resource_root(input).map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn plan_unused_resource_cleanup() -> Result<UnusedResourceCleanupPlan, CommandError> {
+    resource_migration::plan_unused_resource_cleanup().map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn cleanup_unused_resources(
+    input: CleanupUnusedResourcesInput,
+) -> Result<UnusedResourceCleanupResult, CommandError> {
+    resource_migration::cleanup_unused_resources(input).map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn set_local_resource_profile(
+    input: SetLocalResourceProfileInput,
+) -> Result<LocalResourceStatus, CommandError> {
+    local_resources::set_preferred_profile(&input.profile_id).map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn get_local_resource_network_status() -> ResourceNetworkStatus {
+    resource_download::network_status()
+}
+
+#[tauri::command]
+pub fn set_local_resource_proxy(
+    input: SetLocalResourceProxyInput,
+) -> Result<ResourceNetworkStatus, CommandError> {
+    local_resources::set_proxy_url(input.proxy_url.as_deref())?;
+    Ok(resource_download::network_status())
+}
+
+#[tauri::command]
+pub fn list_resource_download_tasks() -> Result<Vec<ResourceDownloadTask>, CommandError> {
+    resource_download::list_tasks().map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn prepare_local_capability(
+    app: AppHandle,
+    input: PrepareLocalCapabilityInput,
+) -> Result<CapabilityPreparation, CommandError> {
+    resource_download::prepare_capability(
+        &input.capability_id,
+        input.pending_action_id.as_deref(),
+        Some(app),
+    )
+    .map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn pause_resource_download(
+    input: ResourceDownloadTaskInput,
+) -> Result<ResourceDownloadTask, CommandError> {
+    resource_download::pause_task(&input.task_id).map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn resume_resource_download(
+    app: AppHandle,
+    input: ResourceDownloadTaskInput,
+) -> Result<ResourceDownloadTask, CommandError> {
+    resource_download::resume_task(&input.task_id, Some(app)).map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn cancel_resource_download(
+    input: ResourceDownloadTaskInput,
+) -> Result<ResourceDownloadTask, CommandError> {
+    resource_download::cancel_task(&input.task_id).map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn retry_resource_download(
+    app: AppHandle,
+    input: ResourceDownloadTaskInput,
+) -> Result<ResourceDownloadTask, CommandError> {
+    resource_download::retry_task(&input.task_id, Some(app)).map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn repair_local_resource(
+    app: AppHandle,
+    input: RepairLocalResourceInput,
+) -> Result<ResourceDownloadTask, CommandError> {
+    resource_download::repair_resource(&input.resource_id, Some(app)).map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn update_local_resource(
+    app: AppHandle,
+    input: RepairLocalResourceInput,
+) -> Result<ResourceDownloadTask, CommandError> {
+    resource_download::update_resource(&input.resource_id, Some(app)).map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn remove_local_resource(
+    input: RemoveLocalResourceInput,
+) -> Result<ResourceRemovalResult, CommandError> {
+    resource_download::remove_resource(&input.resource_id, input.confirmed).map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn get_local_resource_diagnostics() -> Result<LocalResourceDiagnostics, CommandError> {
+    resource_diagnostics::diagnostics().map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn get_local_resource_diagnostic_summary() -> Result<String, CommandError> {
+    resource_diagnostics::diagnostic_summary().map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn get_local_resource_third_party_notices() -> String {
+    resource_diagnostics::third_party_notices().to_owned()
+}
+
+#[tauri::command]
+pub fn rollback_local_resource(
+    input: RollbackLocalResourceInput,
+) -> Result<ResourceRollbackResult, CommandError> {
+    resource_diagnostics::rollback_resource(input).map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn plan_old_resource_version_cleanup() -> Result<OldResourceVersionCleanupPlan, CommandError> {
+    resource_diagnostics::plan_old_version_cleanup().map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn cleanup_old_resource_versions(
+    input: CleanupOldResourceVersionsInput,
+) -> Result<OldResourceVersionCleanupResult, CommandError> {
+    resource_diagnostics::cleanup_old_versions(input).map_err(Into::into)
 }
 
 #[tauri::command]

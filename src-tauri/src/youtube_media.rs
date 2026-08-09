@@ -24,6 +24,7 @@ use crate::{
     domain::Project,
     media::{self, MediaError},
     remote_media::{self, RemoteMediaError},
+    resource_download,
     store::{ProjectStore, RemoteImportProvenance, StoreError},
 };
 
@@ -180,9 +181,7 @@ struct CapturedOutput {
 pub fn inspect_youtube_url(
     input: InspectYouTubeUrlInput,
 ) -> Result<YouTubeMediaPreview, YouTubeMediaError> {
-    let original = validate_youtube_page_url(&input.url)?;
-    let final_url = remote_media::preflight_public_https_page(original.as_str())?;
-    validate_youtube_page_url(final_url.as_str())?;
+    let original = validate_public_youtube_source(&input.url)?;
     let tool = verify_tool(&resolve_yt_dlp_path()?)?;
     inspect_with_tool(&original, &tool)
 }
@@ -192,9 +191,7 @@ pub fn import_youtube_url(
     input: ImportYouTubeUrlInput,
 ) -> Result<Project, YouTubeMediaError> {
     let operation = ImportOperation::register(&input.operation_id)?;
-    let original = validate_youtube_page_url(&input.url)?;
-    let final_url = remote_media::preflight_public_https_page(original.as_str())?;
-    validate_youtube_page_url(final_url.as_str())?;
+    let original = validate_public_youtube_source(&input.url)?;
     operation.check()?;
 
     let tool = verify_tool(&resolve_yt_dlp_path()?)?;
@@ -452,34 +449,67 @@ fn completed_output_path(
 }
 
 fn inspection_arguments(url: &Url) -> Vec<String> {
-    [
+    let (proxy_url, proxy_source) = resource_download::effective_proxy();
+    inspection_arguments_with_proxy(url, proxy_url.as_deref(), proxy_source)
+}
+
+fn inspection_arguments_with_proxy(
+    url: &Url,
+    proxy_url: Option<&str>,
+    proxy_source: &str,
+) -> Vec<String> {
+    let mut arguments = [
         "--ignore-config",
         "--no-plugin-dirs",
         "--no-playlist",
         "--no-cache-dir",
-        "--proxy",
-        "",
-        "--dump-single-json",
-        "--skip-download",
-        "--no-warnings",
-        "--format",
-        FORMAT_SELECTOR,
-        "--",
-        url.as_str(),
     ]
     .into_iter()
     .map(str::to_owned)
-    .collect()
+    .collect::<Vec<_>>();
+    append_proxy_arguments(&mut arguments, proxy_url, proxy_source);
+    arguments.extend(
+        [
+            "--dump-single-json",
+            "--skip-download",
+            "--no-warnings",
+            "--format",
+            FORMAT_SELECTOR,
+            "--",
+            url.as_str(),
+        ]
+        .into_iter()
+        .map(str::to_owned),
+    );
+    arguments
 }
 
 fn download_arguments(url: &Url, output_directory: &Path, ffmpeg_path: &Path) -> Vec<String> {
+    let (proxy_url, proxy_source) = resource_download::effective_proxy();
+    download_arguments_with_proxy(
+        url,
+        output_directory,
+        ffmpeg_path,
+        proxy_url.as_deref(),
+        proxy_source,
+    )
+}
+
+fn download_arguments_with_proxy(
+    url: &Url,
+    output_directory: &Path,
+    ffmpeg_path: &Path,
+    proxy_url: Option<&str>,
+    proxy_source: &str,
+) -> Vec<String> {
     let mut arguments = vec![
         "--ignore-config".to_owned(),
         "--no-plugin-dirs".to_owned(),
         "--no-playlist".to_owned(),
         "--no-cache-dir".to_owned(),
-        "--proxy".to_owned(),
-        String::new(),
+    ];
+    append_proxy_arguments(&mut arguments, proxy_url, proxy_source);
+    arguments.extend([
         "--continue".to_owned(),
         "--part".to_owned(),
         "--no-overwrites".to_owned(),
@@ -504,7 +534,7 @@ fn download_arguments(url: &Url, output_directory: &Path, ffmpeg_path: &Path) ->
         output_directory.to_string_lossy().into_owned(),
         "--output".to_owned(),
         "source.%(ext)s".to_owned(),
-    ];
+    ]);
     if let Some(parent) = ffmpeg_path.parent() {
         arguments.push("--ffmpeg-location".to_owned());
         arguments.push(parent.to_string_lossy().into_owned());
@@ -512,6 +542,20 @@ fn download_arguments(url: &Url, output_directory: &Path, ffmpeg_path: &Path) ->
     arguments.push("--".to_owned());
     arguments.push(url.as_str().to_owned());
     arguments
+}
+
+fn append_proxy_arguments(
+    arguments: &mut Vec<String>,
+    proxy_url: Option<&str>,
+    proxy_source: &str,
+) {
+    if let Some(proxy_url) = proxy_url {
+        arguments.push("--proxy".to_owned());
+        arguments.push(proxy_url.to_owned());
+    } else if proxy_source != "environment" {
+        arguments.push("--proxy".to_owned());
+        arguments.push(String::new());
+    }
 }
 
 fn validate_youtube_page_url(input: &str) -> Result<Url, YouTubeMediaError> {
@@ -550,6 +594,12 @@ fn validate_youtube_page_url(input: &str) -> Result<Url, YouTubeMediaError> {
     if !valid_shape {
         return Err(YouTubeMediaError::UnsupportedUrl);
     }
+    Ok(url)
+}
+
+fn validate_public_youtube_source(input: &str) -> Result<Url, YouTubeMediaError> {
+    let url = validate_youtube_page_url(input)?;
+    remote_media::validate_public_https_url(url.as_str())?;
     Ok(url)
 }
 
@@ -627,10 +677,7 @@ fn preview_token(
 }
 
 fn resolve_yt_dlp_path() -> Result<PathBuf, YouTubeMediaError> {
-    if let Some(path) = env::var_os("SIAOVPLAY_YT_DLP")
-        .filter(|value| !value.is_empty())
-        .map(PathBuf::from)
-    {
+    if let Some(path) = crate::local_resources::development_path_override("SIAOVPLAY_YT_DLP") {
         if path.is_file() {
             return Ok(path);
         }
@@ -639,10 +686,10 @@ fn resolve_yt_dlp_path() -> Result<PathBuf, YouTubeMediaError> {
             path.display()
         )));
     }
-    let runtime_root = env::var_os("SIAOVPLAY_RUNTIME_DIR")
-        .filter(|value| !value.is_empty())
-        .map(PathBuf::from)
-        .or_else(crate::runtime::configured_runtime_root);
+    if let Some(path) = crate::local_resources::resolve_entrypoint("yt-dlp", "ytDlp") {
+        return Ok(path);
+    }
+    let runtime_root = crate::local_resources::development_path_override("SIAOVPLAY_RUNTIME_DIR");
     let executable_path = env::current_exe().ok();
     let candidates = yt_dlp_candidates(runtime_root.as_deref(), executable_path.as_deref());
     candidates
@@ -924,11 +971,13 @@ mod tests {
     #[test]
     fn arguments_disable_user_configuration_cookies_plugins_and_playlists() {
         let url = Url::parse("https://www.youtube.com/watch?v=jNQXAC9IVRw").unwrap();
-        let inspect = inspection_arguments(&url);
-        let download = download_arguments(
+        let inspect = inspection_arguments_with_proxy(&url, None, "direct");
+        let download = download_arguments_with_proxy(
             &url,
             Path::new("W:/SiaoVPlay/app-data/remote-media/test"),
             Path::new("W:/SiaoVPlay/runtimes/ffmpeg/bin/ffmpeg.exe"),
+            None,
+            "direct",
         );
         for arguments in [&inspect, &download] {
             assert!(arguments.contains(&"--ignore-config".to_owned()));
@@ -955,6 +1004,30 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn arguments_apply_explicit_proxy_and_inherit_environment_proxy() {
+        let url = Url::parse("https://youtu.be/jNQXAC9IVRw").unwrap();
+        for arguments in [
+            inspection_arguments_with_proxy(&url, Some("http://127.0.0.1:7897"), "windows_system"),
+            download_arguments_with_proxy(
+                &url,
+                Path::new("W:/SiaoVPlay/app-data/remote-media/test"),
+                Path::new("W:/SiaoVPlay/runtimes/ffmpeg/bin/ffmpeg.exe"),
+                Some("http://127.0.0.1:7897"),
+                "custom",
+            ),
+        ] {
+            assert!(
+                arguments
+                    .windows(2)
+                    .any(|pair| { pair[0] == "--proxy" && pair[1] == "http://127.0.0.1:7897" })
+            );
+        }
+
+        let inherited = inspection_arguments_with_proxy(&url, None, "environment");
+        assert!(!inherited.iter().any(|argument| argument == "--proxy"));
     }
 
     #[test]

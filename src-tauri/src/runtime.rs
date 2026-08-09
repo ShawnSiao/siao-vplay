@@ -12,10 +12,10 @@ use thiserror::Error;
 use uuid::Uuid;
 use zip::ZipArchive;
 
-use crate::{media, transcription, youtube_media};
+use crate::{local_resources, media, transcription, youtube_media};
 
 pub const DEFAULT_MODEL_KIND: &str = "small";
-pub const WHISPER_RUNTIME_VERSION: &str = "1.9.1-siaocut.1";
+pub const LEGACY_WHISPER_RUNTIME_VERSION: &str = "1.9.1-siaocut.1";
 pub const YT_DLP_VERSION: &str = "2026.06.09";
 pub const YT_DLP_SHA256: &str = "3a48cb955d55c8821b60ccbdbbc6f61bc958f2f3d3b7ad5eaf3d83a543293a27";
 
@@ -169,16 +169,14 @@ pub fn set_storage_root(path: &str) -> Result<RuntimeCatalog, RuntimeError> {
     if path.is_empty() {
         return Err(RuntimeError::InvalidStorageRoot("目录不能为空".to_owned()));
     }
-    let path = PathBuf::from(path);
-    fs::create_dir_all(&path)?;
-    if !path.is_dir() {
-        return Err(RuntimeError::InvalidStorageRoot(format!(
-            "不是目录：{}",
-            path.display()
-        )));
-    }
-    let path = fs::canonicalize(path)?;
-    update_settings(|settings| settings.storage_root = Some(path.to_string_lossy().into_owned()))?;
+    let status = local_resources::configure_location(path, true)
+        .map_err(|error| RuntimeError::InvalidStorageRoot(error.to_string()))?;
+    crate::resource_download::bind_configured_root()
+        .map_err(|error| RuntimeError::InvalidStorageRoot(error.to_string()))?;
+    let resource_root = status.resource_root.ok_or_else(|| {
+        RuntimeError::InvalidStorageRoot("资源目录配置后未返回有效路径".to_owned())
+    })?;
+    update_settings(|settings| settings.storage_root = Some(resource_root))?;
     catalog()
 }
 
@@ -189,15 +187,24 @@ pub fn set_preferred_model(model_kind: &str) -> Result<RuntimeCatalog, RuntimeEr
 }
 
 pub fn configured_runtime_root() -> Option<PathBuf> {
-    settings_snapshot().storage_root.map(PathBuf::from)
-}
-
-pub fn configured_model_root() -> Option<PathBuf> {
-    configured_runtime_root().map(|root| root.join("models"))
+    local_resources::configured_root().or_else(|| {
+        persisted_settings_snapshot()
+            .storage_root
+            .map(PathBuf::from)
+    })
 }
 
 pub fn preferred_model_kind() -> String {
     settings_snapshot().preferred_model
+}
+
+pub(crate) fn sync_managed_root() -> Result<(), RuntimeError> {
+    let root = local_resources::configured_root()
+        .ok_or_else(|| RuntimeError::InvalidStorageRoot("本地资源目录尚未配置".to_owned()))?;
+    update_settings(|settings| {
+        settings.storage_root = Some(root.to_string_lossy().into_owned());
+    })?;
+    Ok(())
 }
 
 pub fn download_component(component_id: &str) -> Result<RuntimeCatalog, RuntimeError> {
@@ -253,6 +260,14 @@ fn normalize_settings(mut settings: RuntimeSettings) -> RuntimeSettings {
 }
 
 fn settings_snapshot() -> RuntimeSettings {
+    let mut settings = persisted_settings_snapshot();
+    if let Some(root) = local_resources::configured_root() {
+        settings.storage_root = Some(root.to_string_lossy().into_owned());
+    }
+    settings
+}
+
+fn persisted_settings_snapshot() -> RuntimeSettings {
     RUNTIME_STATE
         .get()
         .and_then(|state| state.read().ok().map(|state| state.settings.clone()))
@@ -306,7 +321,7 @@ fn bundled_whisper_component(id: &str, title: &str, backend: &str) -> RuntimeCom
         id: id.to_owned(),
         title: title.to_owned(),
         component_kind: "bundled".to_owned(),
-        version: WHISPER_RUNTIME_VERSION.to_owned(),
+        version: LEGACY_WHISPER_RUNTIME_VERSION.to_owned(),
         available,
         installed_path: path.map(|path| path.to_string_lossy().into_owned()),
         expected_size_bytes: 0,

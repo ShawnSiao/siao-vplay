@@ -183,12 +183,22 @@ export function PlayerHarness() {
         dataDirectory: "",
         startupMediaPath: null,
       }}
-      runtimeStatus={{
-        available: true,
-        ffmpegPath: null,
-        ffprobePath: null,
-        version: "test",
-        errorMessage: null,
+      localResourceStatus={{
+        configured: true,
+        selectedParent: "W:\\SiaoVPlay",
+        resourceRoot: "W:\\SiaoVPlay\\LocalResources",
+        rootState: "ready",
+        freeSpaceBytes: 500_000_000_000,
+        preferredProfile: "standard",
+        capabilities: [
+          {
+            id: "basic_media",
+            title: "基础视频支持",
+            state: "ready",
+            requiredResourceIds: ["ffmpeg-cpu"],
+            missingResourceIds: [],
+          },
+        ],
       }}
       previewMode
       mediaTitle={project.title}

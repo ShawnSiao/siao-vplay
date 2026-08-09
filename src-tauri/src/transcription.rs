@@ -28,8 +28,11 @@ use crate::{
     },
 };
 
-const WHISPER_RUNTIME_VERSION: &str = "1.9.1-siaocut.1";
+const LEGACY_PATCHED_WHISPER_RUNTIME_VERSION: &str = "1.9.1-siaocut.1";
 const WHISPER_CLI_VERSION: &str = "1.9.1";
+const UPSTREAM_WHISPER_RUNTIME_VERSION: &str = "1.9.1";
+const UPSTREAM_WHISPER_ARCHIVE_SHA256: &str =
+    "7d8be46ecd31828e1eb7a2ecdd0d6b314feafd82163038ab6092594b0a063539";
 const WHISPER_SOURCE_COMMIT: &str = "080bbbe85230f624f0b52127f1ae1218247989f9";
 const VULKAN_METADATA_SHA256: &str =
     "a5b8f595ef3321e68d4b72e4242c2a49bf229904c2cf73e3ed9eff5dd6a9d3d6";
@@ -161,6 +164,13 @@ impl TranscriptionModelKind {
         match self {
             Self::Small => (SMALL_MODEL_SIZE, SMALL_MODEL_SHA256),
             Self::Base => (BASE_MODEL_SIZE, BASE_MODEL_SHA256),
+        }
+    }
+
+    fn product_label(self) -> &'static str {
+        match self {
+            Self::Small => "标准",
+            Self::Base => "快速",
         }
     }
 }
@@ -358,16 +368,20 @@ fn runtime_directory(backend: &str) -> Result<PathBuf, TranscriptionError> {
     } else {
         "SIAOVPLAY_WHISPER_CPU_DIR"
     };
-    if let Some(path) = env::var_os(override_name)
-        .filter(|value| !value.is_empty())
-        .map(PathBuf::from)
-    {
+    if let Some(path) = crate::local_resources::development_path_override(override_name) {
         return Ok(path);
     }
-    let runtime_root = env::var_os("SIAOVPLAY_RUNTIME_DIR")
-        .filter(|value| !value.is_empty())
-        .map(PathBuf::from)
-        .or_else(crate::runtime::configured_runtime_root);
+    let managed_resource = if backend == "vulkan" {
+        "whisper-vulkan"
+    } else {
+        "whisper-cpu"
+    };
+    if let Some(path) = crate::local_resources::resolve_entrypoint(managed_resource, "whisperCli")
+        && let Some(directory) = path.parent()
+    {
+        return Ok(directory.to_path_buf());
+    }
+    let runtime_root = crate::local_resources::development_path_override("SIAOVPLAY_RUNTIME_DIR");
     let executable_path = env::current_exe().ok();
     resolve_runtime_directory(backend, runtime_root.as_deref(), executable_path.as_deref())
 }
@@ -445,8 +459,18 @@ fn runtime_directory_candidates(
 
 fn verify_runtime(backend: &'static str) -> Result<RuntimeBundle, TranscriptionError> {
     let directory = runtime_directory(backend)?;
+    verify_runtime_directory(backend, directory)
+}
+
+fn verify_runtime_directory(
+    backend: &'static str,
+    directory: PathBuf,
+) -> Result<RuntimeBundle, TranscriptionError> {
     let metadata_path = directory.join("runtime-metadata.json");
     if !metadata_path.is_file() {
+        if backend == "cpu" {
+            return verify_upstream_cpu_runtime(directory);
+        }
         return Err(TranscriptionError::RuntimeUnavailable(format!(
             "缺少 {}",
             metadata_path.display()
@@ -466,7 +490,7 @@ fn verify_runtime(backend: &'static str) -> Result<RuntimeBundle, TranscriptionE
     }
     let metadata: RuntimeMetadata = serde_json::from_slice(&fs::read(&metadata_path)?)?;
     if metadata.schema_version != 1
-        || metadata.version != WHISPER_RUNTIME_VERSION
+        || metadata.version != LEGACY_PATCHED_WHISPER_RUNTIME_VERSION
         || metadata.backend != backend
         || metadata.source_commit != WHISPER_SOURCE_COMMIT
         || metadata.source_capabilities.segment_timestamp_domain != "original_media"
@@ -542,21 +566,74 @@ fn verify_runtime(backend: &'static str) -> Result<RuntimeBundle, TranscriptionE
     })
 }
 
+fn verify_upstream_cpu_runtime(directory: PathBuf) -> Result<RuntimeBundle, TranscriptionError> {
+    let executable = directory.join("whisper-cli.exe");
+    if !executable.is_file() {
+        return Err(TranscriptionError::RuntimeUnavailable(format!(
+            "缺少 {}",
+            executable.display()
+        )));
+    }
+    let output = hidden_command(&executable)
+        .current_dir(&directory)
+        .arg("--version")
+        .output()
+        .map_err(|error| {
+            TranscriptionError::RuntimeUnavailable(format!(
+                "{} 无法启动：{error}",
+                executable.display()
+            ))
+        })?;
+    let version_output = format!(
+        "{}\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    if !output.status.success()
+        || !version_output.contains(&format!(
+            "whisper.cpp version: {UPSTREAM_WHISPER_RUNTIME_VERSION}"
+        ))
+    {
+        return Err(TranscriptionError::RuntimeIntegrity(format!(
+            "{} 未报告固定版本 {}",
+            executable.display(),
+            UPSTREAM_WHISPER_RUNTIME_VERSION
+        )));
+    }
+    Ok(RuntimeBundle {
+        directory,
+        executable_sha256: hash_file(&executable)?,
+        executable,
+        backend: "cpu",
+        version: UPSTREAM_WHISPER_RUNTIME_VERSION.to_owned(),
+        metadata_sha256: UPSTREAM_WHISPER_ARCHIVE_SHA256.to_owned(),
+        vad_timeline_verified: false,
+    })
+}
+
+pub(crate) fn verify_managed_runtime(
+    backend: &'static str,
+    directory: &Path,
+) -> Result<(), TranscriptionError> {
+    verify_runtime_directory(backend, directory.to_path_buf()).map(|_| ())
+}
+
 fn model_path(kind: TranscriptionModelKind) -> Result<PathBuf, TranscriptionError> {
     let override_name = match kind {
         TranscriptionModelKind::Small => "SIAOVPLAY_WHISPER_SMALL_MODEL",
         TranscriptionModelKind::Base => "SIAOVPLAY_WHISPER_BASE_MODEL",
     };
-    if let Some(path) = env::var_os(override_name)
-        .filter(|value| !value.is_empty())
-        .map(PathBuf::from)
-    {
+    if let Some(path) = crate::local_resources::development_path_override(override_name) {
         return Ok(path);
     }
-    let model_root = env::var_os("SIAOVPLAY_MODEL_DIR")
-        .filter(|value| !value.is_empty())
-        .map(PathBuf::from)
-        .or_else(crate::runtime::configured_model_root);
+    let managed_resource = match kind {
+        TranscriptionModelKind::Small => "whisper-model-small",
+        TranscriptionModelKind::Base => "whisper-model-base",
+    };
+    if let Some(path) = crate::local_resources::resolve_entrypoint(managed_resource, "model") {
+        return Ok(path);
+    }
+    let model_root = crate::local_resources::development_path_override("SIAOVPLAY_MODEL_DIR");
     let executable_path = env::current_exe().ok();
     resolve_model_path(kind, model_root.as_deref(), executable_path.as_deref())
 }
@@ -657,16 +734,17 @@ fn verify_model(kind: TranscriptionModelKind) -> Result<ModelBundle, Transcripti
 }
 
 fn vad_model_path() -> Result<PathBuf, TranscriptionError> {
-    if let Some(path) = env::var_os("SIAOVPLAY_WHISPER_VAD_MODEL")
-        .filter(|value| !value.is_empty())
-        .map(PathBuf::from)
+    if let Some(path) =
+        crate::local_resources::development_path_override("SIAOVPLAY_WHISPER_VAD_MODEL")
     {
         return Ok(path);
     }
-    let runtime_root = env::var_os("SIAOVPLAY_RUNTIME_DIR")
-        .filter(|value| !value.is_empty())
-        .map(PathBuf::from)
-        .or_else(crate::runtime::configured_runtime_root);
+    if let Some(path) =
+        crate::local_resources::resolve_entrypoint("whisper-vad-silero-6.2", "model")
+    {
+        return Ok(path);
+    }
+    let runtime_root = crate::local_resources::development_path_override("SIAOVPLAY_RUNTIME_DIR");
     let executable_path = env::current_exe().ok();
     let cpu_runtime_directory = runtime_directory("cpu").ok();
     resolve_vad_model_path(
@@ -767,29 +845,26 @@ fn verify_vad_model() -> Result<VadModelBundle, TranscriptionError> {
 }
 
 fn preferred_runtime() -> Result<RuntimeBundle, TranscriptionError> {
-    match verify_runtime("vulkan") {
+    match verify_runtime("cpu") {
         Ok(runtime) => Ok(runtime),
-        Err(vulkan_error) => verify_runtime("cpu").map_err(|cpu_error| {
+        Err(cpu_error) => verify_runtime("vulkan").map_err(|vulkan_error| {
             TranscriptionError::RuntimeUnavailable(format!(
-                "Vulkan：{vulkan_error}；CPU：{cpu_error}"
+                "CPU：{cpu_error}；Vulkan：{vulkan_error}"
             ))
         }),
     }
 }
 
 pub fn transcription_runtime_status() -> TranscriptionRuntimeStatus {
-    let vad_status = verify_vad_model()
-        .map(|_| ())
-        .map_err(|error| error.to_string());
-    let runtimes = ["vulkan", "cpu"]
+    let runtimes = ["cpu", "vulkan"]
         .into_iter()
         .map(|backend| match verify_runtime(backend) {
             Ok(runtime) => TranscriptionRuntimeOption {
                 backend: backend.to_owned(),
-                available: vad_status.is_ok(),
+                available: true,
                 path: Some(runtime.directory.to_string_lossy().into_owned()),
                 version: Some(runtime.version),
-                error_message: vad_status.as_ref().err().cloned(),
+                error_message: None,
             },
             Err(error) => TranscriptionRuntimeOption {
                 backend: backend.to_owned(),
@@ -835,9 +910,10 @@ pub fn transcription_runtime_status() -> TranscriptionRuntimeStatus {
 
 fn transcription_parameters(
     language_code: &str,
-    vad_model: &VadModelBundle,
+    runtime: &RuntimeBundle,
+    vad_model: Option<&VadModelBundle>,
 ) -> Result<String, TranscriptionError> {
-    Ok(serde_json::to_string(&serde_json::json!({
+    let mut parameters = serde_json::json!({
         "audioStream": "0:a:0",
         "sampleFormat": "pcm_s16le",
         "sampleRateHz": 16000,
@@ -846,13 +922,26 @@ fn transcription_parameters(
         "output": "json_full",
         "splitOnWord": true,
         "maxSegmentCharacters": 60,
-        "vad": true,
-        "vadModelPath": vad_model.path.to_string_lossy(),
-        "vadModelSha256": vad_model.sha256,
-        "vadTimelineDomain": "original_media",
-        "vadMinSilenceDurationMs": 250,
-        "vadSpeechPadMs": 80
-    }))?)
+        "vad": false,
+        "timingMode": "whisper_no_vad",
+        "timelineDomain": "original_media"
+    });
+    if runtime.vad_timeline_verified {
+        let vad_model = vad_model.ok_or_else(|| {
+            TranscriptionError::ModelUnavailable(
+                "已验证的加速运行方式缺少所需语音活动检测模型".to_owned(),
+            )
+        })?;
+        parameters["vad"] = serde_json::Value::Bool(true);
+        parameters["timingMode"] = serde_json::Value::String("whisper_verified_vad".to_owned());
+        parameters["vadModelPath"] =
+            serde_json::Value::String(vad_model.path.to_string_lossy().into_owned());
+        parameters["vadModelSha256"] = serde_json::Value::String(vad_model.sha256.clone());
+        parameters["vadTimelineDomain"] = serde_json::Value::String("original_media".to_owned());
+        parameters["vadMinSilenceDurationMs"] = serde_json::Value::from(250);
+        parameters["vadSpeechPadMs"] = serde_json::Value::from(80);
+    }
+    Ok(serde_json::to_string(&parameters)?)
 }
 
 pub fn start_transcription(
@@ -863,12 +952,10 @@ pub fn start_transcription(
     let model_kind = TranscriptionModelKind::parse(&input.model_kind)?;
     let runtime = preferred_runtime()?;
     let model = verify_model(model_kind)?;
-    let vad_model = verify_vad_model()?;
-    if !runtime.vad_timeline_verified {
-        return Err(TranscriptionError::RuntimeIntegrity(
-            "当前转写运行时没有通过 VAD 原媒体时间轴验证".to_owned(),
-        ));
-    }
+    let vad_model = runtime
+        .vad_timeline_verified
+        .then(verify_vad_model)
+        .transpose()?;
     let inspection = media::inspect_project_media(store, &input.project_id)?;
     if inspection.probe.audio_streams.is_empty() {
         return Err(TranscriptionError::MissingAudio);
@@ -908,7 +995,8 @@ pub fn start_transcription(
 
     let timestamp = now_ms()?;
     let job_id = Uuid::new_v4().to_string();
-    let parameters_json = transcription_parameters(language.as_str(), &vad_model)?;
+    let parameters_json =
+        transcription_parameters(language.as_str(), &runtime, vad_model.as_ref())?;
     connection
         .execute(
             "INSERT INTO transcription_jobs (
@@ -1191,13 +1279,12 @@ pub fn resume_transcription_job(
     let model_kind = TranscriptionModelKind::parse(&job.public.model_kind)?;
     let runtime = preferred_runtime()?;
     let model = verify_model(model_kind)?;
-    let vad_model = verify_vad_model()?;
-    if !runtime.vad_timeline_verified {
-        return Err(TranscriptionError::RuntimeIntegrity(
-            "当前转写运行时没有通过 VAD 原媒体时间轴验证".to_owned(),
-        ));
-    }
-    let parameters_json = transcription_parameters(language.as_str(), &vad_model)?;
+    let vad_model = runtime
+        .vad_timeline_verified
+        .then(verify_vad_model)
+        .transpose()?;
+    let parameters_json =
+        transcription_parameters(language.as_str(), &runtime, vad_model.as_ref())?;
     let timestamp = now_ms()?;
     let changed = store.connect()?.execute(
         "UPDATE transcription_jobs
@@ -1274,7 +1361,7 @@ fn validate_baseline(store: &ProjectStore, job: &StoredJob) -> Result<PathBuf, T
 
 fn verify_job_assets(
     job: &StoredJob,
-) -> Result<(RuntimeBundle, ModelBundle, VadModelBundle), TranscriptionError> {
+) -> Result<(RuntimeBundle, ModelBundle, Option<VadModelBundle>), TranscriptionError> {
     let backend: &'static str = match job.public.runtime_backend.as_str() {
         "vulkan" => "vulkan",
         "cpu" => "cpu",
@@ -1308,11 +1395,35 @@ fn verify_job_assets(
     let parameters: serde_json::Value = serde_json::from_str(&job.parameters_json)?;
     if parameters.get("language").and_then(|value| value.as_str())
         != Some(job.public.language_code.as_str())
-        || parameters.get("vad").and_then(|value| value.as_bool()) != Some(true)
-        || parameters
-            .get("vadTimelineDomain")
+    {
+        return Err(TranscriptionError::InvalidOutput(
+            "任务参数与固定转写基线不一致".to_owned(),
+        ));
+    }
+    let vad_enabled = parameters
+        .get("vad")
+        .and_then(|value| value.as_bool())
+        .unwrap_or(false);
+    if !vad_enabled {
+        if parameters
+            .get("timingMode")
             .and_then(|value| value.as_str())
-            != Some("original_media")
+            != Some("whisper_no_vad")
+            || parameters
+                .get("timelineDomain")
+                .and_then(|value| value.as_str())
+                != Some("original_media")
+        {
+            return Err(TranscriptionError::InvalidOutput(
+                "任务没有使用受支持的原视频时间轴安全模式".to_owned(),
+            ));
+        }
+        return Ok((runtime, model, None));
+    }
+    if parameters
+        .get("vadTimelineDomain")
+        .and_then(|value| value.as_str())
+        != Some("original_media")
         || parameters
             .get("vadMinSilenceDurationMs")
             .and_then(|value| value.as_u64())
@@ -1321,12 +1432,8 @@ fn verify_job_assets(
             .get("vadSpeechPadMs")
             .and_then(|value| value.as_u64())
             != Some(80)
+        || !runtime.vad_timeline_verified
     {
-        return Err(TranscriptionError::InvalidOutput(
-            "任务参数与固定转写基线不一致".to_owned(),
-        ));
-    }
-    if !runtime.vad_timeline_verified {
         return Err(TranscriptionError::RuntimeIntegrity(
             "任务运行时没有通过 VAD 原媒体时间轴验证".to_owned(),
         ));
@@ -1346,7 +1453,7 @@ fn verify_job_assets(
             "任务固定的 VAD 模型身份与当前文件不一致".to_owned(),
         ));
     }
-    Ok((runtime, model, vad_model))
+    Ok((runtime, model, Some(vad_model)))
 }
 
 pub(crate) fn run_job(
@@ -1370,7 +1477,7 @@ pub(crate) fn run_job(
         0.05,
     )?;
     let media_path = validate_baseline(store, &job)?;
-    let (mut runtime, model, vad_model) = verify_job_assets(&job)?;
+    let (mut runtime, model, mut vad_model) = verify_job_assets(&job)?;
     let work_directory = reset_job_directory(store, job_id)?;
     let audio_path = work_directory.join("audio-16khz-mono.wav");
     let ffmpeg_log = work_directory.join("ffmpeg.log");
@@ -1419,7 +1526,7 @@ pub(crate) fn run_job(
         cancellation,
         &runtime,
         &model,
-        &vad_model,
+        vad_model.as_ref(),
         &audio_path,
         &job.public.language_code,
         &output_prefix,
@@ -1428,7 +1535,12 @@ pub(crate) fn run_job(
     if !transcription_status.success() && runtime.backend == "vulkan" {
         check_cancelled(store, job_id, cancellation)?;
         let cpu_runtime = verify_runtime("cpu")?;
-        update_job_runtime(store, job_id, &cpu_runtime)?;
+        if !cpu_runtime.vad_timeline_verified {
+            vad_model = None;
+        }
+        let parameters_json =
+            transcription_parameters(&job.public.language_code, &cpu_runtime, vad_model.as_ref())?;
+        update_job_runtime(store, job_id, &cpu_runtime, &parameters_json)?;
         runtime = cpu_runtime;
         let _ = fs::remove_file(output_prefix.with_extension("json"));
         whisper_log = work_directory.join("whisper-cpu.log");
@@ -1438,7 +1550,7 @@ pub(crate) fn run_job(
             cancellation,
             &runtime,
             &model,
-            &vad_model,
+            vad_model.as_ref(),
             &audio_path,
             &job.public.language_code,
             &output_prefix,
@@ -1480,7 +1592,7 @@ pub(crate) fn run_job(
         store,
         PersistTranscriptionInput {
             project_id: job.public.project_id.clone(),
-            source_label: format!("本地转写 · {} · {}", job.public.model_kind, runtime.backend),
+            source_label: format!("本地字幕识别 · {}", model.kind.product_label()),
             source_sha256: output_hash,
             language_code: parsed.language_code,
             expected_project_revision: job.expected_project_revision,
@@ -1515,7 +1627,7 @@ fn run_whisper(
     cancellation: &AtomicBool,
     runtime: &RuntimeBundle,
     model: &ModelBundle,
-    vad_model: &VadModelBundle,
+    vad_model: Option<&VadModelBundle>,
     audio_path: &Path,
     language_code: &str,
     output_prefix: &Path,
@@ -1529,18 +1641,17 @@ fn run_whisper(
         .arg("-f")
         .arg(audio_path)
         .args(["-ojf", "-sow", "-ml", "60"])
-        .args(["--vad", "-vm"])
-        .arg(&vad_model.path)
-        .args([
+        .arg("-l")
+        .arg(language_code);
+    if let Some(vad_model) = vad_model {
+        whisper.args(["--vad", "-vm"]).arg(&vad_model.path).args([
             "--vad-min-silence-duration-ms",
             "250",
             "--vad-speech-pad-ms",
             "80",
-            "-l",
-        ])
-        .arg(language_code)
-        .arg("-of")
-        .arg(output_prefix);
+        ]);
+    }
+    whisper.arg("-of").arg(output_prefix);
     run_child(store, job_id, cancellation, &mut whisper, log_path)
 }
 
@@ -1548,13 +1659,15 @@ fn update_job_runtime(
     store: &ProjectStore,
     job_id: &str,
     runtime: &RuntimeBundle,
+    parameters_json: &str,
 ) -> Result<(), TranscriptionError> {
     let timestamp = now_ms()?;
     let changed = store.connect()?.execute(
         "UPDATE transcription_jobs
          SET runtime_path = ?2, runtime_backend = ?3, runtime_version = ?4,
              runtime_sha256 = ?5, runtime_metadata_sha256 = ?6,
-             stage = 'transcribing_cpu_fallback', updated_at_ms = ?7
+             parameters_json = ?7,
+             stage = 'transcribing_cpu_fallback', updated_at_ms = ?8
          WHERE id = ?1 AND status = 'transcribing'
            AND cancel_requested_at_ms IS NULL",
         params![
@@ -1564,6 +1677,7 @@ fn update_job_runtime(
             runtime.version,
             runtime.executable_sha256,
             runtime.metadata_sha256,
+            parameters_json,
             timestamp,
         ],
     )?;
@@ -2028,6 +2142,56 @@ mod tests {
         (temp, store, project.id)
     }
 
+    fn runtime_bundle(vad_timeline_verified: bool) -> RuntimeBundle {
+        RuntimeBundle {
+            directory: PathBuf::from("runtime"),
+            executable: PathBuf::from("runtime/whisper-cli.exe"),
+            backend: "cpu",
+            version: UPSTREAM_WHISPER_RUNTIME_VERSION.to_owned(),
+            executable_sha256: "runtime-sha256".to_owned(),
+            metadata_sha256: UPSTREAM_WHISPER_ARCHIVE_SHA256.to_owned(),
+            vad_timeline_verified,
+        }
+    }
+
+    #[test]
+    fn upstream_cpu_parameters_use_safe_no_vad_timing() {
+        let parameters = transcription_parameters("en", &runtime_bundle(false), None)
+            .expect("upstream CPU parameters should be created");
+        let parameters: serde_json::Value =
+            serde_json::from_str(&parameters).expect("parameters should be valid JSON");
+
+        assert_eq!(parameters["vad"], false);
+        assert_eq!(parameters["timingMode"], "whisper_no_vad");
+        assert_eq!(parameters["timelineDomain"], "original_media");
+        assert!(parameters.get("vadModelPath").is_none());
+    }
+
+    #[test]
+    fn verified_legacy_runtime_keeps_vad_timing_contract() {
+        let vad_model = VadModelBundle {
+            path: PathBuf::from("models/ggml-silero-v6.2.0.bin"),
+            sha256: "vad-sha256".to_owned(),
+        };
+        let parameters = transcription_parameters("ja", &runtime_bundle(true), Some(&vad_model))
+            .expect("verified VAD parameters should be created");
+        let parameters: serde_json::Value =
+            serde_json::from_str(&parameters).expect("parameters should be valid JSON");
+
+        assert_eq!(parameters["vad"], true);
+        assert_eq!(parameters["timingMode"], "whisper_verified_vad");
+        assert_eq!(parameters["vadTimelineDomain"], "original_media");
+        assert_eq!(parameters["vadModelSha256"], "vad-sha256");
+    }
+
+    #[test]
+    fn verified_legacy_runtime_requires_its_vad_model() {
+        assert!(matches!(
+            transcription_parameters("ko", &runtime_bundle(true), None),
+            Err(TranscriptionError::ModelUnavailable(_))
+        ));
+    }
+
     #[test]
     fn bundled_runtime_is_discovered_from_executable_ancestors() {
         let temp = tempfile::tempdir().expect("temp directory should work");
@@ -2286,6 +2450,16 @@ mod tests {
     struct RealFixture {
         language: String,
         audio_path: String,
+    }
+
+    #[test]
+    #[ignore = "requires the pinned W: CPU Whisper runtime, models, and VAD model"]
+    fn real_runtime_selection_falls_back_to_cpu_when_vulkan_is_unavailable() {
+        let runtime = preferred_runtime().expect("CPU runtime should remain available");
+        assert_eq!(runtime.backend, "cpu");
+        let status = transcription_runtime_status();
+        assert!(status.available);
+        assert_eq!(status.preferred_backend.as_deref(), Some("cpu"));
     }
 
     #[test]

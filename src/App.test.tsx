@@ -10,6 +10,8 @@ import type {
   LearningTask,
   LibraryHome,
   LibraryMediaSummary,
+  LocalResourceCatalog,
+  LocalResourceStatus,
   MediaPreparation,
   Project,
   RemoteMediaPreview,
@@ -26,6 +28,23 @@ const desktopMocks = vi.hoisted(() => ({
   getAppStatus: vi.fn(),
   getMediaRuntimeStatus: vi.fn(),
   getRuntimeCatalog: vi.fn(),
+  getLocalResourceCatalog: vi.fn(),
+  getLocalResourceStatus: vi.fn(),
+  getLocalResourceNetworkStatus: vi.fn(),
+  setLocalResourceProxy: vi.fn(),
+  listResourceDownloadTasks: vi.fn(),
+  listenResourceDownloadTasks: vi.fn(),
+  chooseLocalResourceParent: vi.fn(),
+  planLocalResourceLocation: vi.fn(),
+  configureLocalResourceRoot: vi.fn(),
+  setLocalResourceProfile: vi.fn(),
+  prepareLocalCapability: vi.fn(),
+  pauseResourceDownload: vi.fn(),
+  resumeResourceDownload: vi.fn(),
+  cancelResourceDownload: vi.fn(),
+  retryResourceDownload: vi.fn(),
+  repairLocalResource: vi.fn(),
+  removeLocalResource: vi.fn(),
   setMainWindowMediaTitle: vi.fn(),
   listProjects: vi.fn(),
   getProject: vi.fn(),
@@ -173,6 +192,196 @@ const project: Project = {
     subtitleMode: "translation",
     updatedAtMs: 1_785_354_000_000,
   },
+};
+
+const localResourceCatalog: LocalResourceCatalog = {
+  schemaVersion: 1,
+  productId: "siaovplay",
+  updatedAt: "2026-08-08",
+  packageProfile: "app-only",
+  bundlePolicy: {
+    maximumExceptionBytes: 20_000_000,
+    allowlistedResourceIds: [],
+  },
+  capabilities: [
+    {
+      id: "basic_media",
+      title: "基础视频支持",
+      resourceIds: ["ffmpeg-cpu"],
+      profileIds: [],
+      requiresCapabilityIds: [],
+    },
+    {
+      id: "url_import",
+      title: "在线视频导入",
+      resourceIds: ["ffmpeg-cpu", "yt-dlp"],
+      profileIds: [],
+      requiresCapabilityIds: [],
+    },
+    {
+      id: "local_transcription",
+      title: "本地字幕识别",
+      resourceIds: ["ffmpeg-cpu", "whisper-cpu"],
+      profileIds: ["fast", "standard"],
+      requiresCapabilityIds: [],
+    },
+  ],
+  profiles: [
+    {
+      id: "fast",
+      title: "快速",
+      resourceIds: ["whisper-model-base"],
+      recommended: false,
+    },
+    {
+      id: "standard",
+      title: "标准",
+      resourceIds: ["whisper-model-small"],
+      recommended: true,
+    },
+  ],
+  resources: [
+    {
+      id: "ffmpeg-cpu",
+      version: "8.1",
+      platform: "windows-x86_64",
+      kind: "archive",
+      bundled: false,
+      installedSize: 175_926_890,
+      license: "LGPL-2.1-or-later",
+      sourcePage: "https://example.com/ffmpeg",
+      artifact: {
+        url: "https://example.com/ffmpeg.zip",
+        size: 70_510_962,
+        sha256: "a".repeat(64),
+        format: "zip",
+      },
+      entrypoints: {},
+      healthCheck: "ffmpeg-version",
+    },
+    {
+      id: "yt-dlp",
+      version: "2026.06.09",
+      platform: "windows-x86_64",
+      kind: "file",
+      bundled: false,
+      installedSize: 18_202_192,
+      license: "GPL-3.0-or-later",
+      sourcePage: "https://example.com/yt-dlp",
+      artifact: {
+        url: "https://example.com/yt-dlp.exe",
+        size: 18_202_192,
+        sha256: "b".repeat(64),
+        format: "file",
+      },
+      entrypoints: {},
+      healthCheck: "yt-dlp-version",
+    },
+    {
+      id: "whisper-cpu",
+      version: "1.9.1",
+      platform: "windows-x86_64",
+      kind: "archive",
+      bundled: false,
+      installedSize: 20_355_072,
+      license: "MIT",
+      sourcePage: "https://example.com/whisper-cpu",
+      artifact: {
+        url: "https://example.com/whisper-bin-x64.zip",
+        size: 7_982_101,
+        sha256: "e".repeat(64),
+        format: "zip",
+      },
+      entrypoints: {},
+      healthCheck: "whisper-cli-version",
+    },
+    {
+      id: "whisper-model-base",
+      version: "ggml-base",
+      platform: "any",
+      kind: "file",
+      bundled: false,
+      installedSize: 147_951_465,
+      license: "MIT",
+      sourcePage: "https://example.com/whisper-base",
+      artifact: {
+        url: "https://example.com/ggml-base.bin",
+        size: 147_951_465,
+        sha256: "c".repeat(64),
+        format: "file",
+      },
+      entrypoints: {},
+      healthCheck: "whisper-model-magic",
+    },
+    {
+      id: "whisper-model-small",
+      version: "ggml-small",
+      platform: "any",
+      kind: "file",
+      bundled: false,
+      installedSize: 487_601_967,
+      license: "MIT",
+      sourcePage: "https://example.com/whisper-small",
+      artifact: {
+        url: "https://example.com/ggml-small.bin",
+        size: 487_601_967,
+        sha256: "d".repeat(64),
+        format: "file",
+      },
+      entrypoints: {},
+      healthCheck: "whisper-model-magic",
+    },
+  ],
+};
+
+const readyLocalResourceStatus: LocalResourceStatus = {
+  configured: true,
+  selectedParent: "W:\\SiaoVPlay",
+  resourceRoot: "W:\\SiaoVPlay\\LocalResources",
+  rootState: "ready",
+  freeSpaceBytes: 500_000_000_000,
+  preferredProfile: "standard",
+  capabilities: [
+    {
+      id: "basic_media",
+      title: "基础视频支持",
+      state: "ready",
+      requiredResourceIds: ["ffmpeg-cpu"],
+      missingResourceIds: [],
+    },
+    {
+      id: "url_import",
+      title: "在线视频导入",
+      state: "ready",
+      requiredResourceIds: ["ffmpeg-cpu", "yt-dlp"],
+      missingResourceIds: [],
+    },
+    {
+      id: "local_transcription",
+      title: "本地字幕识别",
+      state: "ready",
+      requiredResourceIds: [
+        "ffmpeg-cpu",
+        "whisper-cpu",
+        "whisper-model-small",
+      ],
+      missingResourceIds: [],
+    },
+  ],
+};
+
+const setupRequiredLocalResourceStatus: LocalResourceStatus = {
+  configured: false,
+  selectedParent: null,
+  resourceRoot: null,
+  rootState: "setup_required",
+  freeSpaceBytes: null,
+  preferredProfile: "standard",
+  capabilities: readyLocalResourceStatus.capabilities.map((capability) => ({
+    ...capability,
+    state: "setup_required",
+    missingResourceIds: [...capability.requiredResourceIds],
+  })),
 };
 
 function mediaSummaryFor(value: Project = project): LibraryMediaSummary {
@@ -619,9 +828,10 @@ const burnJob: SubtitleBurnJob = {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  window.localStorage.clear();
   desktopMocks.getAppStatus.mockResolvedValue({
     appName: "SiaoVPlay",
-    version: "0.2.0",
+    version: "0.3.0",
     platform: "windows-desktop",
     dataDirectory: "W:\\SiaoVPlay\\app-data",
     startupMediaPath: null,
@@ -639,6 +849,43 @@ beforeEach(() => {
       preferredModel: "small",
     },
     components: [],
+  });
+  desktopMocks.getLocalResourceCatalog.mockResolvedValue(localResourceCatalog);
+  desktopMocks.getLocalResourceStatus.mockResolvedValue(readyLocalResourceStatus);
+  desktopMocks.getLocalResourceNetworkStatus.mockResolvedValue({
+    mode: "proxy",
+    proxySource: "windows_system",
+    proxyAddress: "http://127.0.0.1:7897",
+  });
+  desktopMocks.setLocalResourceProxy.mockResolvedValue({
+    mode: "proxy",
+    proxySource: "custom",
+    proxyAddress: "http://127.0.0.1:7897",
+  });
+  desktopMocks.listResourceDownloadTasks.mockResolvedValue([]);
+  desktopMocks.listenResourceDownloadTasks.mockResolvedValue(() => undefined);
+  desktopMocks.chooseLocalResourceParent.mockResolvedValue(null);
+  desktopMocks.planLocalResourceLocation.mockResolvedValue({
+    selectedParent: "W:\\SiaoVPlay",
+    resourceRoot: "W:\\SiaoVPlay\\SiaoVPlay",
+    parentExists: true,
+    resourceRootExists: false,
+    freeSpaceBytes: 500_000_000_000,
+    confirmationRequired: true,
+  });
+  desktopMocks.configureLocalResourceRoot.mockResolvedValue(
+    readyLocalResourceStatus,
+  );
+  desktopMocks.setLocalResourceProfile.mockResolvedValue(
+    readyLocalResourceStatus,
+  );
+  desktopMocks.prepareLocalCapability.mockResolvedValue({
+    capabilityId: "basic_media",
+    pendingActionId: null,
+    state: "ready",
+    resourceIds: ["ffmpeg-cpu"],
+    readyResourceIds: ["ffmpeg-cpu"],
+    taskIds: [],
   });
   desktopMocks.setMainWindowMediaTitle.mockResolvedValue(undefined);
   desktopMocks.listProjects.mockResolvedValue([project]);
@@ -977,10 +1224,10 @@ describe("App", () => {
     expect(settingsButton).toBeEnabled();
     fireEvent.click(settingsButton);
     expect(
-      await screen.findByRole("dialog", { name: "运行时与模型设置" }),
+      await screen.findByRole("dialog", { name: "本地功能资源" }),
     ).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "完成" }));
-    expect(screen.queryByRole("dialog", { name: "运行时与模型设置" })).toBeNull();
+    expect(screen.queryByRole("dialog", { name: "本地功能资源" })).toBeNull();
     fireEvent.click(
       screen.getByRole("button", { name: "折叠媒体库导航" }),
     );
@@ -1059,6 +1306,9 @@ describe("App", () => {
     fireEvent.keyDown(window, { key: "o", ctrlKey: true, shiftKey: true });
     expect(await screen.findByRole("heading", { name: "确认剧集识别结果" })).toBeInTheDocument();
     expect(screen.getByText("Rain.S01E01.mp4")).toBeInTheDocument();
+    expect(
+      await screen.findByRole("button", { name: "导入 1 集" }),
+    ).toBeEnabled();
     fireEvent.keyDown(window, { key: "Enter", ctrlKey: true });
 
     await waitFor(() => expect(libraryGatewayMocks.confirmLibraryImport).toHaveBeenCalledOnce());
@@ -1101,7 +1351,7 @@ describe("App", () => {
     expect(screen.getByText("1 个播放中内容")).toBeInTheDocument();
     expect(screen.queryByLabelText("媒体导入说明")).not.toBeInTheDocument();
     expect(await screen.findAllByText("雨站台")).not.toHaveLength(0);
-    expect(screen.getByText("本地媒体工具可用")).toBeInTheDocument();
+    expect(screen.getByText(/\d+ 项本地功能已准备/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "打开文件" })).toBeEnabled();
     expect(screen.getByLabelText("观看进度 23%")).toBeInTheDocument();
     await waitFor(() =>
@@ -2020,7 +2270,7 @@ describe("App", () => {
   it("opens a local video passed by the desktop process", async () => {
     desktopMocks.getAppStatus.mockResolvedValue({
       appName: "SiaoVPlay",
-      version: "0.2.0",
+      version: "0.3.0",
       platform: "windows-desktop",
       dataDirectory: "W:\\SiaoVPlay\\app-data",
       startupMediaPath: project.mediaSource.locator,
@@ -2040,13 +2290,160 @@ describe("App", () => {
     );
   });
 
-  it("preflights and imports a public HTTPS media URL", async () => {
+  it("offers an optional save location without downloading on first setup", async () => {
+    desktopMocks.getLocalResourceStatus.mockResolvedValue(
+      setupRequiredLocalResourceStatus,
+    );
+
     render(<App />);
+
+    const dialog = await screen.findByRole("dialog", {
+      name: "准备 SiaoVPlay",
+    });
+    expect(within(dialog).getByRole("button", { name: "选择保存位置" })).toBeEnabled();
+    expect(within(dialog).getByText(/此步骤不会下载依赖包或模型/)).toBeVisible();
+    expect(desktopMocks.prepareLocalCapability).not.toHaveBeenCalled();
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: /稍后设置/ }),
+    );
+
+    expect(
+      screen.queryByRole("dialog", { name: "准备 SiaoVPlay" }),
+    ).toBeNull();
+    expect(
+      window.localStorage.getItem(
+        "siaovplay.local-resources.first-run-dismissed.v1",
+      ),
+    ).toBe("1");
+    expect(await screen.findAllByText("雨站台")).not.toHaveLength(0);
+  });
+
+  it("resumes URL import after the required capability becomes ready", async () => {
+    const urlNotReady: LocalResourceStatus = {
+      ...readyLocalResourceStatus,
+      capabilities: readyLocalResourceStatus.capabilities.map((capability) =>
+        capability.id === "url_import"
+          ? {
+              ...capability,
+              state: "not_ready",
+              missingResourceIds: ["yt-dlp"],
+            }
+          : capability,
+      ),
+    };
+    let currentResourceStatus = urlNotReady;
+    desktopMocks.getLocalResourceStatus.mockImplementation(
+      async () => currentResourceStatus,
+    );
+    desktopMocks.prepareLocalCapability.mockImplementation(
+      async (capabilityId, pendingActionId) => {
+        currentResourceStatus = readyLocalResourceStatus;
+        return {
+          capabilityId,
+          pendingActionId,
+          state: "preparing",
+          resourceIds: ["ffmpeg-cpu", "yt-dlp"],
+          readyResourceIds: ["ffmpeg-cpu"],
+          taskIds: ["00000000-0000-4000-8000-000000000020"],
+        };
+      },
+    );
+
+    render(<App />);
+    await screen.findByText(/\d+ 项本地功能已准备/);
     fireEvent.click(
       await screen.findByRole("button", { name: "粘贴视频 URL" }),
     );
 
-    fireEvent.change(screen.getByLabelText("视频 URL"), {
+    const resources = await screen.findByRole("dialog", {
+      name: "本地功能资源",
+    });
+    expect(resources).toHaveTextContent("继续打开在线视频");
+    expect(screen.queryByLabelText("视频 URL")).toBeNull();
+    fireEvent.click(
+      within(resources).getByRole("button", {
+        name: "开始准备所选功能",
+      }),
+    );
+
+    await waitFor(() =>
+      expect(desktopMocks.prepareLocalCapability).toHaveBeenCalledWith(
+        "url_import",
+        expect.stringMatching(
+          /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+        ),
+      ),
+    );
+    expect(
+      await screen.findByRole("dialog", { name: "从 URL 导入视频" }),
+    ).toBeInTheDocument();
+  });
+
+  it("resumes the selected local video after basic media support is ready", async () => {
+    const basicNotReady: LocalResourceStatus = {
+      ...readyLocalResourceStatus,
+      capabilities: readyLocalResourceStatus.capabilities.map((capability) => ({
+        ...capability,
+        state: "not_ready",
+        missingResourceIds: ["ffmpeg-cpu"],
+      })),
+    };
+    let currentResourceStatus = basicNotReady;
+    desktopMocks.getLocalResourceStatus.mockImplementation(
+      async () => currentResourceStatus,
+    );
+    desktopMocks.chooseLocalVideo.mockResolvedValue(project.mediaSource.locator);
+    desktopMocks.prepareLocalCapability.mockImplementation(
+      async (capabilityId, pendingActionId) => {
+        currentResourceStatus = readyLocalResourceStatus;
+        return {
+          capabilityId,
+          pendingActionId,
+          state: "preparing",
+          resourceIds: ["ffmpeg-cpu"],
+          readyResourceIds: [],
+          taskIds: ["00000000-0000-4000-8000-000000000021"],
+        };
+      },
+    );
+
+    render(<App />);
+    await screen.findByText("本地功能按需准备");
+    fireEvent.click(await screen.findByRole("button", { name: "打开文件" }));
+
+    const resources = await screen.findByRole("dialog", {
+      name: "本地功能资源",
+    });
+    expect(resources).toHaveTextContent("继续打开本地视频");
+    expect(desktopMocks.createLocalProject).not.toHaveBeenCalled();
+    fireEvent.click(
+      within(resources).getByRole("button", {
+        name: "开始准备所选功能",
+      }),
+    );
+
+    await waitFor(() =>
+      expect(desktopMocks.prepareLocalCapability).toHaveBeenCalledWith(
+        "basic_media",
+        expect.any(String),
+      ),
+    );
+    await waitFor(() =>
+      expect(desktopMocks.prepareProjectMedia).toHaveBeenCalledWith(
+        project.id,
+        false,
+      ),
+    );
+  });
+
+  it("preflights and imports a public HTTPS media URL", async () => {
+    render(<App />);
+    await screen.findByText(/\d+ 项本地功能已准备/);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "粘贴视频 URL" }),
+    );
+
+    fireEvent.change(await screen.findByLabelText("视频 URL"), {
       target: { value: remotePreview.originalUrl },
     });
     fireEvent.click(screen.getByRole("button", { name: "检查 URL" }));
@@ -2078,10 +2475,11 @@ describe("App", () => {
   it("cancels an active remote media download", async () => {
     desktopMocks.importRemoteMediaUrl.mockReturnValue(new Promise(() => {}));
     render(<App />);
+    await screen.findByText(/\d+ 项本地功能已准备/);
     fireEvent.click(
       await screen.findByRole("button", { name: "粘贴视频 URL" }),
     );
-    fireEvent.change(screen.getByLabelText("视频 URL"), {
+    fireEvent.change(await screen.findByLabelText("视频 URL"), {
       target: { value: remotePreview.originalUrl },
     });
     fireEvent.click(screen.getByRole("button", { name: "检查 URL" }));
@@ -2102,10 +2500,11 @@ describe("App", () => {
 
   it("requires confirmation before importing a public YouTube single video", async () => {
     render(<App />);
+    await screen.findByText(/\d+ 项本地功能已准备/);
     fireEvent.click(
       await screen.findByRole("button", { name: "粘贴视频 URL" }),
     );
-    fireEvent.change(screen.getByLabelText("视频 URL"), {
+    fireEvent.change(await screen.findByLabelText("视频 URL"), {
       target: { value: youtubePreview.originalUrl },
     });
     fireEvent.click(screen.getByRole("button", { name: "检查 URL" }));

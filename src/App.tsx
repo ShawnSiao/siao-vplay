@@ -13,7 +13,10 @@ import {
 } from "./features/library/useEpisodeNavigation";
 import { PreparationScreen } from "./components/PreparationScreen";
 import { RemoteUrlDialog } from "./components/RemoteUrlDialog";
-import { RuntimeSettingsDialog } from "./components/RuntimeSettingsDialog";
+import {
+  LocalResourcesDialog,
+  type PendingResourceAction,
+} from "./components/LocalResourcesDialog";
 import { SubtitleImportDialog } from "./components/SubtitleImportDialog";
 import { SubtitleDeliveryDialog } from "./components/SubtitleDeliveryDialog";
 import { SubtitleRevisionDialog } from "./components/SubtitleRevisionDialog";
@@ -21,6 +24,7 @@ import { TranslationDialog } from "./components/TranslationDialog";
 import { DesktopShell } from "./features/shell/DesktopShell";
 import { useDesktopMediaDrop } from "./features/shell/useDesktopMediaDrop";
 import { useShellController } from "./features/shell/useShellController";
+import { useLocalResources } from "./features/resources/useLocalResources";
 import {
   chooseLocalFolder,
   chooseLocalVideo,
@@ -31,8 +35,6 @@ import {
   getAppStatus,
   getTranscriptionJob,
   getProject,
-  getMediaRuntimeStatus,
-  getRuntimeCatalog,
   isDesktopApp,
   listProjects,
   listSubtitleVersions,
@@ -46,9 +48,7 @@ import {
 import type {
   AppStatus,
   MediaPreparation,
-  MediaRuntimeStatus,
   Project,
-  RuntimeCatalog,
   SubtitleVersion,
   TranscriptionJob,
   TranslationTask,
@@ -64,8 +64,18 @@ const activeTranscriptionStatuses = new Set<TranscriptionJob["status"]>([
   "validating",
 ]);
 
+const firstRunResourceDismissedKey = "siaovplay.local-resources.first-run-dismissed.v1";
+
+type PendingResourceResume = PendingResourceAction & {
+  resume: () => Promise<void> | void;
+};
+
 export default function App() {
   const shellController = useShellController();
+  const localResources = useLocalResources();
+  const localResourceLoading = localResources.loading;
+  const localResourceStatus = localResources.status;
+  const refreshLocalResources = localResources.refresh;
   const {
     state: libraryState,
     refresh: refreshLibrary,
@@ -105,12 +115,8 @@ export default function App() {
   const startupMediaHandledRef = useRef(false);
   const posterJobsRef = useRef(new Set<string>());
   const externalResultScanRef = useRef(false);
+  const pendingResourceResumeRef = useRef<PendingResourceResume | null>(null);
   const [appStatus, setAppStatus] = useState<AppStatus | null>(null);
-  const [runtimeStatus, setRuntimeStatus] =
-    useState<MediaRuntimeStatus | null>(null);
-  const [runtimeCatalog, setRuntimeCatalog] =
-    useState<RuntimeCatalog | null>(null);
-  const [runtimeCatalogLoading, setRuntimeCatalogLoading] = useState(false);
   const [projects, setProjects] = useState<Project[]>([]);
   const [libraryError, setLibraryError] = useState<string | null>(null);
   const [activeProject, setActiveProject] = useState<Project | null>(null);
@@ -139,34 +145,22 @@ export default function App() {
   const [deleteCandidate, setDeleteCandidate] = useState<Project | null>(null);
   const [busyMessage, setBusyMessage] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
-  const [runtimeSettingsOpen, setRuntimeSettingsOpen] = useState(false);
+  const [localResourcesOpen, setLocalResourcesOpen] = useState(false);
+  const [firstRunResourceSetup, setFirstRunResourceSetup] = useState(false);
+  const [pendingResourceAction, setPendingResourceAction] =
+    useState<PendingResourceAction | null>(null);
   const episodeNavigation = useEpisodeNavigation(
     episodeContext,
     activeProject?.id ?? null,
   );
 
-  const refreshRuntimeCatalog = useCallback(async () => {
-    setRuntimeCatalogLoading(true);
-    try {
-      setRuntimeCatalog(await getRuntimeCatalog());
-    } catch (error) {
-      setToast(commandError(error).message);
-    } finally {
-      setRuntimeCatalogLoading(false);
-    }
-  }, []);
-
-  const openRuntimeSettings = useCallback(() => {
-    setRuntimeSettingsOpen(true);
-    void refreshRuntimeCatalog();
-  }, [refreshRuntimeCatalog]);
-
-  const handleRuntimeCatalogChange = useCallback((catalog: RuntimeCatalog) => {
-    setRuntimeCatalog(catalog);
-    void getMediaRuntimeStatus()
-      .then(setRuntimeStatus)
-      .catch((error: unknown) => setToast(commandError(error).message));
-  }, []);
+  const openLocalResources = useCallback(() => {
+    pendingResourceResumeRef.current = null;
+    setPendingResourceAction(null);
+    setFirstRunResourceSetup(false);
+    setLocalResourcesOpen(true);
+    void refreshLocalResources().catch(() => undefined);
+  }, [refreshLocalResources]);
 
   const refreshProjects = useCallback(async () => {
     try {
@@ -192,17 +186,6 @@ export default function App() {
           setLibraryError(commandError(error).message);
         }
       });
-    void getMediaRuntimeStatus()
-      .then((status) => {
-        if (active) {
-          setRuntimeStatus(status);
-        }
-      })
-      .catch((error: unknown) => {
-        if (active) {
-          setLibraryError(commandError(error).message);
-        }
-      });
     void listProjects()
       .then((nextProjects) => {
         if (active) {
@@ -219,6 +202,114 @@ export default function App() {
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (
+      !isDesktopApp ||
+      localResourceLoading ||
+      !localResourceStatus ||
+      localResourceStatus.configured ||
+      localResourcesOpen ||
+      window.localStorage.getItem(firstRunResourceDismissedKey) === "1"
+    ) {
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      setFirstRunResourceSetup(true);
+      setLocalResourcesOpen(true);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [localResourceLoading, localResourceStatus, localResourcesOpen]);
+
+  useEffect(() => {
+    if (localResourceStatus?.configured) {
+      window.localStorage.removeItem(firstRunResourceDismissedKey);
+    }
+  }, [localResourceStatus?.configured]);
+
+  const requestCapability = useCallback(
+    async (
+      capabilityId: string,
+      label: string,
+      resume: () => Promise<void> | void,
+      profileId?: "fast" | "standard",
+    ) => {
+      if (!isDesktopApp) {
+        await resume();
+        return;
+      }
+      const currentStatus = await refreshLocalResources();
+      const capability = currentStatus.capabilities.find(
+        (item) => item.id === capabilityId,
+      );
+      if (capability?.state === "ready") {
+        await resume();
+        return;
+      }
+      const pending: PendingResourceResume = {
+        id: crypto.randomUUID(),
+        capabilityId,
+        label,
+        profileId,
+        resume,
+      };
+      pendingResourceResumeRef.current = pending;
+      setPendingResourceAction({
+        id: pending.id,
+        capabilityId: pending.capabilityId,
+        label: pending.label,
+        profileId: pending.profileId,
+      });
+      setFirstRunResourceSetup(false);
+      setLocalResourcesOpen(true);
+    },
+    [refreshLocalResources],
+  );
+
+  const closeLocalResources = useCallback(() => {
+    if (firstRunResourceSetup) {
+      window.localStorage.setItem(firstRunResourceDismissedKey, "1");
+    }
+    if (pendingResourceResumeRef.current) {
+      setToast("此次操作已取消；已开始的功能准备任务不会被删除。");
+    }
+    pendingResourceResumeRef.current = null;
+    setPendingResourceAction(null);
+    setFirstRunResourceSetup(false);
+    setLocalResourcesOpen(false);
+  }, [firstRunResourceSetup]);
+
+  const dismissFirstRunResources = useCallback(() => {
+    window.localStorage.setItem(firstRunResourceDismissedKey, "1");
+    setFirstRunResourceSetup(false);
+    setLocalResourcesOpen(false);
+  }, []);
+
+  useEffect(() => {
+    const pending = pendingResourceResumeRef.current;
+    if (!pending || pending.id !== pendingResourceAction?.id) {
+      return;
+    }
+    const capability = localResourceStatus?.capabilities.find(
+      (item) => item.id === pending.capabilityId,
+    );
+    if (capability?.state !== "ready") {
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      if (pendingResourceResumeRef.current?.id !== pending.id) {
+        return;
+      }
+      pendingResourceResumeRef.current = null;
+      setPendingResourceAction(null);
+      setLocalResourcesOpen(false);
+      setToast(`${pending.label}：所需功能已准备完成。`);
+      void Promise.resolve(pending.resume()).catch((error: unknown) =>
+        setToast(commandError(error).message),
+      );
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [localResourceStatus, pendingResourceAction?.id]);
 
   useEffect(() => {
     const mediaTitle =
@@ -266,7 +357,7 @@ export default function App() {
     }
   }, [projects, refreshLibrary]);
 
-  const prepareAndOpen = useCallback(
+  const prepareAndOpenReady = useCallback(
     async (
       project: Project,
       shouldForceProxy: boolean,
@@ -327,6 +418,21 @@ export default function App() {
     [refreshProjects, setScreen],
   );
 
+  const prepareAndOpen = useCallback(
+    async (
+      project: Project,
+      shouldForceProxy: boolean,
+      nextEpisodeContext: EpisodePlaybackContext | null,
+    ) => {
+      await requestCapability(
+        "basic_media",
+        `继续播放「${project.title}」`,
+        () => prepareAndOpenReady(project, shouldForceProxy, nextEpisodeContext),
+      );
+    },
+    [prepareAndOpenReady, requestCapability],
+  );
+
   const returnToLibrary = useCallback(() => {
     operationTokenRef.current += 1;
     setLibrarySection("home");
@@ -344,7 +450,7 @@ export default function App() {
     void refreshProjects();
   }, [refreshProjects, setLibrarySection, setScreen]);
 
-  const importMediaPath = useCallback(
+  const importMediaPathReady = useCallback(
     async (mediaPath: string) => {
       try {
         const existingProject = projects.find(
@@ -360,13 +466,22 @@ export default function App() {
         const project =
           existingProject ?? (await createLocalProject(mediaPath));
         setBusyMessage(null);
-        await prepareAndOpen(project, false, null);
+        await prepareAndOpenReady(project, false, null);
       } catch (error) {
         setBusyMessage(null);
         setLibraryError(commandError(error).message);
       }
     },
-    [prepareAndOpen, projects],
+    [prepareAndOpenReady, projects],
+  );
+
+  const importMediaPath = useCallback(
+    async (mediaPath: string) => {
+      await requestCapability("basic_media", "继续打开本地视频", () =>
+        importMediaPathReady(mediaPath),
+      );
+    },
+    [importMediaPathReady, requestCapability],
   );
 
   const importLocalVideo = useCallback(async () => {
@@ -445,9 +560,11 @@ export default function App() {
   );
 
   const openRemoteUrlImport = useCallback(() => {
-    setLibraryError(null);
-    setRemoteUrlDialogOpen(true);
-  }, []);
+    void requestCapability("url_import", "继续打开在线视频", () => {
+      setLibraryError(null);
+      setRemoteUrlDialogOpen(true);
+    });
+  }, [requestCapability]);
 
   useEffect(() => {
     const startupMediaPath = appStatus?.startupMediaPath;
@@ -876,7 +993,7 @@ export default function App() {
         drawerTab={shellController.state.drawerTab}
         dropFeedback={dropFeedback}
         appStatus={appStatus}
-        runtimeStatus={runtimeStatus}
+        localResourceStatus={localResources.status}
         previewMode={!isDesktopApp}
         mediaTitle={screen === "library" ? null : activeProject?.title ?? null}
         currentSubtitleCount={currentSubtitle?.segments.length ?? null}
@@ -916,7 +1033,7 @@ export default function App() {
         }}
         onReviseSubtitles={() => setRevisionDialogOpen(true)}
         onDeliverSubtitles={() => setDeliveryDialogOpen(true)}
-        onOpenSettings={openRuntimeSettings}
+        onOpenSettings={openLocalResources}
       >
         {screen === "library" ? (
           <LibraryScreen
@@ -1004,14 +1121,15 @@ export default function App() {
         ) : null}
       </DesktopShell>
 
-      {runtimeSettingsOpen ? (
-        <RuntimeSettingsDialog
-          catalog={runtimeCatalog}
-          loading={runtimeCatalogLoading}
+      {localResourcesOpen ? (
+        <LocalResourcesDialog
+          controller={localResources}
+          firstRun={firstRunResourceSetup}
+          pendingAction={pendingResourceAction}
           previewMode={!isDesktopApp}
-          onClose={() => setRuntimeSettingsOpen(false)}
-          onCatalogChange={handleRuntimeCatalogChange}
-          onError={setToast}
+          onClose={closeLocalResources}
+          onDismissFirstRun={dismissFirstRunResources}
+          onNotice={setToast}
         />
       ) : null}
 
@@ -1051,6 +1169,20 @@ export default function App() {
           }
           onClose={() => setSubtitleDialogOpen(false)}
           onTranscriptionTracked={setTrackedTranscriptionJobId}
+          localResourceCatalog={localResources.catalog}
+          localResourceStatus={localResources.status}
+          onPrepareTranscriptionResources={async (profileId) => {
+            if (localResources.status?.configured) {
+              await localResources.selectProfile(profileId);
+            }
+            setSubtitleDialogOpen(false);
+            await requestCapability(
+              "local_transcription",
+              "继续生成原文字幕",
+              () => setSubtitleDialogOpen(true),
+              profileId,
+            );
+          }}
           onImported={(version) => {
             void handleSubtitleVersionCreated(
               version,

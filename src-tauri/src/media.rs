@@ -16,7 +16,8 @@ use crate::{
     store::{ProjectStore, StoreError},
 };
 
-const PLAYBACK_PROXY_PROFILE: &str = "h264-yuv420p-aac-v1";
+const PLAYBACK_PROXY_PROFILE: &str = "h264-yuv420p-aac-v2";
+const SOFTWARE_H264_ENCODER: &str = "libopenh264";
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
 #[derive(Debug, Error)]
@@ -235,6 +236,45 @@ pub(crate) fn validate_media_path(media_path: &Path) -> Result<MediaProbe, Media
 
 pub(crate) fn ffmpeg_path() -> Result<PathBuf, MediaError> {
     Ok(MediaRuntime::resolve()?.ffmpeg_path)
+}
+
+pub(crate) fn h264_video_encode_args(probe: &MediaProbe) -> Vec<String> {
+    let resolution_floor = probe
+        .video_streams
+        .first()
+        .map(|stream| u64::from(stream.width) * u64::from(stream.height))
+        .map(|pixels| match pixels {
+            0..=921_600 => 4_000_000,
+            921_601..=2_073_600 => 6_000_000,
+            2_073_601..=3_686_400 => 10_000_000,
+            _ => 16_000_000,
+        })
+        .unwrap_or(6_000_000);
+    let source_adjusted = probe.bit_rate.unwrap_or(0).saturating_mul(2);
+    let target_bitrate = resolution_floor.max(source_adjusted).min(20_000_000);
+    let max_bitrate = target_bitrate.saturating_mul(5) / 4;
+    let buffer_size = target_bitrate.saturating_mul(2);
+
+    [
+        "-c:v".to_owned(),
+        SOFTWARE_H264_ENCODER.to_owned(),
+        "-profile:v".to_owned(),
+        "high".to_owned(),
+        "-coder".to_owned(),
+        "cabac".to_owned(),
+        "-rc_mode".to_owned(),
+        "quality".to_owned(),
+        "-b:v".to_owned(),
+        target_bitrate.to_string(),
+        "-maxrate".to_owned(),
+        max_bitrate.to_string(),
+        "-bufsize".to_owned(),
+        buffer_size.to_string(),
+        "-pix_fmt".to_owned(),
+        "yuv420p".to_owned(),
+    ]
+    .into_iter()
+    .collect()
 }
 
 pub(crate) fn remux_local_hls(playlist_path: &Path, destination: &Path) -> Result<(), MediaError> {
@@ -546,22 +586,13 @@ fn generate_playback_proxy(
 
     remove_controlled_file_if_present(&temporary_path, &project_cache)?;
     remove_controlled_file_if_present(&final_path, &project_cache)?;
-    let output = hidden_command(&runtime.ffmpeg_path)
+    let mut command = hidden_command(&runtime.ffmpeg_path);
+    command
         .args(["-y", "-hide_banner", "-nostdin", "-v", "error", "-i"])
         .arg(source_path)
+        .args(["-map", "0:v:0", "-map", "0:a:0?"])
+        .args(h264_video_encode_args(&inspection.probe))
         .args([
-            "-map",
-            "0:v:0",
-            "-map",
-            "0:a:0?",
-            "-c:v",
-            "libx264",
-            "-preset",
-            "medium",
-            "-crf",
-            "20",
-            "-pix_fmt",
-            "yuv420p",
             "-force_key_frames",
             "expr:gte(t,n_forced*2)",
             "-c:a",
@@ -571,18 +602,17 @@ fn generate_playback_proxy(
             "-movflags",
             "+faststart",
         ])
-        .arg(&temporary_path)
-        .output()
-        .map_err(|error| {
-            fail_proxy(
-                store,
-                &artifact.id,
-                &temporary_path,
-                &project_cache,
-                "ffmpeg_start_failed",
-                &format!("无法启动 FFmpeg：{error}"),
-            )
-        })?;
+        .arg(&temporary_path);
+    let output = command.output().map_err(|error| {
+        fail_proxy(
+            store,
+            &artifact.id,
+            &temporary_path,
+            &project_cache,
+            "ffmpeg_start_failed",
+            &format!("无法启动 FFmpeg：{error}"),
+        )
+    })?;
 
     if !output.status.success() {
         let message = command_error_message(&output);
@@ -972,10 +1002,7 @@ fn resolve_runtime_tool(
     environment_variable: &str,
     file_name: &str,
 ) -> Result<PathBuf, MediaError> {
-    if let Some(path) = env::var_os(environment_variable)
-        .filter(|value| !value.is_empty())
-        .map(PathBuf::from)
-    {
+    if let Some(path) = crate::local_resources::development_path_override(environment_variable) {
         if path.is_file() {
             return Ok(path);
         }
@@ -984,10 +1011,16 @@ fn resolve_runtime_tool(
             path.display()
         )));
     }
-    let runtime_root = env::var_os("SIAOVPLAY_RUNTIME_DIR")
-        .filter(|value| !value.is_empty())
-        .map(PathBuf::from)
-        .or_else(crate::runtime::configured_runtime_root);
+    let managed_entrypoint = match file_name {
+        "ffmpeg.exe" => "ffmpeg",
+        "ffprobe.exe" => "ffprobe",
+        _ => file_name,
+    };
+    if let Some(path) = crate::local_resources::resolve_entrypoint("ffmpeg-cpu", managed_entrypoint)
+    {
+        return Ok(path);
+    }
+    let runtime_root = crate::local_resources::development_path_override("SIAOVPLAY_RUNTIME_DIR");
     let executable_path = env::current_exe().ok();
     let candidates = runtime_tool_candidates(
         file_name,
@@ -1275,6 +1308,18 @@ mod tests {
     }
 
     #[test]
+    fn compatible_h264_encode_args_match_the_managed_lgpl_runtime() {
+        let args =
+            h264_video_encode_args(&probe("av1", "aac", "mov,mp4,m4a,3gp,3g2,mj2", 3840, 2160));
+
+        assert!(args.windows(2).any(|pair| pair == ["-c:v", "libopenh264"]));
+        assert!(args.windows(2).any(|pair| pair == ["-b:v", "16000000"]));
+        assert!(args.windows(2).any(|pair| pair == ["-pix_fmt", "yuv420p"]));
+        assert!(!args.iter().any(|argument| argument == "libx264"));
+        assert!(!args.iter().any(|argument| argument == "-crf"));
+    }
+
+    #[test]
     fn av1_requires_runtime_check_only_inside_performance_gate() {
         let regular = playback_gate(&probe("av1", "opus", "matroska,webm", 1920, 1080));
         let oversized = playback_gate(&probe("av1", "opus", "matroska,webm", 3840, 2160));
@@ -1390,5 +1435,32 @@ mod tests {
             hash_file(&source_path).expect("source should still hash"),
             source_hash_before
         );
+    }
+
+    #[test]
+    #[ignore = "requires SIAOVPLAY_PROJECT_DATABASE, SIAOVPLAY_PROJECT_ID and the local FFmpeg runtime"]
+    fn real_persistent_project_playback_proxy() {
+        let database_path = env::var_os("SIAOVPLAY_PROJECT_DATABASE")
+            .map(PathBuf::from)
+            .expect("SIAOVPLAY_PROJECT_DATABASE must be set");
+        let project_id =
+            env::var("SIAOVPLAY_PROJECT_ID").expect("SIAOVPLAY_PROJECT_ID must be set");
+        let runtime = MediaRuntime::resolve().expect("FFmpeg runtime should resolve");
+        let store = ProjectStore::open(database_path).expect("project store should open");
+
+        let preparation = prepare_project_media(
+            &store,
+            PrepareProjectMediaInput {
+                project_id,
+                force_proxy: true,
+            },
+        )
+        .expect("playback proxy should be generated");
+
+        assert_eq!(preparation.playback_source_kind, PlaybackSourceKind::Proxy);
+        assert!(playback_proxy_is_valid(
+            &runtime,
+            Path::new(&preparation.playback_path)
+        ));
     }
 }

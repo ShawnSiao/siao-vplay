@@ -510,6 +510,282 @@ export type RuntimeCatalog = {
   components: RuntimeComponent[];
 };
 
+export type LocalResourceRootState =
+  | "setup_required"
+  | "ready"
+  | "root_unavailable"
+  | "repair_required";
+
+export type LocalResourceCapabilityState =
+  | "setup_required"
+  | "not_ready"
+  | "preparing"
+  | "ready"
+  | "repair_required"
+  | "root_unavailable"
+  | "update_available";
+
+export type LocalResourceCapabilityStatus = {
+  id: string;
+  title: string;
+  state: LocalResourceCapabilityState;
+  requiredResourceIds: string[];
+  missingResourceIds: string[];
+};
+
+export type LocalResourceStatus = {
+  configured: boolean;
+  selectedParent: string | null;
+  resourceRoot: string | null;
+  rootState: LocalResourceRootState;
+  freeSpaceBytes: number | null;
+  preferredProfile: string;
+  capabilities: LocalResourceCapabilityStatus[];
+};
+
+export type LocalResourceLocationPlan = {
+  selectedParent: string;
+  resourceRoot: string;
+  parentExists: boolean;
+  resourceRootExists: boolean;
+  freeSpaceBytes: number | null;
+  confirmationRequired: boolean;
+};
+
+export type LocalResourceArtifact = {
+  url: string;
+  size: number;
+  sha256: string;
+  format: string;
+  stripComponents?: number;
+};
+
+export type LocalResourceDefinition = {
+  id: string;
+  version: string;
+  platform: string;
+  kind: string;
+  bundled: boolean;
+  installedSize?: number;
+  expectedDownloadSize?: number;
+  license: string;
+  sourcePage: string;
+  artifact?: LocalResourceArtifact;
+  entrypoints: Record<string, string>;
+  healthCheck: string;
+  sourceCommit?: string;
+  patchSha256?: string;
+  requires?: string;
+  distribution?: { status: string };
+};
+
+export type LocalResourceCatalog = {
+  schemaVersion: number;
+  productId: string;
+  updatedAt: string;
+  packageProfile: string;
+  bundlePolicy: {
+    maximumExceptionBytes: number;
+    allowlistedResourceIds: string[];
+  };
+  capabilities: Array<{
+    id: string;
+    title: string;
+    resourceIds: string[];
+    profileIds: string[];
+    requiresCapabilityIds: string[];
+  }>;
+  profiles: Array<{
+    id: string;
+    title: string;
+    resourceIds: string[];
+    recommended: boolean;
+  }>;
+  resources: LocalResourceDefinition[];
+};
+
+export type ResourceDownloadTaskState =
+  | "queued"
+  | "downloading"
+  | "paused"
+  | "verifying"
+  | "installing"
+  | "completed"
+  | "failed"
+  | "cancelled";
+
+export type ResourceDownloadTask = {
+  id: string;
+  resourceId: string;
+  version: string;
+  state: ResourceDownloadTaskState;
+  downloadedBytes: number;
+  totalBytes: number;
+  requestedByCapabilityIds: string[];
+  pendingActionIds: string[];
+  attempt: number;
+  errorCode: string | null;
+  errorMessage: string | null;
+  createdAtMs: number;
+  updatedAtMs: number;
+  forceReinstall: boolean;
+};
+
+export type ResourceNetworkStatus = {
+  mode: "direct" | "proxy";
+  proxySource: "custom" | "environment" | "windows_system" | "direct";
+  proxyAddress: string | null;
+};
+
+export type CapabilityPreparation = {
+  capabilityId: string;
+  pendingActionId: string | null;
+  state: "ready" | "preparing";
+  resourceIds: string[];
+  readyResourceIds: string[];
+  taskIds: string[];
+};
+
+export type ResourceRemovalResult = {
+  resourceId: string;
+  removed: boolean;
+  affectedCapabilityIds: string[];
+};
+
+export type ResourceMigrationSource = {
+  kind: "selected_directory";
+  path: string;
+};
+
+export type ResourceMigrationCandidate = {
+  sourceKind: ResourceMigrationSource["kind"];
+  sourceRoot: string;
+  resourceId: string;
+  resourcePath: string;
+  state: "verified" | "rejected";
+  reusableBytes: number;
+  message: string | null;
+};
+
+export type ResourceMigrationPreview = {
+  sources: ResourceMigrationSource[];
+  candidates: ResourceMigrationCandidate[];
+  verifiedResourceIds: string[];
+  reusableBytes: number;
+  rejectedCount: number;
+};
+
+export type ResourceAdoptionResult = {
+  adoptedResourceIds: string[];
+  alreadyActiveResourceIds: string[];
+  rejectedResourceIds: string[];
+  reusableBytes: number;
+};
+
+export type LocalResourceMovePlan = {
+  previousRoot: string;
+  selectedParent: string;
+  resourceRoot: string;
+  bytesToCopy: number;
+  fileCount: number;
+  freeSpaceBytes: number | null;
+  crossVolume: boolean;
+  destinationExists: boolean;
+  confirmationRequired: boolean;
+};
+
+export type LocalResourceMoveResult = {
+  previousRoot: string;
+  currentRoot: string;
+  copiedBytes: number;
+  verifiedFileCount: number;
+  crossVolume: boolean;
+  previousRootRetained: boolean;
+};
+
+export type UnusedResourceCleanupPlan = {
+  resourceIds: string[];
+  reclaimableBytes: number;
+  confirmationRequired: boolean;
+};
+
+export type UnusedResourceCleanupResult = {
+  removedResourceIds: string[];
+  reclaimedBytes: number;
+};
+
+export type ResourceVersionDiagnostic = {
+  version: string;
+  active: boolean;
+  installPath: string;
+  fileCount: number;
+  installedBytes: number;
+  manifestSha256: string;
+  healthStatus: string;
+  activatedAtMs: number | null;
+  entrypointsAvailable: boolean;
+};
+
+export type ResourceDiagnosticItem = {
+  id: string;
+  catalogVersion: string;
+  activeVersion: string | null;
+  state: "not_installed" | "ready" | "update_available" | "repair_required";
+  license: string;
+  sourcePage: string;
+  artifactSha256: string | null;
+  artifactUrl: string | null;
+  healthCheck: string;
+  versions: ResourceVersionDiagnostic[];
+};
+
+export type ResourceTaskDiagnostic = {
+  id: string;
+  resourceId: string;
+  version: string;
+  state: string;
+  downloadedBytes: number;
+  totalBytes: number;
+  errorCode: string | null;
+  errorMessage: string | null;
+};
+
+export type LocalResourceDiagnostics = {
+  generatedAtMs: number;
+  catalogSource: "embedded";
+  remoteCatalogEnabled: false;
+  remoteSignaturePolicy: string;
+  rootState: LocalResourceRootState;
+  resourceRoot: string | null;
+  preferredProfile: string;
+  resources: ResourceDiagnosticItem[];
+  tasks: ResourceTaskDiagnostic[];
+};
+
+export type ResourceRollbackResult = {
+  resourceId: string;
+  previousVersion: string;
+  activeVersion: string;
+};
+
+export type OldResourceVersionCandidate = {
+  resourceId: string;
+  version: string;
+  reclaimableBytes: number;
+};
+
+export type OldResourceVersionCleanupPlan = {
+  candidates: OldResourceVersionCandidate[];
+  protectedVersions: string[];
+  reclaimableBytes: number;
+  confirmationRequired: boolean;
+};
+
+export type OldResourceVersionCleanupResult = {
+  removedVersions: string[];
+  reclaimedBytes: number;
+};
+
 export type DeleteProjectResult = {
   projectId: string;
   deleted: boolean;

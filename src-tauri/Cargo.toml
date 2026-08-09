@@ -1,6 +1,6 @@
 [package]
 name = "siao-vplay"
-version = "0.2.0"
+version = "0.3.0"
 description = "Windows local-first cross-language intelligent video player"
 authors = ["ShawnSiao"]
 edition = "2024"
@@ -37,6 +37,9 @@ windows-sys = { version = "0.61.2", features = [
     "Win32_UI_Accessibility",
     "Win32_UI_WindowsAndMessaging",
 ] }
+
+[target.'cfg(windows)'.dependencies]
+winreg = "0.55.0"
 
 [dev-dependencies]
 tempfile = "3.27.0"

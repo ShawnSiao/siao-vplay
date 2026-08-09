@@ -6,14 +6,14 @@ const MAX_MEDIA_TITLE_CHARS: usize = 160;
 pub fn apply(window: &WebviewWindow) {
     #[cfg(windows)]
     {
-        apply_windows_frame(window);
+        apply_windows_frame(window, WindowsFrameUpdate::Initial);
         let event_window = window.clone();
         window.on_window_event(move |event| {
             if matches!(
                 event,
                 tauri::WindowEvent::Focused(true) | tauri::WindowEvent::ThemeChanged(_)
             ) {
-                apply_windows_frame(&event_window);
+                apply_windows_frame(&event_window, WindowsFrameUpdate::Refresh);
             }
         });
     }
@@ -41,7 +41,21 @@ fn window_title(media_title: Option<&str>) -> String {
 }
 
 #[cfg(windows)]
-fn apply_windows_frame(window: &WebviewWindow) {
+#[derive(Clone, Copy)]
+enum WindowsFrameUpdate {
+    Initial,
+    Refresh,
+}
+
+#[cfg(windows)]
+impl WindowsFrameUpdate {
+    const fn updates_tauri_theme(self) -> bool {
+        matches!(self, Self::Initial)
+    }
+}
+
+#[cfg(windows)]
+fn apply_windows_frame(window: &WebviewWindow, update: WindowsFrameUpdate) {
     use std::{ffi::c_void, mem::size_of};
 
     use windows_sys::Win32::{
@@ -80,9 +94,11 @@ fn apply_windows_frame(window: &WebviewWindow) {
         }
     };
 
-    let preferred_theme = use_dark_frame.then_some(tauri::Theme::Dark);
-    if let Err(error) = window.set_theme(preferred_theme) {
-        eprintln!("SiaoVPlay: unable to update the native window theme: {error}");
+    if update.updates_tauri_theme() {
+        let preferred_theme = use_dark_frame.then_some(tauri::Theme::Dark);
+        if let Err(error) = window.set_theme(preferred_theme) {
+            eprintln!("SiaoVPlay: unable to update the native window theme: {error}");
+        }
     }
 
     let hwnd: HWND = match window.hwnd() {
@@ -161,6 +177,9 @@ const fn color_ref(red: u8, green: u8, blue: u8) -> u32 {
 mod tests {
     use super::window_title;
 
+    #[cfg(windows)]
+    use super::WindowsFrameUpdate;
+
     #[test]
     fn native_title_uses_the_application_name_for_the_library() {
         assert_eq!(window_title(None), "SiaoVPlay");
@@ -172,5 +191,12 @@ mod tests {
         assert_eq!(window_title(Some("  雨\n站台  ")), "雨站台 — SiaoVPlay");
         let long_title = "a".repeat(200);
         assert_eq!(window_title(Some(&long_title)).chars().count(), 172);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn window_event_refresh_does_not_set_the_tauri_theme_again() {
+        assert!(WindowsFrameUpdate::Initial.updates_tauri_theme());
+        assert!(!WindowsFrameUpdate::Refresh.updates_tauri_theme());
     }
 }

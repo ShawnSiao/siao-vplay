@@ -347,13 +347,13 @@ test("dialog keeps its frame fixed and scrolls only the content at 900px", async
   expect(await actions.boundingBox()).toEqual(before.actions);
 });
 
-test("runtime settings keeps the component list scrollable and explains storage behavior", async ({
+test("local resources stay product-focused, accessible, and scrollable at 1280 by 720", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1280, height: 720 });
   await page.goto("/e2e/runtime.html");
 
-  const dialog = page.getByRole("dialog", { name: "运行时与模型设置" });
+  const dialog = page.getByRole("dialog", { name: "本地功能资源" });
   const body = dialog.locator(".dialog-body");
   const actions = dialog.locator(".dialog-actions");
   const before = {
@@ -362,8 +362,22 @@ test("runtime settings keeps the component list scrollable and explains storage 
   };
 
   await expect(dialog).toBeVisible();
-  await expect(dialog).toContainText("不会搬运现有组件、视频或模型");
-  await expect(dialog).toContainText("下载 FFmpeg 或识别模型前，需要先选择目录");
+  await expect(dialog).toContainText("共享内容不会重复下载");
+  await expect(dialog).toContainText("不会使用隐式系统盘目录");
+  await expect(dialog).toContainText("识别模型下载 148 MB");
+  await expect(dialog).toContainText("识别模型下载 488 MB");
+  await expect(dialog.getByRole("button", { name: "选择现有资源目录" })).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "更改保存位置" })).toBeVisible();
+  expect(await dialog.evaluate((element) => (element as HTMLElement).innerText)).not.toMatch(
+    /FFmpeg|yt-dlp|Whisper|SHA-256|https:\/\/|SIAOVPLAY_/i,
+  );
+  await expect(dialog.getByText("ffmpeg-cpu", { exact: true })).toBeHidden();
+  await expect(dialog.getByText(/SHA-256/).first()).toBeHidden();
+  await expect(
+    dialog.getByRole("progressbar", { name: "在线视频导入准备进度" }),
+  ).toHaveAttribute("aria-valuenow", "50");
+  await dialog.getByRole("button", { name: "继续" }).click();
+  await expect(dialog).toContainText("正在下载");
   expect(await body.evaluate((element) => element.scrollHeight)).toBeGreaterThan(
     await body.evaluate((element) => element.clientHeight),
   );
@@ -371,9 +385,24 @@ test("runtime settings keeps the component list scrollable and explains storage 
   await body.evaluate((element) => {
     element.scrollTop = element.scrollHeight;
   });
-  await expect(dialog.getByText("Whisper Base", { exact: true })).toBeVisible();
+  await dialog.getByText("高级诊断与第三方许可").click();
+  await expect(dialog.getByText("当前使用内置可信目录清单")).toBeVisible();
+  await expect(dialog.getByText("2026.05.01（活动）")).toBeVisible();
+  await expect(
+    dialog.getByRole("button", { name: "回退到 2026.04.01" }),
+  ).toBeVisible();
+  await expect(
+    dialog.getByRole("button", { name: "复制脱敏诊断摘要" }),
+  ).toBeVisible();
   await expect(dialog.getByRole("button", { name: "完成" })).toBeVisible();
   expect(await dialog.boundingBox()).toEqual(before.dialog);
   expect(await actions.boundingBox()).toEqual(before.actions);
   expect(await body.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+  const evidencePath = process.env.SIAOVPLAY_E2E_EVIDENCE_PATH;
+  if (evidencePath) {
+    await dialog
+      .getByRole("button", { name: "回退到 2026.04.01" })
+      .scrollIntoViewIfNeeded();
+    await page.screenshot({ path: evidencePath });
+  }
 });
