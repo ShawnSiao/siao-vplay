@@ -14,9 +14,9 @@ import {
 import { PreparationScreen } from "./components/PreparationScreen";
 import { RemoteUrlDialog } from "./components/RemoteUrlDialog";
 import {
-  LocalResourcesDialog,
+  LocalFeaturesDialog,
   type PendingResourceAction,
-} from "./components/LocalResourcesDialog";
+} from "./features/environment-settings/LocalFeaturesDialog";
 import { SubtitleImportDialog } from "./components/SubtitleImportDialog";
 import { SubtitleDeliveryDialog } from "./components/SubtitleDeliveryDialog";
 import { SubtitleRevisionDialog } from "./components/SubtitleRevisionDialog";
@@ -1122,7 +1122,7 @@ export default function App() {
       </DesktopShell>
 
       {localResourcesOpen ? (
-        <LocalResourcesDialog
+        <LocalFeaturesDialog
           controller={localResources}
           firstRun={firstRunResourceSetup}
           pendingAction={pendingResourceAction}

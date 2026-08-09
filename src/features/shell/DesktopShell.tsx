@@ -8,6 +8,7 @@ import type {
 import type { LibrarySection } from "../library/useLibraryController";
 import type { MediaDropFeedback } from "./useDesktopMediaDrop";
 import type { ShellDrawerTab, ShellView } from "./useShellController";
+import { EnvironmentSettingsTrigger } from "./EnvironmentSettingsTrigger";
 
 type DesktopShellProps = {
   activeView: ShellView;
@@ -325,15 +326,7 @@ export function DesktopShell({
               </div>
             ) : null}
           </div>
-          <button
-            aria-label="设置"
-            className="shell-icon-command"
-            type="button"
-            title="本地功能资源"
-            onClick={onOpenSettings}
-          >
-            ⚙
-          </button>
+          <EnvironmentSettingsTrigger onOpen={onOpenSettings} />
         </div>
       </header>
 

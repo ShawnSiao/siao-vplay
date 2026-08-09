@@ -32,6 +32,7 @@ import type {
   SubtitleSegment,
   SubtitleVersion,
 } from "../types";
+import type { AiHandoffKind } from "../features/ai-tasks/execution";
 
 type LearningPanelProps = {
   projectId: string;
@@ -45,8 +46,6 @@ type LearningPanelProps = {
   embedded?: boolean;
   onJump: (positionMs: number) => void;
 };
-
-type HandoffKind = "codex" | "manual";
 
 type SelectablePart = {
   text: string;
@@ -153,7 +152,7 @@ export function LearningPanel({
     [sourceSegment?.text, sourceVersion?.languageCode],
   );
   const [selectedText, setSelectedText] = useState(sourceSegment?.text ?? "");
-  const [handoff, setHandoff] = useState<HandoffKind>("codex");
+  const [handoff, setHandoff] = useState<AiHandoffKind>("codex");
   const [runtime, setRuntime] = useState<CodexRuntimeStatus | null>(null);
   const [task, setTask] = useState<LearningTask | null>(null);
   const [entry, setEntry] = useState<DictionaryEntry | null>(null);

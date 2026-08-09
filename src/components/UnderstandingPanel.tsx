@@ -24,6 +24,7 @@ import type {
   ExplanationTask,
   SubtitleVersion,
 } from "../types";
+import type { AiHandoffKind } from "../features/ai-tasks/execution";
 
 type UnderstandingPanelProps = {
   projectId: string;
@@ -34,8 +35,6 @@ type UnderstandingPanelProps = {
   onClose: () => void;
   embedded?: boolean;
 };
-
-type HandoffKind = "codex" | "manual";
 
 const activeStatuses = new Set([
   "awaiting_external_result",
@@ -78,7 +77,7 @@ export function UnderstandingPanel({
 }: UnderstandingPanelProps) {
   const handledCompletionRef = useRef<string | null>(null);
   const initialCutoffRef = useRef(playbackCutoffMs);
-  const [handoff, setHandoff] = useState<HandoffKind>("codex");
+  const [handoff, setHandoff] = useState<AiHandoffKind>("codex");
   const [runtime, setRuntime] = useState<CodexRuntimeStatus | null>(null);
   const [task, setTask] = useState<ExplanationTask | null>(null);
   const [explanation, setExplanation] = useState<Explanation | null>(null);
