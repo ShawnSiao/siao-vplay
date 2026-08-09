@@ -367,7 +367,7 @@ test("local resources stay product-focused, accessible, and scrollable at 1280 b
   await expect(dialog).toContainText("识别模型下载 148 MB");
   await expect(dialog).toContainText("识别模型下载 488 MB");
   await expect(dialog.getByRole("button", { name: "选择现有资源目录" })).toBeVisible();
-  await expect(dialog.getByRole("button", { name: "更改保存位置" })).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "移动保存位置" })).toBeVisible();
   expect(await dialog.evaluate((element) => (element as HTMLElement).innerText)).not.toMatch(
     /FFmpeg|yt-dlp|Whisper|SHA-256|https:\/\/|SIAOVPLAY_/i,
   );

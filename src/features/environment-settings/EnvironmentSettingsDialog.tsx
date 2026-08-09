@@ -11,6 +11,7 @@ import { codexSelectionId } from "./serviceSelection";
 import { useEnvironmentSettings } from "./useEnvironmentSettings";
 import "./environment-settings-shell.css";
 import "./environment-settings-content.css";
+import "./local-features-v3.css";
 
 type EnvironmentSettingsDialogProps = {
   localResources: LocalResourcesController;

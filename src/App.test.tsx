@@ -2300,7 +2300,7 @@ describe("App", () => {
     const dialog = await screen.findByRole("dialog", {
       name: "环境配置",
     });
-    expect(within(dialog).getByRole("button", { name: "选择位置" })).toBeEnabled();
+    expect(within(dialog).getByRole("button", { name: "选择保存位置" })).toBeEnabled();
     expect(within(dialog).getByText(/选择位置不会开始下载/)).toBeVisible();
     expect(desktopMocks.prepareLocalCapability).not.toHaveBeenCalled();
     fireEvent.click(
@@ -2360,9 +2360,9 @@ describe("App", () => {
     });
     expect(resources).toHaveTextContent("继续打开在线视频");
     expect(screen.queryByLabelText("视频 URL")).toBeNull();
-    const urlCapability = within(resources).getByText("在线视频导入").closest("article");
-    expect(urlCapability).not.toBeNull();
-    fireEvent.click(within(urlCapability!).getByRole("button", { name: "准备" }));
+    fireEvent.click(
+      within(resources).getByRole("button", { name: "开始准备所选功能" }),
+    );
 
     await waitFor(() =>
       expect(desktopMocks.prepareLocalCapability).toHaveBeenCalledWith(
@@ -2414,9 +2414,9 @@ describe("App", () => {
     });
     expect(resources).toHaveTextContent("继续打开本地视频");
     expect(desktopMocks.createLocalProject).not.toHaveBeenCalled();
-    const mediaCapability = within(resources).getByText("基础视频支持").closest("article");
-    expect(mediaCapability).not.toBeNull();
-    fireEvent.click(within(mediaCapability!).getByRole("button", { name: "准备" }));
+    fireEvent.click(
+      within(resources).getByRole("button", { name: "开始准备所选功能" }),
+    );
 
     await waitFor(() =>
       expect(desktopMocks.prepareLocalCapability).toHaveBeenCalledWith(

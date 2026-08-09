@@ -131,13 +131,23 @@
   grid-template-columns: 28px minmax(0, 1fr);
   align-items: center;
   gap: 7px;
-  margin-top: auto;
+  margin-top: 0;
   padding: 6px 8px;
   border: 1px solid transparent;
   border-radius: 3px;
   color: var(--text-secondary);
   text-align: left;
   background: transparent;
+}
+
+.desktop-navigation-bottom {
+  display: grid;
+  gap: 8px;
+  margin-top: auto;
+}
+
+.desktop-navigation-bottom .desktop-navigation-note {
+  margin: 0 2px;
 }
 
 .environment-navigation-trigger:hover {
