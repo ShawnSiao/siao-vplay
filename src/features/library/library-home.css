@@ -1,3 +1,15 @@
+.library-screen .sr-only {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  overflow: hidden !important;
+  padding: 0 !important;
+  border: 0 !important;
+  margin: -1px !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+}
+
 .library-screen .library-continue-hero {
   display: grid;
   overflow: hidden;
@@ -317,4 +329,22 @@
   margin: 0 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.library-screen .library-home-context {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0 0 17px;
+  color: #7f8b95;
+  font-size: 13px;
+}
+
+.library-screen .library-home-context b {
+  color: #56616a;
+  font-weight: 400;
+}
+
+.library-screen .library-home-context strong {
+  color: #dfe5e9;
+  font-size: 16px;
 }

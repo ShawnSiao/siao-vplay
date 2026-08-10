@@ -8,9 +8,10 @@ test("media home uses a compact responsive desktop shell", async ({ page }) => {
     "height",
     "44px",
   );
-  await page.getByText("添加视频", { exact: true }).first().click();
-  const openFolder = page.getByRole("menuitem", { name: /添加剧集文件夹/ });
+  const openFolder = page.getByRole("button", { name: "添加剧集文件夹" });
   await expect(openFolder).toBeEnabled();
+  await expect(page.getByRole("button", { name: "打开视频" })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "从 URL 导入" })).toBeEnabled();
   await expect(
     page.getByRole("heading", { name: "专注观看，需要时再理解。" }),
   ).toHaveCount(0);

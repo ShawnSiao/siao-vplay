@@ -592,6 +592,9 @@ export function LocalResourcesDialog({
                 {capabilityStatuses.map((capability) => {
                   const installable = capabilityInstallable(capability);
                   const selected = selectedCapabilityIds.has(capability.id);
+                  const ready =
+                    capability.state === "ready" ||
+                    capability.state === "update_available";
                   const locked = pendingAction?.capabilityId === capability.id;
                   const missingResourceIds =
                     missingResourceIdsByCapability.get(capability.id) ?? [];
@@ -601,25 +604,36 @@ export function LocalResourcesDialog({
                     0,
                   );
                   return (
-                    <label
-                      className={`local-capability-card ${selected ? "selected" : ""} ${
+                    <div
+                      className={`local-capability-card ${selected && !ready ? "selected" : ""} ${
+                        ready ? "ready" : ""
+                      } ${
                         !installable ? "unavailable" : ""
                       }`}
                       key={capability.id}
                     >
-                      <input
-                        type="checkbox"
-                        checked={selected}
-                        disabled={
-                          previewMode ||
-                          locked ||
-                          capability.state === "ready" ||
-                          capability.state === "update_available" ||
-                          !installable ||
-                          busyAction !== null
-                        }
-                        onChange={() => toggleCapability(capability.id)}
-                      />
+                      {ready ? (
+                        <span
+                          className="local-capability-ready-mark"
+                          role="img"
+                          aria-label="已准备"
+                        >
+                          ✓
+                        </span>
+                      ) : (
+                        <input
+                          type="checkbox"
+                          aria-label={`选择准备${capability.title}`}
+                          checked={selected}
+                          disabled={
+                            previewMode ||
+                            locked ||
+                            !installable ||
+                            busyAction !== null
+                          }
+                          onChange={() => toggleCapability(capability.id)}
+                        />
+                      )}
                       <span className="local-capability-copy">
                         <strong>{capability.title}</strong>
                         <span>
@@ -644,7 +658,7 @@ export function LocalResourcesDialog({
                       >
                         {capabilityStateLabel(capability, installable)}
                       </span>
-                    </label>
+                    </div>
                   );
                 })}
               </div>

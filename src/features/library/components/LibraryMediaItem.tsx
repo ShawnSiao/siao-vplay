@@ -1,5 +1,4 @@
-import { useState } from "react";
-
+import { MenuPopover } from "../../../components/MenuPopover";
 import { playbackUrl } from "../../../lib/desktop";
 import { fileExtension, formatDuration, formatRecentTime } from "../../../lib/format";
 import type { CollectionSummary, LibraryMediaSummary } from "../../../types";
@@ -66,7 +65,6 @@ export function LibraryMediaItem({
   onRemoveFromCollection,
   onSetWatchLater,
 }: LibraryMediaItemProps) {
-  const [menuOpen, setMenuOpen] = useState(false);
   const needsRelink = libraryMediaNeedsRelink(media);
   const progress = libraryMediaProgress(media);
   const manualCollections = collections.filter(
@@ -79,11 +77,6 @@ export function LibraryMediaItem({
       ? "继续"
       : "播放";
   const code = episodeCode(media);
-
-  const closeThen = (action: () => void) => {
-    setMenuOpen(false);
-    action();
-  };
 
   return (
     <article className="library-media-item">
@@ -134,21 +127,17 @@ export function LibraryMediaItem({
         >
           {primaryLabel}
         </button>
-        <details
+        <MenuPopover
           className="library-row-menu"
-          open={menuOpen}
-          onToggle={(event) => setMenuOpen(event.currentTarget.open)}
+          label={`${media.projectTitle} 的更多操作`}
+          panelClassName="library-row-menu-panel"
         >
-          <summary aria-label={`${media.projectTitle} 的更多操作`}>•••</summary>
-          <div className="library-row-menu-panel" role="menu">
             {context.kind === "watch_later" ? (
               <button
                 type="button"
                 role="menuitem"
                 disabled={mutationPending}
-                onClick={() =>
-                  closeThen(() => void onSetWatchLater(media.projectId, false))
-                }
+                onClick={() => void onSetWatchLater(media.projectId, false)}
               >
                 取消稍后观看
               </button>
@@ -159,12 +148,7 @@ export function LibraryMediaItem({
                 role="menuitem"
                 disabled={mutationPending}
                 onClick={() =>
-                  closeThen(() =>
-                    void onRemoveFromCollection(
-                      context.collectionId,
-                      media.projectId,
-                    ),
-                  )
+                  void onRemoveFromCollection(context.collectionId, media.projectId)
                 }
               >
                 移出合集
@@ -178,9 +162,7 @@ export function LibraryMediaItem({
                   key={collection.id}
                   disabled={mutationPending}
                   onClick={() =>
-                    closeThen(() =>
-                      void onAddToCollection(collection.id, media.projectId),
-                    )
+                    void onAddToCollection(collection.id, media.projectId)
                   }
                 >
                   加入「{collection.title}」
@@ -192,9 +174,7 @@ export function LibraryMediaItem({
                 type="button"
                 role="menuitem"
                 disabled={mutationPending}
-                onClick={() =>
-                  closeThen(() => void onSetWatchLater(media.projectId, true))
-                }
+                onClick={() => void onSetWatchLater(media.projectId, true)}
               >
                 加入稍后观看
               </button>
@@ -203,7 +183,7 @@ export function LibraryMediaItem({
               type="button"
               role="menuitem"
               disabled={!media.mediaAvailable}
-              onClick={() => closeThen(() => onOpenLocation(media))}
+              onClick={() => onOpenLocation(media)}
             >
               打开位置
             </button>
@@ -212,13 +192,12 @@ export function LibraryMediaItem({
                 className="danger"
                 type="button"
                 role="menuitem"
-                onClick={() => closeThen(() => onDelete(media))}
+                onClick={() => onDelete(media)}
               >
                 删除视频
               </button>
             ) : null}
-          </div>
-        </details>
+        </MenuPopover>
       </div>
     </article>
   );

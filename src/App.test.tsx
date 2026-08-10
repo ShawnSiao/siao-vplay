@@ -1195,11 +1195,8 @@ describe("App", () => {
   }
 
   async function getAddMediaCommand(name: string | RegExp) {
-    await screen.findByText("添加视频");
-    const trigger = document.querySelector(".shell-add-media > summary");
-    expect(trigger).toBeInstanceOf(HTMLElement);
-    fireEvent.click(trigger as HTMLElement);
-    return screen.getByRole("menuitem", { name });
+    const commands = await screen.findAllByRole("button", { name });
+    return commands[0];
   }
 
   it("uses a collapsible desktop shell with live library navigation", async () => {
@@ -1209,8 +1206,8 @@ describe("App", () => {
       screen.getByRole("banner", { name: "应用命令栏" }),
     ).toBeInTheDocument();
     expect(await getAddMediaCommand(/添加剧集文件夹/)).toBeEnabled();
-    expect(screen.getByRole("menuitem", { name: /打开视频/ })).toBeEnabled();
-    expect(screen.getByRole("menuitem", { name: /从 URL 导入/ })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /打开视频/ })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /从 URL 导入/ })).toBeEnabled();
     expect(
       screen.getByRole("button", {
         name: "媒体库：稍后观看",

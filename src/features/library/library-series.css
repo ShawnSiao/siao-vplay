@@ -13,8 +13,8 @@
   position: relative;
 }
 
-.library-screen .library-page-menu > summary,
-.library-screen .library-row-menu > summary {
+.library-screen .library-page-menu > .menu-popover-trigger,
+.library-screen .library-row-menu > .menu-popover-trigger {
   display: grid;
   width: 36px;
   height: 36px;
@@ -22,17 +22,23 @@
   border-radius: 8px;
   color: #cbd3da;
   background: #171c22;
-  list-style: none;
-  cursor: default;
+  cursor: pointer;
   place-items: center;
 }
 
-.library-screen .library-page-menu > summary::-webkit-details-marker,
-.library-screen .library-row-menu > summary::-webkit-details-marker {
-  display: none;
+.library-screen .library-page-menu > .menu-popover-trigger:hover,
+.library-screen .library-row-menu > .menu-popover-trigger:hover,
+.library-screen .library-page-menu > .menu-popover-trigger:focus-visible,
+.library-screen .library-row-menu > .menu-popover-trigger:focus-visible,
+.library-screen .menu-popover-trigger[aria-expanded="true"] {
+  border-color: #71808c;
+  color: #f2f5f7;
+  background: #273139;
+  outline: 2px solid rgb(182 238 114 / 22%);
+  outline-offset: 1px;
 }
 
-.library-screen .library-page-menu > div,
+.library-screen .library-page-menu > .menu-popover-panel,
 .library-screen .library-row-menu-panel {
   position: absolute;
   z-index: 20;
@@ -47,7 +53,7 @@
   box-shadow: 0 16px 38px rgb(0 0 0 / 45%);
 }
 
-.library-screen .library-page-menu > div > button,
+.library-screen .library-page-menu > .menu-popover-panel > button,
 .library-screen .library-row-menu-panel > button {
   min-height: 36px;
   padding: 0 9px;
@@ -59,9 +65,12 @@
   text-align: left;
 }
 
-.library-screen .library-page-menu > div > button:hover,
-.library-screen .library-row-menu-panel > button:hover {
+.library-screen .library-page-menu > .menu-popover-panel > button:hover,
+.library-screen .library-page-menu > .menu-popover-panel > button:focus-visible,
+.library-screen .library-row-menu-panel > button:hover,
+.library-screen .library-row-menu-panel > button:focus-visible {
   background: #252d35;
+  outline: none;
 }
 
 .library-screen .library-page-menu .danger,
@@ -146,4 +155,14 @@
   border-radius: 8px;
   color: #d6dde3;
   background: #171c22;
+}
+
+.library-screen .library-episode-load-more {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 0 4px;
+  color: #9ba6b0;
+  font-size: 12px;
 }

@@ -144,6 +144,7 @@ describe("LibraryScreen library lifecycle", () => {
       onSelectSection,
     });
 
+    fireEvent.click(screen.getByRole("button", { name: "合集管理" }));
     fireEvent.click(screen.getByRole("menuitem", { name: "删除合集" }));
     expect(onDeleteCollection).not.toHaveBeenCalled();
     expect(screen.getByText(/视频文件、播放进度、字幕和学习资料会保留/)).toBeInTheDocument();
@@ -175,6 +176,7 @@ describe("LibraryScreen library lifecycle", () => {
 
     expect(screen.getByText("待重建")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "重建剧集 Rain" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Rain 的文件夹操作" }));
     expect(screen.getByRole("menuitem", { name: "撤销授权" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "扫描更新 Rain" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "更换位置 Rain" })).not.toBeInTheDocument();

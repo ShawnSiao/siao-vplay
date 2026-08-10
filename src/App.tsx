@@ -6,6 +6,7 @@ import { LibraryRecoveryDialog } from "./components/LibraryRecoveryDialog";
 import { LibraryScreen } from "./components/LibraryScreen";
 import { PlayerScreen } from "./features/playback/PlayerScreen";
 import { useLibraryController } from "./features/library/useLibraryController";
+import { usePosterQueue } from "./features/library/usePosterQueue";
 import { openProjectMediaLocation } from "./features/library/libraryGateway";
 import {
   useEpisodeNavigation,
@@ -29,7 +30,6 @@ import {
   commandError,
   createLocalProject,
   deleteProject,
-  ensureProjectPoster,
   getAppStatus,
   getTranscriptionJob,
   getProject,
@@ -107,7 +107,6 @@ export default function App() {
   const setScreen = shellController.setActiveView;
   const operationTokenRef = useRef(0);
   const startupMediaHandledRef = useRef(false);
-  const posterJobsRef = useRef(new Set<string>());
   const externalResultScanRef = useRef(false);
   const pendingResourceResumeRef = useRef<PendingResourceResume | null>(null);
   const [appStatus, setAppStatus] = useState<AppStatus | null>(null);
@@ -147,6 +146,14 @@ export default function App() {
     episodeContext,
     activeProject?.id ?? null,
   );
+
+  usePosterQueue({
+    enabled: isDesktopApp && screen === "library",
+    projects,
+    refreshLibrary,
+    setProjects,
+    setActiveProject,
+  });
 
   const openLocalResources = useCallback(() => {
     pendingResourceResumeRef.current = null;
@@ -320,36 +327,6 @@ export default function App() {
     const timer = window.setTimeout(() => setToast(null), 3_000);
     return () => window.clearTimeout(timer);
   }, [toast]);
-
-  useEffect(() => {
-    if (!isDesktopApp) {
-      return;
-    }
-    for (const project of projects) {
-      if (
-        project.status !== "ready" ||
-        project.mediaSource.posterPath ||
-        posterJobsRef.current.has(project.id)
-      ) {
-        continue;
-      }
-      posterJobsRef.current.add(project.id);
-      void ensureProjectPoster(project.id)
-        .then((updated) => {
-          setProjects((current) =>
-            current.map((item) => (item.id === updated.id ? updated : item)),
-          );
-          setActiveProject((current) =>
-            current?.id === updated.id ? updated : current,
-          );
-          void refreshLibrary();
-        })
-        .catch(() => undefined)
-        .finally(() => {
-          posterJobsRef.current.delete(project.id);
-        });
-    }
-  }, [projects, refreshLibrary]);
 
   const prepareAndOpenReady = useCallback(
     async (

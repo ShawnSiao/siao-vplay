@@ -75,12 +75,11 @@ export function LibraryHomeView({
 
   return (
     <div className="library-page library-home-page">
-      <header className="library-page-heading">
-        <div>
-          <p className="library-eyebrow">媒体库</p>
-          <h1>继续观看</h1>
-          <p>回到上次播放位置，或从最近整理的剧集开始。</p>
-        </div>
+      <header className="library-home-context" aria-label="媒体库继续观看">
+        <span>媒体库</span>
+        <b aria-hidden="true">/</b>
+        <strong aria-hidden="true">继续观看</strong>
+        <h1 className="sr-only">继续观看</h1>
       </header>
 
       {hero ? (

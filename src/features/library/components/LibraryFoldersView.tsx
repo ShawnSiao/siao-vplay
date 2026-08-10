@@ -1,3 +1,4 @@
+import { MenuPopover } from "../../../components/MenuPopover";
 import { formatRecentTime } from "../../../lib/format";
 import type { LibraryRootSummary } from "../../../types";
 
@@ -96,9 +97,11 @@ function FolderRow({
           </button>
         ) : null}
         {folder.status !== "ambiguous" ? (
-          <details className="library-row-menu">
-            <summary aria-label={`${folder.displayName} 的文件夹操作`}>•••</summary>
-            <div className="library-row-menu-panel" role="menu">
+          <MenuPopover
+            className="library-row-menu"
+            label={`${folder.displayName} 的文件夹操作`}
+            panelClassName="library-row-menu-panel"
+          >
               {folder.status === "linked" && folder.availability === "available" ? (
                 <button type="button" role="menuitem" onClick={() => onRelocateRoot(folder.id)}>
                   更换位置
@@ -117,8 +120,7 @@ function FolderRow({
               >
                 撤销授权
               </button>
-            </div>
-          </details>
+          </MenuPopover>
         ) : null}
       </div>
     </article>

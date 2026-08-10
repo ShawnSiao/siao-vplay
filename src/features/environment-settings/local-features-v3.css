@@ -21,14 +21,14 @@
 .environment-local-v3-heading p {
   margin: 5px 0 0;
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: 14px;
 }
 
 .environment-local-v3-heading small {
   display: block;
   margin-top: 3px;
   color: var(--text-muted);
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .environment-local-pane .local-resources-embedded {
@@ -71,11 +71,11 @@
 }
 
 .environment-local-pane .local-resources-section-head h3 {
-  font-size: 13px;
+  font-size: 15px;
 }
 
 .environment-local-pane .local-resources-section-head p {
-  font-size: 10px;
+  font-size: 13px;
 }
 
 .environment-local-pane .local-resource-profiles {
@@ -88,12 +88,12 @@
 
 .environment-local-pane .local-resource-profiles legend {
   padding-inline: 4px;
-  font-size: 11px;
+  font-size: 13px;
 }
 
 .environment-local-pane .local-resource-profiles > p {
   margin: 0 0 8px;
-  font-size: 9px;
+  font-size: 12px;
 }
 
 .environment-local-pane .local-resource-profiles > div {
@@ -106,12 +106,12 @@
 }
 
 .environment-local-pane .local-resource-profiles strong {
-  font-size: 11px;
+  font-size: 14px;
 }
 
 .environment-local-pane .local-resource-profiles small {
   margin-top: 3px;
-  font-size: 9px;
+  font-size: 12px;
 }
 
 .environment-local-pane .local-capability-list {
@@ -128,17 +128,17 @@
 }
 
 .environment-local-pane .local-capability-copy > strong {
-  font-size: 12px;
+  font-size: 14px;
 }
 
 .environment-local-pane .local-capability-copy > span,
 .environment-local-pane .local-capability-copy > small {
-  font-size: 9px;
+  font-size: 12px;
   line-height: 1.4;
 }
 
 .environment-local-pane .status-pill {
-  font-size: 9px;
+  font-size: 12px;
   white-space: nowrap;
 }
 
@@ -149,7 +149,7 @@
   border-radius: 5px;
   color: var(--text-secondary);
   background: #10151a;
-  font-size: 11px;
+  font-size: 13px;
 }
 
 .environment-local-pane .local-resources-space-summary {
@@ -164,7 +164,7 @@
 }
 
 .environment-local-pane .local-resources-space-summary dt {
-  font-size: 9px;
+  font-size: 12px;
 }
 
 .environment-local-pane .local-resources-space-summary dd {
@@ -207,7 +207,7 @@
 .environment-local-pane .local-resource-diagnostics summary {
   min-height: 40px;
   padding: 0 12px;
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .environment-local-pane .local-resource-diagnostics[open] {
@@ -235,4 +235,15 @@
   .environment-local-pane .local-resource-task-list {
     grid-template-columns: 1fr;
   }
+}
+.local-capability-ready-mark {
+  display: grid;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  color: #102319;
+  background: var(--success);
+  font-size: 13px;
+  font-weight: 800;
+  place-items: center;
 }

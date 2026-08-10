@@ -1157,7 +1157,7 @@ h3 {
   padding-top: 18px;
   border-top: 1px solid var(--border-subtle);
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .working-indicator {
@@ -5734,14 +5734,6 @@ h3 {
 
 .shell-overflow {
   position: relative;
-}
-.shell-overflow > summary {
-  list-style: none;
-  cursor: default;
-}
-
-.shell-overflow > summary::-webkit-details-marker {
-  display: none;
 }
 
 .shell-overflow-menu {

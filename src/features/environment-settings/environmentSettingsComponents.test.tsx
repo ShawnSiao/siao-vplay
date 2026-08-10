@@ -53,5 +53,21 @@ describe("environment settings components", () => {
     render(<AiServiceList controller={controller()} />);
     expect(screen.getAllByRole("button", { name: /OpenAI/ })).toHaveLength(1);
     expect(screen.getAllByText("OpenAI")).toHaveLength(1);
+    expect(screen.getByRole("button", { name: /OpenAI/ }).querySelector("img")).toBeTruthy();
+    expect(screen.getByText("已连接 · 默认")).toBeVisible();
+  });
+
+  it("does not present stored credentials as a successful connection", () => {
+    const untestedService = { ...service, connectionState: "untested" as const };
+    const nextController = controller();
+    nextController.settings = {
+      ...settings,
+      services: [untestedService],
+    };
+    nextController.service = untestedService;
+
+    render(<AiServiceList controller={nextController} />);
+    expect(screen.getByText("已配置，未测试 · 默认")).toBeVisible();
+    expect(screen.queryByText("已保存 · 默认")).toBeNull();
   });
 });

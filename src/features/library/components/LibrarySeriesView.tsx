@@ -1,3 +1,6 @@
+import { useState } from "react";
+
+import { MenuPopover } from "../../../components/MenuPopover";
 import { playbackUrl } from "../../../lib/desktop";
 import { formatDuration } from "../../../lib/format";
 import type {
@@ -115,11 +118,20 @@ function CollectionGroup({
 
 function CollectionDetailView(props: LibrarySeriesViewProps) {
   const { currentCollection } = props;
+  const paginationKey = `${currentCollection?.summary.id ?? "none"}:${props.selectedSeason ?? "all"}`;
+  const [episodePage, setEpisodePage] = useState({
+    key: paginationKey,
+    count: 50,
+  });
+  const visibleEpisodeCount =
+    episodePage.key === paginationKey ? episodePage.count : 50;
   if (!currentCollection) return null;
   const { summary } = currentCollection;
   const progress = summary.itemCount
     ? Math.round((summary.watchedCount / summary.itemCount) * 100)
     : 0;
+  const visibleEpisodes = props.currentEpisodes.slice(0, visibleEpisodeCount);
+  const hiddenEpisodeCount = props.currentEpisodes.length - visibleEpisodes.length;
 
   return (
     <div className="library-page library-collection-detail">
@@ -137,9 +149,7 @@ function CollectionDetailView(props: LibrarySeriesViewProps) {
             自动连播：{summary.autoPlayNext ? "开" : "关"}
           </button>
           {summary.systemKey === null ? (
-            <details className="library-page-menu">
-              <summary aria-label="合集管理">•••</summary>
-              <div role="menu">
+            <MenuPopover className="library-page-menu" label="合集管理">
                 <button type="button" role="menuitem" onClick={props.onEditCollection}>
                   重命名
                 </button>
@@ -151,8 +161,7 @@ function CollectionDetailView(props: LibrarySeriesViewProps) {
                 >
                   删除合集
                 </button>
-              </div>
-            </details>
+            </MenuPopover>
           ) : null}
         </div>
       </header>
@@ -214,7 +223,7 @@ function CollectionDetailView(props: LibrarySeriesViewProps) {
             <div className="library-loading"><span className="spinner" />正在读取单集…</div>
           ) : props.currentEpisodes.length ? (
             <div className="library-media-list">
-              {props.currentEpisodes.map((media) => (
+              {visibleEpisodes.map((media) => (
                 <LibraryMediaItem
                   key={media.projectId}
                   media={media}
@@ -234,6 +243,25 @@ function CollectionDetailView(props: LibrarySeriesViewProps) {
                   onSetWatchLater={props.onSetWatchLater}
                 />
               ))}
+              {hiddenEpisodeCount > 0 ? (
+                <div className="library-episode-load-more">
+                  <span>
+                    已显示 {visibleEpisodes.length} / {props.currentEpisodes.length} 集
+                  </span>
+                  <button
+                    className="library-heading-primary"
+                    type="button"
+                    onClick={() =>
+                      setEpisodePage({
+                        key: paginationKey,
+                        count: visibleEpisodeCount + 50,
+                      })
+                    }
+                  >
+                    再显示 {Math.min(50, hiddenEpisodeCount)} 集
+                  </button>
+                </div>
+              ) : null}
             </div>
           ) : (
             <div className="library-empty-panel">

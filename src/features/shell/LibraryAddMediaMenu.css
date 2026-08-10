@@ -1,17 +1,15 @@
-.shell-add-media {
-  position: relative;
+.shell-add-media-wrap,
+.shell-add-media-direct {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
-.shell-add-media > summary {
-  list-style: none;
-  cursor: default;
-}
-
-.shell-add-media > summary::-webkit-details-marker {
+.shell-add-media-compact {
   display: none;
 }
 
-.shell-add-media[open] > summary {
+.shell-add-media .menu-popover-trigger[aria-expanded="true"] {
   border-color: #caef9d;
   box-shadow: 0 0 0 2px rgb(182 238 114 / 16%);
 }
@@ -19,4 +17,14 @@
 .shell-add-media-menu {
   width: 244px;
   border-radius: 8px;
+}
+
+@media (max-width: 1100px) {
+  .shell-add-media-direct {
+    display: none;
+  }
+
+  .shell-add-media-compact {
+    display: block;
+  }
 }

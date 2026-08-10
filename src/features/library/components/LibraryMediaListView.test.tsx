@@ -84,6 +84,7 @@ describe("LibraryMediaListView", () => {
     expect(screen.getByText("共 25 个视频，已加载 1 个。"))
       .toBeInTheDocument();
     expect(screen.getByRole("button", { name: "继续" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "雨站台 的更多操作" }));
     expect(screen.queryByRole("menuitem", { name: "移出合集" }))
       .not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("menuitem", { name: "取消稍后观看" }));
@@ -106,6 +107,7 @@ describe("LibraryMediaListView", () => {
     });
 
     expect(screen.getByText("雨站台")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "雨站台 的更多操作" }));
     fireEvent.click(screen.getByRole("menuitem", { name: "加入「周末电影」" }));
     expect(props.onAddToCollection).toHaveBeenCalledWith("collection", "project");
     expect(screen.getByRole("alert")).toHaveTextContent("网络暂时不可用");
