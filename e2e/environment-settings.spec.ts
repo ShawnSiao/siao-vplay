@@ -24,6 +24,15 @@ test("environment settings follows the approved compact provider layout", async 
   await dialog.getByRole("button", { name: "AI 服务" }).click();
   await expect(dialog.locator(".environment-provider-list .environment-provider-row")).toHaveCount(7);
   await expect(dialog.getByRole("button", { name: "＋ 添加其他服务" })).toHaveCount(1);
+  const providerLogos = dialog.locator(".environment-provider-logo img");
+  await expect(providerLogos).toHaveCount(7);
+  expect(
+    await providerLogos.evaluateAll((images) => images.every((image) => {
+      const logo = image as HTMLImageElement;
+      return logo.complete && logo.naturalWidth > 0;
+    })),
+  ).toBe(true);
+  await expect(dialog.locator('[data-logo-provider="kimi"]')).toHaveCSS("background-color", "rgb(8, 12, 34)");
 
   await dialog.getByRole("button", { name: "OpenAI 未配置" }).click();
   await expect(dialog.getByRole("heading", { name: "配置 OpenAI" })).toBeVisible();

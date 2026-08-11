@@ -64,6 +64,11 @@
   object-fit: contain;
 }
 
+.environment-provider-logo[data-logo-provider="kimi"] {
+  border-color: #242b46;
+  background: #080c22;
+}
+
 .environment-provider-copy { min-width: 0; }
 .environment-provider-copy strong,
 .environment-provider-copy small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

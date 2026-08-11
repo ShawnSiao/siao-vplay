@@ -46,6 +46,7 @@ function serviceStatus(service: AiServiceSummary | undefined): ServiceStatus {
 type ServiceRowProps = {
   id: string;
   logo?: string;
+  logoProvider?: AiProviderId | "codex";
   mark?: string;
   name: string;
   status: ServiceStatus;
@@ -53,7 +54,7 @@ type ServiceRowProps = {
   onSelect: () => void;
 };
 
-function ServiceRow({ id, logo, mark, name, status, selected, onSelect }: ServiceRowProps) {
+function ServiceRow({ id, logo, logoProvider, mark, name, status, selected, onSelect }: ServiceRowProps) {
   return (
     <button
       className={`environment-provider-row ${selected ? "selected" : ""}`}
@@ -61,7 +62,7 @@ function ServiceRow({ id, logo, mark, name, status, selected, onSelect }: Servic
       type="button"
       onClick={onSelect}
     >
-      <span className="environment-provider-logo" aria-hidden="true">
+      <span className="environment-provider-logo" data-logo-provider={logoProvider} aria-hidden="true">
         {logo ? <img src={logo} alt="" /> : mark}
       </span>
       <span className="environment-provider-copy">
@@ -87,6 +88,7 @@ export function AiServiceList({ controller }: { controller: EnvironmentSettingsC
         <ServiceRow
           id={codexSelectionId}
           logo={codexLogo}
+          logoProvider="codex"
           name="本机 Codex"
           status={{ label: "本机检测", tone: "neutral" }}
           selected={selectionId === codexSelectionId}
@@ -100,6 +102,7 @@ export function AiServiceList({ controller }: { controller: EnvironmentSettingsC
               key={provider.id}
               id={id}
               logo={logos[provider.id]}
+              logoProvider={provider.id}
               name={provider.displayName}
               status={serviceStatus(service)}
               selected={selectionId === id}
