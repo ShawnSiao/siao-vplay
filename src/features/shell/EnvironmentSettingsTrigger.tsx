@@ -1,3 +1,5 @@
+import "../environment-settings/environment-settings-shell.css";
+
 type EnvironmentSettingsTriggerProps = {
   onOpen: () => void;
   status: string;

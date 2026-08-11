@@ -7,6 +7,7 @@ import {
 } from "../features/library/useLibraryController";
 import type { RelocationMismatchReason } from "../types";
 import { Dialog } from "./Dialog";
+import "./LibraryRecoveryDialog.css";
 
 type EditableValues = Partial<
   Pick<
@@ -237,11 +238,10 @@ export function LibraryRecoveryDialog({
           </div>
         ) : rebuild ? (
           <>
-            <div className="library-import-summary">
-              <div><strong>{rebuild.matchedItems.length}</strong><span>匹配</span></div>
-              <div><strong>{rebuild.newCandidates.length}</strong><span>可新增</span></div>
-              <div><strong>{rebuild.missingItems.length}</strong><span>缺失</span></div>
-              <div><strong>{rebuild.changedItems.length + rebuild.uncertainItems.length}</strong><span>需确认</span></div>
+            <div className="library-recovery-groups" aria-label="恢复结果分组">
+              <div className="stable"><span>保持不变</span><strong>{rebuild.matchedItems.length}</strong><small>已确认匹配</small></div>
+              <div className="review"><span>需要确认</span><strong>{rebuild.newCandidates.length + rebuild.missingItems.length + rebuild.changedItems.length + rebuild.uncertainItems.length}</strong><small>新增、缺失或变化</small></div>
+              <div className="offline"><span>暂时离线</span><strong>{rebuild.rootOffline ? 1 : 0}</strong><small>文件夹状态</small></div>
             </div>
             <label className="library-dialog-field"><span>新剧集名称</span><input value={state.rebuildCollectionTitle} disabled={applying} onChange={(event) => onRebuildTitleChange(event.target.value)} /></label>
             <p className="library-recovery-path" title={rebuild.rootPath}>{rebuild.rootPath}</p>
@@ -279,11 +279,10 @@ export function LibraryRecoveryDialog({
           </>
         ) : rescan ? (
           <>
-            <div className="library-import-summary">
-              <div><strong>{rescan.newCandidates.length}</strong><span>新增</span></div>
-              <div><strong>{rescan.missingItems.length}</strong><span>缺失</span></div>
-              <div><strong>{rescan.changedItems.length}</strong><span>已变更</span></div>
-              <div><strong>{rescan.availableItemCount}</strong><span>正常</span></div>
+            <div className="library-recovery-groups" aria-label="恢复结果分组">
+              <div className="stable"><span>保持不变</span><strong>{rescan.availableItemCount}</strong><small>位置与内容一致</small></div>
+              <div className="review"><span>需要确认</span><strong>{rescan.newCandidates.length + rescan.missingItems.length + rescan.changedItems.length}</strong><small>新增、缺失或变化</small></div>
+              <div className="offline"><span>暂时离线</span><strong>{rescan.rootOffline ? 1 : 0}</strong><small>文件夹状态</small></div>
             </div>
             <p className="library-recovery-path" title={rescan.rootPath}>{rescan.rootPath}</p>
             {rescan.rootOffline ? (

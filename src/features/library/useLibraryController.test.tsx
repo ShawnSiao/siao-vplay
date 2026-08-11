@@ -2,19 +2,25 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type {
-  CollectionDetail,
-  LibraryCollection,
-  LibraryHome,
   LibraryImportResult,
+  LibraryHome,
   LibraryRescanPreview,
   LibraryRescanResult,
   LibraryRootRelocationPreview,
   LibraryScanPreview,
   LibrarySearchResult,
 } from "../../types";
+import {
+  collection,
+  importedDetail,
+  libraryHome,
+  mediaSummary,
+  scanPreview,
+} from "./libraryControllerTestFixtures";
 
 const gatewayMocks = vi.hoisted(() => ({
   getLibraryHome: vi.fn(),
+  listLibrarySection: vi.fn(),
   searchLibrary: vi.fn(),
   createCollection: vi.fn(),
   updateCollection: vi.fn(),
@@ -47,19 +53,6 @@ vi.mock("./libraryGateway", async (importOriginal) => ({
 
 import { useLibraryController } from "./useLibraryController";
 
-function libraryHome(totalProjectCount: number): LibraryHome {
-  return {
-    continueWatching: [],
-    collections: [],
-    folders: [],
-    unclassified: [],
-    recentlyAdded: [],
-    totalProjectCount,
-    collectionItemCount: 0,
-    unclassifiedCount: totalProjectCount,
-  };
-}
-
 function deferred<T>() {
   let resolve!: (value: T) => void;
   const promise = new Promise<T>((next) => {
@@ -68,73 +61,15 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
-const collection: LibraryCollection = {
-  id: "10c4a3b9-75ac-4faf-8672-1c86c7a849cb",
-  kind: "manual",
-  title: "周末电影",
-  rootId: null,
-  systemKey: null,
-  posterPath: null,
-  sortMode: "manual",
-  autoPlayNext: false,
-  lastOpenedAtMs: null,
-  createdAtMs: 1,
-  updatedAtMs: 1,
-};
-
-const scanPreview: LibraryScanPreview = {
-  scanId: "20000000-0000-4000-8000-000000000001",
-  previewToken: "20000000-0000-4000-8000-000000000002",
-  rootPath: "W:\\Series\\Rain",
-  rootDisplayName: "Rain",
-  suggestedCollectionTitle: "Rain",
-  candidates: [
-    {
-      candidateId: "20000000-0000-4000-8000-000000000003",
-      relativePath: "Rain.S01E01.mp4",
-      displayTitle: "Rain",
-      seasonNumber: 1,
-      episodeNumber: 1,
-      absoluteOrder: 0,
-      recognition: "sxx_exx",
-      needsConfirmation: false,
-      confirmationReason: null,
-      sourceSizeBytes: 1024,
-      sourceModifiedAtMs: 10,
-      quickFingerprint: "a".repeat(64),
-    },
-  ],
-  ignoredEntries: [],
-  ignoredCount: 0,
-  needsConfirmationCount: 0,
-  expiresAtMs: 1_900_000_000_000,
-};
-
-const importedDetail: CollectionDetail = {
-  summary: {
-    ...collection,
-    kind: "series",
-    title: "Rain",
-    rootId: "20000000-0000-4000-8000-000000000004",
-    sortMode: "episode",
-    itemCount: 1,
-    seasonCount: 1,
-    watchedCount: 0,
-    totalDurationMs: null,
-  },
-  seasons: [
-    {
-      seasonNumber: 1,
-      episodeCount: 1,
-      watchedCount: 0,
-      totalDurationMs: null,
-    },
-  ],
-};
-
 beforeEach(() => {
   vi.clearAllMocks();
+  window.localStorage.clear();
   gatewayMocks.searchLibrary.mockResolvedValue([]);
+  gatewayMocks.listLibrarySection.mockResolvedValue({
+    items: [],
+    totalCount: 0,
+    nextOffset: null,
+  });
   gatewayMocks.listenLibraryScanProgress.mockResolvedValue(() => undefined);
 });
 
@@ -143,6 +78,45 @@ afterEach(() => {
 });
 
 describe("useLibraryController", () => {
+  it("restores a valid section and appends paged media without duplicates", async () => {
+    window.localStorage.setItem("siaovplay-library-section", "watch_later");
+    gatewayMocks.getLibraryHome.mockResolvedValue(libraryHome(0));
+    gatewayMocks.listLibrarySection
+      .mockResolvedValueOnce({
+        items: [mediaSummary("first")],
+        totalCount: 2,
+        nextOffset: 1,
+      })
+      .mockResolvedValueOnce({
+        items: [mediaSummary("first"), mediaSummary("second")],
+        totalCount: 2,
+        nextOffset: null,
+      });
+    const { result } = renderHook(() => useLibraryController());
+
+    await waitFor(() =>
+      expect(result.current.state.sectionPages.watch_later.items).toHaveLength(1),
+    );
+    expect(result.current.state.section).toBe("watch_later");
+    await act(async () => {
+      await result.current.loadMoreSection("watch_later");
+    });
+    expect(
+      result.current.state.sectionPages.watch_later.items.map((item) => item.projectId),
+    ).toEqual(["first", "second"]);
+    expect(result.current.state.sectionPages.watch_later.nextOffset).toBeNull();
+  });
+
+  it("persists section selection and rejects an unknown stored section", async () => {
+    window.localStorage.setItem("siaovplay-library-section", "unknown");
+    gatewayMocks.getLibraryHome.mockResolvedValue(libraryHome(0));
+    const { result } = renderHook(() => useLibraryController());
+    expect(result.current.state.section).toBe("home");
+
+    act(() => result.current.setSection("folders"));
+    expect(window.localStorage.getItem("siaovplay-library-section")).toBe("folders");
+  });
+
   it("ignores a late home response after a newer refresh completes", async () => {
     const first = deferred<LibraryHome>();
     const second = deferred<LibraryHome>();

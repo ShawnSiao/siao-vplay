@@ -1,6 +1,5 @@
-use serde::{Deserialize, Serialize};
-
 use super::LibraryError;
+use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -275,6 +274,7 @@ pub(crate) struct MediaSummary {
 #[serde(rename_all = "camelCase")]
 pub(crate) struct LibraryHome {
     pub continue_watching: Vec<MediaSummary>,
+    pub continue_watching_count: i64,
     pub collections: Vec<CollectionSummary>,
     pub folders: Vec<LibraryRootSummary>,
     pub unclassified: Vec<MediaSummary>,

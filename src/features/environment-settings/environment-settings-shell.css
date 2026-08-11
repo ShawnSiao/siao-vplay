@@ -35,7 +35,7 @@
 
 .environment-title-group > span {
   color: var(--brand);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 800;
   letter-spacing: .05em;
 }
@@ -121,7 +121,7 @@
 .environment-settings-footer > span {
   margin-right: auto;
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .environment-navigation-trigger {
@@ -180,7 +180,7 @@
 .environment-navigation-trigger small {
   margin-top: 2px;
   color: var(--text-muted);
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .desktop-shell.navigation-collapsed .environment-navigation-trigger {
@@ -190,6 +190,17 @@
 
 .desktop-shell.navigation-collapsed .environment-navigation-trigger > span:last-child {
   display: none;
+}
+
+@media (max-width: 1179px) {
+  .environment-navigation-trigger {
+    grid-template-columns: 1fr;
+    padding: 6px;
+  }
+
+  .environment-navigation-trigger > span:last-child {
+    display: none;
+  }
 }
 
 @media (max-width: 1040px) {

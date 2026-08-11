@@ -1,0 +1,7 @@
+.menu-popover {
+  position: relative;
+}
+
+.menu-popover-panel[hidden] {
+  display: none !important;
+}

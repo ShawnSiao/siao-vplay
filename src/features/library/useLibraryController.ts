@@ -5,7 +5,6 @@ import type {
   CollectionDetail,
   CollectionSortMode,
   ConfirmLibraryImportInput,
-  EpisodeRecognition,
   LibraryCollection,
   LibraryHome,
   LibraryImportResult,
@@ -17,7 +16,6 @@ import type {
   LibraryRootRebuildResult,
   LibraryRootRelocationPreview,
   LibraryRootRelocationResult,
-  LibraryScanCandidate,
   LibraryScanPreview,
   LibraryScanProgress,
   LibrarySearchResult,
@@ -47,30 +45,31 @@ import {
   toCollectionSummary,
   updateCollection,
 } from "./libraryGateway";
+import {
+  emptySectionPages,
+  librarySectionStorageKey,
+  reduceSectionPages,
+  removeUnclassifiedProject,
+  sectionsFromHome,
+  storedLibrarySection,
+  type LibrarySection,
+  type LibrarySectionAction,
+  type LibrarySectionPages,
+} from "./librarySectionState";
+import { useLibrarySectionPaging } from "./useLibrarySectionPaging";
+import {
+  draftCandidateItems,
+  draftItems,
+  type LibraryImportDraftItem,
+} from "./libraryImportDraft";
 
-export type LibrarySection =
-  | "home"
-  | "series"
-  | "folders"
-  | "watch_later"
-  | "unclassified";
-
-export type LibraryImportDraftItem = {
-  candidateId: string;
-  relativePath: string;
-  recognition: EpisodeRecognition;
-  confirmationReason: string | null;
-  initiallyNeedsConfirmation: boolean;
-  originalDisplayTitle: string;
-  originalSeasonNumber: number | null;
-  originalEpisodeNumber: number | null;
-  originalAbsoluteOrder: number;
-  displayTitle: string;
-  seasonNumber: number | null;
-  episodeNumber: number | null;
-  absoluteOrder: number;
-  confirmed: boolean;
-};
+export type {
+  LibrarySection,
+  LibrarySectionPages,
+  LibrarySectionPageState,
+} from "./librarySectionState";
+export type { LibraryImportDraftItem } from "./libraryImportDraft";
+export { importItemNeedsConfirmation } from "./libraryImportDraft";
 
 export type LibraryFolderImportState = {
   stage: "closed" | "scanning" | "preview" | "importing";
@@ -140,6 +139,7 @@ type LibraryState = {
   loading: boolean;
   error: string | null;
   section: LibrarySection;
+  sectionPages: LibrarySectionPages;
   currentCollection: CollectionDetail | null;
   currentEpisodes: LibraryMediaSummary[];
   selectedSeason: number | null;
@@ -158,6 +158,7 @@ type LibraryAction =
   | { type: "home_loaded"; home: LibraryHome; sequence: number }
   | { type: "failed"; message: string }
   | { type: "set_section"; section: LibrarySection }
+  | LibrarySectionAction
   | { type: "collection_started"; season: number | null }
   | {
       type: "collection_loaded";
@@ -256,36 +257,41 @@ type LibraryAction =
   | { type: "relocation_succeeded"; result: LibraryRootRelocationResult }
   | { type: "recovery_closed" };
 
-const initialState: LibraryState = {
-  home: emptyLibraryHome,
-  loading: true,
-  error: null,
-  section: "home",
-  currentCollection: null,
-  currentEpisodes: [],
-  selectedSeason: null,
-  collectionLoading: false,
-  searchQuery: "",
-  searchResults: [],
-  searchLoading: false,
-  mutationPending: false,
-  refreshSequence: 0,
-  folderImport: emptyFolderImport,
-  recovery: emptyRecovery,
-};
+function initialState(): LibraryState {
+  return {
+    home: emptyLibraryHome,
+    loading: true,
+    error: null,
+    section: storedLibrarySection(),
+    sectionPages: emptySectionPages(),
+    currentCollection: null,
+    currentEpisodes: [],
+    selectedSeason: null,
+    collectionLoading: false,
+    searchQuery: "",
+    searchResults: [],
+    searchLoading: false,
+    mutationPending: false,
+    refreshSequence: 0,
+    folderImport: emptyFolderImport,
+    recovery: emptyRecovery,
+  };
+}
 
 function libraryReducer(state: LibraryState, action: LibraryAction): LibraryState {
   switch (action.type) {
     case "home_started":
       return { ...state, loading: true };
-    case "home_loaded":
+    case "home_loaded": {
       return {
         ...state,
         home: action.home,
+        sectionPages: sectionsFromHome(state.sectionPages, action.home),
         loading: false,
         error: null,
         refreshSequence: action.sequence,
       };
+    }
     case "failed":
       return {
         ...state,
@@ -303,6 +309,15 @@ function libraryReducer(state: LibraryState, action: LibraryAction): LibraryStat
         currentEpisodes: [],
         selectedSeason: null,
       };
+    case "section_page_started":
+    case "section_page_loaded":
+    case "section_page_failed":
+      return {
+        ...state,
+        sectionPages: reduceSectionPages(state.sectionPages, action),
+      };
+    case "section_page_remove":
+      return { ...state, sectionPages: reduceSectionPages(state.sectionPages, action) };
     case "collection_started":
       return { ...state, collectionLoading: true, selectedSeason: action.season };
     case "collection_loaded":
@@ -398,17 +413,18 @@ function libraryReducer(state: LibraryState, action: LibraryAction): LibraryStat
           ),
         },
       };
-    case "remove_unclassified":
+    case "remove_unclassified": {
+      const next = removeUnclassifiedProject(
+        state.home,
+        state.sectionPages,
+        action.projectId,
+      );
       return {
         ...state,
-        home: {
-          ...state.home,
-          unclassified: state.home.unclassified.filter(
-            (item) => item.projectId !== action.projectId,
-          ),
-          unclassifiedCount: Math.max(0, state.home.unclassifiedCount - 1),
-        },
+        sectionPages: next.pages,
+        home: next.home,
       };
+    }
     case "scan_started":
       return {
         ...state,
@@ -689,43 +705,8 @@ function libraryReducer(state: LibraryState, action: LibraryAction): LibraryStat
   }
 }
 
-function draftCandidateItems(
-  candidates: LibraryScanCandidate[],
-): LibraryImportDraftItem[] {
-  return candidates.map((candidate) => ({
-    candidateId: candidate.candidateId,
-    relativePath: candidate.relativePath,
-    recognition: candidate.recognition,
-    confirmationReason: candidate.confirmationReason,
-    initiallyNeedsConfirmation: candidate.needsConfirmation,
-    originalDisplayTitle: candidate.displayTitle,
-    originalSeasonNumber: candidate.seasonNumber,
-    originalEpisodeNumber: candidate.episodeNumber,
-    originalAbsoluteOrder: candidate.absoluteOrder,
-    displayTitle: candidate.displayTitle,
-    seasonNumber: candidate.seasonNumber,
-    episodeNumber: candidate.episodeNumber,
-    absoluteOrder: candidate.absoluteOrder,
-    confirmed: false,
-  }));
-}
-
-function draftItems(preview: LibraryScanPreview): LibraryImportDraftItem[] {
-  return draftCandidateItems(preview.candidates);
-}
-
-export function importItemNeedsConfirmation(item: LibraryImportDraftItem): boolean {
-  return (
-    item.initiallyNeedsConfirmation ||
-    item.displayTitle.trim() !== item.originalDisplayTitle ||
-    item.seasonNumber !== item.originalSeasonNumber ||
-    item.episodeNumber !== item.originalEpisodeNumber ||
-    item.absoluteOrder !== item.originalAbsoluteOrder
-  );
-}
-
 export function useLibraryController() {
-  const [state, dispatch] = useReducer(libraryReducer, initialState);
+  const [state, dispatch] = useReducer(libraryReducer, initialState());
   const homeRequestSequence = useRef(0);
   const collectionRequestSequence = useRef(0);
   const searchRequestSequence = useRef(0);
@@ -775,6 +756,12 @@ export function useLibraryController() {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  const { loadSectionPage, loadMoreSection } = useLibrarySectionPaging(
+    state.section,
+    state.sectionPages,
+    dispatch,
+  );
 
   useEffect(() => {
     const query = state.searchQuery.trim();
@@ -913,12 +900,22 @@ export function useLibraryController() {
           if (detail) {
             dispatch({ type: "upsert_detail", detail });
           }
+          if (enabled) {
+            dispatch({ type: "remove_unclassified", projectId });
+          } else {
+            dispatch({
+              type: "section_page_remove",
+              section: "watch_later",
+              projectId,
+            });
+          }
         },
       ),
     [runMutation],
   );
 
   const setSection = useCallback((section: LibrarySection) => {
+    window.localStorage.setItem(librarySectionStorageKey, section);
     dispatch({ type: "set_section", section });
   }, []);
   const setSearchQuery = useCallback((query: string) => {
@@ -1264,6 +1261,8 @@ export function useLibraryController() {
     state,
     refresh,
     setSection,
+    loadSectionPage,
+    loadMoreSection,
     setSearchQuery,
     openCollection: loadCollection,
     closeCollection,

@@ -70,41 +70,59 @@ function home(overrides: Partial<LibraryHome> = {}): LibraryHome {
 function renderScreen(
   overrides: Partial<React.ComponentProps<typeof LibraryScreen>> = {},
 ) {
+  const sectionPages = {
+    continue_watching: {
+      items: [], totalCount: 0, nextOffset: null, initialized: true,
+      loading: false, loadingMore: false, error: null,
+    },
+    watch_later: {
+      items: [], totalCount: 0, nextOffset: null, initialized: true,
+      loading: false, loadingMore: false, error: null,
+    },
+    unclassified: {
+      items: [], totalCount: 0, nextOffset: null, initialized: true,
+      loading: false, loadingMore: false, error: null,
+    },
+  } satisfies React.ComponentProps<typeof LibraryScreen>["sectionPages"];
+  const props: React.ComponentProps<typeof LibraryScreen> = {
+      home: home(),
+      section: "home",
+      sectionPages,
+      currentCollection: null,
+      currentEpisodes: [],
+      selectedSeason: null,
+      loading: false,
+      collectionLoading: false,
+      mutationPending: false,
+      error: null,
+      previewMode: false,
+      onImport: () => undefined,
+      onImportFolder: () => undefined,
+      onImportUrl: () => undefined,
+      onRescanRoot: () => undefined,
+      onRelocateRoot: () => undefined,
+      onRebuildRoot: () => undefined,
+      onRevokeRoot: () => undefined,
+      onOpen: () => undefined,
+      onRelink: () => undefined,
+      onDelete: () => undefined,
+      onOpenLocation: () => undefined,
+      onSelectSection: () => undefined,
+      onLoadMoreSection: () => undefined,
+      onReloadSection: () => undefined,
+      onOpenCollection: () => undefined,
+      onCloseCollection: () => undefined,
+      onSelectSeason: () => undefined,
+      onCreateCollection: async () => undefined,
+      onUpdateCollection: async () => undefined,
+      onDeleteCollection: async () => null,
+      onAddToCollection: async () => undefined,
+      onRemoveFromCollection: async () => undefined,
+      onSetWatchLater: async () => undefined,
+      ...overrides,
+  };
   return render(
-    <LibraryScreen
-      home={home()}
-      section="home"
-      currentCollection={null}
-      currentEpisodes={[]}
-      selectedSeason={null}
-      loading={false}
-      collectionLoading={false}
-      mutationPending={false}
-      error={null}
-      previewMode={false}
-      onImport={() => undefined}
-      onImportFolder={() => undefined}
-      onImportUrl={() => undefined}
-      onRescanRoot={() => undefined}
-      onRelocateRoot={() => undefined}
-      onRebuildRoot={() => undefined}
-      onRevokeRoot={() => undefined}
-      onOpen={() => undefined}
-      onRelink={() => undefined}
-      onDelete={() => undefined}
-      onOpenLocation={() => undefined}
-      onSelectSection={() => undefined}
-      onOpenCollection={() => undefined}
-      onCloseCollection={() => undefined}
-      onSelectSeason={() => undefined}
-      onCreateCollection={async () => undefined}
-      onUpdateCollection={async () => undefined}
-      onDeleteCollection={async () => null}
-      onAddToCollection={async () => undefined}
-      onRemoveFromCollection={async () => undefined}
-      onSetWatchLater={async () => undefined}
-      {...overrides}
-    />,
+    <LibraryScreen {...props} />,
   );
 }
 
@@ -126,7 +144,8 @@ describe("LibraryScreen library lifecycle", () => {
       onSelectSection,
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "删除合集" }));
+    fireEvent.click(screen.getByRole("button", { name: "合集管理" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "删除合集" }));
     expect(onDeleteCollection).not.toHaveBeenCalled();
     expect(screen.getByText(/视频文件、播放进度、字幕和学习资料会保留/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "确认删除合集" }));
@@ -157,7 +176,8 @@ describe("LibraryScreen library lifecycle", () => {
 
     expect(screen.getByText("待重建")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "重建剧集 Rain" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "撤销授权 Rain" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Rain 的文件夹操作" }));
+    expect(screen.getByRole("menuitem", { name: "撤销授权" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "扫描更新 Rain" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "更换位置 Rain" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "重建剧集 Rain" }));
@@ -170,7 +190,7 @@ describe("LibraryScreen library lifecycle", () => {
   it("renders recently added independently from unclassified videos", () => {
     renderScreen({ section: "home", home: home({ unclassified: [], unclassifiedCount: 0 }) });
     expect(screen.getByRole("heading", { name: "最近加入" })).toBeInTheDocument();
-    expect(screen.getByText("已归类")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "未分类" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /打开最近加入的 Rain S01E01/ })).toBeInTheDocument();
   });
 });

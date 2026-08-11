@@ -1,5 +1,6 @@
 import { useEffect, useRef, type ReactNode } from "react";
 
+import { MenuPopover } from "../../components/MenuPopover";
 import type {
   AppStatus,
   LibrarySearchResult,
@@ -9,6 +10,7 @@ import type { LibrarySection } from "../library/useLibraryController";
 import type { MediaDropFeedback } from "./useDesktopMediaDrop";
 import type { ShellDrawerTab, ShellView } from "./useShellController";
 import { EnvironmentSettingsTrigger } from "./EnvironmentSettingsTrigger";
+import { LibraryAddMediaMenu } from "./LibraryAddMediaMenu";
 
 type DesktopShellProps = {
   activeView: ShellView;
@@ -145,40 +147,40 @@ export function DesktopShell({
             </button>
           ) : null}
           <span className="shell-command-divider" aria-hidden="true" />
-          <button
-            aria-label="打开文件"
-            aria-keyshortcuts="Control+O"
-            className="shell-command"
-            type="button"
-            onClick={onOpenFile}
-          >
-            <span aria-hidden="true">＋</span>
-            <span>打开文件</span>
-          </button>
-          <button
-            aria-label="打开剧集文件夹"
-            aria-keyshortcuts="Control+Shift+O"
-            className="shell-command shell-command-primary"
-            type="button"
-            title="打开文件夹 Ctrl+Shift+O"
-            onClick={onOpenFolder}
-          >
-            <span aria-hidden="true">▰</span>
-            <span>打开文件夹</span>
-          </button>
-          <button
-            aria-label="粘贴视频 URL"
-            className="shell-command"
-            type="button"
-            title="打开 URL"
-            onClick={onOpenUrl}
-          >
-            <span aria-hidden="true">↗</span>
-            <span>打开 URL</span>
-          </button>
-          <span className="shell-command-divider" aria-hidden="true" />
           {playerActive ? (
             <>
+              <button
+                aria-label="打开文件"
+                aria-keyshortcuts="Control+O"
+                className="shell-command"
+                type="button"
+                onClick={onOpenFile}
+              >
+                <span aria-hidden="true">＋</span>
+                <span>打开文件</span>
+              </button>
+              <button
+                aria-label="打开剧集文件夹"
+                aria-keyshortcuts="Control+Shift+O"
+                className="shell-command shell-command-primary"
+                type="button"
+                title="打开文件夹 Ctrl+Shift+O"
+                onClick={onOpenFolder}
+              >
+                <span aria-hidden="true">▰</span>
+                <span>打开文件夹</span>
+              </button>
+              <button
+                aria-label="粘贴视频 URL"
+                className="shell-command"
+                type="button"
+                title="打开 URL"
+                onClick={onOpenUrl}
+              >
+                <span aria-hidden="true">↗</span>
+                <span>打开 URL</span>
+              </button>
+              <span className="shell-command-divider" aria-hidden="true" />
               <button
                 aria-label={
                   currentSubtitleCount === null
@@ -192,22 +194,16 @@ export function DesktopShell({
                 <span aria-hidden="true">CC</span>
                 <span>字幕</span>
               </button>
-              <details className="shell-overflow">
-                <summary
-                  aria-label="更多字幕与交付命令"
-                  className="shell-icon-command"
-                  title="更多命令"
-                >
-                  •••
-                </summary>
-                <div className="shell-overflow-menu" role="menu">
+              <MenuPopover
+                className="shell-overflow"
+                label="更多字幕与交付命令"
+                triggerClassName="shell-icon-command"
+                panelClassName="shell-overflow-menu"
+              >
                   <button
                     type="button"
                     role="menuitem"
-                    onClick={(event) => {
-                      event.currentTarget.closest("details")?.removeAttribute("open");
-                      onManageTranslation();
-                    }}
+                    onClick={onManageTranslation}
                   >
                     <span>中文字幕</span>
                     <small>{currentTranslationCount ?? "未生成"}</small>
@@ -216,10 +212,7 @@ export function DesktopShell({
                     type="button"
                     role="menuitem"
                     disabled={!canReviseSubtitles}
-                    onClick={(event) => {
-                      event.currentTarget.closest("details")?.removeAttribute("open");
-                      onReviseSubtitles();
-                    }}
+                    onClick={onReviseSubtitles}
                   >
                     <span>修正字幕</span>
                     <small>逐句与时间轴</small>
@@ -228,16 +221,12 @@ export function DesktopShell({
                     type="button"
                     role="menuitem"
                     disabled={!canDeliverSubtitles}
-                    onClick={(event) => {
-                      event.currentTarget.closest("details")?.removeAttribute("open");
-                      onDeliverSubtitles();
-                    }}
+                    onClick={onDeliverSubtitles}
                   >
                     <span>导出字幕与视频</span>
                     <small>交付</small>
                   </button>
-                </div>
-              </details>
+              </MenuPopover>
               {drawerTab === null ? (
                 <>
                   <span className="shell-command-divider" aria-hidden="true" />
@@ -261,29 +250,11 @@ export function DesktopShell({
                 </>
               ) : null}
             </>
-          ) : (
-            <>
-              <button
-                aria-label="字幕，需要打开视频后使用"
-                className="shell-command shell-context-unavailable"
-                type="button"
-                title="打开视频后管理字幕"
-                disabled
-              >
-                <span aria-hidden="true">CC</span>
-                <span>字幕</span>
-              </button>
-              <button
-                aria-label="更多命令，需要打开视频后使用"
-                className="shell-icon-command shell-context-unavailable"
-                type="button"
-                title="打开视频后使用更多字幕与交付命令"
-                disabled
-              >
-                •••
-              </button>
-            </>
-          )}
+          ) : <LibraryAddMediaMenu
+            onOpenFile={onOpenFile}
+            onOpenFolder={onOpenFolder}
+            onOpenUrl={onOpenUrl}
+          />}
         </div>
         {playerActive && drawerTab ? (
           <div className="desktop-commandbar-context" title={mediaTitle ?? undefined}>
@@ -391,14 +362,14 @@ export function DesktopShell({
               )}
             </button>
             <button
-              aria-label="媒体库：未归类视频"
+              aria-label="媒体库：未分类视频"
               type="button"
-              title="未归类视频"
+              title="未分类视频"
               className={activeView === "library" && librarySection === "unclassified" ? "active" : ""}
               onClick={() => onSelectLibrarySection("unclassified")}
             >
               <span aria-hidden="true">▸</span>
-              <span className="desktop-navigation-label">未归类</span>
+              <span className="desktop-navigation-label">未分类</span>
               <span className="desktop-navigation-count">
                 {libraryCounts.unclassified}
               </span>

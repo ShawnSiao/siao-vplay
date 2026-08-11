@@ -1,38 +1,60 @@
+import anthropicLogo from "../../assets/ai-service-logos/anthropic.svg";
+import chatGlmLogo from "../../assets/ai-service-logos/chatglm.svg";
+import codexLogo from "../../assets/ai-service-logos/codex.svg";
+import deepSeekLogo from "../../assets/ai-service-logos/deepseek.svg";
+import geminiLogo from "../../assets/ai-service-logos/gemini.svg";
+import kimiLogo from "../../assets/ai-service-logos/kimi.svg";
+import openAiLogo from "../../assets/ai-service-logos/openai.svg";
 import { codexSelectionId, providerSelectionId } from "./serviceSelection";
 import type { EnvironmentSettingsController } from "./useEnvironmentSettings";
 import type { AiProviderId, AiServiceSummary } from "./types";
 
-const marks: Record<AiProviderId, string> = {
-  openai: "OA",
-  anthropic: "AI",
-  gemini: "G",
-  deepseek: "DS",
-  kimi: "K",
-  glm: "GLM",
-  custom: "+",
+const logos: Partial<Record<AiProviderId, string>> = {
+  openai: openAiLogo,
+  anthropic: anthropicLogo,
+  gemini: geminiLogo,
+  deepseek: deepSeekLogo,
+  kimi: kimiLogo,
+  glm: chatGlmLogo,
 };
 
-function statusText(service: AiServiceSummary | undefined): string {
-  if (!service) return "未配置";
-  if (service.credentialState !== "stored") return "需要 API Key";
-  if (service.connectionState === "ready") {
-    return service.isDefault ? "已连接 · 默认" : "已连接";
+type ServiceStatus = {
+  label: string;
+  tone: "ready" | "untested" | "error" | "neutral";
+};
+
+function serviceStatus(service: AiServiceSummary | undefined): ServiceStatus {
+  if (!service) return { label: "未配置", tone: "neutral" };
+  if (service.credentialState !== "stored") {
+    return { label: "需要 API Key", tone: "neutral" };
   }
-  if (service.connectionState === "error") return "连接异常";
-  return service.isDefault ? "已保存 · 默认" : "已保存";
+  if (service.connectionState === "ready") {
+    return {
+      label: service.isDefault ? "已连接 · 默认" : "已连接",
+      tone: "ready",
+    };
+  }
+  if (service.connectionState === "error") {
+    return { label: "连接异常", tone: "error" };
+  }
+  return {
+    label: service.isDefault ? "已配置，未测试 · 默认" : "已配置，未测试",
+    tone: "untested",
+  };
 }
 
 type ServiceRowProps = {
   id: string;
-  mark: string;
+  logo?: string;
+  logoProvider?: AiProviderId | "codex";
+  mark?: string;
   name: string;
-  status: string;
-  ready: boolean;
+  status: ServiceStatus;
   selected: boolean;
   onSelect: () => void;
 };
 
-function ServiceRow({ id, mark, name, status, ready, selected, onSelect }: ServiceRowProps) {
+function ServiceRow({ id, logo, logoProvider, mark, name, status, selected, onSelect }: ServiceRowProps) {
   return (
     <button
       className={`environment-provider-row ${selected ? "selected" : ""}`}
@@ -40,13 +62,14 @@ function ServiceRow({ id, mark, name, status, ready, selected, onSelect }: Servi
       type="button"
       onClick={onSelect}
     >
-      <span className="environment-provider-logo" aria-hidden="true">{mark}</span>
+      <span className="environment-provider-logo" data-logo-provider={logoProvider} aria-hidden="true">
+        {logo ? <img src={logo} alt="" /> : mark}
+      </span>
       <span className="environment-provider-copy">
         <strong>{name}</strong>
-        <small>{status}</small>
       </span>
-      <span className={ready ? "environment-provider-state ready" : "environment-provider-state"} aria-hidden="true">
-        {ready ? "●" : "○"}
+      <span className={`environment-provider-status ${status.tone}`}>
+        {status.label}
       </span>
     </button>
   );
@@ -64,10 +87,10 @@ export function AiServiceList({ controller }: { controller: EnvironmentSettingsC
       <div className="environment-provider-list">
         <ServiceRow
           id={codexSelectionId}
-          mark="‹/›"
+          logo={codexLogo}
+          logoProvider="codex"
           name="本机 Codex"
-          status="本机检测"
-          ready={false}
+          status={{ label: "本机检测", tone: "neutral" }}
           selected={selectionId === codexSelectionId}
           onSelect={() => select(codexSelectionId)}
         />
@@ -78,10 +101,10 @@ export function AiServiceList({ controller }: { controller: EnvironmentSettingsC
             <ServiceRow
               key={provider.id}
               id={id}
-              mark={marks[provider.id]}
+              logo={logos[provider.id]}
+              logoProvider={provider.id}
               name={provider.displayName}
-              status={statusText(service)}
-              ready={service?.credentialState === "stored"}
+              status={serviceStatus(service)}
               selected={selectionId === id}
               onSelect={() => select(id)}
             />
@@ -93,8 +116,7 @@ export function AiServiceList({ controller }: { controller: EnvironmentSettingsC
             id={service.id}
             mark="+"
             name={service.displayName}
-            status={statusText(service)}
-            ready={service.credentialState === "stored"}
+            status={serviceStatus(service)}
             selected={selectionId === service.id}
             onSelect={() => select(service.id)}
           />

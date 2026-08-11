@@ -6,6 +6,7 @@ import { LibraryRecoveryDialog } from "./components/LibraryRecoveryDialog";
 import { LibraryScreen } from "./components/LibraryScreen";
 import { PlayerScreen } from "./features/playback/PlayerScreen";
 import { useLibraryController } from "./features/library/useLibraryController";
+import { usePosterQueue } from "./features/library/usePosterQueue";
 import { openProjectMediaLocation } from "./features/library/libraryGateway";
 import {
   useEpisodeNavigation,
@@ -29,7 +30,6 @@ import {
   commandError,
   createLocalProject,
   deleteProject,
-  ensureProjectPoster,
   getAppStatus,
   getTranscriptionJob,
   getProject,
@@ -55,18 +55,12 @@ import type {
   EpisodeReference,
 } from "./types";
 
-const activeTranscriptionStatuses = new Set<TranscriptionJob["status"]>([
-  "queued",
-  "extracting",
-  "transcribing",
-  "validating",
-]);
+const activeTranscriptionStatuses = new Set<TranscriptionJob["status"]>(
+  ["queued", "extracting", "transcribing", "validating"],
+);
 
 const firstRunResourceDismissedKey = "siaovplay.local-resources.first-run-dismissed.v1";
-
-type PendingResourceResume = PendingResourceAction & {
-  resume: () => Promise<void> | void;
-};
+type PendingResourceResume = PendingResourceAction & { resume: () => Promise<void> | void };
 
 export default function App() {
   const shellController = useShellController();
@@ -78,6 +72,8 @@ export default function App() {
     state: libraryState,
     refresh: refreshLibrary,
     setSection: setLibrarySection,
+    loadSectionPage,
+    loadMoreSection,
     setSearchQuery,
     openCollection,
     closeCollection,
@@ -111,7 +107,6 @@ export default function App() {
   const setScreen = shellController.setActiveView;
   const operationTokenRef = useRef(0);
   const startupMediaHandledRef = useRef(false);
-  const posterJobsRef = useRef(new Set<string>());
   const externalResultScanRef = useRef(false);
   const pendingResourceResumeRef = useRef<PendingResourceResume | null>(null);
   const [appStatus, setAppStatus] = useState<AppStatus | null>(null);
@@ -151,6 +146,14 @@ export default function App() {
     episodeContext,
     activeProject?.id ?? null,
   );
+
+  usePosterQueue({
+    enabled: isDesktopApp && screen === "library",
+    projects,
+    refreshLibrary,
+    setProjects,
+    setActiveProject,
+  });
 
   const openLocalResources = useCallback(() => {
     pendingResourceResumeRef.current = null;
@@ -324,36 +327,6 @@ export default function App() {
     const timer = window.setTimeout(() => setToast(null), 3_000);
     return () => window.clearTimeout(timer);
   }, [toast]);
-
-  useEffect(() => {
-    if (!isDesktopApp) {
-      return;
-    }
-    for (const project of projects) {
-      if (
-        project.status !== "ready" ||
-        project.mediaSource.posterPath ||
-        posterJobsRef.current.has(project.id)
-      ) {
-        continue;
-      }
-      posterJobsRef.current.add(project.id);
-      void ensureProjectPoster(project.id)
-        .then((updated) => {
-          setProjects((current) =>
-            current.map((item) => (item.id === updated.id ? updated : item)),
-          );
-          setActiveProject((current) =>
-            current?.id === updated.id ? updated : current,
-          );
-          void refreshLibrary();
-        })
-        .catch(() => undefined)
-        .finally(() => {
-          posterJobsRef.current.delete(project.id);
-        });
-    }
-  }, [projects, refreshLibrary]);
 
   const prepareAndOpenReady = useCallback(
     async (
@@ -999,7 +972,10 @@ export default function App() {
         canReviseSubtitles={Boolean(currentSubtitle)}
         canDeliverSubtitles={Boolean(currentSubtitle || currentTranslation)}
         libraryCounts={{
-          continueWatching: libraryState.home.continueWatching.length,
+          continueWatching:
+            libraryState.home.continueWatchingCount ??
+            libraryState.sectionPages.continue_watching.totalCount ??
+            libraryState.home.continueWatching.length,
           episodeFiles: libraryState.home.totalProjectCount,
           series: libraryState.home.collections.filter(
             (collection) => collection.systemKey === null,
@@ -1037,6 +1013,7 @@ export default function App() {
           <LibraryScreen
             home={libraryState.home}
             section={libraryState.section}
+            sectionPages={libraryState.sectionPages}
             currentCollection={libraryState.currentCollection}
             currentEpisodes={libraryState.currentEpisodes}
             selectedSeason={libraryState.selectedSeason}
@@ -1063,6 +1040,8 @@ export default function App() {
               )
             }
             onSelectSection={selectLibrarySection}
+            onLoadMoreSection={(section) => void loadMoreSection(section)}
+            onReloadSection={(section) => void loadSectionPage(section, 0)}
             onOpenCollection={(collectionId) =>
               void openCollection(collectionId)
             }

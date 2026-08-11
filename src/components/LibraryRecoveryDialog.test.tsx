@@ -68,6 +68,10 @@ describe("LibraryRecoveryDialog", () => {
     const onApply = vi.fn().mockResolvedValue(undefined);
     render(<RescanHarness onApply={onApply} />);
     const apply = screen.getByRole("button", { name: "应用扫描结果" });
+    const groups = screen.getByLabelText("恢复结果分组");
+    expect(groups).toHaveTextContent("保持不变2");
+    expect(groups).toHaveTextContent("需要确认2");
+    expect(groups).toHaveTextContent("暂时离线0");
     expect(
       screen.queryByRole("checkbox", { name: /相同内容指纹/ }),
     ).not.toBeInTheDocument();

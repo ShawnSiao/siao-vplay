@@ -1,0 +1,34 @@
+@media (max-width: 1250px) {
+  .library-screen .library-page { padding-right: 26px; padding-left: 26px; }
+  .library-screen .library-series-preview-grid,
+  .library-screen .library-series-grid,
+  .library-screen .library-recent-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .library-screen .library-folder-row { grid-template-columns: 38px minmax(160px, 1fr) auto auto; }
+  .library-screen .library-folder-description { display: none; }
+  .library-screen .library-folder-row-actions { grid-column: 2 / -1; justify-self: end; }
+}
+
+@media (max-width: 980px) {
+  .library-screen .library-page { padding: 25px 20px 46px; }
+  .library-screen .library-continue-hero { grid-template-columns: 1.15fr 0.85fr; min-height: 248px; }
+  .library-screen .library-continue-copy { padding: 24px; }
+  .library-screen .library-series-preview-grid,
+  .library-screen .library-series-grid,
+  .library-screen .library-recent-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .library-screen .library-collection-layout { grid-template-columns: 190px minmax(0, 1fr); gap: 20px; }
+  .library-screen .library-media-item { grid-template-columns: 92px minmax(0, 1fr) auto; gap: 12px; }
+  .library-screen .library-media-poster { width: 92px; height: 54px; }
+}
+
+@media (max-width: 760px) {
+  .library-screen .library-page-heading { align-items: flex-start; flex-direction: column; }
+  .library-screen .library-continue-hero { grid-template-columns: 1fr; }
+  .library-screen .library-continue-visual { min-height: 210px; }
+  .library-screen .library-collection-layout { grid-template-columns: 1fr; }
+  .library-screen .library-collection-summary { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 12px; }
+  .library-screen .library-collection-poster { grid-row: 1 / 7; margin: 0; }
+  .library-screen .library-media-item { grid-template-columns: 78px minmax(0, 1fr); }
+  .library-screen .library-media-poster { width: 78px; height: 48px; }
+  .library-screen .library-media-actions { grid-column: 2; justify-content: flex-end; }
+  .library-screen .library-media-meta span:last-child { display: none; }
+}

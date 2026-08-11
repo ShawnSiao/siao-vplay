@@ -8,7 +8,6 @@ import type {
   ResourceDownloadTask,
 } from "../types";
 import { LocalResourcesDialog } from "./LocalResourcesDialog";
-
 const catalog: LocalResourceCatalog = {
   schemaVersion: 1,
   productId: "siaovplay",
@@ -635,8 +634,9 @@ describe("LocalResourcesDialog", () => {
         onNotice={() => undefined}
       />,
     );
-
     const details = screen.getByText("高级诊断与第三方许可").closest("details");
+    expect(screen.getAllByRole("img", { name: "已准备" })).toHaveLength(2);
+    expect(screen.queryByRole("checkbox", { name: /选择准备/ })).toBeNull();
     expect(details).not.toHaveAttribute("open");
     expect(screen.getByText("ffmpeg-cpu")).not.toBeVisible();
     expect(screen.getAllByText(/SHA-256/)[0]).not.toBeVisible();

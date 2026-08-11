@@ -1,8 +1,7 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use uuid::Uuid;
-
 use crate::store::ProjectStore;
+use uuid::Uuid;
 
 use super::{
     AddProjectToCollectionInput, Collection, CollectionDetail, CollectionKind, CollectionSortMode,
@@ -22,7 +21,7 @@ const MAX_TITLE_CHARS: usize = 200;
 
 #[derive(Clone, Debug)]
 pub(crate) struct LibraryService {
-    store: ProjectStore,
+    pub(super) store: ProjectStore,
 }
 
 impl LibraryService {
@@ -37,6 +36,7 @@ impl LibraryService {
             repository.counts()?;
         Ok(LibraryHome {
             continue_watching: repository.list_continue_watching(HOME_CONTINUE_LIMIT)?,
+            continue_watching_count: repository.continue_watching_count()?,
             collections: repository.list_collection_summaries()?,
             folders: repository.list_roots()?,
             unclassified: repository.list_unclassified(HOME_UNCLASSIFIED_LIMIT)?,
@@ -538,7 +538,7 @@ mod tests {
                 .expect("membership should be added");
         }
     }
-
+    include!("section_service_tests.rs");
     #[test]
     fn collection_crud_preserves_projects_and_updates_home_counts() {
         let fixture = Fixture::new();

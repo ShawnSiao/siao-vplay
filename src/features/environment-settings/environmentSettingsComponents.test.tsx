@@ -53,5 +53,47 @@ describe("environment settings components", () => {
     render(<AiServiceList controller={controller()} />);
     expect(screen.getAllByRole("button", { name: /OpenAI/ })).toHaveLength(1);
     expect(screen.getAllByText("OpenAI")).toHaveLength(1);
+    expect(screen.getByRole("button", { name: /OpenAI/ }).querySelector("img")).toBeTruthy();
+    expect(screen.getByText("已连接 · 默认")).toBeVisible();
+  });
+
+  it("uses the contrast-safe brand tile for the original Kimi logo", () => {
+    const kimiProvider = {
+      ...provider,
+      id: "kimi" as const,
+      displayName: "Kimi",
+      protocol: "openai_chat_completions" as const,
+      officialBaseUrl: "https://api.moonshot.ai/v1",
+    };
+    const nextController = controller();
+    nextController.settings = {
+      ...settings,
+      providerCatalog: { schemaVersion: 1, providers: [kimiProvider] },
+      services: [],
+      defaultServiceId: null,
+    };
+    nextController.selectionId = "provider:kimi";
+    nextController.service = null;
+    nextController.provider = kimiProvider;
+
+    render(<AiServiceList controller={nextController} />);
+
+    const logo = screen.getByRole("button", { name: /Kimi/ }).querySelector("img");
+    expect(logo).toBeTruthy();
+    expect(logo?.parentElement).toHaveAttribute("data-logo-provider", "kimi");
+  });
+
+  it("does not present stored credentials as a successful connection", () => {
+    const untestedService = { ...service, connectionState: "untested" as const };
+    const nextController = controller();
+    nextController.settings = {
+      ...settings,
+      services: [untestedService],
+    };
+    nextController.service = untestedService;
+
+    render(<AiServiceList controller={nextController} />);
+    expect(screen.getByText("已配置，未测试 · 默认")).toBeVisible();
+    expect(screen.queryByText("已保存 · 默认")).toBeNull();
   });
 });

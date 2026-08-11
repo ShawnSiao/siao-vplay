@@ -129,6 +129,7 @@ const desktopMocks = vi.hoisted(() => ({
 
 const libraryGatewayMocks = vi.hoisted(() => ({
   getLibraryHome: vi.fn(),
+  listLibrarySection: vi.fn(),
   searchLibrary: vi.fn(),
   createCollection: vi.fn(),
   updateCollection: vi.fn(),
@@ -829,6 +830,11 @@ const burnJob: SubtitleBurnJob = {
 beforeEach(() => {
   vi.clearAllMocks();
   window.localStorage.clear();
+  libraryGatewayMocks.listLibrarySection.mockResolvedValue({
+    items: [],
+    totalCount: 0,
+    nextOffset: null,
+  });
   desktopMocks.getAppStatus.mockResolvedValue({
     appName: "SiaoVPlay",
     version: "0.3.0",
@@ -1188,34 +1194,32 @@ describe("App", () => {
     return screen.getByRole("menuitem", { name });
   }
 
+  async function getAddMediaCommand(name: string | RegExp) {
+    const commands = await screen.findAllByRole("button", { name });
+    return commands[0];
+  }
+
   it("uses a collapsible desktop shell with live library navigation", async () => {
     render(<App />);
 
     expect(
       screen.getByRole("banner", { name: "应用命令栏" }),
     ).toBeInTheDocument();
-    expect(
-      screen.getAllByRole("button", { name: "打开剧集文件夹" }),
-    ).toHaveLength(2);
-    for (const button of screen.getAllByRole("button", { name: "打开剧集文件夹" })) {
-      expect(button).toBeEnabled();
-    }
+    expect(await getAddMediaCommand(/添加剧集文件夹/)).toBeEnabled();
+    expect(screen.getByRole("button", { name: /打开视频/ })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /从 URL 导入/ })).toBeEnabled();
     expect(
       screen.getByRole("button", {
         name: "媒体库：稍后观看",
       }),
     ).toBeEnabled();
-    expect(
-      screen.getByRole("button", { name: "字幕，需要打开视频后使用" }),
-    ).toBeDisabled();
-    expect(
-      screen.getByRole("button", { name: "更多命令，需要打开视频后使用" }),
-    ).toBeDisabled();
+    expect(screen.queryByText("字幕")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("更多字幕与交付命令")).not.toBeInTheDocument();
     expect(
       screen.getByRole("searchbox", { name: "搜索媒体库" }),
     ).toBeEnabled();
     expect(screen.getByRole("contentinfo", { name: "媒体库状态" })).toHaveTextContent(
-      "0 个剧集文件",
+      "1 个剧集文件",
     );
     expect(screen.getByRole("contentinfo", { name: "媒体库状态" })).toHaveTextContent(
       "0 个授权文件夹",
@@ -1336,29 +1340,24 @@ describe("App", () => {
     render(<App />);
 
     expect(
-      screen.getByRole("heading", {
-        name: "媒体库",
-      }),
-    ).toBeInTheDocument();
-    expect(
       await screen.findByRole("heading", { name: "继续观看" }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "未归类视频" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "剧集" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "查看全部 ›" })).toBeEnabled();
+    expect(screen.queryByRole("heading", { name: "未分类" })).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "剧集概览" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "查看全部" })).toBeEnabled();
     expect(screen.getByRole("heading", { name: "最近加入" })).toBeInTheDocument();
-    expect(screen.getAllByText(/00:42 \/ 03:00/).length).toBeGreaterThan(0);
-    expect(screen.getByText("1 个播放中内容")).toBeInTheDocument();
+    expect(screen.getByText("00:42")).toBeInTheDocument();
+    expect(screen.getByText("03:00")).toBeInTheDocument();
     expect(screen.queryByLabelText("媒体导入说明")).not.toBeInTheDocument();
     expect(await screen.findAllByText("雨站台")).not.toHaveLength(0);
     expect(screen.getByText(/\d+ 项本地功能已准备/)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "打开文件" })).toBeEnabled();
+    expect(await getAddMediaCommand(/打开视频/)).toBeEnabled();
     expect(screen.getByLabelText("观看进度 23%")).toBeInTheDocument();
     await waitFor(() =>
       expect(desktopMocks.ensureProjectPoster).toHaveBeenCalledWith(project.id),
     );
     await waitFor(() =>
-      expect(document.querySelector(".poster-image")).toHaveAttribute(
+      expect(document.querySelector(".library-continue-visual img")).toHaveAttribute(
         "src",
         expect.stringContaining("poster.jpg"),
       ),
@@ -1367,10 +1366,9 @@ describe("App", () => {
 
   it("prepares a project before opening the player", async () => {
     render(<App />);
-    const [openProject] = await screen.findAllByRole("button", {
-      name: "打开 雨站台",
-    });
-    fireEvent.click(openProject);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "打开最近观看的 雨站台" }),
+    );
 
     expect(await screen.findByText("正在确认视频画面")).toBeInTheDocument();
     expect(desktopMocks.markProjectOpened).toHaveBeenCalledWith(project.id);
@@ -1506,7 +1504,7 @@ describe("App", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: "媒体库：剧集" }));
     fireEvent.click(await screen.findByRole("button", { name: "打开合集 Rain" }));
-    fireEvent.click(await screen.findByRole("button", { name: "打开 雨站台" }));
+    fireEvent.click(await screen.findByRole("button", { name: "继续" }));
     const nextButton = await screen.findByRole("button", { name: "下一集" });
     await waitFor(() => expect(nextButton).toBeEnabled());
     fireEvent.click(nextButton);
@@ -1549,6 +1547,7 @@ describe("App", () => {
 
   it("creates a manual collection from the media library", async () => {
     render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "媒体库：剧集" }));
     fireEvent.click(await screen.findByRole("button", { name: "新建合集" }));
     fireEvent.change(screen.getByLabelText("合集名称"), {
       target: { value: "周末电影" },
@@ -2351,9 +2350,7 @@ describe("App", () => {
 
     render(<App />);
     await screen.findByText(/\d+ 项本地功能已准备/);
-    fireEvent.click(
-      await screen.findByRole("button", { name: "粘贴视频 URL" }),
-    );
+    fireEvent.click(await getAddMediaCommand(/从 URL 导入/));
 
     const resources = await screen.findByRole("dialog", {
       name: "环境配置",
@@ -2407,7 +2404,7 @@ describe("App", () => {
 
     render(<App />);
     await screen.findByText("本地功能按需准备");
-    fireEvent.click(await screen.findByRole("button", { name: "打开文件" }));
+    fireEvent.click(await getAddMediaCommand(/打开视频/));
 
     const resources = await screen.findByRole("dialog", {
       name: "环境配置",
@@ -2435,9 +2432,7 @@ describe("App", () => {
   it("preflights and imports a public HTTPS media URL", async () => {
     render(<App />);
     await screen.findByText(/\d+ 项本地功能已准备/);
-    fireEvent.click(
-      await screen.findByRole("button", { name: "粘贴视频 URL" }),
-    );
+    fireEvent.click(await getAddMediaCommand(/从 URL 导入/));
 
     fireEvent.change(await screen.findByLabelText("视频 URL"), {
       target: { value: remotePreview.originalUrl },
@@ -2472,9 +2467,7 @@ describe("App", () => {
     desktopMocks.importRemoteMediaUrl.mockReturnValue(new Promise(() => {}));
     render(<App />);
     await screen.findByText(/\d+ 项本地功能已准备/);
-    fireEvent.click(
-      await screen.findByRole("button", { name: "粘贴视频 URL" }),
-    );
+    fireEvent.click(await getAddMediaCommand(/从 URL 导入/));
     fireEvent.change(await screen.findByLabelText("视频 URL"), {
       target: { value: remotePreview.originalUrl },
     });
@@ -2497,9 +2490,7 @@ describe("App", () => {
   it("requires confirmation before importing a public YouTube single video", async () => {
     render(<App />);
     await screen.findByText(/\d+ 项本地功能已准备/);
-    fireEvent.click(
-      await screen.findByRole("button", { name: "粘贴视频 URL" }),
-    );
+    fireEvent.click(await getAddMediaCommand(/从 URL 导入/));
     fireEvent.change(await screen.findByLabelText("视频 URL"), {
       target: { value: youtubePreview.originalUrl },
     });
@@ -2525,8 +2516,15 @@ describe("App", () => {
   });
 
   it("states that deleting a project keeps the source video", async () => {
+    libraryGatewayMocks.listLibrarySection.mockImplementation(async ({ section }) => ({
+      items: section === "unclassified" ? [mediaSummaryFor()] : [],
+      totalCount: section === "unclassified" ? 1 : 0,
+      nextOffset: null,
+    }));
     render(<App />);
-    fireEvent.click(await screen.findByRole("button", { name: "删除" }));
+    fireEvent.click(await screen.findByRole("button", { name: "媒体库：未分类视频" }));
+    fireEvent.click(await screen.findByLabelText("雨站台 的更多操作"));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "删除视频" }));
 
     expect(
       await screen.findByRole("heading", { name: "删除这个本地项目？" }),

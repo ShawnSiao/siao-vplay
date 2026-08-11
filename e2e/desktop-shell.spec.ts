@@ -2,18 +2,16 @@ import { expect, test } from "@playwright/test";
 
 test("media home uses a compact responsive desktop shell", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.goto("/e2e/library.html");
+  await page.goto("/e2e/library.html", { waitUntil: "domcontentloaded" });
 
   await expect(page.getByRole("banner", { name: "应用命令栏" })).toHaveCSS(
     "height",
     "44px",
   );
-  const openFolder = page.getByRole("button", { name: "打开剧集文件夹" }).first();
+  const openFolder = page.getByRole("button", { name: "添加剧集文件夹" });
   await expect(openFolder).toBeEnabled();
-  await expect(openFolder).toHaveCSS(
-    "background-image",
-    "linear-gradient(rgb(195, 241, 135), rgb(169, 220, 105))",
-  );
+  await expect(page.getByRole("button", { name: "打开视频" })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "从 URL 导入" })).toBeEnabled();
   await expect(
     page.getByRole("heading", { name: "专注观看，需要时再理解。" }),
   ).toHaveCount(0);
@@ -21,22 +19,19 @@ test("media home uses a compact responsive desktop shell", async ({ page }) => {
     "width",
     "220px",
   );
-  await expect(page.locator(".continue-item")).toHaveCount(1);
-  await expect(page.getByText("00:42 / 03:00").first()).toBeVisible();
-  await expect(page.getByRole("heading", { name: "剧集" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "查看全部 ›" })).toBeEnabled();
+  await expect(page.locator(".library-continue-hero")).toHaveCount(1);
+  await expect(page.getByText("00:42", { exact: true })).toBeVisible();
+  await expect(page.getByText("03:00", { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "剧集概览" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "查看全部" })).toBeEnabled();
   await expect(page.getByRole("heading", { name: "最近加入" })).toBeVisible();
   await expect(
     page.getByRole("button", {
       name: "媒体库：稍后观看",
     }),
   ).toBeEnabled();
-  await expect(
-    page.getByRole("button", { name: "字幕，需要打开视频后使用" }),
-  ).toBeDisabled();
-  await expect(
-    page.getByRole("button", { name: "更多命令，需要打开视频后使用" }),
-  ).toBeDisabled();
+  await expect(page.getByText("字幕", { exact: true })).toHaveCount(0);
+  await expect(page.getByLabel("更多字幕与交付命令")).toHaveCount(0);
   await expect(
     page.getByRole("searchbox", { name: "搜索媒体库" }),
   ).toBeEnabled();
@@ -51,7 +46,7 @@ test("media home uses a compact responsive desktop shell", async ({ page }) => {
   await expect(page.getByRole("contentinfo", { name: "媒体库状态" })).toContainText(
     "1 个授权文件夹",
   );
-  await expect(page.locator(".library-item-list")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "未分类" })).toHaveCount(0);
   await expect(page.locator(".project-card")).toHaveCount(0);
 
   await openFolder.click();
@@ -74,15 +69,18 @@ test("media home uses a compact responsive desktop shell", async ({ page }) => {
   );
   await expect(page.locator(".desktop-navigation-section")).toBeHidden();
   await expect(page.locator(".desktop-navigation-note")).toBeHidden();
+  await expect(page.locator(".environment-navigation-trigger > span:last-child"))
+    .toBeHidden();
 });
 
 test("media library scrolls to its last row above the status bar", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 720 });
-  await page.goto("/e2e/library.html");
+  await page.goto("/e2e/library.html", { waitUntil: "domcontentloaded" });
+  await page.getByRole("button", { name: "媒体库：未分类视频" }).click();
 
   const scroll = page.locator(".library-scroll");
   const statusbar = page.getByRole("contentinfo", { name: "媒体库状态" });
-  const lastItem = page.locator(".library-item-open").last();
+  const lastItem = page.locator(".library-media-item").last();
   const before = await scroll.evaluate((element) => ({
     clientHeight: element.clientHeight,
     scrollHeight: element.scrollHeight,
@@ -108,14 +106,24 @@ test("media library scrolls to its last row above the status bar", async ({ page
 
 test("folder recovery requires confirmation and blocks unsafe relocation", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.goto("/e2e/library.html");
+  await page.goto("/e2e/library.html", { waitUntil: "domcontentloaded" });
   await page.getByRole("button", { name: "媒体库：文件夹" }).click();
-  await expect(page.getByRole("heading", { name: "授权文件夹", level: 1 })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "授权文件夹", level: 2 })).toBeVisible();
   await expect(page.getByText("W:\\Series\\Rain")).toBeVisible();
 
   await page.getByRole("button", { name: "扫描更新 Rain" }).click();
   const rescan = page.getByRole("dialog", { name: "确认重新扫描结果" });
   await expect(rescan).toContainText("根目录当前离线");
+  await expect(rescan.getByLabel("恢复结果分组")).toContainText("保持不变");
+  await expect(rescan.getByLabel("恢复结果分组")).toContainText("需要确认");
+  await expect(rescan.getByLabel("恢复结果分组")).toContainText("暂时离线");
+  await expect
+    .poll(() =>
+      rescan.locator(".dialog-body").evaluate(
+        (element) => element.scrollWidth <= element.clientWidth,
+      ),
+    )
+    .toBe(true);
   const applyRescan = rescan.getByRole("button", { name: "应用扫描结果" });
   await expect(applyRescan).toBeDisabled();
   await rescan.getByRole("checkbox", { name: /确认将根目录与全部单集标记为离线/ }).check();
@@ -123,10 +131,31 @@ test("folder recovery requires confirmation and blocks unsafe relocation", async
   await applyRescan.click();
   await expect(rescan).toHaveCount(0);
 
-  await page.getByRole("button", { name: "更换位置 Rain" }).click();
+  await page.getByLabel("Rain 的文件夹操作").click();
+  await page.getByRole("menuitem", { name: "更换位置" }).click();
   const relocation = page.getByRole("dialog", { name: "确认根目录重定位" });
   await expect(relocation).toContainText("新目录缺少文件");
   await expect(relocation.getByRole("button", { name: "更新根目录" })).toBeDisabled();
+});
+
+test("direct media lists remove successful classification changes", async ({ page }) => {
+  await page.setViewportSize({ width: 1200, height: 800 });
+  await page.goto("/e2e/library.html", { waitUntil: "domcontentloaded" });
+
+  await page.getByRole("button", { name: "媒体库：稍后观看" }).click();
+  await expect(page.getByRole("heading", { name: "稍后观看" })).toBeVisible();
+  await expect(page.getByText("共 1 个视频，已加载 1 个。")).toBeVisible();
+  await page.getByLabel("雨站台 的更多操作").click();
+  await page.getByRole("menuitem", { name: "取消稍后观看" }).click();
+  await expect(page.getByText("还没有稍后观看的视频")).toBeVisible();
+
+  await page.getByRole("button", { name: "媒体库：未分类视频" }).click();
+  await expect(page.getByRole("heading", { name: "未分类" })).toBeVisible();
+  await expect(page.getByText("共 12 个视频，已加载 12 个。")).toBeVisible();
+  await page.getByLabel("雨站台 1 的更多操作").click();
+  await page.getByRole("menuitem", { name: "加入「周末电影」" }).click();
+  await expect(page.getByText("共 11 个视频，已加载 11 个。")).toBeVisible();
+  await expect(page.getByText("雨站台 1", { exact: true })).toHaveCount(0);
 });
 
 test("drawers and context menu preserve the mounted video", async ({ page }) => {

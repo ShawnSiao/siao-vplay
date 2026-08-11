@@ -1,3 +1,5 @@
+import { useEffect, useState } from "react";
+
 import type { Project } from "../types";
 
 type PreparationScreenProps = {
@@ -15,6 +17,16 @@ export function PreparationScreen({
   onRetry,
   onBack,
 }: PreparationScreenProps) {
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  useEffect(() => {
+    if (error) return undefined;
+    const startedAt = Date.now();
+    const timer = window.setInterval(() => {
+      setElapsedSeconds(Math.floor((Date.now() - startedAt) / 1_000));
+    }, 1_000);
+    return () => window.clearInterval(timer);
+  }, [error, project.id]);
+
   return (
     <div className="preparation-screen" data-screen-label="准备本地视频">
       <main className="preparation-content">
@@ -81,10 +93,17 @@ export function PreparationScreen({
                 </button>
               </div>
             ) : (
-              <span className="working-indicator">
-                <span className="spinner"></span>
-                请保持应用开启
-              </span>
+              <div>
+                <span className="working-indicator">
+                  <span className="spinner"></span>
+                  {elapsedSeconds < 5
+                    ? "正在检查"
+                    : `仍在处理 · ${elapsedSeconds} 秒`}
+                </span>
+                <button className="button quiet" type="button" onClick={onBack}>
+                  取消并返回媒体库
+                </button>
+              </div>
             )}
           </footer>
         </section>
