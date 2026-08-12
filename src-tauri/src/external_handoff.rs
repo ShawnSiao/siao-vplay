@@ -81,108 +81,131 @@ struct ResultAttempt {
 pub fn reconcile_external_agent_results(
     store: &ProjectStore,
 ) -> Result<Vec<ExternalAgentResultUpdate>, ExternalHandoffError> {
+    Ok(reconcile_active_tasks_with(
+        active_manual_tasks(store)?,
+        |task| reconcile_external_agent_result(store, task),
+    ))
+}
+
+fn reconcile_active_tasks_with<F>(
+    tasks: Vec<ActiveManualTask>,
+    mut reconcile: F,
+) -> Vec<ExternalAgentResultUpdate>
+where
+    F: FnMut(&ActiveManualTask) -> Result<Option<ExternalAgentResultUpdate>, ExternalHandoffError>,
+{
     let mut updates = Vec::new();
-    for task in active_manual_tasks(store)? {
-        let Some(candidate) = result_candidate(store, &task.id)? else {
-            continue;
-        };
-        let (checking_message, detected_message, changed_message) = match task.kind.as_str() {
-            "translation" => (
-                "正在检查字幕翻译结果",
-                "已检测到外部 Agent 返回，正在检查字幕翻译",
-                "检测到返回文件发生变化，正在重新检查字幕翻译",
+    for task in tasks {
+        match reconcile(&task) {
+            Ok(Some(update)) => updates.push(update),
+            Ok(None) => {}
+            Err(error) => eprintln!(
+                "SiaoVPlay: unable to reconcile external {} task {}: {error}",
+                task.kind, task.id
             ),
-            "explanation" => (
-                "正在检查场景解释结果",
-                "已检测到外部 Agent 返回，正在检查场景解释",
-                "检测到返回文件发生变化，正在重新检查场景解释",
-            ),
-            "learning" => (
-                "正在检查词义结果",
-                "已检测到外部 Agent 返回，正在检查词义",
-                "检测到返回文件发生变化，正在重新检查词义",
-            ),
-            _ => continue,
-        };
-        if task.status == "awaiting_external_result" {
-            if candidate.was_rejected() {
-                continue;
-            }
-            match task.kind.as_str() {
-                "translation" => {
-                    translation::set_task_validating(store, &task.id, "awaiting_external_result")?
-                }
-                "explanation" => {
-                    understanding::set_task_validating(store, &task.id, "awaiting_external_result")?
-                }
-                "learning" => {
-                    learning::set_task_validating(store, &task.id, "awaiting_external_result")?
-                }
-                _ => continue,
-            }
-            record_attempt(&candidate, "validating", checking_message)?;
-            updates.push(validating_update(
-                &task.kind,
-                &task.id,
-                &task.project_id,
-                detected_message,
-            ));
-            continue;
-        }
-        if !candidate.is_staged() {
-            record_attempt(&candidate, "validating", checking_message)?;
-            updates.push(validating_update(
-                &task.kind,
-                &task.id,
-                &task.project_id,
-                changed_message,
-            ));
-            continue;
-        }
-        let result = match task.kind.as_str() {
-            "translation" => {
-                translation::apply_staged_manual_result(store, &task.id, &candidate.path)
-                    .map(|application| application.task.output_version_id)
-                    .map_err(|error| error.to_string())
-            }
-            "explanation" => {
-                understanding::apply_staged_manual_result(store, &task.id, &candidate.path)
-                    .map(|application| application.task.output_explanation_id)
-                    .map_err(|error| error.to_string())
-            }
-            "learning" => learning::apply_staged_manual_result(store, &task.id, &candidate.path)
-                .map(|application| application.task.output_dictionary_entry_id)
-                .map_err(|error| error.to_string()),
-            _ => continue,
-        };
-        match result {
-            Ok(output_id) => {
-                clear_attempt(&candidate.attempt_path);
-                let label = match task.kind.as_str() {
-                    "translation" => "字幕翻译",
-                    "explanation" => "场景解释",
-                    "learning" => "词义结果",
-                    _ => unreachable!(),
-                };
-                updates.push(ExternalAgentResultUpdate {
-                    task_kind: task.kind,
-                    task_id: task.id,
-                    project_id: task.project_id,
-                    status: "completed".to_owned(),
-                    output_id,
-                    message: format!("已检测并导入外部 Agent 返回的{label}"),
-                });
-            }
-            Err(message) => updates.push(rejected_update(
-                &task.kind,
-                &task.id,
-                &task.project_id,
-                &candidate,
-                message,
-            )?),
         }
     }
-    Ok(updates)
+    updates
+}
+
+fn reconcile_external_agent_result(
+    store: &ProjectStore,
+    task: &ActiveManualTask,
+) -> Result<Option<ExternalAgentResultUpdate>, ExternalHandoffError> {
+    let Some(candidate) = result_candidate(store, &task.id)? else {
+        return Ok(None);
+    };
+    let (checking_message, detected_message, changed_message) = match task.kind.as_str() {
+        "translation" => (
+            "正在检查字幕翻译结果",
+            "已检测到外部 Agent 返回，正在检查字幕翻译",
+            "检测到返回文件发生变化，正在重新检查字幕翻译",
+        ),
+        "explanation" => (
+            "正在检查场景解释结果",
+            "已检测到外部 Agent 返回，正在检查场景解释",
+            "检测到返回文件发生变化，正在重新检查场景解释",
+        ),
+        "learning" => (
+            "正在检查词义结果",
+            "已检测到外部 Agent 返回，正在检查词义",
+            "检测到返回文件发生变化，正在重新检查词义",
+        ),
+        _ => return Ok(None),
+    };
+    if task.status == "awaiting_external_result" {
+        if candidate.was_rejected() {
+            return Ok(None);
+        }
+        match task.kind.as_str() {
+            "translation" => {
+                translation::set_task_validating(store, &task.id, "awaiting_external_result")?
+            }
+            "explanation" => {
+                understanding::set_task_validating(store, &task.id, "awaiting_external_result")?
+            }
+            "learning" => {
+                learning::set_task_validating(store, &task.id, "awaiting_external_result")?
+            }
+            _ => return Ok(None),
+        }
+        record_attempt(&candidate, "validating", checking_message)?;
+        return Ok(Some(validating_update(
+            &task.kind,
+            &task.id,
+            &task.project_id,
+            detected_message,
+        )));
+    }
+    if !candidate.is_staged() {
+        record_attempt(&candidate, "validating", checking_message)?;
+        return Ok(Some(validating_update(
+            &task.kind,
+            &task.id,
+            &task.project_id,
+            changed_message,
+        )));
+    }
+    let result = match task.kind.as_str() {
+        "translation" => translation::apply_staged_manual_result(store, &task.id, &candidate.path)
+            .map(|application| application.task.output_version_id)
+            .map_err(|error| error.to_string()),
+        "explanation" => {
+            understanding::apply_staged_manual_result(store, &task.id, &candidate.path)
+                .map(|application| application.task.output_explanation_id)
+                .map_err(|error| error.to_string())
+        }
+        "learning" => learning::apply_staged_manual_result(store, &task.id, &candidate.path)
+            .map(|application| application.task.output_dictionary_entry_id)
+            .map_err(|error| error.to_string()),
+        _ => return Ok(None),
+    };
+    match result {
+        Ok(output_id) => {
+            clear_attempt(&candidate.attempt_path);
+            let label = match task.kind.as_str() {
+                "translation" => "字幕翻译",
+                "explanation" => "场景解释",
+                "learning" => "词义结果",
+                _ => unreachable!(),
+            };
+            Ok(Some(ExternalAgentResultUpdate {
+                task_kind: task.kind.clone(),
+                task_id: task.id.clone(),
+                project_id: task.project_id.clone(),
+                status: "completed".to_owned(),
+                output_id,
+                message: format!("已检测并导入外部 Agent 返回的{label}"),
+            }))
+        }
+        Err(message) => Ok(Some(rejected_update(
+            &task.kind,
+            &task.id,
+            &task.project_id,
+            &candidate,
+            message,
+        )?)),
+    }
 }
 
 struct ActiveManualTask {
@@ -426,7 +449,10 @@ mod tests {
 
     use tempfile::TempDir;
 
-    use super::{record_attempt, result_candidate};
+    use super::{
+        ActiveManualTask, ExternalAgentResultUpdate, ExternalHandoffError,
+        reconcile_active_tasks_with, record_attempt, result_candidate,
+    };
     use crate::store::ProjectStore;
 
     #[test]
@@ -477,5 +503,41 @@ mod tests {
                 .expect("candidate should exist")
                 .was_rejected()
         );
+    }
+
+    #[test]
+    fn one_broken_task_does_not_block_later_external_results() {
+        let tasks = vec![
+            ActiveManualTask {
+                kind: "translation".to_owned(),
+                id: "broken-task".to_owned(),
+                project_id: "project-1".to_owned(),
+                status: "validating".to_owned(),
+            },
+            ActiveManualTask {
+                kind: "learning".to_owned(),
+                id: "valid-task".to_owned(),
+                project_id: "project-2".to_owned(),
+                status: "validating".to_owned(),
+            },
+        ];
+
+        let updates = reconcile_active_tasks_with(tasks, |task| {
+            if task.id == "broken-task" {
+                return Err(ExternalHandoffError::InvalidTask);
+            }
+            Ok(Some(ExternalAgentResultUpdate {
+                task_kind: task.kind.clone(),
+                task_id: task.id.clone(),
+                project_id: task.project_id.clone(),
+                status: "completed".to_owned(),
+                output_id: Some("dictionary-entry".to_owned()),
+                message: "词义结果已导入".to_owned(),
+            }))
+        });
+
+        assert_eq!(updates.len(), 1);
+        assert_eq!(updates[0].task_id, "valid-task");
+        assert_eq!(updates[0].status, "completed");
     }
 }

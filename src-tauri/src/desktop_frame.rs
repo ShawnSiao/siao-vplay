@@ -1,7 +1,32 @@
 use tauri::WebviewWindow;
 
+#[cfg(windows)]
+use std::sync::atomic::{AtomicU8, Ordering};
+
 const APPLICATION_NAME: &str = "SiaoVPlay";
 const MAX_MEDIA_TITLE_CHARS: usize = 160;
+
+#[cfg(windows)]
+const FRAME_COLOR_SUPPORT_UNKNOWN: u8 = 0;
+#[cfg(windows)]
+const FRAME_COLOR_SUPPORT_AVAILABLE: u8 = 1;
+#[cfg(windows)]
+const FRAME_COLOR_SUPPORT_UNAVAILABLE: u8 = 2;
+#[cfg(windows)]
+const E_INVALIDARG_HRESULT: i32 = 0x8007_0057_u32 as i32;
+#[cfg(windows)]
+static FRAME_COLOR_SUPPORT: AtomicU8 = AtomicU8::new(FRAME_COLOR_SUPPORT_UNKNOWN);
+
+#[cfg(windows)]
+fn frame_color_support_after(result: i32) -> Option<u8> {
+    if result >= 0 {
+        Some(FRAME_COLOR_SUPPORT_AVAILABLE)
+    } else if result == E_INVALIDARG_HRESULT {
+        Some(FRAME_COLOR_SUPPORT_UNAVAILABLE)
+    } else {
+        None
+    }
+}
 
 pub fn apply(window: &WebviewWindow) {
     #[cfg(windows)]
@@ -149,21 +174,31 @@ fn apply_windows_frame(window: &WebviewWindow, update: WindowsFrameUpdate) {
         }
     }
 
-    for (attribute, value, name) in [
-        (DWMWA_CAPTION_COLOR, caption_color, "caption color"),
-        (DWMWA_TEXT_COLOR, text_color, "caption text color"),
-        (DWMWA_BORDER_COLOR, border_color, "window border color"),
-    ] {
-        let result = unsafe {
-            DwmSetWindowAttribute(
-                hwnd,
-                attribute as u32,
-                (&value as *const u32).cast::<c_void>(),
-                size_of::<u32>() as u32,
-            )
-        };
-        if result < 0 {
-            eprintln!("SiaoVPlay: unable to apply native {name} (HRESULT {result:#x})");
+    if FRAME_COLOR_SUPPORT.load(Ordering::Relaxed) != FRAME_COLOR_SUPPORT_UNAVAILABLE {
+        for (attribute, value, name) in [
+            (DWMWA_CAPTION_COLOR, caption_color, "caption color"),
+            (DWMWA_TEXT_COLOR, text_color, "caption text color"),
+            (DWMWA_BORDER_COLOR, border_color, "window border color"),
+        ] {
+            let result = unsafe {
+                DwmSetWindowAttribute(
+                    hwnd,
+                    attribute as u32,
+                    (&value as *const u32).cast::<c_void>(),
+                    size_of::<u32>() as u32,
+                )
+            };
+            match frame_color_support_after(result) {
+                Some(support) => {
+                    FRAME_COLOR_SUPPORT.store(support, Ordering::Relaxed);
+                    if support == FRAME_COLOR_SUPPORT_UNAVAILABLE {
+                        break;
+                    }
+                }
+                None => {
+                    eprintln!("SiaoVPlay: unable to apply native {name} (HRESULT {result:#x})");
+                }
+            }
         }
     }
 }
@@ -178,7 +213,10 @@ mod tests {
     use super::window_title;
 
     #[cfg(windows)]
-    use super::WindowsFrameUpdate;
+    use super::{
+        E_INVALIDARG_HRESULT, FRAME_COLOR_SUPPORT_UNAVAILABLE, WindowsFrameUpdate,
+        frame_color_support_after,
+    };
 
     #[test]
     fn native_title_uses_the_application_name_for_the_library() {
@@ -198,5 +236,14 @@ mod tests {
     fn window_event_refresh_does_not_set_the_tauri_theme_again() {
         assert!(WindowsFrameUpdate::Initial.updates_tauri_theme());
         assert!(!WindowsFrameUpdate::Refresh.updates_tauri_theme());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn unsupported_frame_color_attributes_have_a_stable_capability_state() {
+        assert_eq!(
+            frame_color_support_after(std::hint::black_box(E_INVALIDARG_HRESULT)),
+            Some(FRAME_COLOR_SUPPORT_UNAVAILABLE)
+        );
     }
 }
