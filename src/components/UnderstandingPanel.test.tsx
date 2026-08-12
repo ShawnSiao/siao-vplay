@@ -88,4 +88,104 @@ describe("UnderstandingPanel reading flow", () => {
       screen.queryByText("这可能意味着团队正在重新评估自动化任务的边界。"),
     ).not.toBeVisible();
   });
+
+  it("never falls back to an explanation after the current playback point", async () => {
+    desktopMocks.listExplanations.mockResolvedValue([
+      {
+        ...explanation,
+        id: "future-explanation",
+        playbackCutoffMs: explanation.playbackCutoffMs + 60_000,
+        confirmedFacts: ["未来剧情不应显示。"],
+      },
+    ]);
+
+    render(
+      <UnderstandingPanel
+        embedded
+        projectId="project-1"
+        playbackCutoffMs={explanation.playbackCutoffMs}
+        sourceVersion={null}
+        translationVersion={null}
+        onPrepareSubtitles={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    expect(
+      await screen.findByText("需要先准备原文字幕"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("未来剧情不应显示。")).not.toBeInTheDocument();
+  });
+
+  it("hides a previously visible explanation after the viewer rewinds", async () => {
+    const view = render(
+      <UnderstandingPanel
+        embedded
+        projectId="project-1"
+        playbackCutoffMs={explanation.playbackCutoffMs}
+        sourceVersion={null}
+        translationVersion={null}
+        onPrepareSubtitles={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    expect(
+      await screen.findByText("事实一：报告提出了新的验证问题。"),
+    ).toBeInTheDocument();
+
+    view.rerender(
+      <UnderstandingPanel
+        embedded
+        projectId="project-1"
+        playbackCutoffMs={explanation.playbackCutoffMs - 1}
+        sourceVersion={null}
+        translationVersion={null}
+        onPrepareSubtitles={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    expect(
+      await screen.findByText("需要先准备原文字幕"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("事实一：报告提出了新的验证问题。"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("excludes future explanations from the visible history", async () => {
+    desktopMocks.listExplanations.mockResolvedValue([
+      {
+        ...explanation,
+        id: "future-explanation",
+        playbackCutoffMs: explanation.playbackCutoffMs + 1,
+        confirmedFacts: ["未来剧情不应出现在历史中。"],
+      },
+      explanation,
+      {
+        ...explanation,
+        id: "earlier-explanation",
+        playbackCutoffMs: explanation.playbackCutoffMs - 60_000,
+        confirmedFacts: ["更早的剧情。"],
+      },
+    ]);
+
+    render(
+      <UnderstandingPanel
+        embedded
+        projectId="project-1"
+        playbackCutoffMs={explanation.playbackCutoffMs}
+        sourceVersion={null}
+        translationVersion={null}
+        onPrepareSubtitles={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    expect(await screen.findByText("此前理解 · 2")).toBeInTheDocument();
+    expect(
+      screen.queryByText("未来剧情不应出现在历史中。"),
+    ).not.toBeInTheDocument();
+  });
 });
