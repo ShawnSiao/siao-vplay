@@ -27,7 +27,6 @@ use url::Url;
 use uuid::Uuid;
 
 use crate::{
-    ai,
     domain::Project,
     media::{self, MediaError},
     store::{ProjectStore, StoreError},
@@ -486,15 +485,15 @@ fn send_with_redirects(
 
 fn pinned_client(url: &Url, addresses: &[SocketAddr]) -> Result<Client, RemoteMediaError> {
     let host = url.host_str().ok_or(RemoteMediaError::InvalidUrl)?;
-    ai::network::build_client(
-        Client::builder()
-            .redirect(reqwest::redirect::Policy::none())
-            .referer(false)
-            .connect_timeout(CONNECT_TIMEOUT)
-            .timeout(REQUEST_TIMEOUT)
-            .resolve_to_addrs(host, addresses),
-    )
-    .map_err(RemoteMediaError::Request)
+    Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .no_proxy()
+        .referer(false)
+        .connect_timeout(CONNECT_TIMEOUT)
+        .timeout(REQUEST_TIMEOUT)
+        .resolve_to_addrs(host, addresses)
+        .build()
+        .map_err(|error| RemoteMediaError::Request(error.to_string()))
 }
 
 pub(crate) fn validate_public_https_url(input: &str) -> Result<Url, RemoteMediaError> {
@@ -559,12 +558,12 @@ fn public_socket_addresses(host: &str, port: u16) -> Result<Vec<SocketAddr>, Rem
 }
 
 fn resolve_public_dns_over_https(host: &str) -> Result<Vec<IpAddr>, RemoteMediaError> {
-    let client = ai::network::build_client(
-        Client::builder()
-            .redirect(reqwest::redirect::Policy::none())
-            .timeout(Duration::from_secs(10)),
-    )
-    .map_err(RemoteMediaError::Dns)?;
+    let client = Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .no_proxy()
+        .timeout(Duration::from_secs(10))
+        .build()
+        .map_err(|error| RemoteMediaError::Dns(error.to_string()))?;
     let mut addresses = Vec::new();
     for record_type in ["A", "AAAA"] {
         let response = client
