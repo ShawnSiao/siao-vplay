@@ -12,7 +12,6 @@ import type {
   ShellContextMenu,
   ShellDrawerTab,
 } from "../shell/useShellController";
-
 export type PlaybackValues = {
   positionMs: number;
   durationMs: number | null;
@@ -20,7 +19,6 @@ export type PlaybackValues = {
   playbackRate: number;
   subtitleMode: SubtitleDisplayMode;
 };
-
 type PlaybackControllerOptions = {
   project: Project;
   preparation: MediaPreparation;
@@ -34,6 +32,7 @@ type PlaybackControllerOptions = {
   onNeedProxy: (reason: string) => void;
   onPersist: (values: PlaybackValues) => Promise<void>;
   onError: (message: string) => void;
+  onFatalError: (message: string) => void;
 };
 
 function activeSegment(
@@ -60,6 +59,7 @@ export function usePlaybackController({
   onNeedProxy,
   onPersist,
   onError,
+  onFatalError,
 }: PlaybackControllerOptions) {
   const playerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -122,7 +122,7 @@ export function usePlaybackController({
     (reason: string) => {
       if (sourceIsProxy || proxyRequestedRef.current) {
         if (sourceIsProxy) {
-          onError(
+          onFatalError(
             "兼容播放版本仍然没有产生有效画面。项目和源视频已保留，可以返回媒体库后重新尝试。",
           );
         }
@@ -132,7 +132,7 @@ export function usePlaybackController({
       videoRef.current?.pause();
       onNeedProxy(reason);
     },
-    [onError, onNeedProxy, sourceIsProxy],
+    [onFatalError, onNeedProxy, sourceIsProxy],
   );
 
   useEffect(() => {
@@ -218,8 +218,8 @@ export function usePlaybackController({
         await video.play();
         setEnded(false);
         setPlaying(true);
-      } catch (error) {
-        onError(error instanceof Error ? error.message : "播放器未能开始播放");
+      } catch {
+        onError("播放器未能开始播放。可以重新检查视频后重试。");
       }
     } else {
       video.pause();
@@ -243,8 +243,8 @@ export function usePlaybackController({
       } else {
         await playerRef.current?.requestFullscreen();
       }
-    } catch (error) {
-      onError(error instanceof Error ? error.message : "无法切换全屏");
+    } catch {
+      onError("暂时无法切换全屏。可以继续在窗口中观看。");
     }
   }, [onError]);
 

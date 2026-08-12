@@ -1,0 +1,13 @@
+.desktop-shell-player .desktop-commandbar-context {
+  min-width: 0;
+  max-width: min(34vw, 420px);
+  margin-right: auto;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.shell-player-more-menu {
+  right: 0;
+  left: auto;
+  width: 244px;
+}

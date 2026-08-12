@@ -1,5 +1,45 @@
 import { expect, test } from "@playwright/test";
 
+test("empty media library keeps one clear responsive import path", async ({ page }) => {
+  const consoleErrors: string[] = [];
+  page.on("console", (message) => {
+    if (message.type() === "error") consoleErrors.push(message.text());
+  });
+  page.on("pageerror", (error) => consoleErrors.push(error.message));
+  await page.goto("/e2e/library.html?empty=1", { waitUntil: "domcontentloaded" });
+
+  for (const viewport of [
+    { width: 1440, height: 900 },
+    { width: 1200, height: 720 },
+    { width: 960, height: 640 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await expect(
+      page.getByRole("heading", { name: "把海外视频变成可以连续看懂的内容" }),
+    ).toBeVisible();
+    await expect(page.getByRole("button", { name: "导入视频" })).toBeVisible();
+    await expect(page.getByText("不上传本地视频；向 AI 服务发送字幕或关键帧前会单独确认。"))
+      .toBeVisible();
+    await expect
+      .poll(() => page.evaluate(() => document.body.scrollWidth <= document.body.clientWidth))
+      .toBe(true);
+    await expect
+      .poll(() => page.locator(".library-scroll").evaluate(
+        (element) => element.scrollWidth <= element.clientWidth,
+      ))
+      .toBe(true);
+  }
+
+  await page.getByRole("button", { name: "导入视频" }).click();
+  const dialog = page.getByRole("dialog", { name: "导入视频" });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole("button", { name: /打开本地视频/ })).toBeEnabled();
+  await expect(dialog.getByRole("button", { name: /添加剧集文件夹/ })).toBeEnabled();
+  await expect(dialog.getByRole("button", { name: /从公开链接导入/ })).toBeEnabled();
+  await expect(dialog).toContainText("不会绕过登录、付费或 DRM 限制");
+  expect(consoleErrors).toEqual([]);
+});
+
 test("media home uses a compact responsive desktop shell", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/e2e/library.html", { waitUntil: "domcontentloaded" });
@@ -8,10 +48,12 @@ test("media home uses a compact responsive desktop shell", async ({ page }) => {
     "height",
     "44px",
   );
-  const openFolder = page.getByRole("button", { name: "添加剧集文件夹" });
+  const addMedia = page.getByRole("button", { name: "添加视频" });
+  await addMedia.click();
+  const openFolder = page.getByRole("menuitem", { name: "添加剧集文件夹" });
   await expect(openFolder).toBeEnabled();
-  await expect(page.getByRole("button", { name: "打开视频" })).toBeEnabled();
-  await expect(page.getByRole("button", { name: "从 URL 导入" })).toBeEnabled();
+  await expect(page.getByRole("menuitem", { name: "打开本地视频" })).toBeEnabled();
+  await expect(page.getByRole("menuitem", { name: "从公开链接导入" })).toBeEnabled();
   await expect(
     page.getByRole("heading", { name: "专注观看，需要时再理解。" }),
   ).toHaveCount(0);
@@ -31,7 +73,7 @@ test("media home uses a compact responsive desktop shell", async ({ page }) => {
     }),
   ).toBeEnabled();
   await expect(page.getByText("字幕", { exact: true })).toHaveCount(0);
-  await expect(page.getByLabel("更多字幕与交付命令")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "更多", exact: true })).toHaveCount(0);
   await expect(
     page.getByRole("searchbox", { name: "搜索媒体库" }),
   ).toBeEnabled();
@@ -178,7 +220,8 @@ test("drawers and context menu preserve the mounted video", async ({ page }) => 
   await expect(page.getByRole("button", { name: /下一集/ })).toBeEnabled();
   await expect(page.getByRole("button", { name: "进入全屏" })).toBeVisible();
 
-  await page.getByRole("button", { name: "剧集", exact: true }).click();
+  await page.getByRole("button", { name: "更多", exact: true }).click();
+  await page.getByRole("menuitem", { name: /^剧集/ }).click();
   const episodesDrawer = page.getByRole("complementary", { name: "当前内容抽屉" });
   await expect(episodesDrawer).toBeVisible();
   await expect(episodesDrawer).toHaveCSS("position", "absolute");
@@ -238,7 +281,8 @@ test("reading-first drawer exposes readable hierarchy and density controls", asy
   await page.goto("/e2e/player.html");
 
   const drawer = page.getByRole("complementary", { name: "当前内容抽屉" });
-  await page.getByRole("button", { name: "剧集", exact: true }).click();
+  await page.getByRole("button", { name: "更多", exact: true }).click();
+  await page.getByRole("menuitem", { name: /^剧集/ }).click();
 
   await expect(drawer).toHaveCSS("width", "416px");
   await expect(drawer.locator(".player-drawer-meta")).toContainText("正在观看");
@@ -395,6 +439,7 @@ test("local resources stay product-focused, accessible, and scrollable at 1280 b
   await expect(dialog).toContainText("不会使用隐式系统盘目录");
   await expect(dialog).toContainText("识别模型下载 148 MB");
   await expect(dialog).toContainText("识别模型下载 488 MB");
+  await dialog.getByText("高级维护：存储位置、迁移、修复和清理").click();
   await expect(dialog.getByRole("button", { name: "选择现有资源目录" })).toBeVisible();
   await expect(dialog.getByRole("button", { name: "移动保存位置" })).toBeVisible();
   expect(await dialog.evaluate((element) => (element as HTMLElement).innerText)).not.toMatch(

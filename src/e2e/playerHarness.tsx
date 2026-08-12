@@ -259,7 +259,8 @@ export function PlayerHarness() {
         onNeedProxy={() => undefined}
         onPersist={async () => undefined}
         onSwitchEpisode={async () => undefined}
-        onError={() => undefined}
+        onNotice={() => undefined}
+        onRetryPlayback={() => undefined}
       />
     </DesktopShell>
   );

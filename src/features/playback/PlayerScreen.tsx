@@ -1,5 +1,4 @@
 import { useCallback, useRef, useState } from "react";
-
 import { formatDuration } from "../../lib/format";
 import type {
   EpisodeReference,
@@ -18,10 +17,12 @@ import {
   type PlaybackValues,
 } from "./usePlaybackController";
 import { PlayerContextMenu } from "./PlayerContextMenu";
+import { PlayerCaptionStack } from "./PlayerCaptionStack";
 import { PlayerDrawer } from "./PlayerDrawer";
+import { PlayerErrorCard } from "./PlayerErrorCard";
 import { EpisodeDrawer } from "./EpisodeDrawer";
 import type { EpisodeNavigationState } from "../library/useEpisodeNavigation";
-
+import "./player-feedback.css";
 type PlayerScreenProps = {
   project: Project;
   preparation: MediaPreparation;
@@ -39,9 +40,9 @@ type PlayerScreenProps = {
   onNeedProxy: (reason: string) => void;
   onPersist: (values: PlaybackValues) => Promise<void>;
   onSwitchEpisode: (episode: EpisodeReference) => Promise<void>;
-  onError: (message: string) => void;
+  onNotice: (message: string) => void;
+  onRetryPlayback: () => void;
 };
-
 export function PlayerScreen({
   project,
   preparation,
@@ -59,10 +60,12 @@ export function PlayerScreen({
   onNeedProxy,
   onPersist,
   onSwitchEpisode,
-  onError,
+  onNotice,
+  onRetryPlayback,
 }: PlayerScreenProps) {
   const stageRef = useRef<HTMLDivElement>(null);
   const [switchingEpisode, setSwitchingEpisode] = useState(false);
+  const [playerError, setPlayerError] = useState<string | null>(null);
   const {
     playerRef,
     videoRef,
@@ -110,7 +113,8 @@ export function PlayerScreen({
     onCloseContextMenu,
     onNeedProxy,
     onPersist,
-    onError,
+    onError: onNotice,
+    onFatalError: setPlayerError,
   });
   const currentEpisode = episodeNavigation.episodes.find(
     (episode) => episode.projectId === project.id,
@@ -220,27 +224,12 @@ export function PlayerScreen({
               </div>
             ) : null}
 
-            {activeOriginal || activeTranslation ? (
-              <div className="caption-stack" aria-live="off">
-                {(effectiveSubtitleMode === "original" ||
-                  effectiveSubtitleMode === "bilingual") &&
-                activeOriginal ? (
-                  <p
-                    className="caption-line original"
-                    lang={currentSubtitle?.languageCode}
-                  >
-                    {activeOriginal.text}
-                  </p>
-                ) : null}
-                {(effectiveSubtitleMode === "translation" ||
-                  effectiveSubtitleMode === "bilingual") &&
-                activeTranslation ? (
-                  <p className="caption-line translation" lang="zh-CN">
-                    {activeTranslation.text}
-                  </p>
-                ) : null}
-              </div>
-            ) : null}
+            <PlayerCaptionStack
+              mode={effectiveSubtitleMode}
+              original={activeOriginal}
+              translation={activeTranslation}
+              originalLanguage={currentSubtitle?.languageCode}
+            />
 
             {ended &&
             episodeNavigation.neighbors.next &&
@@ -257,6 +246,17 @@ export function PlayerScreen({
                   {switchingEpisode ? "正在打开…" : "播放下一集"}
                 </button>
               </div>
+            ) : null}
+
+            {playerError ? (
+              <PlayerErrorCard
+                message={playerError}
+                onDismiss={() => setPlayerError(null)}
+                onRetry={() => {
+                  setPlayerError(null);
+                  onRetryPlayback();
+                }}
+              />
             ) : null}
           </div>
 

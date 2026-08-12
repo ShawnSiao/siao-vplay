@@ -1,0 +1,61 @@
+.player-error-card {
+  position: absolute;
+  z-index: 6;
+  top: 22px;
+  right: 22px;
+  display: grid;
+  width: min(330px, calc(100% - 44px));
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid rgb(225 94 92 / 72%);
+  border-radius: 9px;
+  color: #f4e8e8;
+  background: rgb(34 21 23 / 96%);
+  box-shadow: 0 18px 44px rgb(0 0 0 / 52%);
+}
+
+.player-error-mark {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  border: 1px solid rgb(238 107 105 / 72%);
+  border-radius: 50%;
+  color: #ff9a98;
+  font-weight: 800;
+  place-items: center;
+}
+
+.player-error-card h2,
+.player-error-card p {
+  margin: 0;
+}
+
+.player-error-card h2 {
+  font-size: 16px;
+}
+
+.player-error-card p {
+  margin-top: 7px;
+  color: #d9c4c5;
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.player-error-card > small,
+.player-error-actions {
+  grid-column: 1 / -1;
+}
+
+.player-error-card > small {
+  padding-top: 10px;
+  border-top: 1px solid rgb(225 94 92 / 24%);
+  color: #edbdbc;
+  font-size: 12px;
+}
+
+.player-error-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}

@@ -420,7 +420,7 @@ describe("LocalResourcesDialog", () => {
         onNotice={() => undefined}
       />,
     );
-
+    fireEvent.click(screen.getByText("高级维护：存储位置、迁移、修复和清理"));
     fireEvent.click(screen.getByRole("button", { name: "选择现有资源目录" }));
     expect(await screen.findByText("发现 1 项可复用资源")).toBeInTheDocument();
     expect(screen.getByText(/只检查了明确选择的目录/)).toBeInTheDocument();

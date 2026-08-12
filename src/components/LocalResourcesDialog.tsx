@@ -68,6 +68,9 @@ export function LocalResourcesDialog({
     useState<UnusedResourceCleanupPlan | null>(null);
   const [diagnostics, setDiagnostics] = useState<LocalResourceDiagnostics | null>(null);
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
+  const [maintenanceOpen, setMaintenanceOpen] = useState(
+    Boolean(pendingAction) || !controller.status?.configured,
+  );
   const diagnosticsRef = useRef<HTMLDetailsElement>(null);
   const [thirdPartyNotices, setThirdPartyNotices] = useState<string | null>(null);
   const [oldVersionCleanupPlan, setOldVersionCleanupPlan] =
@@ -664,6 +667,17 @@ export function LocalResourcesDialog({
               </div>
             </section>
 
+            <details
+              className="local-resources-maintenance"
+              open={
+                Boolean(pendingAction) ||
+                !status.configured ||
+                status.rootState !== "ready" ||
+                maintenanceOpen
+              }
+              onToggle={(event) => setMaintenanceOpen(event.currentTarget.open)}
+            >
+              <summary>高级维护：存储位置、迁移、修复和清理</summary>
             <section className="local-resources-section local-resources-location-section" aria-labelledby="location-heading">
               <div className="local-resources-section-head">
                 <div>
@@ -850,6 +864,7 @@ export function LocalResourcesDialog({
                           : "所选功能已准备"}
               </button>
             </section>
+            </details>
           </>
         ) : null}
 

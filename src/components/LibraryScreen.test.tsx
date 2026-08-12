@@ -127,6 +127,47 @@ function renderScreen(
 }
 
 describe("LibraryScreen library lifecycle", () => {
+  it("starts an empty library with one clear import action and a unified source dialog", () => {
+    const onImport = vi.fn();
+    const onImportFolder = vi.fn();
+    const onImportUrl = vi.fn();
+    renderScreen({
+      home: home({
+        continueWatching: [],
+        collections: [],
+        folders: [],
+        unclassified: [],
+        recentlyAdded: [],
+        totalProjectCount: 0,
+        collectionItemCount: 0,
+      }),
+      onImport,
+      onImportFolder,
+      onImportUrl,
+    });
+
+    expect(
+      screen.getByRole("heading", {
+        name: "把海外视频变成可以连续看懂的内容",
+      }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "导入视频" })).toBeEnabled();
+    expect(screen.getByText(/不上传本地视频/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "导入视频" }));
+    const dialog = screen.getByRole("dialog", { name: "导入视频" });
+    expect(dialog).toHaveTextContent("本地视频");
+    expect(dialog).toHaveTextContent("剧集文件夹");
+    expect(dialog).toHaveTextContent("公开链接");
+    expect(dialog).toHaveTextContent("不会绕过登录、付费或 DRM 限制");
+
+    fireEvent.click(screen.getByRole("button", { name: /打开本地视频/ }));
+    expect(onImport).toHaveBeenCalledOnce();
+    expect(screen.queryByRole("dialog", { name: "导入视频" })).toBeNull();
+    expect(onImportFolder).not.toHaveBeenCalled();
+    expect(onImportUrl).not.toHaveBeenCalled();
+  });
+
   it("requires confirmation before deleting a collection and explains what is preserved", async () => {
     const onDeleteCollection = vi
       .fn<() => Promise<LibraryCollectionDeletionResult | null>>()
