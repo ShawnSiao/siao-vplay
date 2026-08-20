@@ -59,16 +59,16 @@ const catalog: LocalResourceCatalog = {
   resources: [
     {
       id: "ffmpeg-cpu",
-      version: "8.1",
+      version: "8.1.2-34-g9b6c8969e0",
       platform: "windows-x86_64",
       kind: "archive",
       bundled: false,
-      installedSize: 175_926_890,
+      installedSize: 175_929_962,
       license: "LGPL-2.1-or-later",
       sourcePage: "https://example.com/ffmpeg",
       artifact: {
         url: "https://example.com/ffmpeg.zip",
-        size: 70_510_962,
+        size: 70_508_781,
         sha256: "a".repeat(64),
         format: "zip",
       },

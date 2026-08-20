@@ -244,16 +244,16 @@ const localResourceCatalog: LocalResourceCatalog = {
   resources: [
     {
       id: "ffmpeg-cpu",
-      version: "8.1",
+      version: "8.1.2-34-g9b6c8969e0",
       platform: "windows-x86_64",
       kind: "archive",
       bundled: false,
-      installedSize: 175_926_890,
+      installedSize: 175_929_962,
       license: "LGPL-2.1-or-later",
       sourcePage: "https://example.com/ffmpeg",
       artifact: {
         url: "https://example.com/ffmpeg.zip",
-        size: 70_510_962,
+        size: 70_508_781,
         sha256: "a".repeat(64),
         format: "zip",
       },
@@ -2318,7 +2318,7 @@ describe("App", () => {
     expect(await screen.findAllByText("雨站台")).not.toHaveLength(0);
   });
 
-  it("resumes URL import after the required capability becomes ready", async () => {
+  it("opens URL import directly even when optional import resources are not ready", async () => {
     const urlNotReady: LocalResourceStatus = {
       ...readyLocalResourceStatus,
       capabilities: readyLocalResourceStatus.capabilities.map((capability) =>
@@ -2331,48 +2331,22 @@ describe("App", () => {
           : capability,
       ),
     };
-    let currentResourceStatus = urlNotReady;
     desktopMocks.getLocalResourceStatus.mockImplementation(
-      async () => currentResourceStatus,
-    );
-    desktopMocks.prepareLocalCapability.mockImplementation(
-      async (capabilityId, pendingActionId) => {
-        currentResourceStatus = readyLocalResourceStatus;
-        return {
-          capabilityId,
-          pendingActionId,
-          state: "preparing",
-          resourceIds: ["ffmpeg-cpu", "yt-dlp"],
-          readyResourceIds: ["ffmpeg-cpu"],
-          taskIds: ["00000000-0000-4000-8000-000000000020"],
-        };
-      },
+      async () => urlNotReady,
     );
 
     render(<App />);
     await screen.findByText(/\d+ 项本地功能已准备/);
     fireEvent.click(await getAddMediaCommand(/从公开链接导入/));
 
-    const resources = await screen.findByRole("dialog", {
-      name: "环境配置",
-    });
-    expect(resources).toHaveTextContent("继续打开在线视频");
-    expect(screen.queryByLabelText("视频 URL")).toBeNull();
-    fireEvent.click(
-      within(resources).getByRole("button", { name: "开始准备所选功能" }),
-    );
-
-    await waitFor(() =>
-      expect(desktopMocks.prepareLocalCapability).toHaveBeenCalledWith(
-        "url_import",
-        expect.stringMatching(
-          /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
-        ),
-      ),
-    );
     expect(
       await screen.findByRole("dialog", { name: "从 URL 导入视频" }),
     ).toBeInTheDocument();
+    expect(screen.getByLabelText("视频 URL")).toBeVisible();
+    expect(
+      screen.queryByRole("dialog", { name: "环境配置" }),
+    ).not.toBeInTheDocument();
+    expect(desktopMocks.prepareLocalCapability).not.toHaveBeenCalled();
   });
 
   it("resumes the selected local video after basic media support is ready", async () => {

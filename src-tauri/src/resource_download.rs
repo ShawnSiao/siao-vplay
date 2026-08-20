@@ -41,6 +41,7 @@ const TASK_STORE_FILE_NAME: &str = "download-tasks.json";
 const TASK_EVENT_NAME: &str = "local-resource-task-updated";
 const PROGRESS_PERSIST_BYTES: u64 = 1024 * 1024;
 const DOWNLOAD_READ_BUFFER_BYTES: usize = 256 * 1024;
+const MAX_TRANSIENT_DOWNLOAD_RETRIES: usize = 4;
 const FILE_DIGEST_BUFFER_BYTES: usize = 1024 * 1024;
 const FILE_INSTALL_MARGIN_BYTES: u64 = 16 * 1024 * 1024;
 const ARCHIVE_INSTALL_MARGIN_BYTES: u64 = 64 * 1024 * 1024;
@@ -956,67 +957,105 @@ fn download_artifact(
         progress(existing_bytes)?;
         return Ok(DownloadOutcome::Complete);
     }
-    let mut request = client.get(&artifact.url);
-    if existing_bytes > 0 {
-        request = request.header(RANGE, format!("bytes={existing_bytes}-"));
-    }
-    let mut response = request.send().map_err(classify_request_error)?;
-    let append = if existing_bytes > 0 && response.status() == StatusCode::PARTIAL_CONTENT {
-        validate_content_range(&response, existing_bytes)?;
-        true
-    } else if response.status().is_success() {
-        existing_bytes = 0;
-        false
-    } else {
-        return Err(ResourceDownloadError::HttpStatus(
-            response.status().as_u16(),
-        ));
-    };
-    let mut file = OpenOptions::new()
-        .create(true)
-        .write(true)
-        .append(append)
-        .truncate(!append)
-        .open(partial_path)?;
-    if append {
-        file.seek(SeekFrom::End(0))?;
-    }
-    let mut downloaded_bytes = existing_bytes;
     let mut buffer = vec![0_u8; DOWNLOAD_READ_BUFFER_BYTES];
+    let mut retry_count = 0_usize;
     loop {
         if control.cancel_requested.load(Ordering::Acquire) {
-            file.sync_all()?;
             return Ok(DownloadOutcome::Cancelled);
         }
         if control.pause_requested.load(Ordering::Acquire) {
-            file.sync_all()?;
             return Ok(DownloadOutcome::Paused);
         }
-        let count = response
-            .read(&mut buffer)
-            .map_err(|error| ResourceDownloadError::Network(error.to_string()))?;
-        if count == 0 {
-            break;
+        let mut request = client.get(&artifact.url);
+        if existing_bytes > 0 {
+            request = request.header(RANGE, format!("bytes={existing_bytes}-"));
         }
-        file.write_all(&buffer[..count])?;
-        downloaded_bytes = downloaded_bytes.saturating_add(count as u64);
-        if downloaded_bytes > artifact.size {
-            return Err(ResourceDownloadError::Integrity(format!(
-                "下载内容超过清单大小 {} 字节",
-                artifact.size
-            )));
+        let mut response = match request.send() {
+            Ok(response) => response,
+            Err(error) => {
+                let classified = classify_request_error(error);
+                if retry_count >= MAX_TRANSIENT_DOWNLOAD_RETRIES {
+                    return Err(classified);
+                }
+                retry_count += 1;
+                wait_before_download_retry(retry_count);
+                continue;
+            }
+        };
+        let append = if existing_bytes > 0 && response.status() == StatusCode::PARTIAL_CONTENT {
+            validate_content_range(&response, existing_bytes)?;
+            true
+        } else if response.status().is_success() {
+            existing_bytes = 0;
+            false
+        } else {
+            return Err(ResourceDownloadError::HttpStatus(
+                response.status().as_u16(),
+            ));
+        };
+        let mut file = OpenOptions::new()
+            .create(true)
+            .write(true)
+            .append(append)
+            .truncate(!append)
+            .open(partial_path)?;
+        if append {
+            file.seek(SeekFrom::End(0))?;
         }
+        let mut downloaded_bytes = existing_bytes;
+        let interrupted = loop {
+            if control.cancel_requested.load(Ordering::Acquire) {
+                file.sync_all()?;
+                return Ok(DownloadOutcome::Cancelled);
+            }
+            if control.pause_requested.load(Ordering::Acquire) {
+                file.sync_all()?;
+                return Ok(DownloadOutcome::Paused);
+            }
+            let count = match response.read(&mut buffer) {
+                Ok(count) => count,
+                Err(error) => break Some(error.to_string()),
+            };
+            if count == 0 {
+                break (downloaded_bytes != artifact.size).then(|| {
+                    format!(
+                        "下载提前结束：已接收 {downloaded_bytes} 字节，预期 {} 字节",
+                        artifact.size
+                    )
+                });
+            }
+            file.write_all(&buffer[..count])?;
+            downloaded_bytes = downloaded_bytes.saturating_add(count as u64);
+            if downloaded_bytes > artifact.size {
+                return Err(ResourceDownloadError::Integrity(format!(
+                    "下载内容超过清单大小 {} 字节",
+                    artifact.size
+                )));
+            }
+            progress(downloaded_bytes)?;
+        };
+        file.sync_all()?;
         progress(downloaded_bytes)?;
+        if downloaded_bytes == artifact.size {
+            return Ok(DownloadOutcome::Complete);
+        }
+        existing_bytes = downloaded_bytes;
+        if retry_count >= MAX_TRANSIENT_DOWNLOAD_RETRIES {
+            return Err(ResourceDownloadError::Network(
+                interrupted.expect("interrupted download should have a reason"),
+            ));
+        }
+        retry_count += 1;
+        wait_before_download_retry(retry_count);
     }
-    file.sync_all()?;
-    progress(downloaded_bytes)?;
-    if downloaded_bytes != artifact.size {
-        return Err(ResourceDownloadError::Network(format!(
-            "下载提前结束：已接收 {downloaded_bytes} 字节，预期 {} 字节",
-            artifact.size
-        )));
+}
+
+fn wait_before_download_retry(retry_count: usize) {
+    if cfg!(test) {
+        return;
     }
-    Ok(DownloadOutcome::Complete)
+    let delay_ms = 250_u64.saturating_mul(1_u64 << retry_count.min(4));
+    thread::sleep(Duration::from_millis(delay_ms));
 }
 
 fn validate_content_range(
@@ -1816,6 +1855,10 @@ fn available_space(_path: &Path) -> Option<u64> {
 }
 
 #[cfg(test)]
+#[path = "resource_download_retry_tests.rs"]
+mod retry_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use std::{
@@ -2139,15 +2182,17 @@ mod tests {
         fs::create_dir_all(root.path().join("state")).expect("state directory should create");
         let timestamp = now_ms();
         let task_id = "00000000-0000-4000-8000-000000000001";
-        let total_bytes = local_resources::resource_definition("ffmpeg-cpu")
-            .expect("catalog resource should exist")
+        let resource = local_resources::resource_definition("ffmpeg-cpu")
+            .expect("catalog resource should exist");
+        let version = resource.version.clone();
+        let total_bytes = resource
             .artifact
             .expect("FFmpeg should have an artifact")
             .size;
         let task = ResourceDownloadTask {
             id: task_id.to_owned(),
             resource_id: "ffmpeg-cpu".to_owned(),
-            version: "8.1".to_owned(),
+            version,
             state: ResourceDownloadTaskState::Downloading,
             downloaded_bytes: 10,
             total_bytes,

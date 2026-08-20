@@ -533,11 +533,9 @@ export default function App() {
   );
 
   const openRemoteUrlImport = useCallback(() => {
-    void requestCapability("url_import", "继续打开在线视频", () => {
-      setLibraryError(null);
-      setRemoteUrlDialogOpen(true);
-    });
-  }, [requestCapability]);
+    setLibraryError(null);
+    setRemoteUrlDialogOpen(true);
+  }, []);
 
   useEffect(() => {
     const startupMediaPath = appStatus?.startupMediaPath;
