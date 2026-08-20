@@ -10,7 +10,7 @@ import type { LibrarySection } from "../library/useLibraryController";
 import type { MediaDropFeedback } from "./useDesktopMediaDrop";
 import type { ShellDrawerTab, ShellView } from "./useShellController";
 import { EnvironmentSettingsTrigger } from "./EnvironmentSettingsTrigger";
-import { LibraryAddMediaMenu } from "./LibraryAddMediaMenu";
+import { LibraryAddMediaActions } from "./LibraryAddMediaActions";
 import "./PlayerCommandbar.css";
 
 type DesktopShellProps = {
@@ -245,7 +245,7 @@ export function DesktopShell({
                   </button>
               </MenuPopover>
             </>
-          ) : <LibraryAddMediaMenu
+          ) : <LibraryAddMediaActions
             onOpenFile={onOpenFile}
             onOpenFolder={onOpenFolder}
             onOpenUrl={onOpenUrl}

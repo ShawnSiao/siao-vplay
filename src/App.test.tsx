@@ -262,16 +262,16 @@ const localResourceCatalog: LocalResourceCatalog = {
     },
     {
       id: "yt-dlp",
-      version: "2026.06.09",
+      version: "2026.08.19",
       platform: "windows-x86_64",
       kind: "file",
       bundled: false,
-      installedSize: 18_202_192,
+      installedSize: 17_840_399,
       license: "GPL-3.0-or-later",
       sourcePage: "https://example.com/yt-dlp",
       artifact: {
         url: "https://example.com/yt-dlp.exe",
-        size: 18_202_192,
+        size: 17_840_399,
         sha256: "b".repeat(64),
         format: "file",
       },
@@ -499,7 +499,7 @@ const youtubePreview: YouTubeMediaPreview = {
   title: "Me at the zoo",
   durationSeconds: 19,
   fileSizeBytes: 533_067,
-  importerVersion: "2026.06.09",
+  importerVersion: "2026.08.19",
   importerSha256: "3".repeat(64),
   previewToken: "d".repeat(64),
 };
@@ -1197,12 +1197,7 @@ describe("App", () => {
   }
 
   async function getAddMediaCommand(name: string | RegExp) {
-    const visibleCommand = screen.queryByRole("menuitem", { name });
-    if (visibleCommand) {
-      return visibleCommand;
-    }
-    fireEvent.click(await screen.findByRole("button", { name: /^添加视频$/ }));
-    return screen.getByRole("menuitem", { name });
+    return screen.findByRole("button", { name });
   }
 
   it("uses a collapsible desktop shell with live library navigation", async () => {
@@ -1212,8 +1207,9 @@ describe("App", () => {
       screen.getByRole("banner", { name: "应用命令栏" }),
     ).toBeInTheDocument();
     expect(await getAddMediaCommand(/添加剧集文件夹/)).toBeEnabled();
-    expect(screen.getByRole("menuitem", { name: /打开本地视频/ })).toBeEnabled();
-    expect(screen.getByRole("menuitem", { name: /从公开链接导入/ })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /打开本地视频/ })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /从公开链接导入/ })).toBeEnabled();
+    expect(screen.queryByRole("button", { name: "添加视频" })).toBeNull();
     expect(
       screen.getByRole("button", {
         name: "媒体库：稍后观看",

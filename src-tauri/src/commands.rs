@@ -260,44 +260,10 @@ impl From<RemoteMediaError> for CommandError {
 
 impl From<YouTubeMediaError> for CommandError {
     fn from(error: YouTubeMediaError) -> Self {
-        let code = match &error {
-            YouTubeMediaError::Network(RemoteMediaError::PrivateNetwork) => {
-                "remote_private_network"
-            }
-            YouTubeMediaError::Network(_) => "youtube_preflight_failed",
-            YouTubeMediaError::UnsupportedUrl => "youtube_url_unsupported",
-            YouTubeMediaError::PlaylistNotAllowed => "youtube_playlist_not_allowed",
-            YouTubeMediaError::LiveNotAllowed => "youtube_live_not_allowed",
-            YouTubeMediaError::Restricted => "youtube_restricted",
-            YouTubeMediaError::UncertainMedia => "youtube_media_uncertain",
-            YouTubeMediaError::ToolUnavailable(_) => "youtube_runtime_unavailable",
-            YouTubeMediaError::ToolIntegrity | YouTubeMediaError::ToolVersion => {
-                "youtube_runtime_invalid"
-            }
-            YouTubeMediaError::InspectionTimeout => "youtube_inspection_timeout",
-            YouTubeMediaError::InspectionFailed(_) => "youtube_inspection_failed",
-            YouTubeMediaError::MetadataInvalid(_) => "youtube_metadata_invalid",
-            YouTubeMediaError::SelectedMediaUnsafe => "youtube_selected_media_unsafe",
-            YouTubeMediaError::PreviewChanged => "youtube_preview_changed",
-            YouTubeMediaError::SizeLimit => "remote_size_limit",
-            YouTubeMediaError::DownloadTimeout => "youtube_download_timeout",
-            YouTubeMediaError::DownloadFailed(_) => "youtube_download_failed",
-            YouTubeMediaError::Cancelled => "remote_import_cancelled",
-            YouTubeMediaError::FileSystem(_) => "filesystem_error",
-            YouTubeMediaError::Media(MediaError::RuntimeUnavailable(_)) => {
-                "media_runtime_unavailable"
-            }
-            YouTubeMediaError::Media(MediaError::MissingVideo) => "missing_video_stream",
-            YouTubeMediaError::Media(_) => "media_inspection_failed",
-            YouTubeMediaError::Store(StoreError::ProjectNotFound(_)) => "project_not_found",
-            YouTubeMediaError::Store(StoreError::Validation(_)) => "validation_error",
-            YouTubeMediaError::Store(StoreError::UnsupportedSchema { .. }) => "unsupported_schema",
-            YouTubeMediaError::Store(StoreError::FileSystem(_)) => "filesystem_error",
-            YouTubeMediaError::Store(_) => "database_error",
-        };
+        let (code, message) = crate::youtube_command_error::classify(&error);
         Self {
             code,
-            message: error.to_string(),
+            message: message.to_owned(),
         }
     }
 }

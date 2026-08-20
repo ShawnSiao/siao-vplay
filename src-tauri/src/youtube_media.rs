@@ -28,9 +28,9 @@ use crate::{
     store::{ProjectStore, RemoteImportProvenance, StoreError},
 };
 
-const PINNED_YT_DLP_VERSION: &str = "2026.06.09";
+const PINNED_YT_DLP_VERSION: &str = "2026.08.19";
 const PINNED_YT_DLP_SHA256: &str =
-    "3a48cb955d55c8821b60ccbdbbc6f61bc958f2f3d3b7ad5eaf3d83a543293a27";
+    "66674953fe251b89f4d08c5f0e35e0728679bd67ab3d7d05c0562af101dd3e7a";
 const FORMAT_SELECTOR: &str = "bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/bv*+ba/b";
 const MAX_MEDIA_BYTES: u64 = 20 * 1024 * 1024 * 1024;
 const TOOL_TIMEOUT: Duration = Duration::from_secs(10);

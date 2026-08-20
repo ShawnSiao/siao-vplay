@@ -55,16 +55,16 @@ const catalog: LocalResourceCatalog = {
     },
     {
       id: "yt-dlp",
-      version: "2026.06.09",
+      version: "2026.08.19",
       platform: "windows-x86_64",
       kind: "file",
       bundled: false,
-      installedSize: 18_202_192,
+      installedSize: 17_840_399,
       license: "GPL-3.0-or-later",
       sourcePage: "https://example.com/yt-dlp",
       artifact: {
         url: "https://example.com/yt-dlp.exe",
-        size: 18_202_192,
+        size: 17_840_399,
         sha256: "b".repeat(64),
         format: "file",
       },
@@ -287,10 +287,10 @@ describe("LocalResourcesDialog", () => {
     const task: ResourceDownloadTask = {
       id: "00000000-0000-4000-8000-000000000001",
       resourceId: "yt-dlp",
-      version: "2026.06.09",
+      version: "2026.08.19",
       state: "downloading",
-      downloadedBytes: 9_101_096,
-      totalBytes: 18_202_192,
+      downloadedBytes: 8_920_200,
+      totalBytes: 17_840_399,
       requestedByCapabilityIds: ["url_import"],
       pendingActionIds: ["00000000-0000-4000-8000-000000000099"],
       attempt: 1,
@@ -706,7 +706,7 @@ describe("LocalResourcesDialog", () => {
         resources: [
           {
             id: "yt-dlp",
-            catalogVersion: "2026.06.09",
+            catalogVersion: "2026.08.19",
             activeVersion: "2026.05.01",
             state: "update_available",
             license: "GPL-3.0-or-later",

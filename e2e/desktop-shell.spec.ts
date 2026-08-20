@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-test("empty media library keeps one clear responsive import path", async ({ page }) => {
+test("empty media library keeps all three import actions directly visible", async ({ page }) => {
   const consoleErrors: string[] = [];
   page.on("console", (message) => {
     if (message.type() === "error") consoleErrors.push(message.text());
@@ -18,6 +18,10 @@ test("empty media library keeps one clear responsive import path", async ({ page
       page.getByRole("heading", { name: "把海外视频变成可以连续看懂的内容" }),
     ).toBeVisible();
     await expect(page.getByRole("button", { name: "导入视频" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "打开本地视频" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "添加剧集文件夹" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "从公开链接导入" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "添加视频" })).toHaveCount(0);
     await expect(page.getByText("不上传本地视频；向 AI 服务发送字幕或关键帧前会单独确认。"))
       .toBeVisible();
     await expect
@@ -48,12 +52,11 @@ test("media home uses a compact responsive desktop shell", async ({ page }) => {
     "height",
     "44px",
   );
-  const addMedia = page.getByRole("button", { name: "添加视频" });
-  await addMedia.click();
-  const openFolder = page.getByRole("menuitem", { name: "添加剧集文件夹" });
+  await expect(page.getByRole("button", { name: "打开本地视频" })).toBeEnabled();
+  const openFolder = page.getByRole("button", { name: "添加剧集文件夹" });
   await expect(openFolder).toBeEnabled();
-  await expect(page.getByRole("menuitem", { name: "打开本地视频" })).toBeEnabled();
-  await expect(page.getByRole("menuitem", { name: "从公开链接导入" })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "从公开链接导入" })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "添加视频" })).toHaveCount(0);
   await expect(
     page.getByRole("heading", { name: "专注观看，需要时再理解。" }),
   ).toHaveCount(0);

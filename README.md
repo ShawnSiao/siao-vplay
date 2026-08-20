@@ -54,7 +54,7 @@ npm run desktop:build
 
 - Whisper 模型：[whisper.cpp 模型说明](https://github.com/ggml-org/whisper.cpp/blob/master/models/README.md)；`small` 与 `base` 的大小和 SHA-256 固定在本地运行时目录实现中。
 - FFmpeg：[BtbN FFmpeg Builds](https://github.com/BtbN/FFmpeg-Builds)；按需版本固定在内置资源目录清单中。
-- `yt-dlp`：[官方 Releases](https://github.com/yt-dlp/yt-dlp/releases)；按需版本固定为 `2026.06.09`。
+- `yt-dlp`：[官方 Releases](https://github.com/yt-dlp/yt-dlp/releases)；按需版本固定为 `2026.08.19`。
 
 ## 候选版本状态
 
