@@ -64,13 +64,12 @@ export function PlayerCaptionStack({
     if (!drag.moved) return;
     const stageRect = stage.getBoundingClientRect();
     const captionRect = caption.getBoundingClientRect();
-    const bottomInset = fullscreen ? 88 : safeMargin;
+    const bottomInset = fullscreen ? 88 : 0;
     const halfWidth = captionRect.width / 2;
-    const halfHeight = captionRect.height / 2;
     const minX = (halfWidth + safeMargin) / stageRect.width;
     const maxX = 1 - minX;
-    const minY = (halfHeight + safeMargin) / stageRect.height;
-    const maxY = 1 - (halfHeight + bottomInset) / stageRect.height;
+    const minY = (captionRect.height + safeMargin) / stageRect.height;
+    const maxY = 1 - bottomInset / stageRect.height;
     const nextPosition = {
       x: Math.max(minX, Math.min(maxX, drag.startPosition.x + dx / stageRect.width)),
       y: Math.max(minY, Math.min(maxY, drag.startPosition.y + dy / stageRect.height)),

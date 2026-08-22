@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { SubtitleSegment } from "../../types";
-import { getTimedCaptionWords, hasUsableWordTiming } from "./captionTiming";
+import { getTimedCaptionFragments, getTimedCaptionWords, hasUsableWordTiming } from "./captionTiming";
 
 function segment(overrides: Partial<SubtitleSegment> = {}): SubtitleSegment {
   return {
@@ -38,13 +38,51 @@ describe("caption word timing", () => {
     segment({ words: [{ ordinal: 0, startMs: 900, endMs: 1_500, text: "And this", confidence: null }] }),
     segment({ words: [{ ordinal: 0, startMs: 1_000, endMs: 1_500, text: "different", confidence: null }] }),
     segment({ words: [{ ordinal: 0, startMs: 2_000, endMs: 1_500, text: "And this", confidence: null }] }),
-    segment({ words: [
-      { ordinal: 0, startMs: 1_000, endMs: 1_800, text: "And", confidence: null },
-      { ordinal: 1, startMs: 1_700, endMs: 2_200, text: " this", confidence: null },
-    ] }),
-  ])("rejects incomplete or inconsistent timing", (value) => {
+  ])("rejects timing when no token can be aligned safely", (value) => {
     expect(hasUsableWordTiming(value)).toBe(false);
     expect(getTimedCaptionWords(value, 1_250)).toBeNull();
+  });
+
+  it("preserves the canonical sentence while following a reliable timed subset", () => {
+    const value = segment({
+      endMs: 6_000,
+      text: "we're going to see what agent memory systems are. And then",
+      words: [
+        { ordinal: 0, startMs: 1_000, endMs: 1_300, text: "'re", confidence: null },
+        { ordinal: 1, startMs: 1_300, endMs: 1_700, text: "going", confidence: null },
+        { ordinal: 2, startMs: 1_700, endMs: 2_000, text: "see", confidence: null },
+        { ordinal: 3, startMs: 2_000, endMs: 2_300, text: "agent", confidence: null },
+        { ordinal: 4, startMs: 2_300, endMs: 2_700, text: "memory", confidence: null },
+        { ordinal: 5, startMs: 2_700, endMs: 3_100, text: "systems", confidence: null },
+        { ordinal: 6, startMs: 3_100, endMs: 3_400, text: "are", confidence: null },
+        { ordinal: 7, startMs: 3_400, endMs: 3_500, text: ".", confidence: null },
+        { ordinal: 8, startMs: 3_500, endMs: 3_800, text: "And", confidence: null },
+        { ordinal: 9, startMs: 3_800, endMs: 4_100, text: "then", confidence: null },
+      ],
+    });
+    const fragments = getTimedCaptionFragments(value, 1_500);
+    expect(fragments?.map((fragment) => fragment.text).join("")).toBe(value.text);
+    expect(fragments?.filter((fragment) => fragment.kind === "timed")).toHaveLength(10);
+    expect(fragments?.find((fragment) => fragment.kind === "timed" && fragment.word.state === "current")?.text).toBe("going");
+  });
+
+  it("skips inaccurate tokens without removing spaces, punctuation, or capitalization", () => {
+    const value = segment({
+      endMs: 4_000,
+      text: "Is going to store the new memories.",
+      words: [
+        { ordinal: 0, startMs: 1_000, endMs: 1_300, text: "is", confidence: null },
+        { ordinal: 1, startMs: 1_300, endMs: 1_700, text: "going", confidence: null },
+        { ordinal: 2, startMs: 1_700, endMs: 2_000, text: "incorrect-token", confidence: null },
+        { ordinal: 3, startMs: 2_000, endMs: 2_400, text: "store", confidence: null },
+        { ordinal: 4, startMs: 2_400, endMs: 2_700, text: "the", confidence: null },
+        { ordinal: 5, startMs: 2_700, endMs: 3_000, text: "new", confidence: null },
+        { ordinal: 6, startMs: 3_000, endMs: 3_500, text: "memories", confidence: null },
+      ],
+    });
+    const fragments = getTimedCaptionFragments(value, 2_200);
+    expect(fragments?.map((fragment) => fragment.text).join("")).toBe(value.text);
+    expect(fragments?.some((fragment) => fragment.kind === "timed" && fragment.text === "incorrect-token")).toBe(false);
   });
 
   it.each([

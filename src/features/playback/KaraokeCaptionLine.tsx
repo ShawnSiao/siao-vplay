@@ -1,6 +1,6 @@
 import type { CSSProperties } from "react";
 import type { SubtitleSegment } from "../../types";
-import { getTimedCaptionWords } from "./captionTiming";
+import { getTimedCaptionFragments } from "./captionTiming";
 
 type KaraokeCaptionLineProps = {
   segment: SubtitleSegment;
@@ -17,11 +17,13 @@ export function KaraokeCaptionLine({
   highlightColor,
   language,
 }: KaraokeCaptionLineProps) {
-  const words = enabled ? getTimedCaptionWords(segment, positionMs) : null;
+  const fragments = enabled ? getTimedCaptionFragments(segment, positionMs) : null;
   return (
     <p className="caption-line original" lang={language}>
-      {words
-        ? words.map((word) => {
+      {fragments
+        ? fragments.map((fragment) => {
+            if (fragment.kind === "plain") return <span key={fragment.key}>{fragment.text}</span>;
+            const { word } = fragment;
             const style =
               word.state === "current"
                 ? ({
@@ -31,11 +33,11 @@ export function KaraokeCaptionLine({
                 : undefined;
             return (
               <span
-                key={`${word.ordinal}:${word.startMs}`}
+                key={fragment.key}
                 className={`caption-word ${word.state}`}
                 style={style}
               >
-                {word.text}
+                {fragment.text}
               </span>
             );
           })

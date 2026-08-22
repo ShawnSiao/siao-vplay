@@ -453,9 +453,16 @@ test("subtitle following, appearance, dragging, and controls remain complete", a
     const optionsBox = await options.boundingBox();
     expect(optionsBox).not.toBeNull();
     expect(optionsBox!.x + optionsBox!.width).toBeLessThanOrEqual(viewport.width);
+    await expect(options.locator(".seek-step-field")).toContainText("跳转");
+    await expect(page.getByRole("combobox", { name: "快进快退时长" })).toHaveValue("10");
+    const controlWidths = await options.locator(":scope > *").evaluateAll((elements) =>
+      elements.map((element) => ({ width: element.getBoundingClientRect().width, scrollWidth: element.scrollWidth })),
+    );
+    expect(controlWidths.every(({ width, scrollWidth }) => width + 1 >= scrollWidth)).toBe(true);
   }
 
-  await expect(page.locator(".caption-word.current")).toHaveText(" this");
+  await expect(page.locator(".caption-line.original")).toHaveText("Okay, and that's essentially how the system stores the new memories.");
+  await expect(page.locator(".caption-word.current")).toHaveText("essentially");
   await expect(page.getByText("这句话会跟随每一个单词。")).toBeVisible();
   await page.getByRole("button", { name: "字幕设置" }).click();
   const settings = page.getByRole("dialog", { name: "字幕设置" });
@@ -481,8 +488,24 @@ test("subtitle following, appearance, dragging, and controls remain complete", a
   const restored = await caption.boundingBox();
   expect(restored?.x).toBeLessThan(before.x - 40);
   await page.getByRole("button", { name: "字幕设置" }).click();
-  await page.getByRole("dialog", { name: "字幕设置" }).getByRole("button", { name: "恢复默认位置" }).click();
+  const resetSettings = page.getByRole("dialog", { name: "字幕设置" });
+  await resetSettings.getByRole("button", { name: "恢复默认位置" }).click();
+  await resetSettings.getByRole("button", { name: "关闭字幕设置" }).click();
   expect((await caption.boundingBox())?.x).toBeGreaterThan(restored?.x ?? 0);
+  const reset = await caption.boundingBox();
+  if (!reset) throw new Error("missing reset caption");
+  await page.mouse.move(reset.x + reset.width / 2, reset.y + reset.height / 2);
+  await page.mouse.down();
+  const stageBox = await page.locator(".video-stage").boundingBox();
+  if (!stageBox) throw new Error("missing video stage");
+  await page.mouse.move(reset.x + reset.width / 2, stageBox.y + stageBox.height - 1);
+  await page.mouse.up();
+  const bottomGeometry = await page.evaluate(() => {
+    const captionRect = document.querySelector(".caption-stack")!.getBoundingClientRect();
+    const stageRect = document.querySelector(".video-stage")!.getBoundingClientRect();
+    return { captionBottom: captionRect.bottom, stageBottom: stageRect.bottom };
+  });
+  expect(Math.abs(bottomGeometry.captionBottom - bottomGeometry.stageBottom)).toBeLessThanOrEqual(1);
   expect(consoleErrors).toEqual([]);
 });
 
