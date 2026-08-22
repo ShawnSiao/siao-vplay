@@ -22,7 +22,11 @@ import { PlayerDrawer } from "./PlayerDrawer";
 import { PlayerErrorCard } from "./PlayerErrorCard";
 import { EpisodeDrawer } from "./EpisodeDrawer";
 import type { EpisodeNavigationState } from "../library/useEpisodeNavigation";
+import { PlayerControls } from "./PlayerControls";
+import { useFullscreenControlVisibility } from "./useFullscreenControlVisibility";
+import { useSeekStepPreference } from "./playbackPreferences";
 import "./player-feedback.css";
+import "./player-fullscreen.css";
 type PlayerScreenProps = {
   project: Project;
   preparation: MediaPreparation;
@@ -66,6 +70,7 @@ export function PlayerScreen({
   const stageRef = useRef<HTMLDivElement>(null);
   const [switchingEpisode, setSwitchingEpisode] = useState(false);
   const [playerError, setPlayerError] = useState<string | null>(null);
+  const { seekStepSeconds, changeSeekStep } = useSeekStepPreference();
   const {
     playerRef,
     videoRef,
@@ -108,6 +113,7 @@ export function PlayerScreen({
     currentTranslation,
     drawerTab,
     contextMenu,
+    seekStepMs: seekStepSeconds * 1_000,
     onBack,
     onCloseDrawer,
     onCloseContextMenu,
@@ -116,6 +122,8 @@ export function PlayerScreen({
     onError: onNotice,
     onFatalError: setPlayerError,
   });
+  const { controlsVisible, revealControls } =
+    useFullscreenControlVisibility(fullscreen);
   const currentEpisode = episodeNavigation.episodes.find(
     (episode) => episode.projectId === project.id,
   );
@@ -173,8 +181,13 @@ export function PlayerScreen({
   return (
     <div
       ref={playerRef}
-      className="player-screen"
+      className={`player-screen ${fullscreen ? "fullscreen-player" : ""} ${
+        fullscreen && !controlsVisible ? "controls-hidden" : ""
+      }`.trim()}
       data-screen-label="本地播放器"
+      onPointerMove={revealControls}
+      onKeyDownCapture={revealControls}
+      onFocusCapture={revealControls}
     >
       <div
         className={`player-workspace ${drawerTab ? "with-drawer" : ""}`}
@@ -260,130 +273,32 @@ export function PlayerScreen({
             ) : null}
           </div>
 
-          <div className="player-controls">
-            <input
-              className="seek-control"
-              type="range"
-              min="0"
-              max={Math.max(durationMs ?? 0, 1)}
-              step="100"
-              value={Math.min(
-                positionMs,
-                durationMs ?? positionMs,
-              )}
-              aria-label="播放进度"
-              onChange={(event) =>
-                seekTo(Number(event.target.value))
-              }
-            />
-            <div className="control-row">
-              <div className="playback-buttons">
-                <button
-                  aria-label="上一集"
-                  className="control-icon"
-                  type="button"
-                  title="上一集"
-                  disabled={!episodeNavigation.neighbors.previous || switchingEpisode}
-                  onClick={() =>
-                    episodeNavigation.neighbors.previous &&
-                    void switchEpisode(episodeNavigation.neighbors.previous)
-                  }
-                >
-                  ◀▮
-                </button>
-                <button
-                  aria-keyshortcuts="Space"
-                  className="play-button"
-                  type="button"
-                  onClick={() => void togglePlayback()}
-                >
-                  <span aria-hidden="true">{playing ? "Ⅱ" : "▶"}</span>
-                  <strong>{playing ? "暂停" : "播放"}</strong>
-                </button>
-                <button
-                  aria-label="下一集"
-                  className="control-icon"
-                  type="button"
-                  title="下一集"
-                  disabled={!episodeNavigation.neighbors.next || switchingEpisode}
-                  onClick={() =>
-                    episodeNavigation.neighbors.next &&
-                    void switchEpisode(episodeNavigation.neighbors.next)
-                  }
-                >
-                  ▮▶
-                </button>
-              </div>
-              <span className="player-time">
-                {formatDuration(positionMs)} / {formatDuration(durationMs)}
-              </span>
-              <div className="volume-control">
-                <button
-                  aria-label={muted ? "取消静音" : "静音"}
-                  aria-keyshortcuts="M"
-                  className="control-icon"
-                  type="button"
-                  title={muted ? "取消静音" : "静音"}
-                  onClick={toggleMuted}
-                >
-                  {muted ? "×))" : "◖))"}
-                </button>
-                <input
-                  aria-label="音量"
-                  type="range"
-                  min="0"
-                  max="1"
-                  step="0.05"
-                  value={muted ? 0 : volume}
-                  onChange={(event) => changeVolume(Number(event.target.value))}
-                />
-              </div>
-              <div className="now-playing" title={project.title}>
-                {project.title}
-              </div>
-              <div className="playback-options">
-                <select
-                  aria-label="字幕显示"
-                  className="caption-select"
-                  value={effectiveSubtitleMode}
-                  onChange={(event) =>
-                    changeSubtitleMode(
-                      event.target.value as "translation" | "original" | "bilingual",
-                    )
-                  }
-                >
-                  <option value="translation" disabled={!currentTranslation}>中文字幕</option>
-                  <option value="original" disabled={!currentSubtitle}>原文字幕</option>
-                  <option
-                    value="bilingual"
-                    disabled={!currentSubtitle || !currentTranslation}
-                  >
-                    双语字幕
-                  </option>
-                </select>
-                <select
-                  aria-label="播放速度"
-                  className="speed-select"
-                  value={playbackRate}
-                  onChange={(event) => changePlaybackRate(Number(event.target.value))}
-                >
-                  {[0.5, 0.75, 1, 1.25, 1.5, 2].map((rate) => (
-                    <option key={rate} value={rate}>{rate}×</option>
-                  ))}
-                </select>
-                <button
-                  aria-label={fullscreen ? "退出全屏" : "进入全屏"}
-                  aria-keyshortcuts="F"
-                  className="control-icon"
-                  type="button"
-                  title={fullscreen ? "退出全屏" : "全屏"}
-                  onClick={() => void toggleFullscreen()}
-                >
-                  ⛶
-                </button>
-              </div>
-            </div>
-          </div>
+          <PlayerControls
+            playing={playing}
+            muted={muted}
+            fullscreen={fullscreen}
+            positionMs={positionMs}
+            durationMs={durationMs}
+            volume={volume}
+            playbackRate={playbackRate}
+            subtitleMode={effectiveSubtitleMode}
+            originalSubtitleAvailable={Boolean(currentSubtitle)}
+            translationAvailable={Boolean(currentTranslation)}
+            mediaTitle={project.title}
+            previousEpisode={episodeNavigation.neighbors.previous}
+            nextEpisode={episodeNavigation.neighbors.next}
+            switchingEpisode={switchingEpisode}
+            seekStepSeconds={seekStepSeconds}
+            onSwitchEpisode={(episode) => void switchEpisode(episode)}
+            onTogglePlayback={() => void togglePlayback()}
+            onToggleMuted={toggleMuted}
+            onToggleFullscreen={() => void toggleFullscreen()}
+            onSeekTo={seekTo}
+            onChangeVolume={changeVolume}
+            onChangePlaybackRate={changePlaybackRate}
+            onChangeSubtitleMode={changeSubtitleMode}
+            onChangeSeekStep={changeSeekStep}
+          />
         </main>
 
         {drawerTab ? (

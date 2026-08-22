@@ -29,7 +29,7 @@ describe("MenuPopover", () => {
     expect(menus[1]).not.toHaveAttribute("hidden");
   });
 
-  it("closes from outside pointer, Escape, scroll, and menu actions", () => {
+  it("keeps internal scrolling open and closes from external interactions", () => {
     render(<Fixture />);
     const trigger = screen.getByRole("button", { name: "第一个菜单" });
     const menu = screen.getAllByRole("menu", { hidden: true })[0];
@@ -44,6 +44,8 @@ describe("MenuPopover", () => {
     expect(trigger).toHaveFocus();
 
     fireEvent.click(trigger);
+    fireEvent.scroll(menu);
+    expect(menu).not.toHaveAttribute("hidden");
     fireEvent.scroll(document);
     expect(menu).toHaveAttribute("hidden");
 

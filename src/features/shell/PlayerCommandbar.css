@@ -6,8 +6,21 @@
   font-weight: 650;
 }
 
-.shell-player-more-menu {
+.shell-overflow-menu.shell-player-more-menu {
   right: 0;
   left: auto;
-  width: 244px;
+  overflow-y: auto;
+  width: min(244px, calc(100vw - 16px));
+  max-height: calc(100vh - 58px);
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+@media (max-width: 1179px) {
+  .shell-overflow-menu.shell-player-more-menu {
+    position: fixed;
+    top: 44px;
+    right: auto;
+    left: 8px;
+  }
 }

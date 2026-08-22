@@ -367,6 +367,103 @@ test("keeps the progress bar and playback controls outside the video surface", a
   }
 });
 
+test("player more menu stays inside the viewport and supports internal scrolling", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 263, height: 260 });
+  await page.goto("/e2e/player.html");
+
+  await page.getByRole("button", { name: "更多", exact: true }).click();
+  const menu = page.locator(".shell-player-more-menu");
+  await expect(menu).toBeVisible();
+  const geometry = await menu.evaluate((element) => {
+    const box = element.getBoundingClientRect();
+    return {
+      left: box.left,
+      right: box.right,
+      clientHeight: element.clientHeight,
+      scrollHeight: element.scrollHeight,
+      viewportWidth: window.innerWidth,
+    };
+  });
+  expect(geometry.left).toBeGreaterThanOrEqual(8);
+  expect(geometry.right).toBeLessThanOrEqual(geometry.viewportWidth - 8);
+  expect(geometry.scrollHeight).toBeGreaterThan(geometry.clientHeight);
+
+  await menu.evaluate((element) => {
+    element.scrollTop = element.scrollHeight;
+  });
+  await expect(menu).toBeVisible();
+  await expect(
+    menu.getByRole("menuitem", { name: /导出字幕与视频/ }),
+  ).toBeVisible();
+});
+
+test("seek buttons, keyboard shortcuts, and the saved interval stay in sync", async ({
+  page,
+}) => {
+  await page.goto("/e2e/player.html");
+  await page.evaluate(() => window.localStorage.clear());
+  await page.reload();
+
+  await page.getByRole("button", { name: "快进 10 秒" }).click();
+  await expect(page.locator(".player-time")).toContainText("00:25 / 02:00");
+  await page.getByRole("combobox", { name: "快进快退时长" }).selectOption("30");
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        window.localStorage.getItem("siaovplay-playback-seek-step-seconds"),
+      ),
+    )
+    .toBe("30");
+  await page.getByRole("button", { name: "快退 30 秒" }).click();
+  await expect(page.locator(".player-time")).toContainText("00:00 / 02:00");
+
+  await page.reload();
+  await expect(page.getByRole("button", { name: "快退 30 秒" })).toBeVisible();
+  await page.locator(".video-stage").focus();
+  await page.keyboard.press("ArrowRight");
+  await expect(page.locator(".player-time")).toContainText("00:45 / 02:00");
+});
+
+test("fullscreen uses the whole stage and hides controls after inactivity", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.goto("/e2e/player.html");
+
+  await page.getByRole("button", { name: "进入全屏" }).click();
+  const player = page.locator(".player-screen");
+  await expect
+    .poll(() => page.evaluate(() => Boolean(document.fullscreenElement)))
+    .toBe(true);
+  await expect(player).toHaveClass(/fullscreen-player/);
+  const geometry = await page.evaluate(() => {
+    const box = (selector: string) => {
+      const element = document.querySelector<HTMLElement>(selector);
+      if (!element) throw new Error(`missing ${selector}`);
+      const rect = element.getBoundingClientRect();
+      return { top: rect.top, bottom: rect.bottom };
+    };
+    return {
+      stage: box(".video-stage"),
+      controls: box(".player-controls"),
+      viewportHeight: window.innerHeight,
+    };
+  });
+  expect(geometry.stage.bottom).toBeGreaterThanOrEqual(geometry.viewportHeight - 1);
+  expect(geometry.controls.top).toBeLessThan(geometry.stage.bottom);
+  expect(geometry.controls.bottom).toBeLessThanOrEqual(geometry.stage.bottom + 1);
+
+  await expect(player).toHaveClass(/controls-hidden/, { timeout: 4_000 });
+  await page.mouse.move(320, 240);
+  await expect(player).not.toHaveClass(/controls-hidden/);
+  await page.getByRole("button", { name: "退出全屏" }).click();
+  await expect
+    .poll(() => page.evaluate(() => Boolean(document.fullscreenElement)))
+    .toBe(false);
+});
+
 test("playback shortcuts ignore editable controls and drop feedback is explicit", async ({
   page,
 }) => {

@@ -51,14 +51,18 @@ export function MenuPopover({
       close();
       triggerRef.current?.focus();
     };
+    const closeFromScroll = (event: Event) => {
+      if (rootRef.current?.contains(event.target as Node)) return;
+      close();
+    };
     document.addEventListener("pointerdown", closeOutside, true);
     document.addEventListener("keydown", closeFromKeyboard, true);
-    document.addEventListener("scroll", close, true);
+    document.addEventListener("scroll", closeFromScroll, true);
     window.addEventListener("resize", close);
     return () => {
       document.removeEventListener("pointerdown", closeOutside, true);
       document.removeEventListener("keydown", closeFromKeyboard, true);
-      document.removeEventListener("scroll", close, true);
+      document.removeEventListener("scroll", closeFromScroll, true);
       window.removeEventListener("resize", close);
     };
   }, [open]);
