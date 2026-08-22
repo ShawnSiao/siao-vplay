@@ -10,7 +10,8 @@ import type { LibrarySection } from "../library/useLibraryController";
 import type { MediaDropFeedback } from "./useDesktopMediaDrop";
 import type { ShellDrawerTab, ShellView } from "./useShellController";
 import { EnvironmentSettingsTrigger } from "./EnvironmentSettingsTrigger";
-import { LibraryAddMediaMenu } from "./LibraryAddMediaMenu";
+import { LibraryAddMediaActions } from "./LibraryAddMediaActions";
+import "./PlayerCommandbar.css";
 
 type DesktopShellProps = {
   activeView: ShellView;
@@ -109,12 +110,13 @@ export function DesktopShell({
     const focusSearch = (event: KeyboardEvent) => {
       if (event.ctrlKey && event.key.toLowerCase() === "k") {
         event.preventDefault();
-        searchInputRef.current?.focus();
+        if (playerActive) onGoLibrary();
+        window.setTimeout(() => searchInputRef.current?.focus(), 0);
       }
     };
     window.addEventListener("keydown", focusSearch);
     return () => window.removeEventListener("keydown", focusSearch);
-  }, []);
+  }, [onGoLibrary, playerActive]);
 
   return (
     <div
@@ -149,38 +151,9 @@ export function DesktopShell({
           <span className="shell-command-divider" aria-hidden="true" />
           {playerActive ? (
             <>
-              <button
-                aria-label="打开文件"
-                aria-keyshortcuts="Control+O"
-                className="shell-command"
-                type="button"
-                onClick={onOpenFile}
-              >
-                <span aria-hidden="true">＋</span>
-                <span>打开文件</span>
-              </button>
-              <button
-                aria-label="打开剧集文件夹"
-                aria-keyshortcuts="Control+Shift+O"
-                className="shell-command shell-command-primary"
-                type="button"
-                title="打开文件夹 Ctrl+Shift+O"
-                onClick={onOpenFolder}
-              >
-                <span aria-hidden="true">▰</span>
-                <span>打开文件夹</span>
-              </button>
-              <button
-                aria-label="粘贴视频 URL"
-                className="shell-command"
-                type="button"
-                title="打开 URL"
-                onClick={onOpenUrl}
-              >
-                <span aria-hidden="true">↗</span>
-                <span>打开 URL</span>
-              </button>
-              <span className="shell-command-divider" aria-hidden="true" />
+              <span className="desktop-commandbar-context" title={mediaTitle ?? undefined}>
+                {mediaTitle}
+              </span>
               <button
                 aria-label={
                   currentSubtitleCount === null
@@ -194,12 +167,56 @@ export function DesktopShell({
                 <span aria-hidden="true">CC</span>
                 <span>字幕</span>
               </button>
-              <MenuPopover
-                className="shell-overflow"
-                label="更多字幕与交付命令"
-                triggerClassName="shell-icon-command"
-                panelClassName="shell-overflow-menu"
+              <button
+                aria-pressed={drawerTab === "understand"}
+                className={`shell-drawer-command understand ${drawerTab === "understand" ? "active" : ""}`}
+                type="button"
+                onClick={() => onToggleDrawer("understand")}
               >
+                理解
+              </button>
+              <button
+                aria-pressed={drawerTab === "learn"}
+                className={`shell-drawer-command learn ${drawerTab === "learn" ? "active" : ""}`}
+                type="button"
+                onClick={() => onToggleDrawer("learn")}
+              >
+                学习
+              </button>
+              <MenuPopover
+                className="shell-overflow shell-player-more"
+                label="更多"
+                triggerClassName="shell-drawer-command"
+                panelClassName="shell-overflow-menu shell-player-more-menu"
+                trigger={<span>更多</span>}
+              >
+                  <button type="button" role="menuitem" onClick={() => onToggleDrawer("episodes")}>
+                    <span>剧集</span>
+                    <small>当前合集</small>
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      onGoLibrary();
+                      window.setTimeout(() => searchInputRef.current?.focus(), 0);
+                    }}
+                  >
+                    <span>搜索媒体库</span>
+                    <small>Ctrl+K</small>
+                  </button>
+                  <button type="button" role="menuitem" aria-keyshortcuts="Control+O" onClick={onOpenFile}>
+                    <span>打开其他视频</span>
+                    <small>Ctrl+O</small>
+                  </button>
+                  <button type="button" role="menuitem" aria-keyshortcuts="Control+Shift+O" onClick={onOpenFolder}>
+                    <span>添加剧集文件夹</span>
+                    <small>Ctrl+Shift+O</small>
+                  </button>
+                  <button type="button" role="menuitem" onClick={onOpenUrl}>
+                    <span>从公开链接导入</span>
+                    <small>HTTPS</small>
+                  </button>
                   <button
                     type="button"
                     role="menuitem"
@@ -227,41 +244,14 @@ export function DesktopShell({
                     <small>交付</small>
                   </button>
               </MenuPopover>
-              {drawerTab === null ? (
-                <>
-                  <span className="shell-command-divider" aria-hidden="true" />
-                  {(
-                    [
-                      ["episodes", "剧集"],
-                      ["understand", "理解"],
-                      ["learn", "学习"],
-                    ] as const
-                  ).map(([tab, label]) => (
-                    <button
-                      aria-pressed="false"
-                      className={`shell-drawer-command ${tab}`}
-                      key={tab}
-                      type="button"
-                      onClick={() => onToggleDrawer(tab)}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </>
-              ) : null}
             </>
-          ) : <LibraryAddMediaMenu
+          ) : <LibraryAddMediaActions
             onOpenFile={onOpenFile}
             onOpenFolder={onOpenFolder}
             onOpenUrl={onOpenUrl}
           />}
         </div>
-        {playerActive && drawerTab ? (
-          <div className="desktop-commandbar-context" title={mediaTitle ?? undefined}>
-            {mediaTitle}
-          </div>
-        ) : null}
-        <div className="desktop-commandbar-secondary">
+        {!playerActive ? <div className="desktop-commandbar-secondary">
           <div className="shell-search-wrap">
             <label className="shell-search">
               <span aria-hidden="true">⌕</span>
@@ -297,7 +287,7 @@ export function DesktopShell({
               </div>
             ) : null}
           </div>
-        </div>
+        </div> : null}
       </header>
 
       <div className="desktop-workspace">

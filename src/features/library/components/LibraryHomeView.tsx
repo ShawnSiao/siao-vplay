@@ -3,6 +3,7 @@ import { fileExtension, formatDuration, formatRecentTime } from "../../../lib/fo
 import type { CollectionSummary, LibraryHome, LibraryMediaSummary } from "../../../types";
 import type { LibrarySectionPageState } from "../useLibraryController";
 import { libraryMediaProgress } from "./libraryMediaPresentation";
+import "../library-first-run.css";
 
 type LibraryHomeViewProps = {
   home: LibraryHome;
@@ -72,6 +73,42 @@ export function LibraryHomeView({
   const collections = home.collections.filter(
     (collection) => collection.systemKey === null,
   );
+  const firstRun =
+    home.totalProjectCount === 0 &&
+    home.folders.length === 0 &&
+    collections.length === 0;
+
+  if (firstRun) {
+    return (
+      <div className="library-first-run" aria-labelledby="library-first-run-title">
+        <span className="library-first-run-mark" aria-hidden="true">▶</span>
+        <h1 id="library-first-run-title">把海外视频变成可以连续看懂的内容</h1>
+        <p>
+          导入已有视频，准备原文字幕并生成简体中文字幕。视频、字幕、观看记录和设置默认只保存在本机。
+        </p>
+        <button className="library-first-run-action" type="button" onClick={onImport}>
+          导入视频
+        </button>
+        <div className="library-first-run-sources" aria-label="支持的导入方式">
+          <article>
+            <strong>本地视频</strong>
+            <span>选择单个视频文件，直接加入媒体库。</span>
+          </article>
+          <article>
+            <strong>剧集文件夹</strong>
+            <span>自动识别并整理有明确季集关系的内容。</span>
+          </article>
+          <article>
+            <strong>公开链接</strong>
+            <span>导入公开直链、HLS 或单个公开视频页面。</span>
+          </article>
+        </div>
+        <small className="library-first-run-privacy">
+          不上传本地视频；向 AI 服务发送字幕或关键帧前会单独确认。
+        </small>
+      </div>
+    );
+  }
 
   return (
     <div className="library-page library-home-page">

@@ -23,6 +23,7 @@ mod subtitles;
 mod transcription;
 mod translation;
 mod understanding;
+mod youtube_command_error;
 mod youtube_media;
 
 use std::path::{Path, PathBuf};

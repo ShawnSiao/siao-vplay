@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "productId": "siaovplay",
-  "updatedAt": "2026-08-08",
+  "updatedAt": "2026-08-20",
   "packageProfile": "app-only",
   "bundlePolicy": {
     "maximumExceptionBytes": 20000000,
@@ -57,17 +57,17 @@
   "resources": [
     {
       "id": "ffmpeg-cpu",
-      "version": "8.1",
+      "version": "8.1.2-34-g9b6c8969e0",
       "platform": "windows-x86_64",
       "kind": "archive",
       "bundled": false,
-      "installedSize": 175926890,
+      "installedSize": 175929962,
       "license": "LGPL-2.1-or-later",
       "sourcePage": "https://github.com/BtbN/FFmpeg-Builds",
       "artifact": {
-        "url": "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-07-27-14-00/ffmpeg-n8.1.2-31-g8c9502e9b0-win64-lgpl-shared-8.1.zip",
-        "size": 70510962,
-        "sha256": "0c434d097268f8ee61c96eab3faf048ead646f4ff38ee21027012d23f84e5c19",
+        "url": "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-07-31-14-10/ffmpeg-n8.1.2-34-g9b6c8969e0-win64-lgpl-shared-8.1.zip",
+        "size": 70508781,
+        "sha256": "c222a490dde4e7059f45495deef6bfb98dbcacc2b43df5b607546252037aa95c",
         "format": "zip",
         "stripComponents": 1
       },
@@ -79,17 +79,17 @@
     },
     {
       "id": "yt-dlp",
-      "version": "2026.06.09",
+      "version": "2026.08.19",
       "platform": "windows-x86_64",
       "kind": "file",
       "bundled": false,
-      "installedSize": 18202192,
+      "installedSize": 17840399,
       "license": "GPL-3.0-or-later for the combined Windows executable; yt-dlp source is Unlicense",
       "sourcePage": "https://github.com/yt-dlp/yt-dlp",
       "artifact": {
-        "url": "https://github.com/yt-dlp/yt-dlp/releases/download/2026.06.09/yt-dlp.exe",
-        "size": 18202192,
-        "sha256": "3a48cb955d55c8821b60ccbdbbc6f61bc958f2f3d3b7ad5eaf3d83a543293a27",
+        "url": "https://github.com/yt-dlp/yt-dlp/releases/download/2026.08.19/yt-dlp.exe",
+        "size": 17840399,
+        "sha256": "66674953fe251b89f4d08c5f0e35e0728679bd67ab3d7d05c0562af101dd3e7a",
         "format": "file"
       },
       "entrypoints": {

@@ -120,9 +120,7 @@ export function UnderstandingPanel({
         const latestVisible =
           explanations.find(
             (item) => item.playbackCutoffMs <= initialCutoffRef.current,
-          ) ??
-          explanations[0] ??
-          null;
+          ) ?? null;
         if (!activeTask && latestVisible) {
           setFactsExpanded(false);
           setInterpretationExpanded(true);
@@ -379,11 +377,21 @@ export function UnderstandingPanel({
     task && task.handoffKind !== "manual" &&
     ["failed", "cancelled", "interrupted"].includes(task.status),
   );
-  const visibleFacts = explanation
-    ? explanation.confirmedFacts.slice(0, factsExpanded ? undefined : 3)
+  const visibleExplanation =
+    explanation && explanation.playbackCutoffMs <= playbackCutoffMs
+      ? explanation
+      : null;
+  const visibleFacts = visibleExplanation
+    ? visibleExplanation.confirmedFacts.slice(
+        0,
+        factsExpanded ? undefined : 3,
+      )
     : [];
   const hasMoreFacts = Boolean(
-    explanation && explanation.confirmedFacts.length > 3,
+    visibleExplanation && visibleExplanation.confirmedFacts.length > 3,
+  );
+  const visibleHistory = history.filter(
+    (item) => item.playbackCutoffMs <= playbackCutoffMs,
   );
 
   const PanelElement = embedded ? "section" : "aside";
@@ -426,11 +434,11 @@ export function UnderstandingPanel({
             <span className="spinner"></span>
             <span>正在读取此前的场景理解</span>
           </div>
-        ) : explanation ? (
+        ) : visibleExplanation ? (
           <div className="understanding-result">
             <div className="understanding-result-time">
               <span>解释位置</span>
-              <strong>{formatDuration(explanation.playbackCutoffMs)}</strong>
+              <strong>{formatDuration(visibleExplanation.playbackCutoffMs)}</strong>
             </div>
             <section className="understanding-result-section facts-section">
               <div className="understanding-section-heading">
@@ -482,7 +490,7 @@ export function UnderstandingPanel({
                 id="understanding-interpretation"
               >
                 <ul>
-                  {explanation.possibleInterpretations.map((item) => (
+                  {visibleExplanation.possibleInterpretations.map((item) => (
                     <li key={item}>{item}</li>
                   ))}
                 </ul>
@@ -491,9 +499,9 @@ export function UnderstandingPanel({
                 </p>
               </div>
             </section>
-            {explanation.withheldReason ? (
+            {visibleExplanation.withheldReason ? (
               <p className="understanding-withheld">
-                {explanation.withheldReason}
+                {visibleExplanation.withheldReason}
               </p>
             ) : null}
             <button
@@ -695,11 +703,11 @@ export function UnderstandingPanel({
           </div>
         )}
 
-        {history.length > 1 ? (
+        {visibleHistory.length > 1 ? (
           <details className="understanding-history">
-            <summary>此前理解 · {history.length}</summary>
+            <summary>此前理解 · {visibleHistory.length}</summary>
             <div>
-              {history.slice(0, 8).map((item) => (
+              {visibleHistory.slice(0, 8).map((item) => (
                 <button
                   key={item.id}
                   type="button"

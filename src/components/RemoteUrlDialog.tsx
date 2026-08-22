@@ -9,6 +9,7 @@ import {
   inspectRemoteMediaUrl,
   inspectYouTubeUrl,
 } from "../lib/desktop";
+import { userFacingCommandError } from "../lib/userFacingError";
 import type {
   Project,
   RemoteMediaPreview,
@@ -113,7 +114,7 @@ export function RemoteUrlDialog({
         });
       }
     } catch (nextError) {
-      setError(commandError(nextError).message);
+      setError(userFacingCommandError(nextError, "library"));
     } finally {
       setChecking(false);
     }
@@ -144,7 +145,7 @@ export function RemoteUrlDialog({
       onImported(project);
     } catch (nextError) {
       const failure = commandError(nextError);
-      setError(failure.message);
+      setError(userFacingCommandError(failure, "library"));
       if (failure.code !== "remote_import_cancelled") {
         setPreview(null);
       }
@@ -167,7 +168,7 @@ export function RemoteUrlDialog({
         await cancelRemoteMediaImport(operationId);
       }
     } catch (nextError) {
-      setError(commandError(nextError).message);
+      setError(userFacingCommandError(nextError, "library"));
       setCancelRequested(false);
     }
   };

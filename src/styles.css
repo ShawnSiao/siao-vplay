@@ -619,6 +619,26 @@ h3 {
   background: var(--agent-soft);
 }
 
+.status-pill-action {
+  border: 0;
+  cursor: pointer;
+  font: inherit;
+}
+
+.status-pill-action:hover:not(:disabled) {
+  filter: brightness(1.15);
+}
+
+.status-pill-action:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+.status-pill-action:disabled {
+  cursor: wait;
+  opacity: 0.68;
+}
+
 .eyebrow {
   margin: 0 0 7px;
   color: var(--brand);
@@ -5000,20 +5020,6 @@ h3 {
   border-radius: 12px;
   background: var(--bg-panel-raised);
   box-shadow: var(--shadow-dialog);
-}
-
-.toast {
-  position: fixed;
-  z-index: 50;
-  right: 22px;
-  bottom: 22px;
-  max-width: 380px;
-  padding: 12px 15px;
-  border: 1px solid var(--brand-border);
-  border-radius: 9px;
-  color: var(--text-primary);
-  background: rgb(22 27 33 / 97%);
-  box-shadow: 0 15px 50px rgb(0 0 0 / 46%);
 }
 
 @media (max-width: 1279px) {

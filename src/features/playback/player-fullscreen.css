@@ -1,0 +1,42 @@
+.player-screen.fullscreen-player {
+  background: #000;
+}
+
+.player-screen.fullscreen-player .player-primary {
+  position: relative;
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.player-screen.fullscreen-player .player-drawer {
+  display: none;
+}
+
+.player-screen.fullscreen-player .player-controls {
+  position: absolute;
+  z-index: 10;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  padding-top: 22px;
+  border-top: 0;
+  background: linear-gradient(transparent, rgb(9 12 15 / 96%) 36%);
+  transition: opacity 160ms ease, transform 180ms ease;
+}
+
+.player-screen.fullscreen-player .caption-stack {
+  transition: bottom 180ms ease;
+}
+
+.player-screen.fullscreen-player:not(.controls-hidden) .caption-stack {
+  bottom: clamp(96px, 12%, 136px);
+}
+
+.player-screen.fullscreen-player.controls-hidden {
+  cursor: none;
+}
+
+.player-screen.fullscreen-player.controls-hidden .player-controls {
+  opacity: 0;
+  transform: translateY(100%);
+  pointer-events: none;
+}

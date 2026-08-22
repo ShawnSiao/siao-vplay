@@ -244,16 +244,16 @@ const localResourceCatalog: LocalResourceCatalog = {
   resources: [
     {
       id: "ffmpeg-cpu",
-      version: "8.1",
+      version: "8.1.2-34-g9b6c8969e0",
       platform: "windows-x86_64",
       kind: "archive",
       bundled: false,
-      installedSize: 175_926_890,
+      installedSize: 175_929_962,
       license: "LGPL-2.1-or-later",
       sourcePage: "https://example.com/ffmpeg",
       artifact: {
         url: "https://example.com/ffmpeg.zip",
-        size: 70_510_962,
+        size: 70_508_781,
         sha256: "a".repeat(64),
         format: "zip",
       },
@@ -262,16 +262,16 @@ const localResourceCatalog: LocalResourceCatalog = {
     },
     {
       id: "yt-dlp",
-      version: "2026.06.09",
+      version: "2026.08.19",
       platform: "windows-x86_64",
       kind: "file",
       bundled: false,
-      installedSize: 18_202_192,
+      installedSize: 17_840_399,
       license: "GPL-3.0-or-later",
       sourcePage: "https://example.com/yt-dlp",
       artifact: {
         url: "https://example.com/yt-dlp.exe",
-        size: 18_202_192,
+        size: 17_840_399,
         sha256: "b".repeat(64),
         format: "file",
       },
@@ -499,7 +499,7 @@ const youtubePreview: YouTubeMediaPreview = {
   title: "Me at the zoo",
   durationSeconds: 19,
   fileSizeBytes: 533_067,
-  importerVersion: "2026.06.09",
+  importerVersion: "2026.08.19",
   importerSha256: "3".repeat(64),
   previewToken: "d".repeat(64),
 };
@@ -1188,15 +1188,16 @@ beforeEach(() => {
 
 describe("App", () => {
   async function getOverflowCommand(name: string | RegExp) {
-    fireEvent.click(
-      await screen.findByLabelText("更多字幕与交付命令"),
-    );
+    const visibleCommand = screen.queryByRole("menuitem", { name });
+    if (visibleCommand) {
+      return visibleCommand;
+    }
+    fireEvent.click(await screen.findByRole("button", { name: /^更多$/ }));
     return screen.getByRole("menuitem", { name });
   }
 
   async function getAddMediaCommand(name: string | RegExp) {
-    const commands = await screen.findAllByRole("button", { name });
-    return commands[0];
+    return screen.findByRole("button", { name });
   }
 
   it("uses a collapsible desktop shell with live library navigation", async () => {
@@ -1206,15 +1207,16 @@ describe("App", () => {
       screen.getByRole("banner", { name: "应用命令栏" }),
     ).toBeInTheDocument();
     expect(await getAddMediaCommand(/添加剧集文件夹/)).toBeEnabled();
-    expect(screen.getByRole("button", { name: /打开视频/ })).toBeEnabled();
-    expect(screen.getByRole("button", { name: /从 URL 导入/ })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /打开本地视频/ })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /从公开链接导入/ })).toBeEnabled();
+    expect(screen.queryByRole("button", { name: "添加视频" })).toBeNull();
     expect(
       screen.getByRole("button", {
         name: "媒体库：稍后观看",
       }),
     ).toBeEnabled();
     expect(screen.queryByText("字幕")).not.toBeInTheDocument();
-    expect(screen.queryByLabelText("更多字幕与交付命令")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^更多$/ })).not.toBeInTheDocument();
     expect(
       screen.getByRole("searchbox", { name: "搜索媒体库" }),
     ).toBeEnabled();
@@ -1351,7 +1353,7 @@ describe("App", () => {
     expect(screen.queryByLabelText("媒体导入说明")).not.toBeInTheDocument();
     expect(await screen.findAllByText("雨站台")).not.toHaveLength(0);
     expect(screen.getByText(/\d+ 项本地功能已准备/)).toBeInTheDocument();
-    expect(await getAddMediaCommand(/打开视频/)).toBeEnabled();
+    expect(await getAddMediaCommand(/打开本地视频/)).toBeEnabled();
     expect(screen.getByLabelText("观看进度 23%")).toBeInTheDocument();
     await waitFor(() =>
       expect(desktopMocks.ensureProjectPoster).toHaveBeenCalledWith(project.id),
@@ -1569,8 +1571,7 @@ describe("App", () => {
     const video = await screen.findByLabelText("视频画面，单击播放或暂停");
     expect(screen.queryByLabelText("当前内容抽屉")).not.toBeInTheDocument();
 
-    const episodesButton = screen.getByRole("button", { name: "剧集" });
-    fireEvent.click(episodesButton);
+    fireEvent.click(await getOverflowCommand(/^剧集当前合集$/));
     expect(screen.getByLabelText("当前内容抽屉")).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "剧集" })).toHaveAttribute(
       "aria-selected",
@@ -1609,7 +1610,6 @@ describe("App", () => {
       screen.queryByRole("menu", { name: "播放器右键菜单" }),
     ).not.toBeInTheDocument();
     expect(video.closest(".video-stage")).toHaveFocus();
-
     fireEvent.keyDown(window, { key: "m" });
     expect(video).toHaveProperty("muted", true);
     fireEvent.keyDown(window, { key: "]" });
@@ -1618,13 +1618,14 @@ describe("App", () => {
     const speed = screen.getByRole("combobox", { name: "播放速度" });
     fireEvent.keyDown(speed, { key: "[" });
     expect(video).toHaveProperty("playbackRate", 1.25);
-
     fireEvent.keyDown(window, { key: "f" });
     expect(requestFullscreen).toHaveBeenCalledTimes(1);
     fireEvent.doubleClick(video);
     expect(requestFullscreen).toHaveBeenCalledTimes(2);
     requestFullscreen.mockRestore();
     Reflect.deleteProperty(HTMLElement.prototype, "requestFullscreen");
+    fireEvent.keyDown(window, { key: "k", ctrlKey: true });
+    await waitFor(() => expect(screen.getByRole("searchbox", { name: "搜索媒体库" })).toHaveFocus());
   });
 
   it("toggles playback from the video surface and keeps the button label in sync", async () => {
@@ -2317,7 +2318,7 @@ describe("App", () => {
     expect(await screen.findAllByText("雨站台")).not.toHaveLength(0);
   });
 
-  it("resumes URL import after the required capability becomes ready", async () => {
+  it("opens URL import directly even when optional import resources are not ready", async () => {
     const urlNotReady: LocalResourceStatus = {
       ...readyLocalResourceStatus,
       capabilities: readyLocalResourceStatus.capabilities.map((capability) =>
@@ -2330,48 +2331,22 @@ describe("App", () => {
           : capability,
       ),
     };
-    let currentResourceStatus = urlNotReady;
     desktopMocks.getLocalResourceStatus.mockImplementation(
-      async () => currentResourceStatus,
-    );
-    desktopMocks.prepareLocalCapability.mockImplementation(
-      async (capabilityId, pendingActionId) => {
-        currentResourceStatus = readyLocalResourceStatus;
-        return {
-          capabilityId,
-          pendingActionId,
-          state: "preparing",
-          resourceIds: ["ffmpeg-cpu", "yt-dlp"],
-          readyResourceIds: ["ffmpeg-cpu"],
-          taskIds: ["00000000-0000-4000-8000-000000000020"],
-        };
-      },
+      async () => urlNotReady,
     );
 
     render(<App />);
     await screen.findByText(/\d+ 项本地功能已准备/);
-    fireEvent.click(await getAddMediaCommand(/从 URL 导入/));
+    fireEvent.click(await getAddMediaCommand(/从公开链接导入/));
 
-    const resources = await screen.findByRole("dialog", {
-      name: "环境配置",
-    });
-    expect(resources).toHaveTextContent("继续打开在线视频");
-    expect(screen.queryByLabelText("视频 URL")).toBeNull();
-    fireEvent.click(
-      within(resources).getByRole("button", { name: "开始准备所选功能" }),
-    );
-
-    await waitFor(() =>
-      expect(desktopMocks.prepareLocalCapability).toHaveBeenCalledWith(
-        "url_import",
-        expect.stringMatching(
-          /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
-        ),
-      ),
-    );
     expect(
       await screen.findByRole("dialog", { name: "从 URL 导入视频" }),
     ).toBeInTheDocument();
+    expect(screen.getByLabelText("视频 URL")).toBeVisible();
+    expect(
+      screen.queryByRole("dialog", { name: "环境配置" }),
+    ).not.toBeInTheDocument();
+    expect(desktopMocks.prepareLocalCapability).not.toHaveBeenCalled();
   });
 
   it("resumes the selected local video after basic media support is ready", async () => {
@@ -2404,7 +2379,7 @@ describe("App", () => {
 
     render(<App />);
     await screen.findByText("本地功能按需准备");
-    fireEvent.click(await getAddMediaCommand(/打开视频/));
+    fireEvent.click(await getAddMediaCommand(/打开本地视频/));
 
     const resources = await screen.findByRole("dialog", {
       name: "环境配置",
@@ -2432,7 +2407,7 @@ describe("App", () => {
   it("preflights and imports a public HTTPS media URL", async () => {
     render(<App />);
     await screen.findByText(/\d+ 项本地功能已准备/);
-    fireEvent.click(await getAddMediaCommand(/从 URL 导入/));
+    fireEvent.click(await getAddMediaCommand(/从公开链接导入/));
 
     fireEvent.change(await screen.findByLabelText("视频 URL"), {
       target: { value: remotePreview.originalUrl },
@@ -2467,7 +2442,7 @@ describe("App", () => {
     desktopMocks.importRemoteMediaUrl.mockReturnValue(new Promise(() => {}));
     render(<App />);
     await screen.findByText(/\d+ 项本地功能已准备/);
-    fireEvent.click(await getAddMediaCommand(/从 URL 导入/));
+    fireEvent.click(await getAddMediaCommand(/从公开链接导入/));
     fireEvent.change(await screen.findByLabelText("视频 URL"), {
       target: { value: remotePreview.originalUrl },
     });
@@ -2490,7 +2465,7 @@ describe("App", () => {
   it("requires confirmation before importing a public YouTube single video", async () => {
     render(<App />);
     await screen.findByText(/\d+ 项本地功能已准备/);
-    fireEvent.click(await getAddMediaCommand(/从 URL 导入/));
+    fireEvent.click(await getAddMediaCommand(/从公开链接导入/));
     fireEvent.change(await screen.findByLabelText("视频 URL"), {
       target: { value: youtubePreview.originalUrl },
     });
@@ -2868,8 +2843,9 @@ describe("App", () => {
         "W:\\SiaoVPlay\\handoff\\result.json",
       ),
     );
+    expect(await screen.findByText("中文字幕已准备好")).toBeInTheDocument();
     expect(
-      await screen.findByText("已生成 1 条简体中文字幕草稿，可以开始抽查。"),
+      screen.getByText("已生成 1 条草稿，当前视频可以切换为中文或双语字幕。"),
     ).toBeInTheDocument();
   });
 

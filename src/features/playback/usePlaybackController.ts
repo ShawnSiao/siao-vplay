@@ -12,7 +12,7 @@ import type {
   ShellContextMenu,
   ShellDrawerTab,
 } from "../shell/useShellController";
-
+import { usePlaybackShortcuts } from "./usePlaybackShortcuts";
 export type PlaybackValues = {
   positionMs: number;
   durationMs: number | null;
@@ -20,7 +20,6 @@ export type PlaybackValues = {
   playbackRate: number;
   subtitleMode: SubtitleDisplayMode;
 };
-
 type PlaybackControllerOptions = {
   project: Project;
   preparation: MediaPreparation;
@@ -28,12 +27,14 @@ type PlaybackControllerOptions = {
   currentTranslation: SubtitleVersion | null;
   drawerTab: ShellDrawerTab | null;
   contextMenu: ShellContextMenu | null;
+  seekStepMs: number;
   onBack: () => void;
   onCloseDrawer: () => void;
   onCloseContextMenu: () => void;
   onNeedProxy: (reason: string) => void;
   onPersist: (values: PlaybackValues) => Promise<void>;
   onError: (message: string) => void;
+  onFatalError: (message: string) => void;
 };
 
 function activeSegment(
@@ -54,12 +55,14 @@ export function usePlaybackController({
   currentTranslation,
   drawerTab,
   contextMenu,
+  seekStepMs,
   onBack,
   onCloseDrawer,
   onCloseContextMenu,
   onNeedProxy,
   onPersist,
   onError,
+  onFatalError,
 }: PlaybackControllerOptions) {
   const playerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -122,7 +125,7 @@ export function usePlaybackController({
     (reason: string) => {
       if (sourceIsProxy || proxyRequestedRef.current) {
         if (sourceIsProxy) {
-          onError(
+          onFatalError(
             "兼容播放版本仍然没有产生有效画面。项目和源视频已保留，可以返回媒体库后重新尝试。",
           );
         }
@@ -132,7 +135,7 @@ export function usePlaybackController({
       videoRef.current?.pause();
       onNeedProxy(reason);
     },
-    [onError, onNeedProxy, sourceIsProxy],
+    [onFatalError, onNeedProxy, sourceIsProxy],
   );
 
   useEffect(() => {
@@ -218,15 +221,14 @@ export function usePlaybackController({
         await video.play();
         setEnded(false);
         setPlaying(true);
-      } catch (error) {
-        onError(error instanceof Error ? error.message : "播放器未能开始播放");
+      } catch {
+        onError("播放器未能开始播放。可以重新检查视频后重试。");
       }
     } else {
       video.pause();
       setPlaying(false);
     }
   }, [onError]);
-
   const toggleMuted = useCallback(() => {
     const video = videoRef.current;
     if (!video) {
@@ -241,12 +243,14 @@ export function usePlaybackController({
       if (document.fullscreenElement) {
         await document.exitFullscreen();
       } else {
+        onCloseContextMenu();
+        onCloseDrawer();
         await playerRef.current?.requestFullscreen();
       }
-    } catch (error) {
-      onError(error instanceof Error ? error.message : "无法切换全屏");
+    } catch {
+      onError("暂时无法切换全屏。可以继续在窗口中观看。");
     }
-  }, [onError]);
+  }, [onCloseContextMenu, onCloseDrawer, onError]);
 
   const handleSurfaceClick = () => {
     if (surfaceClickTimerRef.current !== null) {
@@ -308,79 +312,22 @@ export function usePlaybackController({
     return () => window.removeEventListener("pointerdown", closeMenu);
   }, [contextMenu, onCloseContextMenu]);
 
-  useEffect(() => {
-    const handleKeyboard = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        if (contextMenu) {
-          onCloseContextMenu();
-        } else if (drawerTab) {
-          onCloseDrawer();
-        } else if (document.fullscreenElement) {
-          void document.exitFullscreen();
-        } else {
-          onBack();
-        }
-        return;
-      }
-      const target = event.target;
-      if (
-        target instanceof Element &&
-        target.closest(
-          "input, select, textarea, button, a, [contenteditable='true']",
-        )
-      ) {
-        return;
-      }
-      if (event.ctrlKey || event.altKey || event.metaKey) {
-        return;
-      }
-      if (event.key === " " || event.code === "Space") {
-        event.preventDefault();
-        void togglePlayback();
-      } else if (event.key === "ArrowLeft") {
-        event.preventDefault();
-        seekTo(positionMs - 10_000);
-      } else if (event.key === "ArrowRight") {
-        event.preventDefault();
-        seekTo(positionMs + 10_000);
-      } else if (event.key.toLowerCase() === "f") {
-        event.preventDefault();
-        void toggleFullscreen();
-      } else if (event.key.toLowerCase() === "m") {
-        event.preventDefault();
-        toggleMuted();
-      } else if (event.key === "[") {
-        event.preventDefault();
-        const nextRate = Math.max(0.5, playbackRate - 0.25);
-        if (videoRef.current) {
-          videoRef.current.playbackRate = nextRate;
-        }
-        setPlaybackRate(nextRate);
-      } else if (event.key === "]") {
-        event.preventDefault();
-        const nextRate = Math.min(2, playbackRate + 0.25);
-        if (videoRef.current) {
-          videoRef.current.playbackRate = nextRate;
-        }
-        setPlaybackRate(nextRate);
-      }
-    };
-    window.addEventListener("keydown", handleKeyboard);
-    return () => window.removeEventListener("keydown", handleKeyboard);
-  }, [
-    contextMenu,
-    drawerTab,
+  usePlaybackShortcuts({
+    contextMenuOpen: Boolean(contextMenu),
+    drawerOpen: Boolean(drawerTab),
+    playbackRate,
+    positionMs,
+    seekStepMs,
+    videoRef,
+    setPlaybackRate,
     onBack,
     onCloseContextMenu,
     onCloseDrawer,
-    playbackRate,
-    positionMs,
-    seekTo,
-    toggleFullscreen,
-    toggleMuted,
-    togglePlayback,
-  ]);
+    onSeek: seekTo,
+    onToggleFullscreen: toggleFullscreen,
+    onToggleMuted: toggleMuted,
+    onTogglePlayback: togglePlayback,
+  });
 
   const beginPerformanceCheck = () => {
     const video = videoRef.current;

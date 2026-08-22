@@ -1,6 +1,5 @@
 import { StrictMode, useState } from "react";
 import { createRoot } from "react-dom/client";
-
 import { LibraryFolderImportDialog } from "../components/LibraryFolderImportDialog";
 import { LibraryRecoveryDialog } from "../components/LibraryRecoveryDialog";
 import { LibraryScreen } from "../components/LibraryScreen";
@@ -12,6 +11,7 @@ import type {
 } from "../features/library/useLibraryController";
 import { DesktopShell } from "../features/shell/DesktopShell";
 import type { LibraryHome, LibraryMediaSummary, Project } from "../types";
+import { emptyLibraryHome } from "./libraryHarnessData";
 import "../styles.css";
 
 const project: Project = {
@@ -193,14 +193,14 @@ const offlineRecovery: LibraryRecoveryState = {
   confirmFingerprintDuplicates: false,
   error: null,
 };
-
 export function LibraryHarness() {
+  const emptyMode = new URLSearchParams(window.location.search).has("empty");
   const [folderImport, setFolderImport] = useState<LibraryFolderImportState | null>(null); const [section, setSection] = useState<LibrarySection>("home");
   const [recovery, setRecovery] = useState<LibraryRecoveryState | null>(null);
   const [watchLaterItems, setWatchLaterItems] = useState([mediaSummary]);
   const [uncategorizedItems, setUncategorizedItems] = useState(unclassifiedItems);
   const openFolderImport = () => setFolderImport(folderPreview);
-  const visibleHome = { ...libraryHome, unclassified: uncategorizedItems, unclassifiedCount: uncategorizedItems.length };
+  const visibleHome: LibraryHome = emptyMode ? emptyLibraryHome : { ...libraryHome, unclassified: uncategorizedItems, unclassifiedCount: uncategorizedItems.length };
   return (
     <>
       <DesktopShell
@@ -239,12 +239,12 @@ export function LibraryHarness() {
       canReviseSubtitles={false}
       canDeliverSubtitles={false}
       libraryCounts={{
-        continueWatching: 1,
-        episodeFiles: 1,
-        series: 1,
-        folders: 1,
-        watchLater: watchLaterItems.length,
-        unclassified: uncategorizedItems.length,
+        continueWatching: emptyMode ? 0 : 1,
+        episodeFiles: emptyMode ? 0 : 1,
+        series: emptyMode ? 0 : 1,
+        folders: emptyMode ? 0 : 1,
+        watchLater: emptyMode ? 0 : watchLaterItems.length,
+        unclassified: emptyMode ? 0 : uncategorizedItems.length,
       }}
       librarySection={section}
       searchQuery=""

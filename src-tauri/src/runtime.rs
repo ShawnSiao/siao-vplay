@@ -16,8 +16,8 @@ use crate::{local_resources, media, transcription, youtube_media};
 
 pub const DEFAULT_MODEL_KIND: &str = "small";
 pub const LEGACY_WHISPER_RUNTIME_VERSION: &str = "1.9.1-siaocut.1";
-pub const YT_DLP_VERSION: &str = "2026.06.09";
-pub const YT_DLP_SHA256: &str = "3a48cb955d55c8821b60ccbdbbc6f61bc958f2f3d3b7ad5eaf3d83a543293a27";
+pub const YT_DLP_VERSION: &str = "2026.08.19";
+pub const YT_DLP_SHA256: &str = "66674953fe251b89f4d08c5f0e35e0728679bd67ab3d7d05c0562af101dd3e7a";
 
 const SETTINGS_FILE_NAME: &str = "runtime-settings.json";
 const FFMPEG_VERSION: &str = "8.1.2-essentials";

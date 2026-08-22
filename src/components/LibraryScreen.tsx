@@ -15,6 +15,7 @@ import type {
   LibraryMediaSummary,
 } from "../types";
 import { Dialog } from "./Dialog";
+import { LibraryImportDialog } from "./LibraryImportDialog";
 import "../features/library/library.css";
 
 type LibraryScreenProps = {
@@ -71,6 +72,7 @@ export function LibraryScreen(props: LibraryScreenProps) {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [revokeRootId, setRevokeRootId] = useState<string | null>(null);
   const [deleteNotice, setDeleteNotice] = useState<string | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
   const commonMediaProps = {
     collections: props.home.collections,
     mutationPending: props.mutationPending,
@@ -106,7 +108,7 @@ export function LibraryScreen(props: LibraryScreenProps) {
             onOpen={props.onOpen}
             onOpenCollection={props.onOpenCollection}
             onSelectSeries={() => props.onSelectSection("series")}
-            onImport={props.onImport}
+            onImport={() => setImportOpen(true)}
             onLoadMore={() => props.onLoadMoreSection("continue_watching")}
           />
         ) : null}
@@ -179,6 +181,15 @@ export function LibraryScreen(props: LibraryScreenProps) {
             <p>合集只整理现有视频，不复制或修改源文件。</p>
           </form>
         </Dialog>
+      ) : null}
+
+      {importOpen ? (
+        <LibraryImportDialog
+          onClose={() => setImportOpen(false)}
+          onImportFile={props.onImport}
+          onImportFolder={props.onImportFolder}
+          onImportUrl={props.onImportUrl}
+        />
       ) : null}
 
       {editOpen && props.currentCollection ? (

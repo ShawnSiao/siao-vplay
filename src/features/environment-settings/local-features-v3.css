@@ -57,13 +57,40 @@
 }
 
 .environment-local-pane .local-resources-capabilities-section {
-  grid-column: 1;
+  grid-column: 1 / -1;
   order: 0;
 }
 
-.environment-local-pane .local-resources-location-section {
-  grid-column: 2;
+.environment-local-pane .local-resources-maintenance {
+  grid-column: 1 / -1;
   order: 0;
+  margin: 0;
+  border: 1px solid var(--border-subtle);
+  border-radius: 5px;
+  background: #10151a;
+}
+
+.environment-local-pane .local-resources-maintenance > summary {
+  min-height: 42px;
+  padding: 0 12px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 42px;
+}
+
+.environment-local-pane .local-resources-maintenance[open] {
+  padding: 0 10px 10px;
+}
+
+.environment-local-pane .local-resources-maintenance[open] > summary {
+  margin-inline: -10px;
+  padding-inline: 22px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.environment-local-pane .local-resources-maintenance > .local-resources-location-section {
+  margin-top: 10px;
 }
 
 .environment-local-pane .local-resources-section-head {
@@ -228,7 +255,7 @@
   }
 
   .environment-local-pane .local-resources-capabilities-section,
-  .environment-local-pane .local-resources-location-section {
+  .environment-local-pane .local-resources-maintenance {
     grid-column: 1;
   }
 

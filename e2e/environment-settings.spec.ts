@@ -82,6 +82,7 @@ test("environment settings keeps the complete local-resource workflow", async ({
   await expect(dialog).toContainText("识别模型下载 488 MB");
   await expect(dialog).toContainText("预计下载");
   await expect(dialog).toContainText("安装后占用");
+  await dialog.getByText("高级维护：存储位置、迁移、修复和清理").click();
   await expect(dialog.getByRole("button", { name: "选择现有资源目录" })).toBeVisible();
   await expect(dialog.getByRole("button", { name: "移动保存位置" })).toBeVisible();
   await expect(dialog.getByRole("button", { name: "检查与修复" })).toBeVisible();

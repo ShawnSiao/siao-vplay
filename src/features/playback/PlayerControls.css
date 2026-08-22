@@ -1,0 +1,39 @@
+.seek-skip-control > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  font-size: 17px;
+  line-height: 1;
+}
+
+.seek-skip-control small {
+  color: inherit;
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+}
+
+.seek-step-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.seek-step-field select {
+  width: 64px;
+}
+
+@media (max-width: 1100px) {
+  .seek-step-field > span {
+    display: none;
+  }
+
+  .seek-step-field select {
+    width: 60px;
+  }
+
+  .volume-control input {
+    width: 64px;
+  }
+}

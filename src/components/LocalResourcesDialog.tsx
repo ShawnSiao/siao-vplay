@@ -1,15 +1,16 @@
 import { useMemo, useRef, useState } from "react";
 
 import type { LocalResourcesController } from "../features/resources/useLocalResources";
+import { updateCapabilityResources } from "../features/environment-settings/updateCapabilityResources";
 import {
   capabilityDescriptions,
-  capabilityStateLabel,
   formatBytes,
   formatRemaining,
   networkSourceLabel,
   resourceDownloadBytes,
   taskStateLabel,
 } from "../features/environment-settings/localResourcePresentation";
+import { CapabilityStatusPill } from "../features/environment-settings/CapabilityStatusPill";
 import type {
   LocalResourceCapabilityStatus,
   LocalResourceDiagnostics,
@@ -68,6 +69,9 @@ export function LocalResourcesDialog({
     useState<UnusedResourceCleanupPlan | null>(null);
   const [diagnostics, setDiagnostics] = useState<LocalResourceDiagnostics | null>(null);
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
+  const [maintenanceOpen, setMaintenanceOpen] = useState(
+    Boolean(pendingAction) || !controller.status?.configured,
+  );
   const diagnosticsRef = useRef<HTMLDetailsElement>(null);
   const [thirdPartyNotices, setThirdPartyNotices] = useState<string | null>(null);
   const [oldVersionCleanupPlan, setOldVersionCleanupPlan] =
@@ -333,6 +337,21 @@ export function LocalResourcesDialog({
       await controller.updateResource(resourceId);
       setDiagnostics(null);
       onNotice("资源更新已开始；新版本验证通过前会继续使用当前版本。");
+    });
+
+  const updateCapability = (capability: LocalResourceCapabilityStatus) =>
+    runAction(`update-capability-${capability.id}`, async () => {
+      const result = await updateCapabilityResources(controller, capability);
+      if (result.updatedResourceIds.length === 0) {
+        setDiagnostics(result.diagnostics);
+        setThirdPartyNotices(result.thirdPartyNotices);
+        onNotice(`${capability.title}当前没有需要更新的内容。`);
+        return;
+      }
+      setDiagnostics(null);
+      onNotice(
+        `${capability.title}更新已开始；新版本验证通过前会继续使用当前版本。`,
+      );
     });
 
   const rollbackResource = (resourceId: string, version: string) =>
@@ -651,19 +670,30 @@ export function LocalResourcesDialog({
                               : "当前不能开始下载"}
                         </small>
                       </span>
-                      <span
-                        className={`status-pill ${
-                          capability.state === "ready" ? "ready" : "warning"
-                        }`}
-                      >
-                        {capabilityStateLabel(capability, installable)}
-                      </span>
+                      <CapabilityStatusPill
+                        capability={capability}
+                        installable={installable}
+                        busy={busyAction === `update-capability-${capability.id}`}
+                        previewMode={previewMode}
+                        onUpdate={() => void updateCapability(capability)}
+                      />
                     </div>
                   );
                 })}
               </div>
             </section>
 
+            <details
+              className="local-resources-maintenance"
+              open={
+                Boolean(pendingAction) ||
+                !status.configured ||
+                status.rootState !== "ready" ||
+                maintenanceOpen
+              }
+              onToggle={(event) => setMaintenanceOpen(event.currentTarget.open)}
+            >
+              <summary>高级维护：存储位置、迁移、修复和清理</summary>
             <section className="local-resources-section local-resources-location-section" aria-labelledby="location-heading">
               <div className="local-resources-section-head">
                 <div>
@@ -850,6 +880,7 @@ export function LocalResourcesDialog({
                           : "所选功能已准备"}
               </button>
             </section>
+            </details>
           </>
         ) : null}
 

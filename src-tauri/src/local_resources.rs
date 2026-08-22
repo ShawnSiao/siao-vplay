@@ -1515,6 +1515,10 @@ fn available_space(_path: &Path) -> Option<u64> {
 }
 
 #[cfg(test)]
+#[path = "local_resources_version_tests.rs"]
+mod version_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use tempfile::tempdir;
@@ -1811,66 +1815,6 @@ mod tests {
                 .and_then(|configuration| configuration.proxy_url),
             None
         );
-    }
-
-    #[test]
-    fn failed_new_version_keeps_the_previous_version_active_and_update_is_visible() {
-        let data = tempdir().expect("data directory");
-        let parent = tempdir().expect("resource parent");
-        let mut manager = LocalResourceManager::load(data.path()).expect("manager should load");
-        manager
-            .configure_location(parent.path().to_str().expect("UTF-8 path"), true)
-            .expect("configuration should succeed");
-        let root = parent.path().join(RESOURCE_DIRECTORY_NAME);
-        for version in ["7.0", "8.1"] {
-            let install = root.join(format!("packages/ffmpeg-cpu/{version}/bin"));
-            fs::create_dir_all(&install).expect("install directory should create");
-            fs::write(install.join("ffmpeg.exe"), b"ffmpeg").expect("ffmpeg should write");
-            fs::write(install.join("ffprobe.exe"), b"ffprobe").expect("ffprobe should write");
-        }
-        manager
-            .activate_receipt(fixture_receipt("7.0", "passed"))
-            .expect("old version should activate");
-        assert!(manager.resource_update_available("ffmpeg-cpu"));
-        assert_eq!(
-            manager
-                .status()
-                .expect("status should resolve")
-                .capabilities
-                .iter()
-                .find(|capability| capability.id == "basic_media")
-                .expect("basic media should exist")
-                .state,
-            LocalResourceCapabilityState::UpdateAvailable
-        );
-
-        let error = manager
-            .activate_receipt(fixture_receipt("8.1", "failed"))
-            .expect_err("failed health must not activate");
-        assert!(matches!(error, LocalResourceError::InvalidReceipt(_)));
-        assert_eq!(
-            manager
-                .configuration
-                .as_ref()
-                .and_then(|configuration| configuration.active_resources.get("ffmpeg-cpu"))
-                .map(String::as_str),
-            Some("7.0")
-        );
-        assert!(!root.join("receipts/ffmpeg-cpu/8.1.json").exists());
-
-        manager
-            .activate_receipt(fixture_receipt("8.1", "passed"))
-            .expect("healthy new version should activate");
-        assert_eq!(
-            manager
-                .configuration
-                .as_ref()
-                .and_then(|configuration| configuration.active_resources.get("ffmpeg-cpu"))
-                .map(String::as_str),
-            Some("8.1")
-        );
-        assert!(root.join("receipts/ffmpeg-cpu/7.0.json").is_file());
-        assert!(!manager.resource_update_available("ffmpeg-cpu"));
     }
 
     #[test]

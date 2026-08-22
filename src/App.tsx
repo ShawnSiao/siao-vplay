@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { Dialog } from "./components/Dialog";
+import { AppToast, type ToastNotice } from "./components/AppToast";
 import { LibraryFolderImportDialog } from "./components/LibraryFolderImportDialog";
 import { LibraryRecoveryDialog } from "./components/LibraryRecoveryDialog";
 import { LibraryScreen } from "./components/LibraryScreen";
@@ -15,6 +16,7 @@ import {
 import { PreparationScreen } from "./components/PreparationScreen";
 import { RemoteUrlDialog } from "./components/RemoteUrlDialog";
 import { EnvironmentSettingsDialog } from "./features/environment-settings/EnvironmentSettingsDialog";
+import { backgroundResultNotice } from "./features/ai-tasks/backgroundNotice";
 import type { PendingResourceAction } from "./features/environment-settings/LocalFeaturesDialog";
 import { SubtitleImportDialog } from "./components/SubtitleImportDialog";
 import { SubtitleDeliveryDialog } from "./components/SubtitleDeliveryDialog";
@@ -27,7 +29,6 @@ import { useLocalResources } from "./features/resources/useLocalResources";
 import {
   chooseLocalFolder,
   chooseLocalVideo,
-  commandError,
   createLocalProject,
   deleteProject,
   getAppStatus,
@@ -43,6 +44,7 @@ import {
   setMainWindowMediaTitle,
   updatePlaybackState,
 } from "./lib/desktop";
+import { userFacingCommandError } from "./lib/userFacingError";
 import type {
   AppStatus,
   MediaPreparation,
@@ -137,7 +139,7 @@ export default function App() {
   const [remoteUrlDialogOpen, setRemoteUrlDialogOpen] = useState(false);
   const [deleteCandidate, setDeleteCandidate] = useState<Project | null>(null);
   const [busyMessage, setBusyMessage] = useState<string | null>(null);
-  const [toast, setToast] = useState<string | null>(null);
+  const [toast, setToast] = useState<ToastNotice | null>(null);
   const [localResourcesOpen, setLocalResourcesOpen] = useState(false);
   const [firstRunResourceSetup, setFirstRunResourceSetup] = useState(false);
   const [pendingResourceAction, setPendingResourceAction] =
@@ -170,7 +172,7 @@ export default function App() {
       setLibraryError(null);
       await refreshLibrary();
     } catch (error) {
-      setLibraryError(commandError(error).message);
+      setLibraryError(userFacingCommandError(error, "library"));
     }
   }, [refreshLibrary]);
 
@@ -184,7 +186,7 @@ export default function App() {
       })
       .catch((error: unknown) => {
         if (active) {
-          setLibraryError(commandError(error).message);
+          setLibraryError(userFacingCommandError(error, "library"));
         }
       });
     void listProjects()
@@ -196,7 +198,7 @@ export default function App() {
       })
       .catch((error: unknown) => {
         if (active) {
-          setLibraryError(commandError(error).message);
+          setLibraryError(userFacingCommandError(error, "library"));
         }
       })
     return () => {
@@ -306,7 +308,7 @@ export default function App() {
       setLocalResourcesOpen(false);
       setToast(`${pending.label}：所需功能已准备完成。`);
       void Promise.resolve(pending.resume()).catch((error: unknown) =>
-        setToast(commandError(error).message),
+        setToast(userFacingCommandError(error, "settings")),
       );
     }, 0);
     return () => window.clearTimeout(timer);
@@ -372,7 +374,7 @@ export default function App() {
           })
           .catch((error: unknown) => {
             if (operationTokenRef.current === token) {
-              setToast(commandError(error).message);
+              setToast(userFacingCommandError(error, "subtitle"));
             }
           });
         void refreshProjects();
@@ -383,7 +385,7 @@ export default function App() {
         }
         window.clearTimeout(preparationTimer);
         setScreen("preparing");
-        setPreparationError(commandError(error).message);
+        setPreparationError(userFacingCommandError(error, "playback"));
       }
     },
     [refreshProjects, setScreen],
@@ -440,7 +442,7 @@ export default function App() {
         await prepareAndOpenReady(project, false, null);
       } catch (error) {
         setBusyMessage(null);
-        setLibraryError(commandError(error).message);
+        setLibraryError(userFacingCommandError(error, "library"));
       }
     },
     [prepareAndOpenReady, projects],
@@ -468,7 +470,7 @@ export default function App() {
       await importMediaPath(mediaPath);
     } catch (error) {
       setBusyMessage(null);
-      setLibraryError(commandError(error).message);
+      setLibraryError(userFacingCommandError(error, "library"));
     }
   }, [importMediaPath]);
 
@@ -485,7 +487,7 @@ export default function App() {
       setLibraryError(null);
       await startFolderScan(rootPath);
     } catch (error) {
-      setLibraryError(commandError(error).message);
+      setLibraryError(userFacingCommandError(error, "library"));
     }
   }, [startFolderScan]);
 
@@ -502,7 +504,7 @@ export default function App() {
         }
         await inspectRootRelocation(rootId, newRootPath);
       } catch (error) {
-        setLibraryError(commandError(error).message);
+        setLibraryError(userFacingCommandError(error, "library"));
       }
     },
     [inspectRootRelocation],
@@ -524,18 +526,16 @@ export default function App() {
         }
         await inspectRootRebuild(rootId, newRootPath);
       } catch (error) {
-        setLibraryError(commandError(error).message);
+        setLibraryError(userFacingCommandError(error, "library"));
       }
     },
     [inspectRootRebuild],
   );
 
   const openRemoteUrlImport = useCallback(() => {
-    void requestCapability("url_import", "继续打开在线视频", () => {
-      setLibraryError(null);
-      setRemoteUrlDialogOpen(true);
-    });
-  }, [requestCapability]);
+    setLibraryError(null);
+    setRemoteUrlDialogOpen(true);
+  }, []);
 
   useEffect(() => {
     const startupMediaPath = appStatus?.startupMediaPath;
@@ -602,7 +602,7 @@ export default function App() {
       await prepareAndOpen(relinked, false, null);
     } catch (error) {
       setBusyMessage(null);
-      setLibraryError(commandError(error).message);
+      setLibraryError(userFacingCommandError(error, "library"));
     }
   }, [prepareAndOpen]);
 
@@ -621,7 +621,7 @@ export default function App() {
             : null,
         );
       } catch (error) {
-        setLibraryError(commandError(error).message);
+        setLibraryError(userFacingCommandError(error, "library"));
       }
     },
     [prepareAndOpen],
@@ -632,7 +632,7 @@ export default function App() {
       const project = await getProject(media.projectId);
       await relinkProject(project);
     } catch (error) {
-      setLibraryError(commandError(error).message);
+      setLibraryError(userFacingCommandError(error, "library"));
     }
   }, [relinkProject]);
 
@@ -640,7 +640,7 @@ export default function App() {
     try {
       setDeleteCandidate(await getProject(media.projectId));
     } catch (error) {
-      setLibraryError(commandError(error).message);
+      setLibraryError(userFacingCommandError(error, "library"));
     }
   }, []);
 
@@ -674,7 +674,7 @@ export default function App() {
                 : null,
             ),
           )
-          .catch((error: unknown) => setLibraryError(commandError(error).message));
+          .catch((error: unknown) => setLibraryError(userFacingCommandError(error, "library")));
       }
     },
     [
@@ -697,7 +697,7 @@ export default function App() {
           seasonNumber: episode.seasonNumber,
         });
       } catch (error) {
-        setToast(commandError(error).message);
+        setToast(userFacingCommandError(error, "playback"));
         throw error;
       }
     },
@@ -727,7 +727,7 @@ export default function App() {
     } catch (error) {
       setBusyMessage(null);
       setDeleteCandidate(null);
-      setLibraryError(commandError(error).message);
+      setLibraryError(userFacingCommandError(error, "library"));
     }
   };
 
@@ -776,8 +776,16 @@ export default function App() {
       }
       setToast(
         task.validation?.warningCount
-          ? `中文字幕草稿已生成，另有 ${task.validation.warningCount} 项一致性提示。`
-          : `已生成 ${task.segmentCount} 条简体中文字幕草稿，可以开始抽查。`,
+          ? {
+              title: "中文字幕草稿已生成",
+              message: `另有 ${task.validation.warningCount} 项一致性提示，建议抽查后再使用。`,
+              tone: "warning",
+            }
+          : {
+              title: "中文字幕已准备好",
+              message: `已生成 ${task.segmentCount} 条草稿，当前视频可以切换为中文或双语字幕。`,
+              tone: "success",
+            },
       );
       const updatedProject = await getProject(task.projectId);
       setActiveProject(updatedProject);
@@ -807,14 +815,16 @@ export default function App() {
         if (!active || !updates.length) {
           return;
         }
-        const latest = updates.at(-1);
-        if (latest) {
-          setToast(
-            latest.status === "rejected"
-              ? `外部 Agent 返回未通过检查：${latest.message}`
-              : latest.message,
-          );
-        }
+        const currentProjectUpdates = activeProjectId
+          ? updates.filter(
+              (update) =>
+                update.projectId === activeProjectId &&
+                update.status !== "validating",
+            )
+          : [];
+        const latest = currentProjectUpdates.at(-1);
+        const resultNotice = latest ? backgroundResultNotice(latest) : null;
+        if (resultNotice) setToast(resultNotice);
         if (
           updates.some(
             (update) =>
@@ -921,7 +931,7 @@ export default function App() {
         );
       } catch (error) {
         if (active) {
-          setToast(commandError(error).message);
+          setToast(userFacingCommandError(error, "subtitle"));
           timer = window.setTimeout(() => void poll(), 1_500);
         }
       }
@@ -1036,7 +1046,7 @@ export default function App() {
             onDelete={(media) => void deleteLibraryMedia(media)}
             onOpenLocation={(media) =>
               void openProjectMediaLocation(media.projectId).catch((error: unknown) =>
-                setLibraryError(commandError(error).message),
+                setLibraryError(userFacingCommandError(error, "library")),
               )
             }
             onSelectSection={selectLibrarySection}
@@ -1089,11 +1099,16 @@ export default function App() {
             }
             onPersist={persistPlayback}
             onSwitchEpisode={switchEpisode}
-            onError={(message) => {
-              setPreparationError(message);
-              setForceProxy(true);
-              setScreen("preparing");
-            }}
+            onNotice={(message) =>
+              setToast({
+                title: "播放器操作没有完成",
+                message,
+                tone: "warning",
+              })
+            }
+            onRetryPlayback={() =>
+              void prepareAndOpen(activeProject, true, episodeContext)
+            }
           />
         ) : null}
       </DesktopShell>
@@ -1309,9 +1324,7 @@ export default function App() {
       ) : null}
 
       {toast ? (
-        <div className="toast" role="status">
-          {toast}
-        </div>
+        <AppToast notice={toast} onDismiss={() => setToast(null)} />
       ) : null}
     </div>
   );

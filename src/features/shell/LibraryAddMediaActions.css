@@ -1,0 +1,47 @@
+.shell-add-media-actions {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 4px;
+}
+
+.shell-add-media-actions .shell-command {
+  flex: 0 0 auto;
+}
+
+.shell-add-media-actions .shell-command:not(.shell-command-primary) {
+  border-color: var(--border-subtle);
+  color: var(--text-secondary);
+  background: linear-gradient(#242b33, #1a2026);
+  box-shadow: inset 0 1px rgb(255 255 255 / 4%);
+}
+
+@media (max-width: 1179px) {
+  .desktop-shell-library {
+    grid-template-rows: auto minmax(0, 1fr) 26px;
+  }
+
+  .desktop-shell-library .desktop-commandbar {
+    flex-wrap: wrap;
+    gap: 5px;
+    padding-block: 6px;
+  }
+
+  .desktop-shell-library .desktop-commandbar-primary,
+  .desktop-shell-library .desktop-commandbar-secondary {
+    flex: 1 1 100%;
+  }
+
+  .desktop-shell-library .desktop-commandbar-secondary {
+    justify-content: flex-end;
+  }
+
+  .desktop-shell-library .shell-add-media-actions .shell-command {
+    width: auto;
+    padding-inline: 9px;
+  }
+
+  .desktop-shell-library .shell-add-media-actions .shell-command > span:last-child {
+    display: inline;
+  }
+}
