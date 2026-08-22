@@ -24,11 +24,8 @@
 }
 
 .player-screen.fullscreen-player .caption-stack {
-  transition: bottom 180ms ease;
-}
-
-.player-screen.fullscreen-player:not(.controls-hidden) .caption-stack {
-  bottom: clamp(96px, 12%, 136px);
+  right: auto;
+  bottom: auto;
 }
 
 .player-screen.fullscreen-player.controls-hidden {

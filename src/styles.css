@@ -1255,40 +1255,6 @@ h3 {
   text-align: center;
 }
 
-.caption-stack {
-  position: absolute;
-  z-index: 4;
-  right: 9%;
-  bottom: clamp(28px, 5%, 72px);
-  left: 9%;
-  display: grid;
-  justify-items: center;
-  gap: 7px;
-  pointer-events: none;
-  text-align: center;
-}
-
-.caption-line {
-  width: fit-content;
-  max-width: min(880px, 90%);
-  margin: 0;
-  padding: 3px 9px;
-  color: #fff;
-  background: rgb(0 0 0 / 42%);
-  font-size: clamp(20px, 2vw, 28px);
-  font-weight: 680;
-  line-height: 1.48;
-  text-shadow:
-    0 2px 5px #000,
-    0 0 14px #000;
-  text-wrap: balance;
-}
-
-.caption-line.original {
-  color: rgb(255 255 255 / 90%);
-  font-size: clamp(15px, 1.4vw, 20px);
-  font-weight: 560;
-}
 
 .player-controls {
   position: static;

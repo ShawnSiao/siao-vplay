@@ -5,8 +5,10 @@ import type {
 } from "../../types";
 import {
   seekStepOptions,
+  type SubtitleFollowPreferences,
   type SeekStepSeconds,
 } from "./playbackPreferences";
+import { SubtitleAppearancePopover } from "./SubtitleAppearancePopover";
 import "./PlayerControls.css";
 
 type PlayerControlsProps = {
@@ -25,6 +27,7 @@ type PlayerControlsProps = {
   nextEpisode: EpisodeReference | null;
   switchingEpisode: boolean;
   seekStepSeconds: SeekStepSeconds;
+  subtitleFollowPreferences: SubtitleFollowPreferences;
   onSwitchEpisode: (episode: EpisodeReference) => void;
   onTogglePlayback: () => void;
   onToggleMuted: () => void;
@@ -34,6 +37,7 @@ type PlayerControlsProps = {
   onChangePlaybackRate: (rate: number) => void;
   onChangeSubtitleMode: (mode: SubtitleDisplayMode) => void;
   onChangeSeekStep: (seconds: SeekStepSeconds) => void;
+  onChangeSubtitleFollowPreferences: (preferences: SubtitleFollowPreferences) => void;
 };
 
 export function PlayerControls({
@@ -52,6 +56,7 @@ export function PlayerControls({
   nextEpisode,
   switchingEpisode,
   seekStepSeconds,
+  subtitleFollowPreferences,
   onSwitchEpisode,
   onTogglePlayback,
   onToggleMuted,
@@ -61,6 +66,7 @@ export function PlayerControls({
   onChangePlaybackRate,
   onChangeSubtitleMode,
   onChangeSeekStep,
+  onChangeSubtitleFollowPreferences,
 }: PlayerControlsProps) {
   const seekStepMs = seekStepSeconds * 1_000;
   return (
@@ -163,6 +169,7 @@ export function PlayerControls({
             <option value="original" disabled={!originalSubtitleAvailable}>原文字幕</option>
             <option value="bilingual" disabled={!originalSubtitleAvailable || !translationAvailable}>双语字幕</option>
           </select>
+          <SubtitleAppearancePopover preferences={subtitleFollowPreferences} onChange={onChangeSubtitleFollowPreferences} />
           <label className="seek-step-field" title="设置快进和快退的跳转时长">
             <span>跳转</span>
             <select

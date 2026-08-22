@@ -24,7 +24,10 @@ import { EpisodeDrawer } from "./EpisodeDrawer";
 import type { EpisodeNavigationState } from "../library/useEpisodeNavigation";
 import { PlayerControls } from "./PlayerControls";
 import { useFullscreenControlVisibility } from "./useFullscreenControlVisibility";
-import { useSeekStepPreference } from "./playbackPreferences";
+import {
+  useSeekStepPreference,
+  useSubtitleFollowPreferences,
+} from "./playbackPreferences";
 import "./player-feedback.css";
 import "./player-fullscreen.css";
 type PlayerScreenProps = {
@@ -71,6 +74,10 @@ export function PlayerScreen({
   const [switchingEpisode, setSwitchingEpisode] = useState(false);
   const [playerError, setPlayerError] = useState<string | null>(null);
   const { seekStepSeconds, changeSeekStep } = useSeekStepPreference();
+  const {
+    subtitleFollowPreferences,
+    changeSubtitleFollowPreferences,
+  } = useSubtitleFollowPreferences();
   const {
     playerRef,
     videoRef,
@@ -242,6 +249,19 @@ export function PlayerScreen({
               original={activeOriginal}
               translation={activeTranslation}
               originalLanguage={currentSubtitle?.languageCode}
+              videoRef={videoRef}
+              stageRef={stageRef}
+              playing={playing}
+              positionMs={positionMs}
+              fullscreen={fullscreen}
+              preferences={subtitleFollowPreferences}
+              onPositionCommit={(position) =>
+                changeSubtitleFollowPreferences({
+                  ...subtitleFollowPreferences,
+                  position,
+                })
+              }
+              onTogglePlayback={() => void togglePlayback()}
             />
 
             {ended &&
@@ -289,6 +309,7 @@ export function PlayerScreen({
             nextEpisode={episodeNavigation.neighbors.next}
             switchingEpisode={switchingEpisode}
             seekStepSeconds={seekStepSeconds}
+            subtitleFollowPreferences={subtitleFollowPreferences}
             onSwitchEpisode={(episode) => void switchEpisode(episode)}
             onTogglePlayback={() => void togglePlayback()}
             onToggleMuted={toggleMuted}
@@ -298,6 +319,7 @@ export function PlayerScreen({
             onChangePlaybackRate={changePlaybackRate}
             onChangeSubtitleMode={changeSubtitleMode}
             onChangeSeekStep={changeSeekStep}
+            onChangeSubtitleFollowPreferences={changeSubtitleFollowPreferences}
           />
         </main>
 

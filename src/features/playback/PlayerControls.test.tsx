@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { PlayerControls } from "./PlayerControls";
+import { defaultSubtitleFollowPreferences } from "./playbackPreferences";
 
 function renderControls() {
   const onSeekTo = vi.fn();
@@ -23,6 +24,7 @@ function renderControls() {
       nextEpisode={null}
       switchingEpisode={false}
       seekStepSeconds={10}
+      subtitleFollowPreferences={defaultSubtitleFollowPreferences}
       onSwitchEpisode={() => undefined}
       onTogglePlayback={() => undefined}
       onToggleMuted={() => undefined}
@@ -32,6 +34,7 @@ function renderControls() {
       onChangePlaybackRate={() => undefined}
       onChangeSubtitleMode={() => undefined}
       onChangeSeekStep={onChangeSeekStep}
+      onChangeSubtitleFollowPreferences={() => undefined}
     />,
   );
   return { onSeekTo, onChangeSeekStep };
