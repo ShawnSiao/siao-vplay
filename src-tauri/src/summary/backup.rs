@@ -43,6 +43,8 @@ pub(crate) fn create_v17_backup(
             let backup = Backup::new(source, &mut destination)?;
             backup.run_to_completion(128, Duration::from_millis(10), None)?;
         }
+        destination
+            .execute_batch("PRAGMA wal_checkpoint(TRUNCATE); PRAGMA journal_mode=DELETE;")?;
         drop(destination);
         validate_v17_backup(&partial_path)?;
         OpenOptions::new()

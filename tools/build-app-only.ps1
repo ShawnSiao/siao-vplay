@@ -1,7 +1,10 @@
 [CmdletBinding()]
 param(
     [Parameter()]
-    [string]$BuildRoot = 'W:\SiaoVPlay\build\app-only-0.3.0'
+    [string]$BuildRoot = 'W:\SiaoVPlay\build-cache\v0.4-ai-insight-summary',
+
+    [Parameter()]
+    [string]$OutputDirectory = 'W:\SiaoVPlay\candidate-packages\v0.4-ai-insight-summary'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -41,6 +44,10 @@ $buildRootPath = [System.IO.Path]::GetFullPath($BuildRoot)
 if ($buildRootPath -match '^(?i)C:\\') {
     throw "Installer build directory cannot be on the C drive: $buildRootPath"
 }
+$outputDirectoryPath = [System.IO.Path]::GetFullPath($OutputDirectory)
+if ($outputDirectoryPath -match '^(?i)C:\\') {
+    throw "Candidate output directory cannot be on the C drive: $outputDirectoryPath"
+}
 
 $tauriCli = Join-Path $repoRoot 'node_modules\.bin\tauri.cmd'
 if (-not (Test-Path -LiteralPath $tauriCli -PathType Leaf)) {
@@ -50,7 +57,7 @@ if (-not (Test-Path -LiteralPath $tauriCli -PathType Leaf)) {
 & (Join-Path $PSScriptRoot 'check-app-only-package.ps1') -SourceRoot $repoRoot
 
 New-Item -ItemType Directory -Force -Path $buildRootPath | Out-Null
-$cargoTargetPath = Join-Path $buildRootPath 'cargo-target'
+$cargoTargetPath = $buildRootPath
 $previousCargoTarget = $env:CARGO_TARGET_DIR
 $previousLocation = Get-Location
 
@@ -78,13 +85,21 @@ if ($installers.Count -ne 1) {
 }
 
 $installer = $installers[0]
-$hash = Get-Sha256 $installer.FullName
-$signatureStatus = Get-SignatureStatus $installer.FullName
+New-Item -ItemType Directory -Force -Path $outputDirectoryPath | Out-Null
+$candidatePath = Join-Path $outputDirectoryPath $installer.Name
+if (Test-Path -LiteralPath $candidatePath) {
+    throw "Candidate installer already exists and will not be overwritten: $candidatePath"
+}
+Copy-Item -LiteralPath $installer.FullName -Destination $candidatePath
+$candidate = Get-Item -LiteralPath $candidatePath
+$hash = Get-Sha256 $candidate.FullName
+$signatureStatus = Get-SignatureStatus $candidate.FullName
 
 [pscustomobject]@{
-    path = $installer.FullName
-    version = '0.3.0'
-    sizeBytes = $installer.Length
+    path = $candidate.FullName
+    buildPath = $installer.FullName
+    version = '0.4.0'
+    sizeBytes = $candidate.Length
     sha256 = $hash
     signatureStatus = $signatureStatus
     packageProfile = 'app-only'

@@ -10,6 +10,8 @@ pub(crate) mod migration;
 mod model;
 mod prompts;
 mod report;
+#[cfg(test)]
+mod report_acceptance_tests;
 mod repository;
 mod result_repository;
 mod result_validation;

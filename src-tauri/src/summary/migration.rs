@@ -107,6 +107,7 @@ fn ensure_foreign_keys(transaction: &Transaction<'_>) -> Result<(), StoreError> 
 mod tests {
     use super::*;
     use rusqlite::OpenFlags;
+    use std::path::PathBuf;
 
     fn create_v17_fixture(path: &Path, corrupt: bool) {
         let connection = Connection::open(path).unwrap();
@@ -168,6 +169,10 @@ mod tests {
             7
         );
         let backup_path = backup::v17_backup_path(&path);
+        assert!(!PathBuf::from(format!("{}-wal", backup_path.display())).exists());
+        assert!(!PathBuf::from(format!("{}-shm", backup_path.display())).exists());
+        assert!(!PathBuf::from(format!("{}.part-wal", backup_path.display())).exists());
+        assert!(!PathBuf::from(format!("{}.part-shm", backup_path.display())).exists());
         let backup =
             Connection::open_with_flags(backup_path, OpenFlags::SQLITE_OPEN_READ_ONLY).unwrap();
         assert_eq!(
