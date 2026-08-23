@@ -70,6 +70,14 @@ pub fn prepare_summary_task(
 }
 
 #[tauri::command]
+pub fn open_summary_materials(
+    store: State<'_, ProjectStore>,
+    input: SummaryTaskIdInput,
+) -> Result<bool, SummaryCommandError> {
+    materials::open_materials(store.inner(), &input.task_id).map_err(Into::into)
+}
+
+#[tauri::command]
 pub fn start_summary_task(
     store: State<'_, ProjectStore>,
     input: SummaryTaskIdInput,

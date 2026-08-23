@@ -208,6 +208,7 @@ pub fn run() {
             summary::commands::save_analysis_prompt_templates,
             summary::commands::delete_analysis_prompt_templates,
             summary::commands::prepare_summary_task,
+            summary::commands::open_summary_materials,
             summary::commands::start_summary_task,
             summary::commands::resume_summary_task,
             summary::commands::cancel_summary_task,

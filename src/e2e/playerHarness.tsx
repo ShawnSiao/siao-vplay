@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 
 import { PlayerScreen } from "../features/playback/PlayerScreen";
 import { UnderstandingResultView } from "../features/analysis/UnderstandingResultView";
+import { SummaryPreview } from "./SummaryPreview";
 import { LearningSpeechPreview } from "./LearningSpeechPreview";
 import { DesktopShell } from "../features/shell/DesktopShell";
 import type { MediaDropFeedback } from "../features/shell/useDesktopMediaDrop";
@@ -20,6 +21,8 @@ import type {
 } from "../types";
 import { createUnderstandingFixtures } from "../test-fixtures/understanding";
 import "../styles.css";
+import "../features/summary/summary.css";
+import "../features/summary/summary-results.css";
 
 const project: Project = {
   id: "e2e-project",
@@ -274,6 +277,10 @@ export function PlayerHarness() {
 
   if (new URLSearchParams(window.location.search).get("understanding") === "result") {
     return <UnderstandingResultPreview />;
+  }
+  const summaryPreview = new URLSearchParams(window.location.search).get("summary");
+  if (summaryPreview === "progress" || summaryPreview === "result") {
+    return <SummaryPreview state={summaryPreview} />;
   }
   if (new URLSearchParams(window.location.search).get("learning") === "speech") {
     return <LearningSpeechPreview />;

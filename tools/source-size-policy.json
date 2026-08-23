@@ -39,7 +39,7 @@
     "src/components/SubtitleRevisionDialog.tsx": 614,
     "src/components/TranscriptionPanel.tsx": 571,
     "src/components/TranslationDialog.tsx": 900,
-    "src/components/UnderstandingPanel.tsx": 755,
+    "src/components/CurrentScenePanel.tsx": 755,
     "src/features/library/useLibraryController.test.tsx": 440,
     "src/features/library/useLibraryController.ts": 1296,
     "src/features/playback/PlayerScreen.tsx": 459,

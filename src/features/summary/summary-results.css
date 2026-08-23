@@ -1,0 +1,110 @@
+.summary-result-hero {
+  display: grid;
+  gap: 7px;
+  border-color: var(--agent-border);
+  background: var(--agent-soft);
+}
+
+.summary-result-hero small {
+  color: var(--text-muted);
+  font-size: 9px;
+}
+
+.summary-result-group > header {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.summary-result-group h3,
+.summary-result-group h4,
+.summary-mermaid h3,
+.summary-limitations h3,
+.summary-glossary h3 {
+  margin: 0;
+  color: var(--text-primary);
+}
+
+.summary-result-group > header span {
+  color: var(--agent);
+  font-size: 9px;
+  font-weight: 760;
+}
+
+.summary-result-group article + article {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.summary-result-group article > p,
+.summary-limitations li,
+.summary-glossary dd {
+  color: var(--text-secondary);
+  font-size: 10px;
+  line-height: 1.65;
+}
+
+.summary-result-group article > ul,
+.summary-limitations ul {
+  display: grid;
+  gap: 7px;
+  padding: 0;
+  list-style: none;
+}
+
+.summary-evidence {
+  padding: 8px;
+  border-left: 2px solid var(--agent-border);
+  border-radius: 0 6px 6px 0;
+  background: rgb(255 255 255 / 2%);
+}
+
+.summary-evidence > span {
+  color: var(--agent);
+  font-size: 8px;
+  font-weight: 760;
+}
+
+.summary-evidence.ai_inference > span,
+.summary-evidence.needs_external_validation > span {
+  color: var(--warning);
+}
+
+.summary-evidence p,
+.summary-evidence small {
+  margin: 4px 0 0;
+  color: var(--text-secondary);
+  font-size: 9px;
+  line-height: 1.55;
+}
+
+.summary-evidence small {
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+.summary-mermaid pre {
+  max-height: 220px;
+  margin: 10px 0 0;
+  overflow: auto;
+  color: var(--agent);
+  font-size: 9px;
+  white-space: pre-wrap;
+}
+
+.summary-glossary dl {
+  display: grid;
+  gap: 9px;
+}
+
+.summary-glossary dt {
+  color: var(--text-primary);
+  font-size: 10px;
+  font-weight: 750;
+}
+
+.summary-glossary dd {
+  margin: 2px 0 0;
+}

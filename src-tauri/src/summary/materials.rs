@@ -148,6 +148,28 @@ pub(crate) fn prepare(
     repository.get(&task.id)
 }
 
+pub(crate) fn open_materials(store: &ProjectStore, task_id: &str) -> Result<bool, StoreError> {
+    let repository = SummaryTaskRepository::new(store);
+    repository.get(task_id)?;
+    let directory = dunce::canonicalize(repository.materials_directory(task_id))?;
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        std::process::Command::new("explorer.exe")
+            .arg(&directory)
+            .creation_flags(0x0800_0000)
+            .spawn()?;
+        Ok(true)
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = directory;
+        Err(StoreError::Validation(
+            "当前平台不支持打开总结材料目录".to_owned(),
+        ))
+    }
+}
+
 fn validate_input(input: &PrepareSummaryTaskInput) -> Result<(), StoreError> {
     if !input.subtitles_authorized {
         return Err(StoreError::Validation(

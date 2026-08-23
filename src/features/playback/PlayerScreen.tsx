@@ -30,6 +30,7 @@ import {
 } from "./playbackPreferences";
 import "./player-feedback.css";
 import "./player-fullscreen.css";
+import { useSummaryCompletionNotice } from "../summary/useSummaryCompletionNotice";
 type PlayerScreenProps = {
   project: Project;
   preparation: MediaPreparation;
@@ -73,6 +74,7 @@ export function PlayerScreen({
   const stageRef = useRef<HTMLDivElement>(null);
   const [switchingEpisode, setSwitchingEpisode] = useState(false);
   const [playerError, setPlayerError] = useState<string | null>(null);
+  useSummaryCompletionNotice(project.id, onNotice);
   const { seekStepSeconds, changeSeekStep } = useSeekStepPreference();
   const {
     subtitleFollowPreferences,
@@ -353,6 +355,7 @@ export function PlayerScreen({
                 key={project.id}
                 projectId={project.id}
                 playbackCutoffMs={positionMs}
+                durationMs={durationMs}
                 sourceVersion={currentSubtitle}
                 translationVersion={currentTranslation}
                 onPrepareSubtitles={onManageSubtitles}
