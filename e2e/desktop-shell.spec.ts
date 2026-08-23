@@ -240,7 +240,7 @@ test("drawers and context menu preserve the mounted video", async ({ page }) => 
     "aria-selected",
     "true",
   );
-  await expect(episodesDrawer.getByLabel("场景理解")).toBeVisible();
+  await expect(episodesDrawer.getByLabel("场景理解", { exact: true })).toBeVisible();
   await expect(video).toHaveAttribute("data-mount-token", "stable-video");
   expect(
     await page.locator(".player-primary").evaluate(
@@ -424,6 +424,132 @@ test("seek buttons, keyboard shortcuts, and the saved interval stay in sync", as
   await page.locator(".video-stage").focus();
   await page.keyboard.press("ArrowRight");
   await expect(page.locator(".player-time")).toContainText("00:45 / 02:00");
+});
+
+test("subtitle following, appearance, dragging, and controls remain complete", async ({
+  page,
+}) => {
+  const consoleErrors: string[] = [];
+  page.on("console", (message) => {
+    if (message.type() === "error") consoleErrors.push(message.text());
+  });
+  page.on("pageerror", (error) => consoleErrors.push(error.message));
+  await page.goto("/e2e/player.html");
+  await page.evaluate(() => window.localStorage.clear());
+  await page.reload();
+
+  for (const viewport of [
+    { width: 1440, height: 900 },
+    { width: 1200, height: 720 },
+    { width: 960, height: 640 },
+  ]) {
+    await page.setViewportSize(viewport);
+    for (const name of ["字幕显示", "快进快退时长", "播放速度"])
+      await expect(page.getByRole("combobox", { name })).toBeVisible();
+    await expect(page.getByRole("button", { name: "字幕设置" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "进入全屏" })).toBeVisible();
+    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+    const options = page.locator(".playback-options");
+    const optionsBox = await options.boundingBox();
+    expect(optionsBox).not.toBeNull();
+    expect(optionsBox!.x + optionsBox!.width).toBeLessThanOrEqual(viewport.width);
+    await expect(options.locator(".seek-step-field")).toContainText("跳转");
+    await expect(page.getByRole("combobox", { name: "快进快退时长" })).toHaveValue("10");
+    const controlWidths = await options.locator(":scope > *").evaluateAll((elements) =>
+      elements.map((element) => ({ width: element.getBoundingClientRect().width, scrollWidth: element.scrollWidth })),
+    );
+    expect(controlWidths.every(({ width, scrollWidth }) => width + 1 >= scrollWidth)).toBe(true);
+  }
+
+  await expect(page.locator(".caption-line.original")).toHaveText("Okay, and that's essentially how the system stores the new memories.");
+  await expect(page.locator(".caption-word.current")).toHaveText("essentially");
+  await expect(page.getByText("这句话会跟随每一个单词。")).toBeVisible();
+  await page.getByRole("button", { name: "字幕设置" }).click();
+  const settings = page.getByRole("dialog", { name: "字幕设置" });
+  await settings.getByRole("button", { name: "使用字幕默认颜色 #fef3c7" }).click();
+  await settings.getByRole("button", { name: "使用当前词颜色 #fb923c" }).click();
+  const colorState = await page.evaluate(() => {
+    const stack = document.querySelector<HTMLElement>(".caption-stack")!;
+    const spoken = document.querySelector<HTMLElement>(".caption-word.spoken")!;
+    const current = document.querySelector<HTMLElement>(".caption-word.current")!;
+    const translation = document.querySelector<HTMLElement>(".caption-line.translation")!;
+    const original = document.querySelector<HTMLElement>(".caption-line.original")!;
+    const stackStyle = getComputedStyle(stack);
+    return {
+      base: stack.style.getPropertyValue("--caption-base"),
+      background: stackStyle.backgroundColor,
+      filter: stackStyle.filter,
+      spokenColor: getComputedStyle(spoken).color,
+      currentDecoration: getComputedStyle(current).textDecorationLine,
+      currentWeight: Number(getComputedStyle(current).fontWeight),
+      originalWeight: Number(getComputedStyle(original).fontWeight),
+      textShadow: getComputedStyle(original).textShadow,
+      translationColor: getComputedStyle(translation).color,
+      translationWeight: Number(getComputedStyle(translation).fontWeight),
+    };
+  });
+  expect(colorState).toMatchObject({
+    base: "#fef3c7",
+    background: "rgba(5, 7, 9, 0.76)",
+    filter: "none",
+    spokenColor: "rgb(254, 243, 199)",
+    currentDecoration: "none",
+    originalWeight: 650,
+    textShadow: "none",
+    translationColor: "rgb(254, 243, 199)",
+    translationWeight: 700,
+  });
+  expect(colorState.currentWeight).toBeGreaterThanOrEqual(700);
+  const settingsBox = await settings.boundingBox();
+  expect(settingsBox).not.toBeNull();
+  expect(settingsBox!.x).toBeGreaterThanOrEqual(0);
+  expect(settingsBox!.x + settingsBox!.width).toBeLessThanOrEqual(960);
+  expect(settingsBox!.y).toBeGreaterThanOrEqual(0);
+  expect(settingsBox!.y + settingsBox!.height).toBeLessThanOrEqual(640);
+  await expect.poll(() => page.evaluate(() => JSON.parse(window.localStorage.getItem("siaovplay-subtitle-follow-preferences-v1") ?? "{}").baseTextColor)).toBe("#fef3c7");
+  await expect.poll(() => page.evaluate(() => JSON.parse(window.localStorage.getItem("siaovplay-subtitle-follow-preferences-v1") ?? "{}").highlightColor)).toBe("#fb923c");
+  await settings.getByRole("checkbox", { name: "原文逐词跟随" }).uncheck();
+  await expect(page.locator(".caption-word")).toHaveCount(0);
+  await settings.getByRole("checkbox", { name: "原文逐词跟随" }).check();
+  await settings.getByRole("button", { name: "关闭字幕设置" }).click();
+
+  await page.reload();
+  await expect.poll(() => page.locator(".caption-stack").evaluate((element) => (element as HTMLElement).style.getPropertyValue("--caption-base"))).toBe("#fef3c7");
+
+  const caption = page.locator(".caption-stack");
+  const before = await caption.boundingBox();
+  if (!before) throw new Error("missing caption");
+  await page.mouse.move(before.x + before.width / 2, before.y + before.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(before.x + before.width / 2 - 80, before.y + before.height / 2 - 40);
+  await page.mouse.up();
+  const moved = await caption.boundingBox();
+  expect(moved?.x).toBeLessThan(before.x - 40);
+  const storedPosition = await page.evaluate(() => JSON.parse(window.localStorage.getItem("siaovplay-subtitle-follow-preferences-v1") ?? "{}").position);
+  expect(storedPosition.x).toBeLessThan(0.5);
+  await page.reload();
+  const restored = await caption.boundingBox();
+  expect(restored?.x).toBeLessThan(before.x - 40);
+  await page.getByRole("button", { name: "字幕设置" }).click();
+  const resetSettings = page.getByRole("dialog", { name: "字幕设置" });
+  await resetSettings.getByRole("button", { name: "恢复默认位置" }).click();
+  await resetSettings.getByRole("button", { name: "关闭字幕设置" }).click();
+  expect((await caption.boundingBox())?.x).toBeGreaterThan(restored?.x ?? 0);
+  const reset = await caption.boundingBox();
+  if (!reset) throw new Error("missing reset caption");
+  await page.mouse.move(reset.x + reset.width / 2, reset.y + reset.height / 2);
+  await page.mouse.down();
+  const stageBox = await page.locator(".video-stage").boundingBox();
+  if (!stageBox) throw new Error("missing video stage");
+  await page.mouse.move(reset.x + reset.width / 2, stageBox.y + stageBox.height - 1);
+  await page.mouse.up();
+  const bottomGeometry = await page.evaluate(() => {
+    const captionRect = document.querySelector(".caption-stack")!.getBoundingClientRect();
+    const stageRect = document.querySelector(".video-stage")!.getBoundingClientRect();
+    return { captionBottom: captionRect.bottom, stageBottom: stageRect.bottom };
+  });
+  expect(Math.abs(bottomGeometry.captionBottom - bottomGeometry.stageBottom)).toBeLessThanOrEqual(1);
+  expect(consoleErrors).toEqual([]);
 });
 
 test("fullscreen uses the whole stage and hides controls after inactivity", async ({

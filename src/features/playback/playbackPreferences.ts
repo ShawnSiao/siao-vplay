@@ -3,8 +3,43 @@ import { useCallback, useState } from "react";
 export const seekStepOptions = [5, 10, 15, 30] as const;
 export type SeekStepSeconds = (typeof seekStepOptions)[number];
 
+export type SubtitlePosition = { x: number; y: number };
+export type SubtitleFollowPreferences = {
+  enabled: boolean;
+  baseTextColor: string;
+  highlightColor: string;
+  position: SubtitlePosition;
+};
+
+export const subtitleBaseColorPresets = [
+  "#ffffff",
+  "#e5e7eb",
+  "#fef3c7",
+  "#dbeafe",
+  "#dcfce7",
+  "#fce7f3",
+] as const;
+
+export const subtitleHighlightPresets = [
+  "#b8f36a",
+  "#49d6e9",
+  "#fbbf24",
+  "#fb923c",
+  "#f472b6",
+  "#c4b5fd",
+] as const;
+
+export const defaultSubtitleFollowPreferences: SubtitleFollowPreferences = {
+  enabled: true,
+  baseTextColor: subtitleBaseColorPresets[0],
+  highlightColor: subtitleHighlightPresets[0],
+  position: { x: 0.5, y: 0.9 },
+};
+
 const seekStepStorageKey = "siaovplay-playback-seek-step-seconds";
 const defaultSeekStepSeconds: SeekStepSeconds = 10;
+const subtitleFollowStorageKey = "siaovplay-subtitle-follow-preferences-v1";
+const hexColorPattern = /^#[0-9a-f]{6}$/i;
 
 function validSeekStep(value: number): value is SeekStepSeconds {
   return seekStepOptions.some((option) => option === value);
@@ -34,4 +69,80 @@ export function useSeekStepPreference() {
     setSeekStepSeconds(value);
   }, []);
   return { seekStepSeconds, changeSeekStep };
+}
+
+export function isValidSubtitleHighlightColor(value: string) {
+  return hexColorPattern.test(value);
+}
+
+export const isValidSubtitleColor = isValidSubtitleHighlightColor;
+
+function isNormalizedPosition(value: unknown): value is SubtitlePosition {
+  if (!value || typeof value !== "object") return false;
+  const position = value as Partial<SubtitlePosition>;
+  return (
+    typeof position.x === "number" &&
+    Number.isFinite(position.x) &&
+    position.x >= 0 &&
+    position.x <= 1 &&
+    typeof position.y === "number" &&
+    Number.isFinite(position.y) &&
+    position.y >= 0 &&
+    position.y <= 1
+  );
+}
+
+export function readSubtitleFollowPreferences(): SubtitleFollowPreferences {
+  try {
+    const raw = window.localStorage.getItem(subtitleFollowStorageKey);
+    if (!raw) return defaultSubtitleFollowPreferences;
+    const value = JSON.parse(raw) as Partial<SubtitleFollowPreferences>;
+    if (
+      typeof value.enabled !== "boolean" ||
+      typeof value.highlightColor !== "string" ||
+      !isValidSubtitleHighlightColor(value.highlightColor) ||
+      !isNormalizedPosition(value.position)
+    ) {
+      return defaultSubtitleFollowPreferences;
+    }
+    return {
+      enabled: value.enabled,
+      baseTextColor:
+        typeof value.baseTextColor === "string" &&
+        isValidSubtitleColor(value.baseTextColor)
+          ? value.baseTextColor.toLowerCase()
+          : defaultSubtitleFollowPreferences.baseTextColor,
+      highlightColor: value.highlightColor.toLowerCase(),
+      position: { ...value.position },
+    };
+  } catch {
+    return defaultSubtitleFollowPreferences;
+  }
+}
+
+export function saveSubtitleFollowPreferences(
+  value: SubtitleFollowPreferences,
+) {
+  try {
+    window.localStorage.setItem(subtitleFollowStorageKey, JSON.stringify(value));
+  } catch {
+    // Playback remains usable when local preferences cannot be written.
+  }
+}
+
+export function useSubtitleFollowPreferences() {
+  const [subtitleFollowPreferences, setPreferences] = useState(
+    readSubtitleFollowPreferences,
+  );
+  const changeSubtitleFollowPreferences = useCallback(
+    (next: SubtitleFollowPreferences) => {
+      saveSubtitleFollowPreferences(next);
+      setPreferences(next);
+    },
+    [],
+  );
+  return {
+    subtitleFollowPreferences,
+    changeSubtitleFollowPreferences,
+  };
 }

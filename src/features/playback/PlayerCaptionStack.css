@@ -1,0 +1,66 @@
+.caption-stack {
+  position: absolute;
+  z-index: 4;
+  display: grid;
+  width: max-content;
+  max-width: min(760px, calc(100% - 24px));
+  padding: 5px 11px 6px;
+  justify-items: center;
+  gap: 1px;
+  border: 1px solid rgb(255 255 255 / 10%);
+  border-radius: 7px;
+  background: rgb(5 7 9 / 76%);
+  box-shadow: 0 3px 10px rgb(0 0 0 / 16%);
+  transform: translate(-50%, -100%);
+  cursor: grab;
+  pointer-events: auto;
+  text-align: center;
+  touch-action: none;
+  user-select: none;
+}
+
+.caption-stack.dragging {
+  cursor: grabbing;
+}
+
+.caption-line {
+  max-width: 100%;
+  margin: 0;
+  padding: 0;
+  color: var(--caption-base, #fff);
+  background: transparent;
+  font-size: clamp(17px, 1.65vw, 23px);
+  font-weight: 650;
+  line-height: 1.32;
+  text-shadow: none;
+  text-wrap: balance;
+}
+
+.caption-line.original {
+  color: var(--caption-base, #fff);
+  font-size: clamp(15px, 1.35vw, 19px);
+  font-weight: 650;
+}
+
+.caption-line.translation {
+  font-size: clamp(18px, 1.65vw, 23px);
+  font-weight: 700;
+}
+
+.caption-word {
+  color: var(--caption-base, #fff);
+  white-space: pre-wrap;
+}
+
+.caption-word.spoken {
+  color: var(--caption-base, #fff);
+}
+
+.caption-word.current {
+  color: transparent;
+  background: linear-gradient(90deg, var(--caption-highlight) 0 var(--caption-progress), var(--caption-base, #fff) var(--caption-progress) 100%);
+  background-clip: text;
+  -webkit-background-clip: text;
+  font-weight: 750;
+  text-decoration: none;
+}
