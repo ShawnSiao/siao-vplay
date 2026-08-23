@@ -155,6 +155,8 @@ fn connection_test_input(model_id: &str) -> GenerationInput {
             "additionalProperties": false
         }),
         image_data_urls: Vec::new(),
+        max_output_tokens: 256,
+        timeout: std::time::Duration::from_secs(90),
     }
 }
 

@@ -28,6 +28,8 @@ pub struct GenerationInput {
     pub schema_name: String,
     pub schema: Value,
     pub image_data_urls: Vec<String>,
+    pub max_output_tokens: u32,
+    pub timeout: Duration,
 }
 
 #[derive(Clone, Debug)]
@@ -106,6 +108,10 @@ fn client_with_timeout(timeout: Duration) -> Result<Client, ProviderFailure> {
         .connect_timeout(timeout.min(Duration::from_secs(30)))
         .timeout(timeout);
     network::build_client(builder).map_err(|_| ProviderFailure::from(AiError::ProviderUnavailable))
+}
+
+pub(super) fn generation_client(input: &GenerationInput) -> Result<Client, ProviderFailure> {
+    client_with_timeout(input.timeout)
 }
 
 pub(super) fn endpoint(base_url: &str, path: &str) -> String {

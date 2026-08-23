@@ -2,8 +2,8 @@ use reqwest::header::CONTENT_TYPE;
 use serde_json::{Value, json};
 
 use super::{
-    GenerationInput, ProviderFailure, ProviderOutput, checked, client, endpoint, json_value,
-    parse_data_url, send_error,
+    GenerationInput, ProviderFailure, ProviderOutput, checked, client, endpoint, generation_client,
+    json_value, parse_data_url, send_error,
 };
 use crate::ai::{
     error::AiError,
@@ -63,11 +63,12 @@ pub fn generate(
         "contents": [{"role": "user", "parts": parts}],
         "generationConfig": {
             "responseMimeType": "application/json",
-            "responseJsonSchema": input.schema
+            "responseJsonSchema": input.schema,
+            "maxOutputTokens": input.max_output_tokens
         }
     });
     let path = format!("/models/{}:generateContent", input.model_id);
-    let response = client()?
+    let response = generation_client(input)?
         .post(endpoint(&service.base_url, &path))
         .header("x-goog-api-key", &service.api_key)
         .header(CONTENT_TYPE, "application/json")

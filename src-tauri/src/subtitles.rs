@@ -220,7 +220,7 @@ pub struct ImportEmbeddedSubtitleInput {
     pub expected_project_revision: i64,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SubtitleWord {
     pub ordinal: usize,
@@ -230,7 +230,7 @@ pub struct SubtitleWord {
     pub confidence: Option<f64>,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SubtitleSegment {
     pub id: String,

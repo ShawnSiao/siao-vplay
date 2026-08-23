@@ -4,6 +4,7 @@ mod ai;
 mod ai_migration;
 mod burn;
 mod codex_runner;
+mod codex_task_state;
 mod commands;
 mod delivery;
 mod desktop_frame;
@@ -121,6 +122,7 @@ pub fn run() {
             codex_runner::recover_translation_tasks(&store)?;
             understanding::recover_explanation_tasks(&store)?;
             learning::recover_learning_tasks(&store)?;
+            summary::recover_summary_tasks(&store)?;
             burn::recover_subtitle_burn_jobs(&store)?;
             app.manage(store);
             app.manage(StartupMediaPath(resolve_startup_media_path()));
@@ -205,6 +207,15 @@ pub fn run() {
             summary::commands::list_analysis_prompt_templates,
             summary::commands::save_analysis_prompt_templates,
             summary::commands::delete_analysis_prompt_templates,
+            summary::commands::prepare_summary_task,
+            summary::commands::start_summary_task,
+            summary::commands::resume_summary_task,
+            summary::commands::cancel_summary_task,
+            summary::commands::get_summary_task,
+            summary::commands::list_summary_tasks,
+            summary::commands::get_video_summary,
+            summary::commands::list_video_summaries,
+            summary::commands::export_video_summary,
             speech::commands::list_speech_voices,
             speech::commands::synthesize_speech,
             ai::commands::start_explanation_task,

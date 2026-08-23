@@ -129,7 +129,7 @@ pub struct CodexRuntimeStatus {
 }
 
 #[derive(Clone, Debug)]
-struct RuntimeIdentity {
+pub(crate) struct RuntimeIdentity {
     executable: PathBuf,
     version: String,
     auth_mode: String,
@@ -1523,7 +1523,7 @@ fn invoke_codex_raw(
 }
 
 #[allow(clippy::too_many_arguments)]
-fn invoke_codex_raw_with_images(
+pub(crate) fn invoke_codex_raw_with_images(
     store: &ProjectStore,
     task_id: &str,
     runtime: &RuntimeIdentity,
@@ -1574,7 +1574,9 @@ fn invoke_codex_raw_with_images(
         if let Some(status) = child.try_wait()? {
             break status;
         }
-        if cancellation.load(Ordering::SeqCst) || cancellation_requested(store, task_id)? {
+        if cancellation.load(Ordering::SeqCst)
+            || crate::codex_task_state::cancellation_requested(store, task_id)?
+        {
             process_group.terminate();
             let _ = child.wait();
             let _ = event_reader.join();
@@ -1871,29 +1873,12 @@ fn ensure_not_cancelled(
     task_id: &str,
     cancellation: &AtomicBool,
 ) -> Result<(), CodexRunnerError> {
-    if cancellation.load(Ordering::SeqCst) || cancellation_requested(store, task_id)? {
+    if cancellation.load(Ordering::SeqCst)
+        || crate::codex_task_state::cancellation_requested(store, task_id)?
+    {
         return Err(CodexRunnerError::Cancelled);
     }
     Ok(())
-}
-
-fn cancellation_requested(store: &ProjectStore, task_id: &str) -> Result<bool, CodexRunnerError> {
-    store
-        .connect()?
-        .query_row(
-            "SELECT cancel_requested_at_ms IS NOT NULL
-             FROM agent_tasks WHERE id = ?1
-             UNION ALL
-             SELECT cancel_requested_at_ms IS NOT NULL
-             FROM explanation_tasks WHERE id = ?1
-             UNION ALL
-             SELECT cancel_requested_at_ms IS NOT NULL
-             FROM learning_tasks WHERE id = ?1",
-            params![task_id],
-            |row| row.get(0),
-        )
-        .optional()?
-        .ok_or_else(|| CodexRunnerError::InvalidTaskState(format!("找不到 Codex 任务 {task_id}")))
 }
 
 fn invocation_spec_with_images(
@@ -2037,7 +2022,7 @@ fn parse_events_and_save(
     Ok(summary)
 }
 
-fn require_ready_codex() -> Result<RuntimeIdentity, CodexRunnerError> {
+pub(crate) fn require_ready_codex() -> Result<RuntimeIdentity, CodexRunnerError> {
     let executable = resolve_codex_cli()?;
     let status = runtime_status_with(
         &executable,

@@ -2,8 +2,8 @@ use reqwest::header::CONTENT_TYPE;
 use serde_json::{Value, json};
 
 use super::{
-    GenerationInput, ProviderFailure, ProviderOutput, checked, client, endpoint, json_value,
-    parse_data_url, send_error,
+    GenerationInput, ProviderFailure, ProviderOutput, checked, client, endpoint, generation_client,
+    json_value, parse_data_url, send_error,
 };
 use crate::ai::{
     error::AiError,
@@ -55,11 +55,14 @@ pub fn generate(
     }));
     let body = json!({
         "model": input.model_id,
-        "max_tokens": 2048,
+        "max_tokens": input.max_output_tokens,
         "system": format!("{}\n只返回符合此 JSON Schema 的 JSON：{}", input.system, input.schema),
         "messages": [{"role": "user", "content": content}]
     });
-    let response = request(service, reqwest::Method::POST, "/v1/messages")?
+    let response = generation_client(input)?
+        .post(endpoint(&service.base_url, "/v1/messages"))
+        .header("x-api-key", &service.api_key)
+        .header("anthropic-version", "2023-06-01")
         .header(CONTENT_TYPE, "application/json")
         .json(&body)
         .send()

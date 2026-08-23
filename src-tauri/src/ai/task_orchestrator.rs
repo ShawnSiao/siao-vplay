@@ -197,6 +197,8 @@ fn run_api_explanation(
             schema_name: "scene_explanation".to_owned(),
             schema,
             image_data_urls: images,
+            max_output_tokens: 2_048,
+            timeout: std::time::Duration::from_secs(90),
         },
     )?;
     match understanding::apply_api_result(store, task_id, &output.output_text) {
@@ -243,6 +245,8 @@ fn run_api_learning(
             schema_name: "contextual_learning".to_owned(),
             schema: learning::read_learning_schema(store, task_id)?,
             image_data_urls: Vec::new(),
+            max_output_tokens: 2_048,
+            timeout: std::time::Duration::from_secs(90),
         },
     )?;
     match learning::apply_api_result(store, task_id, &output.output_text) {

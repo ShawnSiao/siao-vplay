@@ -87,6 +87,8 @@ impl MockServer {
                 "additionalProperties": false
             }),
             image_data_urls: Vec::new(),
+            max_output_tokens: 2_048,
+            timeout: Duration::from_secs(90),
         }
     }
 

@@ -2,8 +2,8 @@ use reqwest::header::{AUTHORIZATION, CONTENT_TYPE};
 use serde_json::{Value, json};
 
 use super::{
-    GenerationInput, ProviderFailure, ProviderOutput, checked, client, endpoint, json_value,
-    send_error,
+    GenerationInput, ProviderFailure, ProviderOutput, checked, client, endpoint, generation_client,
+    json_value, send_error,
 };
 use crate::ai::{
     error::AiError,
@@ -47,9 +47,10 @@ pub fn generate(
             {"role": "user", "content": input.prompt}
         ],
         "response_format": {"type": "json_object"},
+        "max_tokens": input.max_output_tokens,
         "stream": false
     });
-    let response = client()?
+    let response = generation_client(input)?
         .post(endpoint(&service.base_url, "/chat/completions"))
         .header(AUTHORIZATION, format!("Bearer {}", service.api_key))
         .header(CONTENT_TYPE, "application/json")

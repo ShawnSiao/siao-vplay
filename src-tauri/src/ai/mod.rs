@@ -4,17 +4,18 @@ pub(crate) mod request_coordinator;
 
 mod catalog;
 mod config;
-mod connection;
+pub(crate) mod connection;
 mod credentials;
 mod error;
 mod material_scope;
 mod probe;
-mod providers;
+pub(crate) mod providers;
 mod storage;
+pub(crate) mod summary_provider;
 mod task_orchestrator;
 mod task_persistence;
 mod task_types;
-mod types;
+pub(crate) mod types;
 
 use std::path::Path;
 

@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["title", "overview", "timeline", "coreConcepts", "principlesOrArchitecture", "conclusions", "limitations", "glossary", "mermaid"],
+  "properties": {
+    "title": { "type": "string" },
+    "overview": { "type": "string" },
+    "timeline": { "$ref": "#/$defs/sections" },
+    "coreConcepts": { "$ref": "#/$defs/sections" },
+    "principlesOrArchitecture": { "$ref": "#/$defs/sections" },
+    "conclusions": { "$ref": "#/$defs/sections" },
+    "limitations": { "type": "array", "items": { "type": "string" } },
+    "glossary": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["term", "explanation", "subtitleIds"],
+        "properties": {
+          "term": { "type": "string" },
+          "explanation": { "type": "string" },
+          "subtitleIds": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    "mermaid": { "type": ["string", "null"] }
+  },
+  "$defs": {
+    "sections": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["title", "body", "evidence"],
+        "properties": {
+          "title": { "type": "string" },
+          "body": { "type": "string" },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["kind", "claim", "subtitleIds", "frameTimestampsMs"],
+              "properties": {
+                "kind": { "enum": ["video_statement", "subtitle_or_frame", "ai_inference", "needs_external_validation"] },
+                "claim": { "type": "string" },
+                "subtitleIds": { "type": "array", "items": { "type": "string" } },
+                "frameTimestampsMs": { "type": "array", "items": { "type": "integer", "minimum": 0 } }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

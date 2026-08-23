@@ -1,0 +1,388 @@
+use std::{
+    collections::{HashMap, HashSet},
+    fs,
+    path::PathBuf,
+    thread,
+    time::Duration,
+};
+
+use base64::{Engine as _, engine::general_purpose::STANDARD};
+
+use crate::{
+    ai::{
+        providers::ProviderFailure,
+        summary_provider::{self, SummaryProviderInput},
+    },
+    codex_runner,
+    store::{ProjectStore, StoreError},
+    subtitles::SubtitleSegment,
+};
+
+use super::{
+    codex_executor, keyframes,
+    model::{SummaryExecutionKind, SummaryResult, SummaryTask},
+    result_repository::SummaryResultRepository,
+    result_validation::{result_schema, validate_result},
+    task_repository::SummaryTaskRepository,
+};
+
+const SYSTEM: &str = "只使用任务提供的授权材料。视频主张不等于外部事实。直接证据必须引用有效字幕 ID；无直接依据的内容只能标为 AI 推导或待外部验证。只返回符合 Schema 的 JSON。";
+const RETRY_DELAYS: [Duration; 2] = [Duration::from_secs(2), Duration::from_secs(5)];
+
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum SummaryExecutionError {
+    #[error(transparent)]
+    Store(#[from] StoreError),
+    #[error("AI 服务调用失败：{message}")]
+    Provider { code: &'static str, message: String },
+    #[error("Codex 执行失败：{0}")]
+    Codex(#[from] codex_runner::CodexRunnerError),
+}
+
+impl SummaryExecutionError {
+    pub(crate) fn code(&self) -> &'static str {
+        match self {
+            Self::Store(StoreError::Validation(_)) => "summary_result_invalid",
+            Self::Store(_) => "summary_store_failed",
+            Self::Provider { code, .. } => code,
+            Self::Codex(error) => error.code(),
+        }
+    }
+}
+
+pub(crate) fn start_or_resume(
+    store: &ProjectStore,
+    task_id: &str,
+) -> Result<SummaryTask, StoreError> {
+    let repository = SummaryTaskRepository::new(store);
+    let task = repository.get(task_id)?;
+    if repository.translation_is_active()? {
+        return Err(StoreError::Validation(
+            "存在活动翻译任务，完成或取消翻译后才能启动视频总结".to_owned(),
+        ));
+    }
+    if task.execution_kind == SummaryExecutionKind::Manual {
+        return resume_manual(store, &task);
+    }
+    if !matches!(
+        task.status.as_str(),
+        "prepared" | "interrupted" | "failed" | "paused"
+    ) {
+        return Err(StoreError::Validation(format!(
+            "总结任务当前状态不可启动：{}",
+            task.status
+        )));
+    }
+    repository.set_task_state(task_id, "queued", "queued", task.progress)?;
+    let worker_store = store.clone();
+    let worker_task_id = task_id.to_owned();
+    thread::spawn(move || {
+        if let Err(error) = execute(&worker_store, &worker_task_id) {
+            let repository = SummaryTaskRepository::new(&worker_store);
+            if repository
+                .get(&worker_task_id)
+                .is_ok_and(|task| task.cancel_requested)
+            {
+                let _ = repository.finish_cancelled(&worker_task_id);
+            } else {
+                let _ = repository.fail(&worker_task_id, error.code(), &error.to_string());
+            }
+        }
+    });
+    repository.get(task_id)
+}
+
+fn execute(store: &ProjectStore, task_id: &str) -> Result<(), SummaryExecutionError> {
+    let tasks = SummaryTaskRepository::new(store);
+    tasks.set_task_state(task_id, "running", "analyzing_chunks", 0.0)?;
+    let mut task = tasks.get(task_id)?;
+    let segments = read_segments(&tasks.materials_directory(task_id))?;
+    let by_id = segments
+        .iter()
+        .map(|segment| (segment.id.clone(), segment))
+        .collect::<HashMap<_, _>>();
+    let total = task.chunks.len();
+    for chunk in task
+        .chunks
+        .iter()
+        .filter(|chunk| chunk.status != "completed")
+    {
+        let allowed = chunk
+            .segment_ids
+            .iter()
+            .chain(&chunk.context_segment_ids)
+            .cloned()
+            .collect::<HashSet<_>>();
+        let material = chunk
+            .context_segment_ids
+            .iter()
+            .chain(&chunk.segment_ids)
+            .filter_map(|id| by_id.get(id).copied())
+            .collect::<Vec<_>>();
+        SummaryResultRepository::new(store).begin_chunk(&chunk.id)?;
+        let prompt = chunk_prompt(&task, chunk.ordinal, &material)?;
+        let images = keyframes::for_chunk(&tasks.materials_directory(task_id), chunk.ordinal)?;
+        let raw = run_request(
+            store,
+            &task,
+            &format!("chunk-{}", chunk.ordinal),
+            Some(&chunk.id),
+            images,
+            prompt,
+            2_048,
+        )?;
+        if tasks.get(task_id)?.cancel_requested {
+            tasks.finish_cancelled(task_id)?;
+            return Ok(());
+        }
+        let result: SummaryResult = serde_json::from_str(raw.trim_start_matches('\u{feff}'))
+            .map_err(|error| StoreError::Validation(format!("分块结果 JSON 无效：{error}")))?;
+        validate_result(&result, &allowed, task.playback_cutoff_ms)?;
+        SummaryResultRepository::new(store).save_chunk(&chunk.id, &result)?;
+        let progress = (chunk.ordinal + 1) as f64 / (total + 1) as f64;
+        tasks.set_task_state(task_id, "running", "analyzing_chunks", progress)?;
+    }
+    task = tasks.get(task_id)?;
+    tasks.set_task_state(
+        task_id,
+        "validating",
+        "synthesizing",
+        total as f64 / (total + 1) as f64,
+    )?;
+    let chunk_results = SummaryResultRepository::new(store).completed_chunk_results(task_id)?;
+    if chunk_results.len() != total {
+        return Err(StoreError::Validation("并非所有总结分块均已通过校验".to_owned()).into());
+    }
+    let final_prompt = final_prompt(&task, &chunk_results)?;
+    let raw = run_request(store, &task, "final", None, Vec::new(), final_prompt, 8_192)?;
+    if tasks.get(task_id)?.cancel_requested {
+        tasks.finish_cancelled(task_id)?;
+        return Ok(());
+    }
+    let result: SummaryResult = serde_json::from_str(raw.trim_start_matches('\u{feff}'))
+        .map_err(|error| StoreError::Validation(format!("最终总结 JSON 无效：{error}")))?;
+    let allowed = task
+        .chunks
+        .iter()
+        .flat_map(|chunk| chunk.segment_ids.iter().cloned())
+        .collect();
+    validate_result(&result, &allowed, task.playback_cutoff_ms)?;
+    let visual_used = task.visual_material_authorized
+        && tasks
+            .materials_directory(task_id)
+            .join("frames.json")
+            .is_file();
+    SummaryResultRepository::new(store).save_summary(task_id, &result, visual_used)?;
+    Ok(())
+}
+
+fn run_request(
+    store: &ProjectStore,
+    task: &SummaryTask,
+    run_name: &str,
+    chunk_id: Option<&str>,
+    images: Vec<PathBuf>,
+    prompt: String,
+    budget: u32,
+) -> Result<String, SummaryExecutionError> {
+    match task.execution_kind {
+        SummaryExecutionKind::Api => run_api(store, task, chunk_id, images, prompt, budget),
+        SummaryExecutionKind::Codex => {
+            let directory = SummaryTaskRepository::new(store)
+                .materials_directory(&task.id)
+                .join("runs")
+                .join(run_name);
+            fs::create_dir_all(&directory).map_err(StoreError::from)?;
+            let isolated_images = images
+                .iter()
+                .enumerate()
+                .map(|(index, source)| {
+                    let target = directory.join(format!("frame-{:03}.jpg", index + 1));
+                    fs::copy(source, &target)?;
+                    Ok(target)
+                })
+                .collect::<Result<Vec<_>, StoreError>>()?;
+            Ok(codex_executor::invoke(
+                store,
+                &task.id,
+                &directory,
+                prompt,
+                &result_schema(),
+                &isolated_images,
+            )?)
+        }
+        SummaryExecutionKind::Manual => {
+            Err(StoreError::Validation("手动任务不应进入自动执行器".to_owned()).into())
+        }
+    }
+}
+
+fn run_api(
+    store: &ProjectStore,
+    task: &SummaryTask,
+    chunk_id: Option<&str>,
+    images: Vec<PathBuf>,
+    prompt: String,
+    budget: u32,
+) -> Result<String, SummaryExecutionError> {
+    let service = task
+        .service_config_id
+        .as_deref()
+        .ok_or_else(|| StoreError::Validation("总结任务缺少 AI 服务".to_owned()))?;
+    let revision = task
+        .service_revision
+        .ok_or_else(|| StoreError::Validation("总结任务缺少服务版本".to_owned()))?;
+    let model = task
+        .model_id
+        .as_deref()
+        .ok_or_else(|| StoreError::Validation("总结任务缺少模型".to_owned()))?;
+    let image_data_urls = images
+        .iter()
+        .map(|path| {
+            fs::read(path).map(|bytes| format!("data:image/jpeg;base64,{}", STANDARD.encode(bytes)))
+        })
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(StoreError::from)?;
+    let mut retry = 0;
+    loop {
+        let response = summary_provider::generate(SummaryProviderInput {
+            service_config_id: service,
+            service_revision: revision,
+            model_id: model,
+            system: SYSTEM,
+            prompt: prompt.clone(),
+            schema_name: "video_summary",
+            schema: result_schema(),
+            max_output_tokens: budget,
+            image_data_urls: image_data_urls.clone(),
+        });
+        match response {
+            Ok(output) => return Ok(output.output_text),
+            Err(failure) if retry < retry_delays(&failure).len() => {
+                if SummaryTaskRepository::new(store)
+                    .get(&task.id)?
+                    .cancel_requested
+                {
+                    return Err(StoreError::Validation("总结任务已请求取消".to_owned()).into());
+                }
+                let delay = retry_delays(&failure)[retry];
+                retry += 1;
+                if let Some(chunk_id) = chunk_id {
+                    SummaryResultRepository::new(store).update_retry(
+                        chunk_id,
+                        retry as u8,
+                        failure.error.code(),
+                        &failure.error.to_string(),
+                    )?;
+                }
+                thread::sleep(delay);
+            }
+            Err(failure) => return Err(provider_error(failure)),
+        }
+    }
+}
+
+fn retry_delays(failure: &ProviderFailure) -> &'static [Duration] {
+    if matches!(
+        failure.error,
+        crate::ai::AiError::Timeout
+            | crate::ai::AiError::RateLimited
+            | crate::ai::AiError::ProviderUnavailable
+    ) {
+        &RETRY_DELAYS
+    } else {
+        &[]
+    }
+}
+
+fn provider_error(failure: ProviderFailure) -> SummaryExecutionError {
+    SummaryExecutionError::Provider {
+        code: failure.error.code(),
+        message: failure.error.to_string(),
+    }
+}
+
+fn read_segments(directory: &std::path::Path) -> Result<Vec<SubtitleSegment>, StoreError> {
+    serde_json::from_slice(&fs::read(directory.join("subtitles.json"))?)
+        .map_err(|error| StoreError::Validation(error.to_string()))
+}
+
+fn chunk_prompt(
+    task: &SummaryTask,
+    ordinal: usize,
+    material: &[&SubtitleSegment],
+) -> Result<String, StoreError> {
+    let json = serde_json::to_string(material)
+        .map_err(|error| StoreError::Validation(error.to_string()))?;
+    Ok(format!(
+        "{}\n\n分析模式：{:?}\n这是第 {} 个字幕分块。前置字幕仅为上下文，不计入本块覆盖率。提取时间线、概念、原理或组件关系、结论与证据。\n\n授权字幕 JSON：\n{}",
+        task.prompt_snapshot.composed_prompt,
+        task.analysis_mode,
+        ordinal + 1,
+        json
+    ))
+}
+
+fn final_prompt(task: &SummaryTask, results: &[SummaryResult]) -> Result<String, StoreError> {
+    let json = serde_json::to_string(results)
+        .map_err(|error| StoreError::Validation(error.to_string()))?;
+    Ok(format!(
+        "{}\n\n只综合下列已经校验的分块结果，不读取原始字幕或其他材料。合并重复内容，保持证据 ID，完整输出时间线、核心概念、原理或架构、结论、局限、术语表；架构内容可给出 Mermaid。\n\n已校验分块结果：\n{}",
+        task.prompt_snapshot.composed_prompt, json
+    ))
+}
+
+fn resume_manual(store: &ProjectStore, task: &SummaryTask) -> Result<SummaryTask, StoreError> {
+    let repository = SummaryTaskRepository::new(store);
+    let result_path = repository.materials_directory(&task.id).join("result.json");
+    if !result_path.is_file() {
+        repository.set_task_state(
+            &task.id,
+            "awaiting_external_result",
+            "awaiting_external_result",
+            task.progress,
+        )?;
+        return repository.get(&task.id);
+    }
+    let result: SummaryResult = serde_json::from_slice(&fs::read(result_path)?)
+        .map_err(|error| StoreError::Validation(format!("手动总结结果无效：{error}")))?;
+    let allowed = task
+        .chunks
+        .iter()
+        .flat_map(|chunk| chunk.segment_ids.iter().cloned())
+        .collect();
+    validate_result(&result, &allowed, task.playback_cutoff_ms)?;
+    SummaryResultRepository::new(store).save_summary(&task.id, &result, false)?;
+    repository.get(&task.id)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ai::AiError;
+
+    #[test]
+    fn retries_only_transient_provider_failures() {
+        for error in [
+            AiError::Timeout,
+            AiError::RateLimited,
+            AiError::ProviderUnavailable,
+        ] {
+            assert_eq!(
+                retry_delays(&ProviderFailure {
+                    error,
+                    provider_request_id: None
+                })
+                .len(),
+                2
+            );
+        }
+        assert!(
+            retry_delays(&ProviderFailure {
+                error: AiError::Unauthorized,
+                provider_request_id: None
+            })
+            .is_empty()
+        );
+    }
+}
