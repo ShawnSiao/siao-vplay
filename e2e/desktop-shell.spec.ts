@@ -485,17 +485,19 @@ test("subtitle following, appearance, dragging, and controls remain complete", a
       originalWeight: Number(getComputedStyle(original).fontWeight),
       textShadow: getComputedStyle(original).textShadow,
       translationColor: getComputedStyle(translation).color,
+      translationWeight: Number(getComputedStyle(translation).fontWeight),
     };
   });
   expect(colorState).toMatchObject({
     base: "#fef3c7",
-    background: "rgba(5, 7, 9, 0.42)",
+    background: "rgba(5, 7, 9, 0.76)",
     filter: "none",
     spokenColor: "rgb(254, 243, 199)",
     currentDecoration: "none",
-    originalWeight: 620,
-    textShadow: "rgba(0, 0, 0, 0.78) 0px 1px 2px",
+    originalWeight: 650,
+    textShadow: "none",
     translationColor: "rgb(254, 243, 199)",
+    translationWeight: 700,
   });
   expect(colorState.currentWeight).toBeGreaterThanOrEqual(700);
   const settingsBox = await settings.boundingBox();
