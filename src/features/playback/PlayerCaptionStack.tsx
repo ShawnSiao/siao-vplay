@@ -1,4 +1,5 @@
 import {
+  type CSSProperties,
   useRef,
   useState,
   type PointerEvent as ReactPointerEvent,
@@ -95,7 +96,7 @@ export function PlayerCaptionStack({
       className={`caption-stack${dragging ? " dragging" : ""}`}
       aria-live="off"
       aria-label="字幕，可拖动调整位置"
-      style={{ left: `${renderedPosition.x * 100}%`, top: `${renderedPosition.y * 100}%` }}
+      style={{ left: `${renderedPosition.x * 100}%`, top: `${renderedPosition.y * 100}%`, "--caption-base": preferences.baseTextColor } as CSSProperties}
       onPointerDown={(event) => {
         if (event.button !== 0) return;
         event.preventDefault();

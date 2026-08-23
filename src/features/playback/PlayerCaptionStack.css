@@ -27,7 +27,7 @@
   max-width: 100%;
   margin: 0;
   padding: 0;
-  color: #fff;
+  color: var(--caption-base, #fff);
   background: transparent;
   font-size: clamp(17px, 1.65vw, 23px);
   font-weight: 650;
@@ -37,27 +37,24 @@
 }
 
 .caption-line.original {
-  color: rgb(255 255 255 / 90%);
+  color: var(--caption-base, #fff);
   font-size: clamp(14px, 1.25vw, 18px);
   font-weight: 560;
 }
 
 .caption-word {
-  color: rgb(255 255 255 / 72%);
+  color: var(--caption-base, #fff);
   white-space: pre-wrap;
 }
 
 .caption-word.spoken {
-  color: color-mix(in srgb, var(--caption-highlight, #b8f36a) 58%, white 42%);
+  color: var(--caption-base, #fff);
 }
 
 .caption-word.current {
   color: transparent;
-  background: linear-gradient(90deg, var(--caption-highlight) 0 var(--caption-progress), rgb(255 255 255 / 82%) var(--caption-progress) 100%);
+  background: linear-gradient(90deg, var(--caption-highlight) 0 var(--caption-progress), var(--caption-base, #fff) var(--caption-progress) 100%);
   background-clip: text;
   font-weight: 750;
-  text-decoration: underline;
-  text-decoration-color: var(--caption-highlight);
-  text-decoration-thickness: 2px;
-  text-underline-offset: 3px;
+  text-decoration: none;
 }

@@ -62,8 +62,30 @@ describe("caption word timing", () => {
     });
     const fragments = getTimedCaptionFragments(value, 1_500);
     expect(fragments?.map((fragment) => fragment.text).join("")).toBe(value.text);
-    expect(fragments?.filter((fragment) => fragment.kind === "timed")).toHaveLength(10);
+    expect(fragments?.filter((fragment) => fragment.kind === "timed")).toHaveLength(9);
     expect(fragments?.find((fragment) => fragment.kind === "timed" && fragment.word.state === "current")?.text).toBe("going");
+  });
+
+  it("uses one visible word for a contraction and folds punctuation into the prior word", () => {
+    const value = segment({
+      endMs: 4_000,
+      text: "And what's next.",
+      words: [
+        { ordinal: 0, startMs: 1_000, endMs: 1_300, text: "And", confidence: null },
+        { ordinal: 1, startMs: 1_300, endMs: 1_600, text: "what", confidence: null },
+        { ordinal: 2, startMs: 1_600, endMs: 1_750, text: "'s", confidence: null },
+        { ordinal: 3, startMs: 1_750, endMs: 2_100, text: "next", confidence: null },
+        { ordinal: 4, startMs: 2_100, endMs: 2_200, text: ".", confidence: null },
+      ],
+    });
+    const fragments = getTimedCaptionFragments(value, 1_700);
+    expect(fragments?.map((fragment) => fragment.text).join("")).toBe(value.text);
+    expect(fragments?.filter((fragment) => fragment.kind === "timed").map((fragment) => fragment.text)).toEqual([
+      "And",
+      "what's",
+      "next.",
+    ]);
+    expect(fragments?.find((fragment) => fragment.kind === "timed" && fragment.word.state === "current")?.text).toBe("what's");
   });
 
   it("skips inaccurate tokens without removing spaces, punctuation, or capitalization", () => {
@@ -101,7 +123,7 @@ describe("caption word timing", () => {
       })),
     });
     expect(hasUsableWordTiming(value)).toBe(true);
-    expect(getTimedCaptionWords(value, 1_100)?.map((word) => word.text).join(""))
+    expect(getTimedCaptionFragments(value, 1_100)?.map((fragment) => fragment.text).join(""))
       .toBe(text);
   });
 });

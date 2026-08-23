@@ -8,7 +8,7 @@ describe("SubtitleAppearancePopover", () => {
     const onChange = vi.fn();
     render(<SubtitleAppearancePopover preferences={defaultSubtitleFollowPreferences} onChange={onChange} />);
     fireEvent.click(screen.getByRole("button", { name: "字幕设置" }));
-    const hex = screen.getByRole("textbox", { name: "高亮色 HEX 值" });
+    const hex = screen.getByRole("textbox", { name: "当前词颜色 HEX 值" });
     fireEvent.change(hex, { target: { value: "#123" } });
     expect(hex).toHaveAttribute("aria-invalid", "true");
     expect(onChange).not.toHaveBeenCalled();
@@ -22,6 +22,26 @@ describe("SubtitleAppearancePopover", () => {
     expect(onChange).toHaveBeenLastCalledWith({
       ...defaultSubtitleFollowPreferences,
       position: { x: 0.5, y: 0.9 },
+    });
+  });
+
+  it("changes and resets the two colors independently", () => {
+    const onChange = vi.fn();
+    render(<SubtitleAppearancePopover preferences={defaultSubtitleFollowPreferences} onChange={onChange} />);
+    fireEvent.click(screen.getByRole("button", { name: "字幕设置" }));
+
+    fireEvent.change(screen.getByRole("textbox", { name: "字幕默认颜色 HEX 值" }), {
+      target: { value: "#FEF3C7" },
+    });
+    expect(onChange).toHaveBeenLastCalledWith({
+      ...defaultSubtitleFollowPreferences,
+      baseTextColor: "#fef3c7",
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "使用当前词颜色 #49d6e9" }));
+    expect(onChange).toHaveBeenLastCalledWith({
+      ...defaultSubtitleFollowPreferences,
+      highlightColor: "#49d6e9",
     });
   });
 });

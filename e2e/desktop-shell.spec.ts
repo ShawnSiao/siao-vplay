@@ -466,12 +466,43 @@ test("subtitle following, appearance, dragging, and controls remain complete", a
   await expect(page.getByText("这句话会跟随每一个单词。")).toBeVisible();
   await page.getByRole("button", { name: "字幕设置" }).click();
   const settings = page.getByRole("dialog", { name: "字幕设置" });
-  await settings.getByRole("button", { name: "使用颜色 #fb923c" }).click();
+  await settings.getByRole("button", { name: "使用字幕默认颜色 #fef3c7" }).click();
+  await settings.getByRole("button", { name: "使用当前词颜色 #fb923c" }).click();
+  const colorState = await page.evaluate(() => {
+    const stack = document.querySelector<HTMLElement>(".caption-stack")!;
+    const spoken = document.querySelector<HTMLElement>(".caption-word.spoken")!;
+    const current = document.querySelector<HTMLElement>(".caption-word.current")!;
+    const translation = document.querySelector<HTMLElement>(".caption-line.translation")!;
+    return {
+      base: stack.style.getPropertyValue("--caption-base"),
+      spokenColor: getComputedStyle(spoken).color,
+      currentDecoration: getComputedStyle(current).textDecorationLine,
+      currentWeight: Number(getComputedStyle(current).fontWeight),
+      translationColor: getComputedStyle(translation).color,
+    };
+  });
+  expect(colorState).toMatchObject({
+    base: "#fef3c7",
+    spokenColor: "rgb(254, 243, 199)",
+    currentDecoration: "none",
+    translationColor: "rgb(254, 243, 199)",
+  });
+  expect(colorState.currentWeight).toBeGreaterThanOrEqual(700);
+  const settingsBox = await settings.boundingBox();
+  expect(settingsBox).not.toBeNull();
+  expect(settingsBox!.x).toBeGreaterThanOrEqual(0);
+  expect(settingsBox!.x + settingsBox!.width).toBeLessThanOrEqual(960);
+  expect(settingsBox!.y).toBeGreaterThanOrEqual(0);
+  expect(settingsBox!.y + settingsBox!.height).toBeLessThanOrEqual(640);
+  await expect.poll(() => page.evaluate(() => JSON.parse(window.localStorage.getItem("siaovplay-subtitle-follow-preferences-v1") ?? "{}").baseTextColor)).toBe("#fef3c7");
   await expect.poll(() => page.evaluate(() => JSON.parse(window.localStorage.getItem("siaovplay-subtitle-follow-preferences-v1") ?? "{}").highlightColor)).toBe("#fb923c");
   await settings.getByRole("checkbox", { name: "原文逐词跟随" }).uncheck();
   await expect(page.locator(".caption-word")).toHaveCount(0);
   await settings.getByRole("checkbox", { name: "原文逐词跟随" }).check();
   await settings.getByRole("button", { name: "关闭字幕设置" }).click();
+
+  await page.reload();
+  await expect.poll(() => page.locator(".caption-stack").evaluate((element) => (element as HTMLElement).style.getPropertyValue("--caption-base"))).toBe("#fef3c7");
 
   const caption = page.locator(".caption-stack");
   const before = await caption.boundingBox();

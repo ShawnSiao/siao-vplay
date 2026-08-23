@@ -6,13 +6,23 @@ export type SeekStepSeconds = (typeof seekStepOptions)[number];
 export type SubtitlePosition = { x: number; y: number };
 export type SubtitleFollowPreferences = {
   enabled: boolean;
+  baseTextColor: string;
   highlightColor: string;
   position: SubtitlePosition;
 };
 
+export const subtitleBaseColorPresets = [
+  "#ffffff",
+  "#e5e7eb",
+  "#fef3c7",
+  "#dbeafe",
+  "#dcfce7",
+  "#fce7f3",
+] as const;
+
 export const subtitleHighlightPresets = [
   "#b8f36a",
-  "#67e8f9",
+  "#49d6e9",
   "#fbbf24",
   "#fb923c",
   "#f472b6",
@@ -21,6 +31,7 @@ export const subtitleHighlightPresets = [
 
 export const defaultSubtitleFollowPreferences: SubtitleFollowPreferences = {
   enabled: true,
+  baseTextColor: subtitleBaseColorPresets[0],
   highlightColor: subtitleHighlightPresets[0],
   position: { x: 0.5, y: 0.9 },
 };
@@ -64,6 +75,8 @@ export function isValidSubtitleHighlightColor(value: string) {
   return hexColorPattern.test(value);
 }
 
+export const isValidSubtitleColor = isValidSubtitleHighlightColor;
+
 function isNormalizedPosition(value: unknown): value is SubtitlePosition {
   if (!value || typeof value !== "object") return false;
   const position = value as Partial<SubtitlePosition>;
@@ -94,6 +107,11 @@ export function readSubtitleFollowPreferences(): SubtitleFollowPreferences {
     }
     return {
       enabled: value.enabled,
+      baseTextColor:
+        typeof value.baseTextColor === "string" &&
+        isValidSubtitleColor(value.baseTextColor)
+          ? value.baseTextColor.toLowerCase()
+          : defaultSubtitleFollowPreferences.baseTextColor,
       highlightColor: value.highlightColor.toLowerCase(),
       position: { ...value.position },
     };
