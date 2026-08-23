@@ -5,12 +5,12 @@ use std::{
     process::{Command, Stdio},
 };
 
-use regex::Regex;
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 
 use super::{
-    model::{ExportVideoSummaryInput, SummaryEvidence, SummaryExport, SummarySection},
+    markdown_report,
+    model::{ExportVideoSummaryInput, SummaryExport},
     result_repository::SummaryResultRepository,
     task_repository::{SummaryTaskRepository, now_ms},
 };
@@ -39,8 +39,7 @@ pub(crate) fn export(
             "请选择已存在的报告保存目录".to_owned(),
         ));
     }
-    let summaries = SummaryResultRepository::new(store);
-    let summary = summaries.get_summary(&input.summary_id)?;
+    let summary = SummaryResultRepository::new(store).get_summary(&input.summary_id)?;
     let task = SummaryTaskRepository::new(store).get(&summary.task_id)?;
     let project = store.get_project(&summary.project_id)?;
     let final_directory = unique_directory(&destination, &project.title, now_ms()?);
@@ -59,9 +58,8 @@ pub(crate) fn export(
             &assets_directory,
             &timestamps,
         )?;
-        let report = render_markdown(&project.title, &summary, &task, &assets);
-        let report_path = temporary.join("report.md");
-        fs::write(&report_path, report.as_bytes())?;
+        let report = markdown_report::render(&project.title, &summary, &task, &assets);
+        fs::write(temporary.join("report.md"), report.as_bytes())?;
         let report_sha256 = digest(report.as_bytes());
         let manifest = ExportManifest {
             protocol_version: "siaovplay-summary-export-v1",
@@ -106,10 +104,13 @@ fn representative_timestamps(
     cutoff_ms: Option<i64>,
 ) -> Vec<i64> {
     let selected = result
-        .timeline
+        .speaker_narrative
         .iter()
+        .chain(&result.timeline)
         .chain(&result.core_concepts)
         .chain(&result.principles_or_architecture)
+        .chain(&result.examples_and_scenarios)
+        .chain(&result.design_tradeoffs)
         .chain(&result.conclusions)
         .flat_map(|section| &section.evidence)
         .flat_map(|evidence| evidence.frame_timestamps_ms.iter().copied())
@@ -172,105 +173,6 @@ fn extract_frames(
     Ok(assets)
 }
 
-fn render_markdown(
-    project_title: &str,
-    summary: &super::model::VideoSummary,
-    task: &super::model::SummaryTask,
-    assets: &BTreeMap<String, String>,
-) -> String {
-    let mut markdown = format!(
-        "# {}\n\n## 分析范围\n\n- 视频：{}\n- 范围：{}\n- 截止点：{}\n- 字幕版本：`{}`\n- 分析模式：`{:?}`\n- 执行方式：`{:?}`\n- 服务与模型：{} / {}\n- 提示词模板：{}\n- AI 实际使用视觉材料：{}\n\n## 概览\n\n{}\n",
-        safe(&summary.result.title),
-        safe(project_title),
-        if summary.scope == super::model::AnalysisScope::FullVideo {
-            "完整视频"
-        } else {
-            "截至当前进度"
-        },
-        summary
-            .playback_cutoff_ms
-            .map(format_time)
-            .unwrap_or_else(|| "完整视频".to_owned()),
-        summary.subtitle_version_id,
-        summary.analysis_mode,
-        task.execution_kind,
-        task.provider_id.as_deref().unwrap_or("本机"),
-        task.model_id.as_deref().unwrap_or("未记录"),
-        safe(&task.prompt_snapshot.template_name),
-        if summary.visual_material_used {
-            "是"
-        } else {
-            "否"
-        },
-        safe(&summary.result.overview),
-    );
-    render_sections(&mut markdown, "时间线", &summary.result.timeline);
-    render_sections(&mut markdown, "核心概念", &summary.result.core_concepts);
-    render_sections(
-        &mut markdown,
-        "原理或架构",
-        &summary.result.principles_or_architecture,
-    );
-    if let Some(mermaid) = summary
-        .result
-        .mermaid
-        .as_deref()
-        .filter(|value| !value.trim().is_empty())
-    {
-        markdown.push_str(&format!("\n```mermaid\n{}\n```\n", safe(mermaid)));
-    }
-    render_sections(&mut markdown, "行动结论", &summary.result.conclusions);
-    markdown.push_str("\n## 局限与待验证\n\n");
-    for limitation in &summary.result.limitations {
-        markdown.push_str(&format!("- {}\n", safe(limitation)));
-    }
-    markdown.push_str("\n## 术语表\n\n");
-    for entry in &summary.result.glossary {
-        markdown.push_str(&format!(
-            "- **{}**：{}（字幕：{}）\n",
-            safe(&entry.term),
-            safe(&entry.explanation),
-            entry.subtitle_ids.join(", ")
-        ));
-    }
-    if !assets.is_empty() {
-        markdown.push_str("\n## 代表性画面\n\n");
-        for name in assets.keys() {
-            markdown.push_str(&format!("![代表性画面](assets/{name})\n\n"));
-        }
-    }
-    markdown.push_str(
-        "\n> 说明：视频中的主张不等于外部已验证事实；「AI 推导」与「待外部验证」应单独核验。\n",
-    );
-    markdown
-}
-
-fn render_sections(output: &mut String, heading: &str, sections: &[SummarySection]) {
-    output.push_str(&format!("\n## {heading}\n\n"));
-    for section in sections {
-        output.push_str(&format!(
-            "### {}\n\n{}\n",
-            safe(&section.title),
-            safe(&section.body)
-        ));
-        for evidence in &section.evidence {
-            render_evidence(output, evidence);
-        }
-    }
-}
-
-fn render_evidence(output: &mut String, evidence: &SummaryEvidence) {
-    output.push_str(&format!(
-        "- [{:?}] {}",
-        evidence.kind,
-        safe(&evidence.claim)
-    ));
-    if !evidence.subtitle_ids.is_empty() {
-        output.push_str(&format!("（字幕：{}）", evidence.subtitle_ids.join(", ")));
-    }
-    output.push('\n');
-}
-
 fn verify_export(directory: &Path, manifest: &ExportManifest) -> Result<(), StoreError> {
     if digest(&fs::read(directory.join(&manifest.report))?) != manifest.report_sha256 {
         return Err(StoreError::Validation("报告哈希校验失败".to_owned()));
@@ -287,16 +189,6 @@ fn verify_export(directory: &Path, manifest: &ExportManifest) -> Result<(), Stor
         }
     }
     Ok(())
-}
-
-fn safe(value: &str) -> String {
-    let windows_path = Regex::new(r"(?i)[a-z]:\\[^\s\]\[()<>]+").expect("path pattern");
-    let key = Regex::new(r"(?i)(sk|api[_-]?key)[-_:= ]?[a-z0-9]{12,}").expect("key pattern");
-    key.replace_all(
-        &windows_path.replace_all(value, "[本机路径已隐藏]"),
-        "[凭证已隐藏]",
-    )
-    .into_owned()
 }
 
 fn unique_directory(parent: &Path, title: &str, timestamp: i64) -> PathBuf {
@@ -323,15 +215,6 @@ fn unique_directory(parent: &Path, title: &str, timestamp: i64) -> PathBuf {
         .expect("an unused report path must exist")
 }
 
-fn format_time(milliseconds: i64) -> String {
-    format!(
-        "{:02}:{:02}:{:02}",
-        milliseconds / 3_600_000,
-        milliseconds / 60_000 % 60,
-        milliseconds / 1_000 % 60
-    )
-}
-
 fn digest(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
 }
@@ -344,16 +227,4 @@ fn hidden_command(program: &Path) -> Command {
         command.creation_flags(0x0800_0000);
     }
     command
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn redacts_paths_and_credentials() {
-        let value = safe("见 E:\\private\\video.mp4 key sk-abcdefghijklmnop");
-        assert!(!value.contains("private"));
-        assert!(!value.contains("abcdefghijklmnop"));
-    }
 }

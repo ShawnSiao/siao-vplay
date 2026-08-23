@@ -360,6 +360,8 @@ export function PlayerScreen({
                 translationVersion={currentTranslation}
                 onPrepareSubtitles={onManageSubtitles}
                 onClose={onCloseDrawer}
+                onJump={seekTo}
+                onPausePlayback={pausePlayback}
               />
             ) : (
               <LearningPanel

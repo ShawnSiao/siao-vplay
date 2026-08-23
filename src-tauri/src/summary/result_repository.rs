@@ -1,8 +1,11 @@
+use std::fs;
+
 use rusqlite::{OptionalExtension, params};
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
 use super::{
+    citations,
     model::{AnalysisMode, AnalysisScope, SummaryResult, VideoSummary},
     task_repository::now_ms,
 };
@@ -154,6 +157,18 @@ impl<'a> SummaryResultRepository<'a> {
             )
             .optional()?
             .ok_or_else(|| StoreError::Validation("视频总结不存在".to_owned()))?;
+        let mut result: SummaryResult = serde_json::from_str(&row.9)
+            .map_err(|error| StoreError::Validation(error.to_string()))?;
+        let materials = super::task_repository::SummaryTaskRepository::new(self.store)
+            .materials_directory(&row.1)
+            .join("subtitles.json");
+        if let Ok(bytes) = fs::read(materials) {
+            if let Ok(segments) =
+                serde_json::from_slice::<Vec<crate::subtitles::SubtitleSegment>>(&bytes)
+            {
+                citations::hydrate_result(&mut result, &segments);
+            }
+        }
         Ok(VideoSummary {
             id: row.0,
             task_id: row.1,
@@ -164,8 +179,7 @@ impl<'a> SummaryResultRepository<'a> {
             analysis_mode: AnalysisMode::from_database(&row.6)?,
             subtitle_version_id: row.7,
             material_manifest_sha256: row.8,
-            result: serde_json::from_str(&row.9)
-                .map_err(|error| StoreError::Validation(error.to_string()))?,
+            result,
             visual_material_used: row.10,
             created_at_ms: row.11,
             updated_at_ms: row.12,

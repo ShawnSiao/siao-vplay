@@ -64,30 +64,47 @@ export function createSummaryFixtures(): { task: SummaryTask; summary: VideoSumm
     createdAtMs: 2,
     updatedAtMs: 2,
     result: {
+      formatVersion: 2,
       title: "从即时状态到外部记忆",
       overview: "视频通过层间状态、检索和外部存储解释上下文记忆的工作方式。",
+      coveredChunkOrdinals: [1, 2, 3, 4, 5, 6, 7],
+      speakerNarrative: [{
+        title: "从上下文限制讲到外部记忆",
+        body: "讲者先区分即时状态与跨会话保存，再说明检索结果如何重新进入当前上下文，论述重点从保存信息逐步转向选择和取回信息。",
+        evidence: [{ kind: "video_statement", claim: "讲述顺序由状态传递进入外部检索。", subtitleIds: ["S128"], frameTimestampsMs: [], citations: [{ startMs: 194_000, endMs: 198_000, subtitleCount: 2, excerpt: "讲者从状态传递转向外部记忆。" }] }],
+      }],
       timeline: [{
         title: "状态在层间传递",
         body: "讲者先说明上下文如何压缩成下一层可使用的状态。",
-        evidence: [{ kind: "video_statement", claim: "讲者明确描述了层间状态转换。", subtitleIds: ["S128"], frameTimestampsMs: [194_000] }],
+        evidence: [{ kind: "video_statement", claim: "讲者明确描述了层间状态转换。", subtitleIds: ["S128"], frameTimestampsMs: [194_000], citations: [{ startMs: 194_000, endMs: 198_000, subtitleCount: 2, excerpt: "层间状态转换。" }] }],
       }],
       coreConcepts: [{
         title: "外部记忆",
         body: "可持久化信息会在需要时检索并重新加入上下文。",
-        evidence: [{ kind: "subtitle_or_frame", claim: "字幕和流程图同时出现检索路径。", subtitleIds: ["S134"], frameTimestampsMs: [211_000] }],
+        evidence: [{ kind: "subtitle_or_frame", claim: "字幕和流程图同时出现检索路径。", subtitleIds: ["S134"], frameTimestampsMs: [211_000], citations: [{ startMs: 211_000, endMs: 215_000, subtitleCount: 1, excerpt: "检索路径。" }] }],
       }],
       principlesOrArchitecture: [{
         title: "即时推理与跨会话保存",
         body: "模型内部状态服务即时推理，外部记忆负责跨会话保存。",
-        evidence: [{ kind: "ai_inference", claim: "这一职责划分是依据当前材料作出的谨慎推导。", subtitleIds: [], frameTimestampsMs: [] }],
+        evidence: [{ kind: "ai_inference", claim: "这一职责划分是依据当前材料作出的谨慎推导。", subtitleIds: [], frameTimestampsMs: [], citations: [] }],
+      }],
+      examplesAndScenarios: [{
+        title: "跨会话助手",
+        body: "视频用跨会话助手说明外部记忆的用途：系统在新会话中检索先前偏好，并只把当前问题相关的内容重新加入上下文。",
+        evidence: [{ kind: "video_statement", claim: "讲者给出跨会话检索示例。", subtitleIds: ["S134"], frameTimestampsMs: [], citations: [{ startMs: 211_000, endMs: 215_000, subtitleCount: 1, excerpt: "新会话会取回相关偏好。" }] }],
+      }],
+      designTradeoffs: [{
+        title: "保留细节与控制噪声",
+        body: "保存更多历史有利于追溯，但会增加检索噪声和上下文成本；摘要能够压缩内容，却可能遗漏之后才显得重要的细节。",
+        evidence: [{ kind: "ai_inference", claim: "这一权衡由视频中的压缩与检索机制推导。", subtitleIds: [], frameTimestampsMs: [], citations: [] }],
       }],
       conclusions: [{
         title: "选择性保留信息",
         body: "压缩会丢失细节，因此系统需要决定保留什么。",
-        evidence: [{ kind: "needs_external_validation", claim: "该机制的实际效果仍需外部基准验证。", subtitleIds: [], frameTimestampsMs: [] }],
+        evidence: [{ kind: "needs_external_validation", claim: "该机制的实际效果仍需外部基准验证。", subtitleIds: [], frameTimestampsMs: [], citations: [] }],
       }],
       limitations: ["没有进行外部事实检索。", "完整视频后半段尚未纳入范围。"],
-      glossary: [{ term: "上下文状态", explanation: "模型当前推理可直接使用的信息表示。", subtitleIds: ["S128"] }],
+      glossary: [{ term: "上下文状态", explanation: "模型当前推理可直接使用的信息表示。", subtitleIds: ["S128"], citations: [] }],
       mermaid: "flowchart LR\nInput --> State\nState --> Retrieval\nRetrieval --> Context",
     },
   };

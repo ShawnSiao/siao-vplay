@@ -19,10 +19,10 @@ use crate::{
 };
 
 use super::{
-    codex_executor, keyframes,
+    codex_executor, execution_prompts, keyframes,
     model::{SummaryExecutionKind, SummaryResult, SummaryTask},
     result_repository::SummaryResultRepository,
-    result_validation::{result_schema, validate_result},
+    result_validation::{result_schema, validate_chunk_result, validate_final_result},
     task_repository::SummaryTaskRepository,
 };
 
@@ -120,7 +120,7 @@ fn execute(store: &ProjectStore, task_id: &str) -> Result<(), SummaryExecutionEr
             .filter_map(|id| by_id.get(id).copied())
             .collect::<Vec<_>>();
         SummaryResultRepository::new(store).begin_chunk(&chunk.id)?;
-        let prompt = chunk_prompt(&task, chunk.ordinal, &material)?;
+        let prompt = execution_prompts::chunk(&task, chunk.ordinal, &material)?;
         let images = keyframes::for_chunk(&tasks.materials_directory(task_id), chunk.ordinal)?;
         let raw = run_request(
             store,
@@ -129,7 +129,7 @@ fn execute(store: &ProjectStore, task_id: &str) -> Result<(), SummaryExecutionEr
             Some(&chunk.id),
             images,
             prompt,
-            2_048,
+            4_096,
         )?;
         if tasks.get(task_id)?.cancel_requested {
             tasks.finish_cancelled(task_id)?;
@@ -137,7 +137,7 @@ fn execute(store: &ProjectStore, task_id: &str) -> Result<(), SummaryExecutionEr
         }
         let result: SummaryResult = serde_json::from_str(raw.trim_start_matches('\u{feff}'))
             .map_err(|error| StoreError::Validation(format!("分块结果 JSON 无效：{error}")))?;
-        validate_result(&result, &allowed, task.playback_cutoff_ms)?;
+        validate_chunk_result(&result, &allowed, task.playback_cutoff_ms, chunk.ordinal)?;
         SummaryResultRepository::new(store).save_chunk(&chunk.id, &result)?;
         let progress = (chunk.ordinal + 1) as f64 / (total + 1) as f64;
         tasks.set_task_state(task_id, "running", "analyzing_chunks", progress)?;
@@ -153,8 +153,16 @@ fn execute(store: &ProjectStore, task_id: &str) -> Result<(), SummaryExecutionEr
     if chunk_results.len() != total {
         return Err(StoreError::Validation("并非所有总结分块均已通过校验".to_owned()).into());
     }
-    let final_prompt = final_prompt(&task, &chunk_results)?;
-    let raw = run_request(store, &task, "final", None, Vec::new(), final_prompt, 8_192)?;
+    let final_prompt = execution_prompts::final_synthesis(&task, &chunk_results)?;
+    let raw = run_request(
+        store,
+        &task,
+        "final",
+        None,
+        Vec::new(),
+        final_prompt,
+        12_288,
+    )?;
     if tasks.get(task_id)?.cancel_requested {
         tasks.finish_cancelled(task_id)?;
         return Ok(());
@@ -166,7 +174,22 @@ fn execute(store: &ProjectStore, task_id: &str) -> Result<(), SummaryExecutionEr
         .iter()
         .flat_map(|chunk| chunk.segment_ids.iter().cloned())
         .collect();
-    validate_result(&result, &allowed, task.playback_cutoff_ms)?;
+    let required_chunk_ids = task
+        .chunks
+        .iter()
+        .map(|chunk| chunk.segment_ids.iter().cloned().collect())
+        .collect::<Vec<HashSet<String>>>();
+    let require_examples = chunk_results
+        .iter()
+        .any(|chunk| !chunk.examples_and_scenarios.is_empty());
+    validate_final_result(
+        &result,
+        &allowed,
+        task.playback_cutoff_ms,
+        &required_chunk_ids,
+        require_examples,
+        task.analysis_mode,
+    )?;
     let visual_used = task.visual_material_authorized
         && tasks
             .materials_directory(task_id)
@@ -307,31 +330,6 @@ fn read_segments(directory: &std::path::Path) -> Result<Vec<SubtitleSegment>, St
         .map_err(|error| StoreError::Validation(error.to_string()))
 }
 
-fn chunk_prompt(
-    task: &SummaryTask,
-    ordinal: usize,
-    material: &[&SubtitleSegment],
-) -> Result<String, StoreError> {
-    let json = serde_json::to_string(material)
-        .map_err(|error| StoreError::Validation(error.to_string()))?;
-    Ok(format!(
-        "{}\n\n分析模式：{:?}\n这是第 {} 个字幕分块。前置字幕仅为上下文，不计入本块覆盖率。提取时间线、概念、原理或组件关系、结论与证据。\n\n授权字幕 JSON：\n{}",
-        task.prompt_snapshot.composed_prompt,
-        task.analysis_mode,
-        ordinal + 1,
-        json
-    ))
-}
-
-fn final_prompt(task: &SummaryTask, results: &[SummaryResult]) -> Result<String, StoreError> {
-    let json = serde_json::to_string(results)
-        .map_err(|error| StoreError::Validation(error.to_string()))?;
-    Ok(format!(
-        "{}\n\n只综合下列已经校验的分块结果，不读取原始字幕或其他材料。合并重复内容，保持证据 ID，完整输出时间线、核心概念、原理或架构、结论、局限、术语表；架构内容可给出 Mermaid。\n\n已校验分块结果：\n{}",
-        task.prompt_snapshot.composed_prompt, json
-    ))
-}
-
 fn resume_manual(store: &ProjectStore, task: &SummaryTask) -> Result<SummaryTask, StoreError> {
     let repository = SummaryTaskRepository::new(store);
     let result_path = repository.materials_directory(&task.id).join("result.json");
@@ -351,7 +349,19 @@ fn resume_manual(store: &ProjectStore, task: &SummaryTask) -> Result<SummaryTask
         .iter()
         .flat_map(|chunk| chunk.segment_ids.iter().cloned())
         .collect();
-    validate_result(&result, &allowed, task.playback_cutoff_ms)?;
+    let required_chunk_ids = task
+        .chunks
+        .iter()
+        .map(|chunk| chunk.segment_ids.iter().cloned().collect())
+        .collect::<Vec<HashSet<String>>>();
+    validate_final_result(
+        &result,
+        &allowed,
+        task.playback_cutoff_ms,
+        &required_chunk_ids,
+        false,
+        task.analysis_mode,
+    )?;
     SummaryResultRepository::new(store).save_summary(&task.id, &result, false)?;
     repository.get(&task.id)
 }

@@ -71,6 +71,14 @@ export type SummaryEvidence = {
   claim: string;
   subtitleIds: string[];
   frameTimestampsMs: number[];
+  citations?: SummaryCitation[];
+};
+
+export type SummaryCitation = {
+  startMs: number;
+  endMs: number;
+  subtitleCount: number;
+  excerpt: string;
 };
 
 export type SummarySection = {
@@ -80,14 +88,19 @@ export type SummarySection = {
 };
 
 export type SummaryResult = {
+  formatVersion: number;
   title: string;
   overview: string;
+  coveredChunkOrdinals: number[];
+  speakerNarrative: SummarySection[];
   timeline: SummarySection[];
   coreConcepts: SummarySection[];
   principlesOrArchitecture: SummarySection[];
+  examplesAndScenarios: SummarySection[];
+  designTradeoffs: SummarySection[];
   conclusions: SummarySection[];
   limitations: string[];
-  glossary: Array<{ term: string; explanation: string; subtitleIds: string[] }>;
+  glossary: Array<{ term: string; explanation: string; subtitleIds: string[]; citations?: SummaryCitation[] }>;
   mermaid: string | null;
 };
 

@@ -5,7 +5,10 @@ use uuid::Uuid;
 
 use super::{
     model::{AnalysisPromptTemplate, AnalysisTaskType, SaveAnalysisPromptTemplateInput},
-    prompts::{compose_prompt_snapshot, validate_template_name, validate_template_requirements},
+    prompts::{
+        apply_current_builtin, compose_prompt_snapshot, validate_template_name,
+        validate_template_requirements,
+    },
 };
 use crate::store::{ProjectStore, StoreError};
 
@@ -45,7 +48,14 @@ impl<'a> PromptTemplateRepository<'a> {
                 .query_map([], read_raw_row)?
                 .collect::<Result<Vec<_>, _>>()?
         };
-        raw_rows.into_iter().map(RawTemplate::convert).collect()
+        raw_rows
+            .into_iter()
+            .map(|raw| {
+                let mut template = raw.convert()?;
+                apply_current_builtin(&mut template);
+                Ok(template)
+            })
+            .collect()
     }
 
     pub(crate) fn get(&self, id: &str) -> Result<AnalysisPromptTemplate, StoreError> {
@@ -60,7 +70,9 @@ impl<'a> PromptTemplateRepository<'a> {
             )
             .optional()?
             .ok_or_else(|| StoreError::Validation("分析提示词模板不存在".to_owned()))?;
-        raw.convert()
+        let mut template = raw.convert()?;
+        apply_current_builtin(&mut template);
+        Ok(template)
     }
 
     pub(crate) fn snapshot(

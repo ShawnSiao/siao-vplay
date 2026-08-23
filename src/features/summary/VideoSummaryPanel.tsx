@@ -34,6 +34,8 @@ type VideoSummaryPanelProps = {
   sourceVersion: SubtitleVersion | null;
   translationVersion: SubtitleVersion | null;
   onPrepareSubtitles: () => void;
+  onJump?: (positionMs: number) => void;
+  onPausePlayback?: () => void;
 };
 
 const pollingStatuses = new Set(["queued", "running", "validating"]);
@@ -54,6 +56,8 @@ export function VideoSummaryPanel({
   sourceVersion,
   translationVersion,
   onPrepareSubtitles,
+  onJump,
+  onPausePlayback,
 }: VideoSummaryPanelProps) {
   const completionRef = useRef<string | null>(null);
   const execution = useAiExecutionChoice(true);
@@ -234,7 +238,7 @@ export function VideoSummaryPanel({
       ) : null}
       {error ? <div className="understanding-error" role="alert">{error}</div> : null}
       {summary ? (
-        <SummaryResultView summary={summary} exporting={operation === "export"} exportNotice={exportNotice} onExport={() => void exportReport()} onNewSummary={newSummary} />
+        <SummaryResultView summary={summary} exporting={operation === "export"} exportNotice={exportNotice} onExport={() => void exportReport()} onNewSummary={newSummary} onJump={onJump} onPausePlayback={onPausePlayback} />
       ) : task ? (
         <SummaryProgress task={task} busy={operation !== null} onCancel={() => void cancel()} onResume={() => void resume()} onOpenMaterials={() => void openSummaryMaterials(task.id).catch(showError)} />
       ) : (

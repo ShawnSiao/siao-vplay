@@ -2,13 +2,27 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
   "additionalProperties": false,
-  "required": ["title", "overview", "timeline", "coreConcepts", "principlesOrArchitecture", "conclusions", "limitations", "glossary", "mermaid"],
+  "required": [
+    "formatVersion", "title", "overview", "coveredChunkOrdinals",
+    "speakerNarrative", "timeline", "coreConcepts", "principlesOrArchitecture",
+    "examplesAndScenarios", "designTradeoffs", "conclusions", "limitations",
+    "glossary", "mermaid"
+  ],
   "properties": {
-    "title": { "type": "string" },
-    "overview": { "type": "string" },
+    "formatVersion": { "const": 2 },
+    "title": { "type": "string", "minLength": 1 },
+    "overview": { "type": "string", "minLength": 1 },
+    "coveredChunkOrdinals": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "integer", "minimum": 1 }
+    },
+    "speakerNarrative": { "$ref": "#/$defs/sections" },
     "timeline": { "$ref": "#/$defs/sections" },
     "coreConcepts": { "$ref": "#/$defs/sections" },
     "principlesOrArchitecture": { "$ref": "#/$defs/sections" },
+    "examplesAndScenarios": { "$ref": "#/$defs/sections" },
+    "designTradeoffs": { "$ref": "#/$defs/sections" },
     "conclusions": { "$ref": "#/$defs/sections" },
     "limitations": { "type": "array", "items": { "type": "string" } },
     "glossary": {
@@ -18,8 +32,8 @@
         "additionalProperties": false,
         "required": ["term", "explanation", "subtitleIds"],
         "properties": {
-          "term": { "type": "string" },
-          "explanation": { "type": "string" },
+          "term": { "type": "string", "minLength": 1 },
+          "explanation": { "type": "string", "minLength": 1 },
           "subtitleIds": { "type": "array", "items": { "type": "string" } }
         }
       }
@@ -34,8 +48,8 @@
         "additionalProperties": false,
         "required": ["title", "body", "evidence"],
         "properties": {
-          "title": { "type": "string" },
-          "body": { "type": "string" },
+          "title": { "type": "string", "minLength": 1 },
+          "body": { "type": "string", "minLength": 1 },
           "evidence": {
             "type": "array",
             "items": {
@@ -44,7 +58,7 @@
               "required": ["kind", "claim", "subtitleIds", "frameTimestampsMs"],
               "properties": {
                 "kind": { "enum": ["video_statement", "subtitle_or_frame", "ai_inference", "needs_external_validation"] },
-                "claim": { "type": "string" },
+                "claim": { "type": "string", "minLength": 1 },
                 "subtitleIds": { "type": "array", "items": { "type": "string" } },
                 "frameTimestampsMs": { "type": "array", "items": { "type": "integer", "minimum": 0 } }
               }

@@ -9,9 +9,10 @@ use super::{
     model::{
         AnalysisMode, AnalysisScope, EvidenceKind, ExportVideoSummaryInput,
         PrepareSummaryTaskInput, PromptSelection, SummaryEvidence, SummaryExecutionKind,
-        SummaryGlossaryEntry, SummaryResult, SummarySection,
+        SummaryResult, SummarySection,
     },
     report,
+    result_model::SummaryGlossaryEntry,
     result_repository::SummaryResultRepository,
     task_repository::SummaryTaskRepository,
 };
@@ -72,6 +73,8 @@ fn real_media_exports_a_verified_private_markdown_report() {
     assert!(report.contains("assets/frame-001.jpg"));
     assert!(!report.contains(&media_path));
     assert!(!report.contains("abcdefghijklmnop"));
+    assert!(!report.contains("segment-1"));
+    assert!(report.contains("00:00:00–00:00:01 · 1 条字幕"));
     let manifest: Value =
         serde_json::from_slice(&fs::read(&exported.manifest_path).unwrap()).unwrap();
     let root = Path::new(&exported.directory);
@@ -217,24 +220,31 @@ fn summary_result() -> SummaryResult {
         claim: "组件之间传递数据".to_owned(),
         subtitle_ids: vec!["segment-1".to_owned()],
         frame_timestamps_ms: vec![500],
+        citations: vec![],
     };
     let section = SummarySection {
         title: "数据流".to_owned(),
-        body: "输入经过组件处理后传给下游。".to_owned(),
+        body: "输入经过组件处理后传给下游，并在边界处完成格式检查、错误处理和结果验证。".repeat(2),
         evidence: vec![evidence],
     };
     SummaryResult {
+        format_version: 2,
         title: "软件架构分析".to_owned(),
-        overview: "结构化报告 api_key=abcdefghijklmnop".to_owned(),
+        overview: "讲者先解释组件边界，然后说明数据如何在组件间传递，最后讨论验证方式与适用限制。结构化报告 api_key=abcdefghijklmnop".repeat(2),
+        covered_chunk_ordinals: vec![1],
+        speaker_narrative: vec![section.clone()],
         timeline: vec![section.clone()],
         core_concepts: vec![section.clone()],
         principles_or_architecture: vec![section.clone()],
+        examples_and_scenarios: vec![section.clone()],
+        design_tradeoffs: vec![section.clone()],
         conclusions: vec![section],
         limitations: vec!["需要外部验证性能结论".to_owned()],
         glossary: vec![SummaryGlossaryEntry {
             term: "组件".to_owned(),
             explanation: "具有独立职责的模块".to_owned(),
             subtitle_ids: vec!["segment-1".to_owned()],
+            citations: vec![],
         }],
         mermaid: Some("flowchart LR\nA --> B".to_owned()),
     }

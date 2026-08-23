@@ -58,10 +58,17 @@ test("video summary progress and evidence report stay usable across target viewp
 
     await page.goto("/e2e/player.html?summary=result", { waitUntil: "domcontentloaded" });
     await expect(page.getByText("从即时状态到外部记忆")).toBeVisible();
-    await expect(page.getByText("视频明确陈述")).toBeVisible();
-    await expect(page.getByText("字幕或画面证据")).toBeVisible();
-    await expect(page.getByText("AI 推导")).toBeVisible();
-    await expect(page.getByText("待外部验证")).toBeVisible();
+    for (const disclosure of await page.locator(".summary-evidence-details > summary").all()) {
+      await disclosure.click();
+    }
+    await expect(page.getByText("视频明确陈述").first()).toBeVisible();
+    await expect(page.getByText("字幕或画面证据").first()).toBeVisible();
+    await expect(page.getByText("AI 推导").first()).toBeVisible();
+    await expect(page.getByText("待外部验证").first()).toBeVisible();
+    await expect(page.getByText(/S128|S134/)).toHaveCount(0);
+    await expect(page.getByText(/03:14–03:18/).first()).toBeVisible();
+    await page.getByRole("button", { name: "展开阅读" }).click();
+    await expect(page.locator(".summary-reader-expanded")).toBeVisible();
     await expect(page.getByRole("button", { name: "保存 Markdown 报告" })).toBeVisible();
     await expect.poll(() => page.evaluate(() => document.body.scrollWidth <= document.body.clientWidth)).toBe(true);
     await expect.poll(() => page.getByLabel("视频总结预览").evaluate(

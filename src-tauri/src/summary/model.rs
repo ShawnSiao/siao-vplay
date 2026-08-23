@@ -1,5 +1,9 @@
 use serde::{Deserialize, Serialize};
 
+pub use super::result_model::{
+    EvidenceKind, SummaryCitation, SummaryEvidence, SummaryResult, SummarySection,
+};
+
 use crate::store::StoreError;
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -280,65 +284,6 @@ pub struct SummaryTask {
     pub updated_at_ms: i64,
     pub chunks: Vec<SummaryChunk>,
     pub materials_directory: String,
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum EvidenceKind {
-    VideoStatement,
-    SubtitleOrFrame,
-    AiInference,
-    NeedsExternalValidation,
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SummaryEvidence {
-    pub kind: EvidenceKind,
-    pub claim: String,
-    #[serde(default)]
-    pub subtitle_ids: Vec<String>,
-    #[serde(default)]
-    pub frame_timestamps_ms: Vec<i64>,
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SummarySection {
-    pub title: String,
-    pub body: String,
-    #[serde(default)]
-    pub evidence: Vec<SummaryEvidence>,
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SummaryGlossaryEntry {
-    pub term: String,
-    pub explanation: String,
-    #[serde(default)]
-    pub subtitle_ids: Vec<String>,
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SummaryResult {
-    pub title: String,
-    pub overview: String,
-    #[serde(default)]
-    pub timeline: Vec<SummarySection>,
-    #[serde(default)]
-    pub core_concepts: Vec<SummarySection>,
-    #[serde(default)]
-    pub principles_or_architecture: Vec<SummarySection>,
-    #[serde(default)]
-    pub conclusions: Vec<SummarySection>,
-    #[serde(default)]
-    pub limitations: Vec<String>,
-    #[serde(default)]
-    pub glossary: Vec<SummaryGlossaryEntry>,
-    #[serde(default)]
-    pub mermaid: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]

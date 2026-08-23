@@ -2,9 +2,12 @@ pub mod commands;
 
 mod backup;
 mod chunker;
+mod citations;
 mod codex_executor;
+mod execution_prompts;
 mod executor;
 mod keyframes;
+mod markdown_report;
 mod materials;
 pub(crate) mod migration;
 mod model;
@@ -13,6 +16,7 @@ mod report;
 #[cfg(test)]
 mod report_acceptance_tests;
 mod repository;
+mod result_model;
 mod result_repository;
 mod result_validation;
 mod schema;

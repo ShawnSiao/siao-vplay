@@ -7,12 +7,16 @@ import "../features/summary/summary-results.css";
 
 type UnderstandingPanelProps = CurrentScenePanelProps & {
   durationMs?: number | null;
+  onJump?: (positionMs: number) => void;
+  onPausePlayback?: () => void;
 };
 
 export function UnderstandingPanel({
   durationMs = null,
   embedded = false,
   onClose,
+  onJump,
+  onPausePlayback,
   ...sceneProps
 }: UnderstandingPanelProps) {
   const [tab, setTab] = useState<"scene" | "summary">("scene");
@@ -59,6 +63,8 @@ export function UnderstandingPanel({
             sourceVersion={sceneProps.sourceVersion}
             translationVersion={sceneProps.translationVersion}
             onPrepareSubtitles={sceneProps.onPrepareSubtitles}
+            onJump={onJump}
+            onPausePlayback={onPausePlayback}
           />
         )}
       </div>
