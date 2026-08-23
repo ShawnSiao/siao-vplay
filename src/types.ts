@@ -990,6 +990,19 @@ export type ExplanationFrame = {
   sha256: string;
 };
 
+export type ExplanationMaterialSummary = {
+  subtitleCount: number;
+  frameCount: number;
+  startMs: number;
+  endMs: number;
+};
+
+export type ExplanationEntry = {
+  text: string;
+  subtitleSegmentIds: string[];
+  frameIds: string[];
+};
+
 export type ExplanationTask = {
   id: string;
   projectId: string;
@@ -1023,6 +1036,7 @@ export type ExplanationTask = {
   startedAtMs: number | null;
   completedAtMs: number | null;
   frames: ExplanationFrame[];
+  materialSummary: ExplanationMaterialSummary;
 };
 export type Explanation = {
   id: string;
@@ -1032,8 +1046,10 @@ export type Explanation = {
   translationVersionId: string | null;
   playbackCutoffMs: number;
   sceneStartMs: number;
-  confirmedFacts: string[];
-  possibleInterpretations: string[];
+  protocolVersion: string;
+  materialSummary: ExplanationMaterialSummary;
+  confirmedFacts: ExplanationEntry[];
+  possibleInterpretations: ExplanationEntry[];
   withheldReason: string | null;
   createdAtMs: number;
 };

@@ -86,7 +86,6 @@ pub(crate) fn seed_built_ins(
     Ok(())
 }
 
-#[allow(dead_code)] // Consumed by understanding v2 and summary task preparation in later phases.
 pub(crate) fn compose_prompt_snapshot(
     template: &AnalysisPromptTemplate,
     one_time_requirements: &str,

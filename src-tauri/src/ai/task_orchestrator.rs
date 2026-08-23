@@ -1,7 +1,7 @@
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 
 use super::{
-    connection,
+    connection, material_scope,
     providers::{self, GenerationInput, ProviderFailure, ProviderOutput},
     request_coordinator::global_request_coordinator,
     task_persistence::{self, AiTaskKind},
@@ -23,12 +23,16 @@ pub fn start_explanation(
 ) -> Result<ExplanationTask, AiTaskError> {
     validate_authorization(&input.authorization)?;
     let service = api_service(&input.execution, &input.authorization)?;
+    let include_frames =
+        material_scope::explanation_frames_enabled(input.authorization.frames, service.as_ref());
     let task = understanding::prepare_explanation_task(
         store,
         PrepareExplanationTaskInput {
             project_id: input.project_id,
             handoff_kind: input.execution.kind().to_owned(),
             playback_cutoff_ms: input.playback_cutoff_ms,
+            include_frames,
+            prompt_selection: input.prompt_selection,
         },
     )?;
     match input.execution {
@@ -162,8 +166,14 @@ fn run_api_explanation(
     let model_id = selected_model(&service)?;
     let frames_effective =
         authorization.frames && providers::model_supports_vision(&service, model_id);
-    let prompt = authorized_explanation_prompt(
+    let frame_ids = task
+        .frames
+        .iter()
+        .map(|frame| frame.id.clone())
+        .collect::<Vec<_>>();
+    let prompt = material_scope::authorized_explanation_prompt(
         understanding::read_explanation_prompt(store, task_id)?,
+        &frame_ids,
         frames_effective,
     );
     let images = if frames_effective {
@@ -171,7 +181,10 @@ fn run_api_explanation(
     } else {
         Vec::new()
     };
-    let schema = understanding::read_explanation_schema(store, task_id)?;
+    let schema = material_scope::authorized_explanation_schema(
+        understanding::read_explanation_schema(store, task_id)?,
+        frames_effective,
+    );
     let output = execute_provider(
         store,
         AiTaskKind::Explanation,
@@ -321,24 +334,6 @@ fn validate_authorization(authorization: &AiMaterialAuthorization) -> Result<(),
     }
 }
 
-fn authorized_explanation_prompt(prompt: String, include_frames: bool) -> String {
-    if include_frames {
-        return prompt;
-    }
-    let Some(start) = prompt.find("## 已授权关键帧") else {
-        return prompt;
-    };
-    let Some(relative_end) = prompt[start..].find("## 结果校验规则") else {
-        return prompt;
-    };
-    let end = start + relative_end;
-    format!(
-        "{}## 已授权关键帧\n\n本次未授权发送画面。\n\n{}",
-        &prompt[..start],
-        &prompt[end..]
-    )
-}
-
 fn encode_frames(task: &ExplanationTask) -> Result<Vec<String>, AiTaskError> {
     task.frames
         .iter()
@@ -378,19 +373,5 @@ fn run_codex_learning(
         Ok(codex_runner::resume_codex_learning_task(store, input)?)
     } else {
         Ok(codex_runner::start_codex_learning_task(store, input)?)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn text_only_prompt_removes_frame_manifest() {
-        let prompt = "before\n## 已授权关键帧\n\n```json\n[path]\n```\n\n## 结果校验规则\nafter";
-        let redacted = authorized_explanation_prompt(prompt.to_owned(), false);
-        assert!(!redacted.contains("[path]"));
-        assert!(redacted.contains("本次未授权发送画面"));
-        assert!(redacted.contains("## 结果校验规则"));
     }
 }

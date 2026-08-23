@@ -1008,17 +1008,17 @@ export async function chooseExplanationResultFile(): Promise<string | null> {
   });
   return typeof selected === "string" ? selected : null;
 }
-
 export async function prepareExplanationTask(
   projectId: string,
   handoffKind: "manual" | "codex",
   playbackCutoffMs: number,
+  includeFrames: boolean,
+  promptSelection: import("../features/analysis/types").PromptSelection,
 ): Promise<ExplanationTask> {
   return invoke<ExplanationTask>("prepare_explanation_task", {
-    input: { projectId, handoffKind, playbackCutoffMs },
+    input: { projectId, handoffKind, playbackCutoffMs, includeFrames, promptSelection },
   });
 }
-
 export async function getExplanationTask(
   taskId: string,
 ): Promise<ExplanationTask> {

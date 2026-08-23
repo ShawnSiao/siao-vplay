@@ -2,10 +2,12 @@ import { invoke } from "@tauri-apps/api/core";
 
 import type { ExplanationTask, LearningSelectionKind, LearningTask } from "../../types";
 import type { AiExecutionTarget, AiMaterialAuthorization } from "../environment-settings/types";
+import type { PromptSelection } from "../analysis/types";
 
 export function startExplanationTask(input: {
   projectId: string;
   playbackCutoffMs: number;
+  promptSelection: PromptSelection;
   execution: AiExecutionTarget;
   authorization: AiMaterialAuthorization;
 }): Promise<ExplanationTask> {

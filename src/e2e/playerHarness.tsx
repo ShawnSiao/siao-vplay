@@ -2,6 +2,7 @@ import { StrictMode, useState } from "react";
 import { createRoot } from "react-dom/client";
 
 import { PlayerScreen } from "../features/playback/PlayerScreen";
+import { UnderstandingResultView } from "../features/analysis/UnderstandingResultView";
 import { DesktopShell } from "../features/shell/DesktopShell";
 import type { MediaDropFeedback } from "../features/shell/useDesktopMediaDrop";
 import type {
@@ -16,6 +17,7 @@ import type {
   Project,
   SubtitleVersion,
 } from "../types";
+import { createUnderstandingFixtures } from "../test-fixtures/understanding";
 import "../styles.css";
 
 const project: Project = {
@@ -226,9 +228,52 @@ function requestedDropFeedback(): MediaDropFeedback | null {
     : null;
 }
 
+function UnderstandingResultPreview() {
+  const [factsExpanded, setFactsExpanded] = useState(false);
+  const [interpretationsExpanded, setInterpretationsExpanded] = useState(false);
+  const { explanation } = createUnderstandingFixtures({
+    projectId: project.id,
+    sourceVersionId: originalSubtitle.id,
+    translationVersionId: translatedSubtitle.id,
+    sourceSegmentId: originalSubtitle.segments[0].id,
+  });
+  const entries = Array.from({ length: 6 }, (_, index) => ({
+    text: `第 ${index + 1} 条带依据的分析内容。`,
+    subtitleSegmentIds: [originalSubtitle.segments[0].id],
+    frameIds: index % 2 === 0 ? ["16e2210a-62e4-4df8-a0cc-25a9c218f998"] : [],
+  }));
+  return (
+    <main className="understanding-preview">
+      <section className="understanding-panel embedded" aria-label="场景理解">
+        <div className="understanding-scroll">
+          <div className="spoiler-boundary"><span>无剧透范围</span><strong>仅使用 00:15 之前</strong></div>
+          <UnderstandingResultView
+            explanation={{
+              ...explanation,
+              playbackCutoffMs: 15_000,
+              materialSummary: { ...explanation.materialSummary, endMs: 15_000 },
+              confirmedFacts: entries,
+              possibleInterpretations: entries,
+            }}
+            factsExpanded={factsExpanded}
+            interpretationsExpanded={interpretationsExpanded}
+            onFactsExpandedChange={setFactsExpanded}
+            onInterpretationsExpandedChange={setInterpretationsExpanded}
+            onAnalyzeAgain={() => undefined}
+          />
+        </div>
+      </section>
+    </main>
+  );
+}
+
 export function PlayerHarness() {
   const [drawerTab, setDrawerTab] = useState<ShellDrawerTab | null>(null);
   const [contextMenu, setContextMenu] = useState<ShellContextMenu | null>(null);
+
+  if (new URLSearchParams(window.location.search).get("understanding") === "result") {
+    return <UnderstandingResultPreview />;
+  }
 
   const toggleDrawer = (tab: ShellDrawerTab) => {
     setDrawerTab((current) => (current === tab ? null : tab));

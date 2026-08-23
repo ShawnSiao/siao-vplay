@@ -2591,7 +2591,6 @@ mod tests {
             )
             .expect("translation task should be prepared")
         }
-
         fn prepare_explanation(&self, handoff_kind: &str) -> ExplanationTask {
             let project = self
                 .store
@@ -2642,6 +2641,8 @@ mod tests {
                     project_id: self.project_id.clone(),
                     handoff_kind: handoff_kind.to_owned(),
                     playback_cutoff_ms: 2_000,
+                    include_frames: true,
+                    prompt_selection: crate::summary::PromptSelection::default(),
                 },
                 |_media_path, timestamp_ms, output_path| {
                     fs::write(output_path, format!("jpeg-at-{timestamp_ms}"))?;
@@ -2753,15 +2754,14 @@ process.stdin.on("end", () => {
                 .parent()
                 .expect("fixture data directory should have a parent");
             let script_path = root.join("fake-explanation-codex.js");
-            let result = serde_json::to_string(&json!({
-                "protocolVersion": task.protocol_version,
-                "taskId": task.id,
-                "sourceVersionId": task.source_version_id,
-                "playbackCutoffMs": task.playback_cutoff_ms,
-                "confirmedFacts": ["两个人约定在车站前见面。"],
-                "possibleInterpretations": ["结合当前语气，这个约定对说话者可能很重要。"],
-                "withheldReason": "不展开播放位置之后的内容。"
-            }))
+            let result = serde_json::to_string(&crate::understanding_v2::fixture_result(
+                &task.protocol_version,
+                &task.id,
+                &task.source_version_id,
+                task.playback_cutoff_ms,
+                &task.authorized_segment_ids[0],
+                &task.frames[0].id,
+            ))
             .expect("result should serialize");
             fs::write(
                 &script_path,

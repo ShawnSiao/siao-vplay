@@ -8,7 +8,8 @@ mod repository;
 mod schema;
 
 pub use model::{
-    AnalysisPromptTemplate, DeleteAnalysisPromptTemplateInput, ListAnalysisPromptTemplatesInput,
+    AnalysisPromptTemplate, AnalysisTaskType, DeleteAnalysisPromptTemplateInput,
+    ListAnalysisPromptTemplatesInput, PromptSelection, PromptSnapshot,
     SaveAnalysisPromptTemplateInput,
 };
 

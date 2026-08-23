@@ -24,6 +24,7 @@ mod summary;
 mod transcription;
 mod translation;
 mod understanding;
+mod understanding_v2;
 mod youtube_command_error;
 mod youtube_media;
 

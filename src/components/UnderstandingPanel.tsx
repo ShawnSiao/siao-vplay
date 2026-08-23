@@ -1,4 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+
+import "../features/analysis/understanding.css";
 
 import {
   cancelExplanationTask,
@@ -26,6 +28,9 @@ import type {
 } from "../types";
 import { AiTaskExecutionSetup } from "../features/ai-tasks/AiTaskExecutionSetup";
 import { resumeExplanationTask, startExplanationTask } from "../features/ai-tasks/gateway";
+import { UnderstandingPromptSelector } from "../features/analysis/UnderstandingPromptSelector";
+import { UnderstandingResultView } from "../features/analysis/UnderstandingResultView";
+import type { PromptSelection } from "../features/analysis/types";
 import {
   authorizationForTask,
   executionForTask,
@@ -91,12 +96,19 @@ export function UnderstandingPanel({
   const [prompt, setPrompt] = useState<string | null>(null);
   const [promptExpanded, setPromptExpanded] = useState(false);
   const [factsExpanded, setFactsExpanded] = useState(false);
-  const [interpretationExpanded, setInterpretationExpanded] = useState(true);
+  const [interpretationExpanded, setInterpretationExpanded] = useState(false);
+  const [promptSelection, setPromptSelection] = useState<PromptSelection>({
+    templateId: "builtin:understanding:balanced",
+    oneTimeRequirements: "",
+  });
   const [copyNotice, setCopyNotice] = useState<string | null>(null);
   const [resultPath, setResultPath] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [operation, setOperation] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const handlePromptError = useCallback((cause: unknown) => {
+    setError(commandError(cause).message);
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -123,7 +135,7 @@ export function UnderstandingPanel({
           ) ?? null;
         if (!activeTask && latestVisible) {
           setFactsExpanded(false);
-          setInterpretationExpanded(true);
+          setInterpretationExpanded(false);
           setExplanation(latestVisible);
           setTask(
             tasks.find((item) => item.id === latestVisible.taskId) ?? null,
@@ -213,7 +225,7 @@ export function UnderstandingPanel({
     void getExplanation(task.outputExplanationId)
       .then((value) => {
         setFactsExpanded(false);
-        setInterpretationExpanded(true);
+        setInterpretationExpanded(false);
         setExplanation(value);
         setHistory((current) => [
           value,
@@ -232,7 +244,7 @@ export function UnderstandingPanel({
     setPrompt(null);
     setPromptExpanded(false);
     setFactsExpanded(false);
-    setInterpretationExpanded(true);
+    setInterpretationExpanded(false);
     setCopyNotice(null);
     setResultPath(null);
     setError(null);
@@ -247,8 +259,14 @@ export function UnderstandingPanel({
     try {
       const choice = executionChoice.kind === "api" ? await executionChoice.preview() : null;
       const prepared = choice ? await startExplanationTask({
-        projectId, playbackCutoffMs, execution: choice.execution, authorization: choice.authorization,
-      }) : await prepareExplanationTask(projectId, executionChoice.kind === "manual" ? "manual" : "codex", playbackCutoffMs);
+        projectId, playbackCutoffMs, promptSelection, execution: choice.execution, authorization: choice.authorization,
+      }) : await prepareExplanationTask(
+        projectId,
+        executionChoice.kind === "manual" ? "manual" : "codex",
+        playbackCutoffMs,
+        executionChoice.authorization.frames,
+        promptSelection,
+      );
       setTask(prepared);
       setExplanation(null);
       if (executionChoice.kind === "codex") {
@@ -355,7 +373,7 @@ export function UnderstandingPanel({
       const application = await importExplanationResult(task.id, resultPath);
       handledCompletionRef.current = task.id;
       setFactsExpanded(false);
-      setInterpretationExpanded(true);
+      setInterpretationExpanded(false);
       setTask(application.task);
       setExplanation(application.explanation);
       setHistory((current) => [
@@ -381,15 +399,6 @@ export function UnderstandingPanel({
     explanation && explanation.playbackCutoffMs <= playbackCutoffMs
       ? explanation
       : null;
-  const visibleFacts = visibleExplanation
-    ? visibleExplanation.confirmedFacts.slice(
-        0,
-        factsExpanded ? undefined : 3,
-      )
-    : [];
-  const hasMoreFacts = Boolean(
-    visibleExplanation && visibleExplanation.confirmedFacts.length > 3,
-  );
   const visibleHistory = history.filter(
     (item) => item.playbackCutoffMs <= playbackCutoffMs,
   );
@@ -429,89 +438,33 @@ export function UnderstandingPanel({
           </div>
         ) : null}
 
+        {task && !visibleExplanation ? (
+          <div className="understanding-task-material" aria-label="本次任务材料范围">
+            <span>本次实际材料</span>
+            <strong>
+              {task.materialSummary.subtitleCount} 条字幕 · {task.materialSummary.frameCount} 张关键帧
+            </strong>
+            <small>
+              {formatDuration(task.materialSummary.startMs)}–{formatDuration(task.materialSummary.endMs)}，
+              不包含播放点之后的材料
+            </small>
+          </div>
+        ) : null}
+
         {loading ? (
           <div className="understanding-loading" role="status">
             <span className="spinner"></span>
             <span>正在读取此前的场景理解</span>
           </div>
         ) : visibleExplanation ? (
-          <div className="understanding-result">
-            <div className="understanding-result-time">
-              <span>解释位置</span>
-              <strong>{formatDuration(visibleExplanation.playbackCutoffMs)}</strong>
-            </div>
-            <section className="understanding-result-section facts-section">
-              <div className="understanding-section-heading">
-                <div>
-                  <span>01</span>
-                  <h3>当前可确认的事实</h3>
-                </div>
-                {hasMoreFacts ? (
-                  <button
-                    aria-controls="understanding-facts"
-                    aria-expanded={factsExpanded}
-                    className="understanding-disclosure"
-                    type="button"
-                    onClick={() => setFactsExpanded((value) => !value)}
-                  >
-                    {factsExpanded ? "收起部分" : "展开全部"}
-                  </button>
-                ) : null}
-              </div>
-              <ul id="understanding-facts">
-                {visibleFacts.map((fact) => (
-                  <li key={fact}>{fact}</li>
-                ))}
-              </ul>
-            </section>
-            <section
-              className={`understanding-result-section interpretation ${
-                interpretationExpanded ? "is-expanded" : "is-collapsed"
-              }`}
-            >
-              <div className="understanding-section-heading">
-                <div>
-                  <span>02</span>
-                  <h3>结合当前剧情的可能解读</h3>
-                </div>
-                <button
-                  aria-controls="understanding-interpretation"
-                  aria-expanded={interpretationExpanded}
-                  className="understanding-disclosure"
-                  type="button"
-                  onClick={() => setInterpretationExpanded((value) => !value)}
-                >
-                  {interpretationExpanded ? "收起" : "展开"}
-                </button>
-              </div>
-              <div
-                className="understanding-disclosure-body"
-                hidden={!interpretationExpanded}
-                id="understanding-interpretation"
-              >
-                <ul>
-                  {visibleExplanation.possibleInterpretations.map((item) => (
-                    <li key={item}>{item}</li>
-                  ))}
-                </ul>
-                <p className="understanding-interpretation-note">
-                  这是结合当前播放位置的可能解读，不代表影片后续已经给出结论。
-                </p>
-              </div>
-            </section>
-            {visibleExplanation.withheldReason ? (
-              <p className="understanding-withheld">
-                {visibleExplanation.withheldReason}
-              </p>
-            ) : null}
-            <button
-              className="button quiet understanding-again"
-              type="button"
-              onClick={resetForCurrentScene}
-            >
-              解释当前播放位置
-            </button>
-          </div>
+          <UnderstandingResultView
+            explanation={visibleExplanation}
+            factsExpanded={factsExpanded}
+            interpretationsExpanded={interpretationExpanded}
+            onFactsExpandedChange={setFactsExpanded}
+            onInterpretationsExpandedChange={setInterpretationExpanded}
+            onAnalyzeAgain={resetForCurrentScene}
+          />
         ) : !sourceVersion ? (
           <div className="understanding-empty">
             <strong>需要先准备原文字幕</strong>
@@ -527,9 +480,15 @@ export function UnderstandingPanel({
         ) : !task ? (
           <div className="understanding-setup">
             <div className="understanding-intro">
-              <strong>理解人物此刻为什么这样说</strong>
-              <p>根据最近的字幕和最多三张关键帧，区分已确认事实与可能解读。</p>
+              <strong>深入理解当前内容</strong>
+              <p>最多回看 3 分钟、40 条字幕和 6 张关键帧，事实与解读均附材料依据。</p>
             </div>
+            <UnderstandingPromptSelector
+              value={promptSelection}
+              disabled={busy}
+              onChange={setPromptSelection}
+              onError={handlePromptError}
+            />
             <AiTaskExecutionSetup
               controller={executionChoice}
               runtime={runtime}
@@ -713,13 +672,13 @@ export function UnderstandingPanel({
                   type="button"
                   onClick={() => {
                     setFactsExpanded(false);
-                    setInterpretationExpanded(true);
+                    setInterpretationExpanded(false);
                     setExplanation(item);
                     setTask(null);
                   }}
                 >
                   <span>{formatDuration(item.playbackCutoffMs)}</span>
-                  <strong>{item.confirmedFacts[0] ?? "此前的场景理解"}</strong>
+                  <strong>{item.confirmedFacts[0]?.text ?? "此前的场景理解"}</strong>
                 </button>
               ))}
             </div>

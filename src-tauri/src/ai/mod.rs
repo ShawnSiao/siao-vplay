@@ -7,6 +7,7 @@ mod config;
 mod connection;
 mod credentials;
 mod error;
+mod material_scope;
 mod probe;
 mod providers;
 mod storage;

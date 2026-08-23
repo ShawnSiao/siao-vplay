@@ -2769,14 +2769,13 @@ mod tests {
             .expect("translation version should remain");
         assert!(translation.is_current);
         assert_eq!(translation.segments[0].text, "你一直在等吗？");
-
         let explanations = crate::understanding::list_explanations(&store, &fixture.project_id)
             .expect("explanations should remain readable");
         assert_eq!(explanations.len(), 1);
-        assert_eq!(explanations[0].id, fixture.explanation_id);
-        assert_eq!(explanations[0].confirmed_facts, ["人物正在车站等待"]);
-        assert_eq!(explanations[0].possible_interpretations, ["语气带有惊讶"]);
-
+        let explanation = &explanations[0];
+        assert_eq!(explanation.id, fixture.explanation_id);
+        assert_eq!(explanation.confirmed_facts[0].text, "人物正在车站等待");
+        assert_eq!(explanation.possible_interpretations[0].text, "语气带有惊讶");
         let entries = crate::learning::list_dictionary_entries(&store, &fixture.project_id)
             .expect("dictionary entries should remain readable");
         assert_eq!(entries.len(), 1);

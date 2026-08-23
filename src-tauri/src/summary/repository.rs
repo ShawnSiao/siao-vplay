@@ -5,7 +5,7 @@ use uuid::Uuid;
 
 use super::{
     model::{AnalysisPromptTemplate, AnalysisTaskType, SaveAnalysisPromptTemplateInput},
-    prompts::{validate_template_name, validate_template_requirements},
+    prompts::{compose_prompt_snapshot, validate_template_name, validate_template_requirements},
 };
 use crate::store::{ProjectStore, StoreError};
 
@@ -61,6 +61,27 @@ impl<'a> PromptTemplateRepository<'a> {
             .optional()?
             .ok_or_else(|| StoreError::Validation("分析提示词模板不存在".to_owned()))?;
         raw.convert()
+    }
+
+    pub(crate) fn snapshot(
+        &self,
+        id: &str,
+        one_time_requirements: &str,
+    ) -> Result<super::model::PromptSnapshot, StoreError> {
+        let mut template = self.get(id)?;
+        if !template.is_builtin {
+            let base = self.get(&template.base_template_id)?;
+            if !base.is_builtin || base.task_type != template.task_type {
+                return Err(StoreError::Validation(
+                    "个人模板的内置基础模板无效".to_owned(),
+                ));
+            }
+            template.custom_requirements = format!(
+                "基础模板要求：{}\n个人模板要求：{}",
+                base.custom_requirements, template.custom_requirements
+            );
+        }
+        compose_prompt_snapshot(&template, one_time_requirements)
     }
 
     pub(crate) fn save(
@@ -237,6 +258,9 @@ mod tests {
             })
             .unwrap();
         assert_eq!(updated.name, "我的架构复盘");
+        let snapshot = repository.snapshot(&updated.id, "补充说明边界").unwrap();
+        assert!(snapshot.template_requirements.contains("失败路径"));
+        assert!(snapshot.template_requirements.contains("个人模板要求"));
         repository.delete(&created.id).unwrap();
         assert!(repository.get(&created.id).is_err());
     }

@@ -28,7 +28,7 @@ impl AnalysisTaskType {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AnalysisPromptTemplate {
     pub id: String,
@@ -63,7 +63,7 @@ pub struct DeleteAnalysisPromptTemplateInput {
     pub id: String,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PromptSnapshot {
     pub schema_version: u32,
@@ -76,6 +76,23 @@ pub struct PromptSnapshot {
     pub one_time_requirements: String,
     pub composed_prompt: String,
     pub sha256: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct PromptSelection {
+    pub template_id: String,
+    #[serde(default)]
+    pub one_time_requirements: String,
+}
+
+impl Default for PromptSelection {
+    fn default() -> Self {
+        Self {
+            template_id: "builtin:understanding:balanced".to_owned(),
+            one_time_requirements: String::new(),
+        }
+    }
 }
 
 #[cfg(test)]

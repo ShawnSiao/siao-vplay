@@ -4,8 +4,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   DictionaryEntry,
   EmbeddedSubtitlePreview,
-  Explanation,
-  ExplanationTask,
   LearningCard,
   LearningTask,
   LibraryHome,
@@ -23,6 +21,7 @@ import type {
   TranslationTask,
   YouTubeMediaPreview,
 } from "./types";
+import { createUnderstandingFixtures } from "./test-fixtures/understanding";
 
 const desktopMocks = vi.hoisted(() => ({
   getAppStatus: vi.fn(),
@@ -146,6 +145,12 @@ const libraryGatewayMocks = vi.hoisted(() => ({
   confirmLibraryImport: vi.fn(),
 }));
 
+const analysisGatewayMocks = vi.hoisted(() => ({
+  listAnalysisPromptTemplates: vi.fn(),
+  saveAnalysisPromptTemplate: vi.fn(),
+  deleteAnalysisPromptTemplate: vi.fn(),
+}));
+
 vi.mock("./lib/desktop", () => ({
   ...desktopMocks,
   isDesktopApp: true,
@@ -160,6 +165,8 @@ vi.mock("./features/library/libraryGateway", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./features/library/libraryGateway")>()),
   ...libraryGatewayMocks,
 }));
+
+vi.mock("./features/analysis/gateway", () => analysisGatewayMocks);
 
 import App from "./App";
 
@@ -665,57 +672,12 @@ const completedTranslationTask: TranslationTask = {
   completedAtMs: 1_785_354_310_000,
 };
 
-const explanationTask: ExplanationTask = {
-  id: "3f4ed2ea-f522-4914-a846-c4187e39caa9",
+const { explanationTask, explanation } = createUnderstandingFixtures({
   projectId: project.id,
-  handoffKind: "codex",
-  protocolVersion: "siaovplay-understanding-v1",
-  status: "queued",
-  stage: "queued",
-  progress: 0,
-  receiverLabel: "本机 Codex",
-  materialScope: [
-    "播放截止时间以内的原文字幕",
-    "对应的简体中文字幕（如有）",
-    "不晚于播放位置的最多三张关键帧",
-  ],
   sourceVersionId: subtitleVersion.id,
   translationVersionId: translatedVersion.id,
-  authorizedSegmentIds: [subtitleVersion.segments[0].id],
-  playbackCutoffMs: 42_000,
-  sceneStartMs: 0,
-  expectedProjectRevision: 3,
-  outputExplanationId: null,
-  errorCode: null,
-  errorMessage: null,
-  createdAtMs: 1_785_354_320_000,
-  updatedAtMs: 1_785_354_320_000,
-  startedAtMs: null,
-  completedAtMs: null,
-  frames: [
-    {
-      id: "16e2210a-62e4-4df8-a0cc-25a9c218f998",
-      ordinal: 0,
-      timestampMs: 41_750,
-      path: "W:\\SiaoVPlay\\agent-tasks\\task\\input\\frames\\frame-0001.jpg",
-      sha256: "d".repeat(64),
-    },
-  ],
-};
-
-const explanation: Explanation = {
-  id: "194b4275-8790-426a-91bb-ee31c01dc902",
-  projectId: project.id,
-  taskId: explanationTask.id,
-  sourceVersionId: subtitleVersion.id,
-  translationVersionId: translatedVersion.id,
-  playbackCutoffMs: 42_000,
-  sceneStartMs: 0,
-  confirmedFacts: ["人物明确提到会在车站前见面。"],
-  possibleInterpretations: ["结合当前语气，这个约定对人物可能很重要。"],
-  withheldReason: "后续发展未展开，以避免剧透。",
-  createdAtMs: 1_785_354_330_000,
-};
+  sourceSegmentId: subtitleVersion.segments[0].id,
+});
 
 const learningTask: LearningTask = {
   id: "d34346c4-ec23-4f05-aee5-29ec8c8942aa",
@@ -828,6 +790,18 @@ const burnJob: SubtitleBurnJob = {
 };
 
 beforeEach(() => {
+  analysisGatewayMocks.listAnalysisPromptTemplates.mockResolvedValue([
+    {
+      id: "builtin:understanding:balanced",
+      taskType: "understanding",
+      baseTemplateId: "builtin:understanding:balanced",
+      name: "均衡解释",
+      customRequirements: "均衡理解",
+      isBuiltin: true,
+      createdAtMs: 1,
+      updatedAtMs: 1,
+    },
+  ]);
   vi.clearAllMocks();
   window.localStorage.clear();
   libraryGatewayMocks.listLibrarySection.mockResolvedValue({
@@ -1879,6 +1853,11 @@ describe("App", () => {
         project.id,
         "codex",
         42_000,
+        true,
+        {
+          templateId: "builtin:understanding:balanced",
+          oneTimeRequirements: "",
+        },
       ),
     );
     await waitFor(() =>
@@ -1981,7 +1960,7 @@ describe("App", () => {
       ),
     );
     expect(
-      await screen.findByText("结合当前剧情的可能解读"),
+      await screen.findByText("结合当前内容的可能解读"),
     ).toBeInTheDocument();
     expect(
       screen.getByText("结合当前语气，这个约定对人物可能很重要。"),

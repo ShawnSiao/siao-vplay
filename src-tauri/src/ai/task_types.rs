@@ -8,7 +8,7 @@ use super::{
 };
 use crate::{
     codex_runner::CodexRunnerError, learning::LearningError, store::StoreError,
-    understanding::UnderstandingError,
+    summary::PromptSelection, understanding::UnderstandingError,
 };
 
 #[derive(Clone, Debug, Deserialize)]
@@ -16,6 +16,8 @@ use crate::{
 pub struct StartExplanationTaskInput {
     pub project_id: String,
     pub playback_cutoff_ms: i64,
+    #[serde(default)]
+    pub prompt_selection: PromptSelection,
     pub execution: AiExecutionTarget,
     pub authorization: AiMaterialAuthorization,
 }
