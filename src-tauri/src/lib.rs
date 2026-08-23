@@ -20,6 +20,7 @@ mod resource_migration;
 mod runtime;
 mod store;
 mod subtitles;
+mod summary;
 mod transcription;
 mod translation;
 mod understanding;
@@ -199,6 +200,9 @@ pub fn run() {
             ai::commands::list_ai_service_models,
             ai::commands::test_ai_service,
             ai::commands::preview_ai_execution,
+            summary::commands::list_analysis_prompt_templates,
+            summary::commands::save_analysis_prompt_templates,
+            summary::commands::delete_analysis_prompt_templates,
             ai::commands::start_explanation_task,
             ai::commands::resume_explanation_task,
             ai::commands::start_learning_task,

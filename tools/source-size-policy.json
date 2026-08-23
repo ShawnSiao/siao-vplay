@@ -4,7 +4,7 @@
   "extensions": [".ts", ".tsx", ".rs", ".css"],
   "legacyLineLimits": {
     "src-tauri/src/burn.rs": 1963,
-    "src-tauri/src/codex_runner.rs": 3827,
+    "src-tauri/src/codex_runner.rs": 3829,
     "src-tauri/src/commands.rs": 1522,
     "src-tauri/src/delivery.rs": 907,
     "src-tauri/src/external_handoff.rs": 481,

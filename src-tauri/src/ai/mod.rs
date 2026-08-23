@@ -1,5 +1,6 @@
 pub mod commands;
 pub mod network;
+pub(crate) mod request_coordinator;
 
 mod catalog;
 mod config;

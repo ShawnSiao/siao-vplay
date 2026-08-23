@@ -3,6 +3,7 @@ use base64::{Engine as _, engine::general_purpose::STANDARD};
 use super::{
     connection,
     providers::{self, GenerationInput, ProviderFailure, ProviderOutput},
+    request_coordinator::global_request_coordinator,
     task_persistence::{self, AiTaskKind},
     task_types::{
         AiTaskError, ResumeAiTaskInput, StartExplanationTaskInput, StartLearningTaskInput,
@@ -254,6 +255,11 @@ fn execute_provider(
     service: &ResolvedAiService,
     input: GenerationInput,
 ) -> Result<ProviderOutput, AiTaskError> {
+    let lane = service
+        .service_config_id
+        .as_deref()
+        .unwrap_or(&service.base_url);
+    let _request_permit = global_request_coordinator().acquire_interactive(lane);
     let output = providers::generate(service, &input).map_err(|failure| {
         fail_provider(store, kind, task_id, &failure);
         AiTaskError::from(failure)
