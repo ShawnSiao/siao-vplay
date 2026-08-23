@@ -473,18 +473,28 @@ test("subtitle following, appearance, dragging, and controls remain complete", a
     const spoken = document.querySelector<HTMLElement>(".caption-word.spoken")!;
     const current = document.querySelector<HTMLElement>(".caption-word.current")!;
     const translation = document.querySelector<HTMLElement>(".caption-line.translation")!;
+    const original = document.querySelector<HTMLElement>(".caption-line.original")!;
+    const stackStyle = getComputedStyle(stack);
     return {
       base: stack.style.getPropertyValue("--caption-base"),
+      background: stackStyle.backgroundColor,
+      filter: stackStyle.filter,
       spokenColor: getComputedStyle(spoken).color,
       currentDecoration: getComputedStyle(current).textDecorationLine,
       currentWeight: Number(getComputedStyle(current).fontWeight),
+      originalWeight: Number(getComputedStyle(original).fontWeight),
+      textShadow: getComputedStyle(original).textShadow,
       translationColor: getComputedStyle(translation).color,
     };
   });
   expect(colorState).toMatchObject({
     base: "#fef3c7",
+    background: "rgba(5, 7, 9, 0.42)",
+    filter: "none",
     spokenColor: "rgb(254, 243, 199)",
     currentDecoration: "none",
+    originalWeight: 620,
+    textShadow: "rgba(0, 0, 0, 0.78) 0px 1px 2px",
     translationColor: "rgb(254, 243, 199)",
   });
   expect(colorState.currentWeight).toBeGreaterThanOrEqual(700);
