@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 
 import { PlayerScreen } from "../features/playback/PlayerScreen";
 import { UnderstandingResultView } from "../features/analysis/UnderstandingResultView";
+import { LearningSpeechPreview } from "./LearningSpeechPreview";
 import { DesktopShell } from "../features/shell/DesktopShell";
 import type { MediaDropFeedback } from "../features/shell/useDesktopMediaDrop";
 import type {
@@ -273,6 +274,9 @@ export function PlayerHarness() {
 
   if (new URLSearchParams(window.location.search).get("understanding") === "result") {
     return <UnderstandingResultPreview />;
+  }
+  if (new URLSearchParams(window.location.search).get("learning") === "speech") {
+    return <LearningSpeechPreview />;
   }
 
   const toggleDrawer = (tab: ShellDrawerTab) => {

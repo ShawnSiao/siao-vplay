@@ -229,6 +229,10 @@ export function usePlaybackController({
       setPlaying(false);
     }
   }, [onError]);
+  const pausePlayback = useCallback(() => {
+    videoRef.current?.pause();
+    setPlaying(false);
+  }, []);
   const toggleMuted = useCallback(() => {
     const video = videoRef.current;
     if (!video) {
@@ -463,6 +467,7 @@ export function usePlaybackController({
     handleSurfaceClick,
     handleSurfaceDoubleClick,
     togglePlayback,
+    pausePlayback,
     toggleMuted,
     toggleFullscreen,
     seekTo,

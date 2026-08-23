@@ -18,6 +18,7 @@ mod resource_diagnostics;
 mod resource_download;
 mod resource_migration;
 mod runtime;
+mod speech;
 mod store;
 mod subtitles;
 mod summary;
@@ -204,6 +205,8 @@ pub fn run() {
             summary::commands::list_analysis_prompt_templates,
             summary::commands::save_analysis_prompt_templates,
             summary::commands::delete_analysis_prompt_templates,
+            speech::commands::list_speech_voices,
+            speech::commands::synthesize_speech,
             ai::commands::start_explanation_task,
             ai::commands::resume_explanation_task,
             ai::commands::start_learning_task,

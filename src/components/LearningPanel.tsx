@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import "../features/learning/learning-speech.css";
+
 import {
   cancelLearningTask,
   chooseLearningExportDirectory,
@@ -16,18 +18,15 @@ import {
   listLearningCards,
   listLearningTasks,
   openExternalResultDirectory,
-  playbackUrl,
   prepareLearningTask,
   readLearningPrompt,
   resumeCodexLearningTask,
   startCodexLearningTask,
 } from "../lib/desktop";
-import { formatDuration } from "../lib/format";
 import type {
   CodexRuntimeStatus,
   DictionaryEntry,
   LearningCard,
-  LearningSelectionKind,
   LearningTask,
   SubtitleSegment,
   SubtitleVersion,
@@ -39,6 +38,11 @@ import {
   executionForTask,
   useAiExecutionChoice,
 } from "../features/ai-tasks/useAiExecutionChoice";
+import { LearningCardsSection } from "../features/learning/LearningCardsSection";
+import { LearningResultSection } from "../features/learning/LearningResultSection";
+import { LearningSelectionSection } from "../features/learning/LearningSelectionSection";
+import { selectionKind, splitForSelection } from "../features/learning/learningSelection";
+import { useLocalSpeech } from "../features/learning/useLocalSpeech";
 
 type LearningPanelProps = {
   projectId: string;
@@ -51,11 +55,7 @@ type LearningPanelProps = {
   onClose: () => void;
   embedded?: boolean;
   onJump: (positionMs: number) => void;
-};
-
-type SelectablePart = {
-  text: string;
-  selectable: boolean;
+  onPausePlayback: () => void;
 };
 
 const activeStatuses = new Set([
@@ -64,54 +64,6 @@ const activeStatuses = new Set([
   "running",
   "validating",
 ]);
-
-function splitForSelection(text: string, languageCode: string): SelectablePart[] {
-  if (!text) {
-    return [];
-  }
-  try {
-    const segmenter = new Intl.Segmenter(languageCode, {
-      granularity: "word",
-    });
-    return Array.from(segmenter.segment(text), (part) => ({
-      text: part.segment,
-      selectable: Boolean(part.isWordLike),
-    }));
-  } catch {
-    return text.split(/(\s+|[.,!?，。！？、…]+)/u).map((part) => ({
-      text: part,
-      selectable: Boolean(part.trim()) && !/^[.,!?，。！？、…]+$/u.test(part),
-    }));
-  }
-}
-
-function selectionKind(
-  selectedText: string,
-  sourceSentence: string,
-  selectableParts: SelectablePart[],
-): LearningSelectionKind {
-  if (selectedText === sourceSentence) {
-    return "sentence";
-  }
-  if (
-    selectableParts.some(
-      (part) => part.selectable && part.text === selectedText,
-    )
-  ) {
-    return "word";
-  }
-  return "phrase";
-}
-
-function selectionKindLabel(kind: LearningSelectionKind): string {
-  if (kind === "word") {
-    return "词语";
-  }
-  if (kind === "phrase") {
-    return "短语";
-  }
-  return "整句";
-}
 
 function statusCopy(task: LearningTask): string {
   if (task.status === "queued") {
@@ -147,6 +99,7 @@ export function LearningPanel({
   onClose,
   embedded = false,
   onJump,
+  onPausePlayback,
 }: LearningPanelProps) {
   const handledCompletionRef = useRef<string | null>(null);
   const selectableParts = useMemo(
@@ -171,6 +124,10 @@ export function LearningPanel({
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [operation, setOperation] = useState<string | null>(null);
+  const speech = useLocalSpeech({
+    language: sourceVersion?.languageCode ?? "und",
+    onBeforeSpeak: onPausePlayback,
+  });
 
   const kind = selectionKind(
     selectedText,
@@ -480,6 +437,7 @@ export function LearningPanel({
   };
 
   const removeCard = async (card: LearningCard) => {
+    speech.stop();
     setOperation(`delete:${card.id}`);
     setError(null);
     try {
@@ -551,7 +509,10 @@ export function LearningPanel({
           aria-label="关闭语言学习"
           className="learning-close"
           type="button"
-          onClick={onClose}
+          onClick={() => {
+            speech.stop();
+            onClose();
+          }}
         >
           ×
         </button>
@@ -588,91 +549,29 @@ export function LearningPanel({
           </div>
         ) : (
           <>
-            <section className="learning-selection">
-              <div className="learning-selection-heading">
-                <span>{formatDuration(playbackPositionMs)}</span>
-                <button
-                  type="button"
-                  onClick={() => selectText(sourceSegment.text)}
-                >
-                  选整句
-                </button>
-              </div>
-              <div
-                aria-label="选择原文词语"
-                className="learning-words"
-                lang={sourceVersion.languageCode}
-              >
-                {selectableParts.map((part, index) =>
-                  part.selectable ? (
-                    <button
-                      className={
-                        selectedText === part.text ? "selected" : undefined
-                      }
-                      key={`${index}-${part.text}`}
-                      type="button"
-                      onClick={() => selectText(part.text)}
-                    >
-                      {part.text}
-                    </button>
-                  ) : (
-                    <span key={`${index}-${part.text}`}>{part.text}</span>
-                  ),
-                )}
-              </div>
-              {translationSegment ? (
-                <p className="learning-translation" lang="zh-CN">
-                  {translationSegment.text}
-                </p>
-              ) : null}
-              <label className="learning-selection-input">
-                <span>查询内容 · {selectionKindLabel(kind)}</span>
-                <input
-                  aria-invalid={!selectionValid}
-                  aria-label="要查询的原文"
-                  value={selectedText}
-                  onChange={(event) => selectText(event.target.value)}
-                />
-              </label>
-              {!selectionValid ? (
-                <small className="learning-selection-error">
-                  查询内容必须完整出现在当前原文字幕中。
-                </small>
-              ) : null}
-            </section>
+            <LearningSelectionSection
+              playbackPositionMs={playbackPositionMs}
+              sourceVersion={sourceVersion}
+              sourceSegment={sourceSegment}
+              translationSegment={translationSegment}
+              selectableParts={selectableParts}
+              selectedText={selectedText}
+              selectionValid={selectionValid}
+              kind={kind}
+              speech={speech}
+              onSelectText={selectText}
+            />
 
             {entry ? (
-              <section className="learning-result">
-                <div className="learning-result-heading">
-                  <div>
-                    <strong>{entry.selectedText}</strong>
-                    <span>{entry.pronunciation}</span>
-                  </div>
-                  <em>{entry.partOfSpeech}</em>
-                </div>
-                <p>{entry.contextualMeaning}</p>
-                {entry.usageNote ? <small>{entry.usageNote}</small> : null}
-                <button
-                  className="button primary learning-primary"
-                  type="button"
-                  disabled={busy || savedEntry}
-                  onClick={() => void saveCard()}
-                >
-                  {savedEntry
-                    ? "已收藏"
-                    : operation === "card"
-                      ? "正在截取场景…"
-                      : "收藏台词和场景"}
-                </button>
-                <button
-                  className="button text learning-reset"
-                  type="button"
-                  disabled={busy}
-                  onClick={resetQuery}
-                >
-                  查询其他内容
-                </button>
-              </section>
+              <LearningResultSection
+                entry={entry}
+                speech={speech}
+                busy={busy}
+                saved={savedEntry}
+                saving={operation === "card"}
+                onSave={() => void saveCard()}
+                onReset={resetQuery}
+              />
             ) : !task ? (
               <section className="learning-setup">
                 <AiTaskExecutionSetup
@@ -840,61 +739,15 @@ export function LearningPanel({
               </p>
             ) : null}
 
-            <section className="learning-cards">
-              <div className="learning-cards-heading">
-                <div>
-                  <span>学习卡片</span>
-                  <strong>{cards.length}</strong>
-                </div>
-                <button
-                  type="button"
-                  disabled={!cards.length || busy}
-                  onClick={() => void exportCards()}
-                >
-                  {operation === "export" ? "导出中…" : "导出"}
-                </button>
-              </div>
-              {cards.length ? (
-                <div className="learning-card-list">
-                  {cards.map((card) => (
-                    <article className="learning-card" key={card.id}>
-                      {card.screenshotAvailable ? (
-                        <img
-                          alt={`${card.selectedText} 的场景截图`}
-                          src={playbackUrl(card.screenshotPath)}
-                        />
-                      ) : (
-                        <div className="learning-card-missing">截图不可用</div>
-                      )}
-                      <div>
-                        <strong>{card.selectedText}</strong>
-                        <span>{card.contextualMeaning}</span>
-                        <small>{formatDuration(card.playbackPositionMs)}</small>
-                      </div>
-                      <div className="learning-card-actions">
-                        <button
-                          type="button"
-                          onClick={() => onJump(card.playbackPositionMs)}
-                        >
-                          跳回
-                        </button>
-                        <button
-                          type="button"
-                          disabled={busy}
-                          onClick={() => void removeCard(card)}
-                        >
-                          {operation === `delete:${card.id}` ? "删除中" : "删除"}
-                        </button>
-                      </div>
-                    </article>
-                  ))}
-                </div>
-              ) : (
-                <p className="learning-cards-empty">
-                  查询台词后，可以收藏释义与当前场景。
-                </p>
-              )}
-            </section>
+            <LearningCardsSection
+              cards={cards}
+              speech={speech}
+              busy={busy}
+              operation={operation}
+              onExport={() => void exportCards()}
+              onJump={onJump}
+              onDelete={(card) => void removeCard(card)}
+            />
           </>
         )}
       </div>

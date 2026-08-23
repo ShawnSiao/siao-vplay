@@ -104,6 +104,7 @@ export function PlayerScreen({
     handleSurfaceClick,
     handleSurfaceDoubleClick,
     togglePlayback,
+    pausePlayback,
     toggleMuted,
     toggleFullscreen,
     seekTo,
@@ -370,6 +371,7 @@ export function PlayerScreen({
                 onPrepareSubtitles={onManageSubtitles}
                 onClose={onCloseDrawer}
                 onJump={seekTo}
+                onPausePlayback={pausePlayback}
               />
             )}
           </PlayerDrawer>
