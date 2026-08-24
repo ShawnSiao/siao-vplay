@@ -4,13 +4,14 @@ import type { LocalResourcesController } from "../features/resources/useLocalRes
 
 export function RuntimeView({ controller }: { controller: LocalResourcesController }) {
   const environmentMode = new URLSearchParams(window.location.search).has("environment");
+  const storagePreviewMode = new URLSearchParams(window.location.search).has("storage");
   if (environmentMode) {
     return (
       <EnvironmentSettingsDialog
         localResources={controller}
         firstRun={false}
         pendingAction={null}
-        previewMode={false}
+        previewMode={storagePreviewMode}
         onClose={() => undefined}
         onDismissFirstRun={() => undefined}
         onNotice={() => undefined}

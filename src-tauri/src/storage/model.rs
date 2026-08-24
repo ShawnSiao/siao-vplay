@@ -8,6 +8,34 @@ pub enum StorageArea {
     MediaCache,
 }
 
+#[derive(Clone, Copy, Debug, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum StorageLocationKind {
+    AppData,
+    RemoteMedia,
+    MediaCache,
+    SubtitleExport,
+    VideoReportExport,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StorageLocationInput {
+    pub kind: StorageLocationKind,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ClearPlaybackCacheInput {
+    pub confirmed: bool,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ClearPlaybackCacheResult {
+    pub reclaimed_bytes: u64,
+}
+
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum StorageMigrationMode {

@@ -1,4 +1,4 @@
-export type EnvironmentSettingsTab = "local" | "ai";
+export type EnvironmentSettingsTab = "local" | "ai" | "storage";
 
 const eventName = "siaovplay:open-environment-settings";
 
@@ -18,7 +18,7 @@ export function listenEnvironmentSettings(
 ): () => void {
   const handler = (event: Event) => {
     const tab = (event as CustomEvent<{ tab?: EnvironmentSettingsTab }>).detail?.tab;
-    listener(tab === "ai" ? "ai" : "local");
+    listener(tab === "ai" || tab === "storage" ? tab : "local");
   };
   window.addEventListener(eventName, handler);
   return () => window.removeEventListener(eventName, handler);

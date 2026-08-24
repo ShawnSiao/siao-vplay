@@ -152,6 +152,14 @@ impl StorageManager {
             .ok_or(StorageError::MigrationNotFound)
     }
 
+    pub fn current_migration(&self) -> Result<Option<StorageMigrationTask>, StorageError> {
+        let runtime = self
+            .migration
+            .lock()
+            .map_err(|_| StorageError::StatePoisoned)?;
+        Ok(runtime.task.clone())
+    }
+
     pub fn cancel_migration(&self, task_id: &str) -> Result<StorageMigrationTask, StorageError> {
         let runtime = self
             .migration

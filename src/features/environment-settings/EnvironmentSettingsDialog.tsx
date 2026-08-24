@@ -9,6 +9,8 @@ import { LocalFeaturesPane } from "./LocalFeaturesPane";
 import { listenEnvironmentSettings } from "./events";
 import { codexSelectionId } from "./serviceSelection";
 import { useEnvironmentSettings } from "./useEnvironmentSettings";
+import { StoragePane } from "../storage/StoragePane";
+import { useStorageSettings } from "../storage/useStorageSettings";
 import "./environment-settings-shell.css";
 import "./environment-settings-content.css";
 import "./local-features-v3.css";
@@ -32,19 +34,24 @@ export function EnvironmentSettingsDialog({
   onDismissFirstRun,
   onNotice,
 }: EnvironmentSettingsDialogProps) {
-  const [tab, setTab] = useState<"local" | "ai">("local");
+  const [tab, setTab] = useState<"local" | "ai" | "storage">("local");
   const controller = useEnvironmentSettings(true, previewMode);
+  const storage = useStorageSettings(tab === "storage", previewMode, onNotice);
   const dialogRef = useRef<HTMLElement>(null);
   const titleId = useId();
 
   useEffect(() => {
     const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const focusable = () => Array.from(dialogRef.current?.querySelectorAll<HTMLElement>(
+    const focusable = () => {
+      const scope = dialogRef.current?.querySelector(".storage-migration-dialog") ?? dialogRef.current;
+      return Array.from(scope?.querySelectorAll<HTMLElement>(
       'button:not(:disabled), input:not(:disabled), select:not(:disabled), summary, [tabindex]:not([tabindex="-1"])',
-    ) ?? []);
+      ) ?? []);
+    };
     focusable()[0]?.focus();
     const keydown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
+        if (dialogRef.current?.querySelector(".storage-migration-dialog")) return;
         event.preventDefault();
         onClose();
       } else if (event.key === "Tab") {
@@ -80,6 +87,10 @@ export function EnvironmentSettingsDialog({
     controller.draft && (configured || controller.draft.apiKey.trim()),
   );
   const aiBusy = controller.operation !== null;
+  const storageDirty = Boolean(storage.settings && (
+    storage.subtitleDirectory !== storage.settings.defaultSubtitleExportDirectory ||
+    storage.reportDirectory !== storage.settings.defaultVideoReportExportDirectory
+  ));
 
   return (
     <div className="environment-settings-scrim" role="presentation" onMouseDown={(event) => {
@@ -90,11 +101,12 @@ export function EnvironmentSettingsDialog({
           <div className="environment-title-group">
             <span>按需管理</span>
             <h1 id={titleId}>环境配置</h1>
-            <p>管理本地功能、AI 服务和隐私范围</p>
+            <p>管理本地功能、AI 服务、存储位置和隐私范围</p>
           </div>
           <nav className="environment-settings-tabs" aria-label="环境配置分类">
             <button className={tab === "local" ? "active" : ""} type="button" onClick={() => setTab("local")}>本地功能</button>
             <button className={tab === "ai" ? "active" : ""} type="button" onClick={() => setTab("ai")}>AI 服务</button>
+            <button className={tab === "storage" ? "active" : ""} type="button" onClick={() => setTab("storage")}>存储</button>
           </nav>
           <button className="environment-settings-close" type="button" aria-label="关闭环境配置" onClick={onClose}>×</button>
         </header>
@@ -102,20 +114,25 @@ export function EnvironmentSettingsDialog({
         <div className="environment-settings-content">
           {tab === "local" ? (
             <LocalFeaturesPane controller={localResources} pendingAction={pendingAction} previewMode={previewMode} onNotice={onNotice} />
-          ) : (
+          ) : tab === "ai" ? (
             <div className="environment-ai-layout">
               <AiServiceList controller={controller} />
               {controller.selectionId === codexSelectionId ? <LocalCodexDetail previewMode={previewMode} /> : <AiServiceEditor key={controller.selectionId} controller={controller} />}
             </div>
-          )}
+          ) : <StoragePane controller={storage} />}
         </div>
 
         <footer className="environment-settings-footer">
-          <span>{tab === "local" ? "下载位置与本地功能状态在这里统一管理。" : "配置只保存在这台电脑，使用时会再次确认发送范围。"}</span>
+          <span>{tab === "local" ? "下载位置与本地功能状态在这里统一管理。" : tab === "ai" ? "配置只保存在这台电脑，使用时会再次确认发送范围。" : "默认位置只影响下次选择，导出时仍可临时更改。"}</span>
           {tab === "local" ? (
             <>
               {firstRun ? <button className="button text" type="button" onClick={onDismissFirstRun}>稍后配置</button> : null}
               <button className="button quiet" type="button" onClick={onClose}>关闭</button>
+            </>
+          ) : tab === "storage" ? (
+            <>
+              <button className="button text" type="button" disabled={!storageDirty || storage.operation !== null} onClick={() => { storage.setSubtitleDirectory(null); storage.setReportDirectory(null); }}>恢复默认</button>
+              <button className="button primary" type="button" disabled={!storageDirty || storage.operation !== null} onClick={() => void storage.saveDefaults()}>{storage.operation === "saving" ? "正在保存…" : "应用设置"}</button>
             </>
           ) : controller.selectionId === codexSelectionId ? (
             <button className="button quiet" type="button" onClick={() => controller.select(codexSelectionId)}>重新检测</button>

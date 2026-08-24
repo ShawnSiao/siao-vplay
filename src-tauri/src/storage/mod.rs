@@ -1,5 +1,6 @@
 pub mod commands;
 mod database;
+mod maintenance;
 mod migration;
 mod migration_copy;
 mod migration_state;
@@ -18,8 +19,9 @@ mod settings_tests;
 use thiserror::Error;
 
 pub use model::{
-    PrepareStorageMigrationInput, SaveStorageSettingsInput, StartStorageMigrationInput,
-    StorageArea, StorageMigrationMode, StorageMigrationStatus, StorageMigrationTask,
+    ClearPlaybackCacheInput, ClearPlaybackCacheResult, PrepareStorageMigrationInput,
+    SaveStorageSettingsInput, StartStorageMigrationInput, StorageArea, StorageLocationInput,
+    StorageLocationKind, StorageMigrationMode, StorageMigrationStatus, StorageMigrationTask,
     StorageMigrationTaskInput, StorageSettingsView,
 };
 pub(crate) use paths::remove_remote_project_directory;

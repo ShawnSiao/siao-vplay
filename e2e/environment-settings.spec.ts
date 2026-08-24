@@ -100,3 +100,36 @@ test("environment settings keeps the complete local-resource workflow", async ({
     await dialog.locator(".environment-local-v3-scroll").evaluate((element) => element.scrollTop),
   ).toBeGreaterThan(0);
 });
+
+for (const viewport of [
+  { width: 1440, height: 900 },
+  { width: 1200, height: 720 },
+  { width: 960, height: 640 },
+]) {
+  test(`storage settings remains usable at ${viewport.width} by ${viewport.height}`, async ({ page }) => {
+    const consoleProblems: string[] = [];
+    page.on("console", (entry) => {
+      if (["error", "warning"].includes(entry.type())) consoleProblems.push(entry.text());
+    });
+    await page.setViewportSize(viewport);
+    await page.goto("/e2e/runtime.html?environment=1&storage=1");
+    const dialog = page.getByRole("dialog", { name: "环境配置" });
+    await dialog.getByRole("button", { name: "存储" }).click();
+    await expect(dialog.getByRole("region", { name: "存储位置" })).toBeVisible();
+    await expect(dialog.getByText("应用数据与数据库")).toBeVisible();
+    await expect(dialog.getByText("URL 导入视频")).toBeVisible();
+    await expect(dialog.getByText("播放缓存")).toBeVisible();
+    await expect(dialog.getByText("视频与分析报告")).toBeVisible();
+    expect(await dialog.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+
+    await dialog.getByRole("button", { name: "迁移" }).click();
+    const migration = page.getByRole("dialog", { name: "迁移应用数据与数据库" });
+    await migration.getByRole("button", { name: "选择文件夹" }).click();
+    await migration.getByRole("button", { name: "检查迁移条件" }).click();
+    await expect(migration.getByRole("button", { name: "开始迁移" })).toBeVisible();
+    await migration.getByRole("button", { name: "开始迁移" }).click();
+    await expect(migration.getByText("新目录已通过校验。")).toBeVisible();
+    expect(await migration.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+    expect(consoleProblems).toEqual([]);
+  });
+}

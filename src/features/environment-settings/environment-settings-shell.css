@@ -11,7 +11,7 @@
 
 .environment-settings-dialog {
   display: grid;
-  width: min(1040px, calc(100vw - 48px));
+  width: min(1220px, calc(100vw - 48px));
   height: min(790px, calc(100vh - 32px));
   min-height: 0;
   grid-template-rows: auto minmax(0, 1fr) auto;
@@ -25,7 +25,7 @@
 .environment-settings-header {
   display: grid;
   min-height: 94px;
-  grid-template-columns: 250px minmax(360px, 430px) 34px;
+  grid-template-columns: 300px minmax(420px, 610px) 34px;
   align-items: center;
   justify-content: space-between;
   gap: 20px;
@@ -206,7 +206,7 @@
 @media (max-width: 1040px) {
   .environment-settings-scrim { padding: 8px 12px; }
   .environment-settings-dialog { width: calc(100vw - 24px); height: calc(100vh - 16px); }
-  .environment-settings-header { grid-template-columns: 210px minmax(330px, 400px) 34px; padding-inline: 18px; }
+  .environment-settings-header { grid-template-columns: 230px minmax(420px, 520px) 34px; padding-inline: 18px; }
   .environment-settings-content { padding: 10px 18px 12px; }
   .environment-settings-footer { padding-inline: 18px; }
   .environment-ai-layout { grid-template-columns: 250px minmax(0, 1fr); }
