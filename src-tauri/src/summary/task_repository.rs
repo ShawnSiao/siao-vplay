@@ -207,7 +207,8 @@ impl<'a> SummaryTaskRepository<'a> {
     ) -> Result<(), StoreError> {
         self.store.connect()?.execute(
             "UPDATE summary_tasks SET status = ?2, stage = ?3, progress = ?4,
-                    updated_at_ms = ?5, started_at_ms = COALESCE(started_at_ms, ?5)
+                    updated_at_ms = ?5, started_at_ms = COALESCE(started_at_ms, ?5),
+                    completed_at_ms = NULL, error_code = NULL, error_message = NULL
              WHERE id = ?1",
             params![task_id, status, stage, progress, now_ms()?],
         )?;

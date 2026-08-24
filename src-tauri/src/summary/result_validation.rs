@@ -311,4 +311,22 @@ mod tests {
             .is_err()
         );
     }
+
+    #[test]
+    fn codex_output_schema_avoids_unsupported_unique_items() {
+        let schema = result_schema();
+        assert!(
+            schema
+                .pointer("/properties/coveredChunkOrdinals/uniqueItems")
+                .is_none()
+        );
+        assert_eq!(
+            schema.pointer("/properties/formatVersion/type"),
+            Some(&serde_json::json!("integer"))
+        );
+        assert_eq!(
+            schema.pointer("/$defs/sections/items/properties/evidence/items/properties/kind/type"),
+            Some(&serde_json::json!("string"))
+        );
+    }
 }

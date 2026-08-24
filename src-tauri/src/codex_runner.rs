@@ -1,7 +1,7 @@
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap},
     env, fs,
-    io::{BufRead, BufReader, Write},
+    io::{BufReader, Write},
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
     sync::{
@@ -19,6 +19,7 @@ use thiserror::Error;
 use uuid::Uuid;
 
 use crate::{
+    codex_event_stream::parse_events_and_save,
     learning::{self, LearningApplication, LearningError, LearningTask},
     store::{ProjectStore, StoreError},
     translation::{self, TranslationApplication, TranslationError, TranslationTask},
@@ -61,8 +62,8 @@ pub enum CodexRunnerError {
     InvalidTaskState(String),
     #[error("当前任务已经在本机运行")]
     AlreadyRunning,
-    #[error("Codex 进程未成功完成")]
-    ProcessFailed,
+    #[error("Codex 进程未成功完成：{0}")]
+    ProcessFailed(String),
     #[error("Codex 事件流未通过安全检查：{0}")]
     InvalidEventStream(String),
     #[error("Codex 翻译结果无效：{0}")]
@@ -98,7 +99,7 @@ impl CodexRunnerError {
             Self::InvalidTimeout => "codex_timeout_invalid",
             Self::InvalidTaskState(_) => "translation_task_state_invalid",
             Self::AlreadyRunning => "translation_task_already_running",
-            Self::ProcessFailed => "codex_process_failed",
+            Self::ProcessFailed(_) => "codex_process_failed",
             Self::InvalidEventStream(_) => "codex_event_stream_invalid",
             Self::InvalidOutput(_) => "translation_result_invalid",
             Self::TimedOut => "codex_timeout",
@@ -185,14 +186,6 @@ struct BatchResult {
 struct BatchTranslation {
     segment_id: String,
     translated_text: String,
-}
-
-#[derive(Debug, Default)]
-struct EventSummary {
-    thread_id: Option<String>,
-    saw_turn_completed: bool,
-    saw_error: bool,
-    saw_tool_activity: bool,
 }
 
 fn active_tasks() -> &'static Mutex<HashMap<String, Arc<AtomicBool>>> {
@@ -1595,11 +1588,17 @@ pub(crate) fn invoke_codex_raw_with_images(
         .join()
         .map_err(|_| CodexRunnerError::InvalidEventStream("无法读取 Codex 事件".to_owned()))??;
     if !status.success() {
-        return Err(CodexRunnerError::ProcessFailed);
+        return Err(CodexRunnerError::ProcessFailed(
+            events
+                .error_message
+                .unwrap_or_else(|| "Codex 未提供错误详情".to_owned()),
+        ));
     }
     if events.saw_error {
         return Err(CodexRunnerError::InvalidEventStream(
-            "事件流包含失败或无法解析的事件".to_owned(),
+            events
+                .error_message
+                .unwrap_or_else(|| "事件流包含失败或无法解析的事件".to_owned()),
         ));
     }
     if events.saw_tool_activity {
@@ -1972,54 +1971,6 @@ fn invocation_spec_with_images(
         stdin,
         environment,
     })
-}
-
-fn parse_events_and_save(
-    reader: impl BufRead,
-    events_path: &Path,
-) -> Result<EventSummary, std::io::Error> {
-    let mut output = fs::File::create(events_path)?;
-    let mut summary = EventSummary::default();
-    for line in reader.lines() {
-        let line = match line {
-            Ok(line) => line,
-            Err(error) => {
-                summary.saw_error = true;
-                writeln!(output, "{{\"type\":\"runner.read_error\"}}")?;
-                return Err(error);
-            }
-        };
-        writeln!(output, "{line}")?;
-        let Ok(value) = serde_json::from_str::<Value>(&line) else {
-            summary.saw_error = true;
-            continue;
-        };
-        match value.get("type").and_then(Value::as_str) {
-            Some("thread.started") => {
-                summary.thread_id = value
-                    .get("thread_id")
-                    .or_else(|| value.get("threadId"))
-                    .and_then(Value::as_str)
-                    .map(str::to_owned);
-            }
-            Some("turn.completed") => summary.saw_turn_completed = true,
-            Some("turn.failed" | "error") => summary.saw_error = true,
-            _ => {}
-        }
-        let item_type = value
-            .get("item")
-            .and_then(|item| item.get("type"))
-            .and_then(Value::as_str);
-        if item_type.is_some_and(|kind| {
-            matches!(
-                kind,
-                "command_execution" | "file_change" | "mcp_tool_call" | "web_search"
-            )
-        }) {
-            summary.saw_tool_activity = true;
-        }
-    }
-    Ok(summary)
 }
 
 pub(crate) fn require_ready_codex() -> Result<RuntimeIdentity, CodexRunnerError> {
@@ -2945,6 +2896,25 @@ process.stdin.on("end", () => {{
         assert!(!summary.saw_turn_completed);
         assert!(summary.saw_tool_activity);
         assert!(events_path.is_file());
+    }
+
+    #[test]
+    fn event_stream_preserves_a_compact_provider_error() {
+        let temporary = tempfile::tempdir().expect("temporary directory should be created");
+        let events_path = temporary.path().join("events.jsonl");
+        let events = concat!(
+            "{\"type\":\"thread.started\",\"thread_id\":\"thread-1\"}\n",
+            "{\"type\":\"error\",\"message\":\"{\\\"error\\\":{\\\"message\\\":\\\"Invalid schema: uniqueItems is not permitted.\\\"}}\"}\n",
+            "{\"type\":\"turn.failed\",\"error\":{\"message\":\"request failed\"}}\n"
+        );
+        let summary =
+            parse_events_and_save(Cursor::new(events), &events_path).expect("events should parse");
+
+        assert!(summary.saw_error);
+        assert_eq!(
+            summary.error_message.as_deref(),
+            Some("Invalid schema: uniqueItems is not permitted.")
+        );
     }
 
     #[test]

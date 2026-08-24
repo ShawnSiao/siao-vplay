@@ -9,12 +9,11 @@
     "glossary", "mermaid"
   ],
   "properties": {
-    "formatVersion": { "const": 2 },
+    "formatVersion": { "type": "integer", "const": 2 },
     "title": { "type": "string", "minLength": 1 },
     "overview": { "type": "string", "minLength": 1 },
     "coveredChunkOrdinals": {
       "type": "array",
-      "uniqueItems": true,
       "items": { "type": "integer", "minimum": 1 }
     },
     "speakerNarrative": { "$ref": "#/$defs/sections" },
@@ -57,7 +56,7 @@
               "additionalProperties": false,
               "required": ["kind", "claim", "subtitleIds", "frameTimestampsMs"],
               "properties": {
-                "kind": { "enum": ["video_statement", "subtitle_or_frame", "ai_inference", "needs_external_validation"] },
+                "kind": { "type": "string", "enum": ["video_statement", "subtitle_or_frame", "ai_inference", "needs_external_validation"] },
                 "claim": { "type": "string", "minLength": 1 },
                 "subtitleIds": { "type": "array", "items": { "type": "string" } },
                 "frameTimestampsMs": { "type": "array", "items": { "type": "integer", "minimum": 0 } }

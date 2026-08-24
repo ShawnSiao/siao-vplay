@@ -82,7 +82,7 @@ impl AiTaskError {
                 error.to_string(),
                 matches!(
                     error,
-                    CodexRunnerError::TimedOut | CodexRunnerError::ProcessFailed
+                    CodexRunnerError::TimedOut | CodexRunnerError::ProcessFailed(_)
                 ),
                 None,
             ),

@@ -3,6 +3,7 @@ mod agent_task_files;
 mod ai;
 mod ai_migration;
 mod burn;
+mod codex_event_stream;
 mod codex_runner;
 mod codex_task_state;
 mod commands;
