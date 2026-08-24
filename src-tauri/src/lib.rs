@@ -21,6 +21,7 @@ mod resource_download;
 mod resource_migration;
 mod runtime;
 mod speech;
+mod storage;
 mod store;
 mod subtitles;
 mod summary;
@@ -82,14 +83,18 @@ fn set_main_window_media_title(
         .map_err(|error| format!("无法更新 SiaoVPlay 窗口标题：{error}"))
 }
 
-fn resolve_data_directory(app: &tauri::App) -> Result<PathBuf, Box<dyn std::error::Error>> {
-    if let Some(data_directory) = std::env::var_os("SIAOVPLAY_DATA_DIR")
+fn initialize_storage(
+    app: &tauri::App,
+) -> Result<storage::StorageManager, Box<dyn std::error::Error>> {
+    let default_data_directory = app.path().app_local_data_dir()?;
+    let environment_data_directory = std::env::var_os("SIAOVPLAY_DATA_DIR")
         .filter(|value| !value.is_empty())
-        .map(PathBuf::from)
-    {
-        return Ok(data_directory);
-    }
-    Ok(app.path().app_local_data_dir()?)
+        .map(PathBuf::from);
+    Ok(storage::StorageManager::initialize(
+        &default_data_directory,
+        default_data_directory.clone(),
+        environment_data_directory,
+    )?)
 }
 
 fn resolve_startup_media_path() -> Option<String> {
@@ -110,7 +115,8 @@ pub fn run() {
             } else {
                 eprintln!("SiaoVPlay: main window was unavailable during native frame setup");
             }
-            let data_directory = resolve_data_directory(app)?;
+            let storage = initialize_storage(app)?;
+            let data_directory = storage.app_data_root()?;
             local_resources::initialize(&data_directory)?;
             let legacy_proxy = local_resources::configured_proxy_url();
             ai::initialize(&data_directory, legacy_proxy.as_deref())?;
@@ -126,6 +132,7 @@ pub fn run() {
             summary::recover_summary_tasks(&store)?;
             burn::recover_subtitle_burn_jobs(&store)?;
             app.manage(store);
+            app.manage(storage);
             app.manage(StartupMediaPath(resolve_startup_media_path()));
             app.manage(library::LibraryPreviewStore::default());
             app.manage(library::LibraryRecoveryStore::default());
@@ -205,6 +212,8 @@ pub fn run() {
             ai::commands::list_ai_service_models,
             ai::commands::test_ai_service,
             ai::commands::preview_ai_execution,
+            storage::commands::get_storage_settings,
+            storage::commands::save_storage_settings,
             summary::commands::list_analysis_prompt_templates,
             summary::commands::save_analysis_prompt_templates,
             summary::commands::delete_analysis_prompt_templates,

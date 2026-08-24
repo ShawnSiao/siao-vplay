@@ -321,6 +321,7 @@ pub fn inspect_project_media(
 
 pub fn prepare_project_media(
     store: &ProjectStore,
+    media_cache_root: &Path,
     input: PrepareProjectMediaInput,
 ) -> Result<MediaPreparation, MediaError> {
     let runtime = MediaRuntime::resolve()?;
@@ -343,8 +344,14 @@ pub fn prepare_project_media(
         });
     }
 
-    let (artifact, reused_proxy) =
-        generate_playback_proxy(store, &runtime, &project, &inspection, &source_path)?;
+    let (artifact, reused_proxy) = generate_playback_proxy(
+        store,
+        media_cache_root,
+        &runtime,
+        &project,
+        &inspection,
+        &source_path,
+    )?;
     Ok(MediaPreparation {
         inspection,
         playback_source_kind: PlaybackSourceKind::Proxy,
@@ -356,13 +363,14 @@ pub fn prepare_project_media(
 
 pub fn ensure_project_poster(
     store: &ProjectStore,
+    media_cache_root: &Path,
     project_id: &str,
 ) -> Result<crate::domain::Project, MediaError> {
     let runtime = MediaRuntime::resolve()?;
     let inspection = inspect_with_runtime(store, project_id, &runtime)?;
     let project = store.get_project(project_id)?;
     let source_path = PathBuf::from(&project.media_source.locator);
-    let project_cache = store.data_directory().join("media-cache").join(&project.id);
+    let project_cache = media_cache_root.join(&project.id);
     fs::create_dir_all(&project_cache)?;
     let fingerprint_prefix = &inspection.source_sha256[..16];
     let final_path = project_cache.join(format!("poster-{fingerprint_prefix}.jpg"));
@@ -554,12 +562,13 @@ fn valid_poster(path: &Path) -> bool {
 
 fn generate_playback_proxy(
     store: &ProjectStore,
+    media_cache_root: &Path,
     runtime: &MediaRuntime,
     project: &crate::domain::Project,
     inspection: &MediaInspection,
     source_path: &Path,
 ) -> Result<(MediaArtifact, bool), MediaError> {
-    let project_cache = store.data_directory().join("media-cache").join(&project.id);
+    let project_cache = media_cache_root.join(&project.id);
     fs::create_dir_all(&project_cache)?;
     let fingerprint_prefix = &inspection.source_sha256[..16];
     let final_path = project_cache.join(format!("playback-{fingerprint_prefix}.mp4"));
@@ -1390,8 +1399,10 @@ mod tests {
                 title: Some("HEVC proxy test".to_owned()),
             })
             .expect("project should be created");
+        let media_cache_root = store.data_directory().join("media-cache");
         let first = prepare_project_media(
             &store,
+            &media_cache_root,
             PrepareProjectMediaInput {
                 project_id: project.id.clone(),
                 force_proxy: false,
@@ -1415,6 +1426,7 @@ mod tests {
 
         let second = prepare_project_media(
             &store,
+            &media_cache_root,
             PrepareProjectMediaInput {
                 project_id: project.id.clone(),
                 force_proxy: false,
@@ -1424,8 +1436,8 @@ mod tests {
         assert!(second.reused_proxy);
         assert!(second.inspection.reused_probe);
 
-        let project_with_poster =
-            ensure_project_poster(&store, &project.id).expect("poster should be generated");
+        let project_with_poster = ensure_project_poster(&store, &media_cache_root, &project.id)
+            .expect("poster should be generated");
         let poster_path = project_with_poster
             .media_source
             .poster_path
@@ -1436,31 +1448,8 @@ mod tests {
             source_hash_before
         );
     }
-
-    #[test]
-    #[ignore = "requires SIAOVPLAY_PROJECT_DATABASE, SIAOVPLAY_PROJECT_ID and the local FFmpeg runtime"]
-    fn real_persistent_project_playback_proxy() {
-        let database_path = env::var_os("SIAOVPLAY_PROJECT_DATABASE")
-            .map(PathBuf::from)
-            .expect("SIAOVPLAY_PROJECT_DATABASE must be set");
-        let project_id =
-            env::var("SIAOVPLAY_PROJECT_ID").expect("SIAOVPLAY_PROJECT_ID must be set");
-        let runtime = MediaRuntime::resolve().expect("FFmpeg runtime should resolve");
-        let store = ProjectStore::open(database_path).expect("project store should open");
-
-        let preparation = prepare_project_media(
-            &store,
-            PrepareProjectMediaInput {
-                project_id,
-                force_proxy: true,
-            },
-        )
-        .expect("playback proxy should be generated");
-
-        assert_eq!(preparation.playback_source_kind, PlaybackSourceKind::Proxy);
-        assert!(playback_proxy_is_valid(
-            &runtime,
-            Path::new(&preparation.playback_path)
-        ));
-    }
 }
+
+#[cfg(test)]
+#[path = "media_storage_tests.rs"]
+mod media_storage_tests;

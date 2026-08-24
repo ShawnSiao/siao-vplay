@@ -188,6 +188,7 @@ pub fn inspect_youtube_url(
 
 pub fn import_youtube_url(
     store: &ProjectStore,
+    remote_media_root: &Path,
     input: ImportYouTubeUrlInput,
 ) -> Result<Project, YouTubeMediaError> {
     let operation = ImportOperation::register(&input.operation_id)?;
@@ -201,10 +202,7 @@ pub fn import_youtube_url(
         return Err(YouTubeMediaError::PreviewChanged);
     }
 
-    let import_directory = store
-        .data_directory()
-        .join("remote-media")
-        .join(Uuid::new_v4().to_string());
+    let import_directory = remote_media_root.join(Uuid::new_v4().to_string());
     fs::create_dir_all(&import_directory)?;
     let result = (|| {
         let media_path = download_video(&original, &tool, &import_directory, &operation.cancelled)?;
@@ -1171,6 +1169,7 @@ mod tests {
                     .expect("authorized public video should inspect");
                 import_youtube_url(
                     &store,
+                    &store.data_directory().join("remote-media"),
                     ImportYouTubeUrlInput {
                         url: url.clone(),
                         expected_preview_token: preview.preview_token,
@@ -1228,6 +1227,7 @@ mod tests {
 
         let project = import_youtube_url(
             &store,
+            &store.data_directory().join("remote-media"),
             ImportYouTubeUrlInput {
                 url: url.to_owned(),
                 expected_preview_token: preview.preview_token,

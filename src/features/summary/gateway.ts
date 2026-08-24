@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
-import { open } from "@tauri-apps/plugin-dialog";
+
+import { chooseConfiguredStorageDirectory } from "../storage/directoryPicker";
 
 import type {
   PrepareSummaryTaskInput,
@@ -41,12 +42,7 @@ export function listVideoSummaries(projectId: string): Promise<VideoSummary[]> {
 }
 
 export async function chooseSummaryExportDirectory(): Promise<string | null> {
-  const selected = await open({
-    multiple: false,
-    directory: true,
-    title: "选择视频分析报告保存位置",
-  });
-  return typeof selected === "string" ? selected : null;
+  return chooseConfiguredStorageDirectory("report", "选择视频分析报告保存位置");
 }
 
 export function exportVideoSummary(

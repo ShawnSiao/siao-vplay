@@ -49,6 +49,7 @@ use crate::{
         self, DownloadRuntimeComponentInput, RuntimeCatalog, RuntimeError, SetPreferredModelInput,
         SetRuntimeStorageRootInput,
     },
+    storage::{StorageError, StorageManager},
     store::{ProjectStore, StoreError},
     subtitles::{
         self, EmbeddedSubtitlePreview, ImportEmbeddedSubtitleInput, ImportSubtitleFileInput,
@@ -92,6 +93,24 @@ impl From<StoreError> for CommandError {
             | StoreError::InvalidMediaSourceKind(_)
             | StoreError::InvalidMediaArtifactStatus(_)
             | StoreError::InvalidSubtitleDisplayMode(_) => "database_error",
+        };
+        Self {
+            code,
+            message: error.to_string(),
+        }
+    }
+}
+
+impl From<StorageError> for CommandError {
+    fn from(error: StorageError) -> Self {
+        let code = match &error {
+            StorageError::InvalidPath(_) => "storage_path_invalid",
+            StorageError::RootUnavailable(_) => "storage_root_unavailable",
+            StorageError::RevisionConflict { .. } => "storage_revision_conflict",
+            StorageError::UnsupportedVersion(_) => "storage_version_unsupported",
+            StorageError::FileSystem(_) => "storage_filesystem_error",
+            StorageError::Serialization(_) => "storage_serialization_error",
+            StorageError::StatePoisoned => "storage_state_unavailable",
         };
         Self {
             code,
@@ -462,11 +481,14 @@ pub async fn inspect_remote_media_url(
 #[tauri::command]
 pub async fn import_remote_media_url(
     store: State<'_, ProjectStore>,
+    storage: State<'_, StorageManager>,
     input: ImportRemoteMediaUrlInput,
 ) -> Result<Project, CommandError> {
     let store = store.inner().clone();
+    let remote_media_root = storage.remote_media_root_for_write()?;
     tauri::async_runtime::spawn_blocking(move || {
-        remote_media::import_remote_media_url(&store, input).map_err(CommandError::from)
+        remote_media::import_remote_media_url(&store, &remote_media_root, input)
+            .map_err(CommandError::from)
     })
     .await
     .map_err(CommandError::background_task_failed)?
@@ -493,11 +515,14 @@ pub async fn inspect_youtube_url(
 #[tauri::command]
 pub async fn import_youtube_url(
     store: State<'_, ProjectStore>,
+    storage: State<'_, StorageManager>,
     input: ImportYouTubeUrlInput,
 ) -> Result<Project, CommandError> {
     let store = store.inner().clone();
+    let remote_media_root = storage.remote_media_root_for_write()?;
     tauri::async_runtime::spawn_blocking(move || {
-        youtube_media::import_youtube_url(&store, input).map_err(CommandError::from)
+        youtube_media::import_youtube_url(&store, &remote_media_root, input)
+            .map_err(CommandError::from)
     })
     .await
     .map_err(CommandError::background_task_failed)?
@@ -555,6 +580,7 @@ pub fn relink_project_media(
 #[tauri::command]
 pub fn delete_project(
     store: State<'_, ProjectStore>,
+    storage: State<'_, StorageManager>,
     project_id: String,
 ) -> Result<DeleteProjectResult, CommandError> {
     transcription::cancel_project_transcriptions(store.inner(), &project_id)?;
@@ -562,7 +588,10 @@ pub fn delete_project(
     codex_runner::cancel_project_explanation_tasks(store.inner(), &project_id)?;
     codex_runner::cancel_project_learning_tasks(store.inner(), &project_id)?;
     burn::cancel_project_subtitle_burn_jobs(store.inner(), &project_id)?;
-    store.delete_project(&project_id).map_err(Into::into)
+    let remote_media_root = storage.remote_media_root()?;
+    store
+        .delete_project_with_remote_media_root(&project_id, &remote_media_root)
+        .map_err(Into::into)
 }
 
 #[tauri::command]
@@ -811,11 +840,13 @@ pub async fn inspect_project_media(
 pub async fn prepare_project_media(
     app: AppHandle,
     store: State<'_, ProjectStore>,
+    storage: State<'_, StorageManager>,
     input: PrepareProjectMediaInput,
 ) -> Result<MediaPreparation, CommandError> {
     let store = store.inner().clone();
+    let media_cache_root = storage.media_cache_root_for_write()?;
     let preparation = tauri::async_runtime::spawn_blocking(move || {
-        media::prepare_project_media(&store, input).map_err(CommandError::from)
+        media::prepare_project_media(&store, &media_cache_root, input).map_err(CommandError::from)
     })
     .await
     .map_err(CommandError::background_task_failed)??;
@@ -832,11 +863,14 @@ pub async fn prepare_project_media(
 pub async fn ensure_project_poster(
     app: AppHandle,
     store: State<'_, ProjectStore>,
+    storage: State<'_, StorageManager>,
     project_id: String,
 ) -> Result<Project, CommandError> {
     let store = store.inner().clone();
+    let media_cache_root = storage.media_cache_root_for_write()?;
     let project = tauri::async_runtime::spawn_blocking(move || {
-        media::ensure_project_poster(&store, &project_id).map_err(CommandError::from)
+        media::ensure_project_poster(&store, &media_cache_root, &project_id)
+            .map_err(CommandError::from)
     })
     .await
     .map_err(CommandError::background_task_failed)??;

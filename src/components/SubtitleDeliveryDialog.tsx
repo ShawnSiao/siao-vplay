@@ -156,7 +156,7 @@ export function SubtitleDeliveryDialog({
     setError(null);
     let destination: string | null;
     try {
-      destination = await chooseSubtitleDeliveryDirectory();
+      destination = await chooseSubtitleDeliveryDirectory(outputKind);
     } catch (caught) {
       setError(commandError(caught).message);
       return;

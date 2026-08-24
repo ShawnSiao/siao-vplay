@@ -3,6 +3,7 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 
 import { supportedVideoExtensions } from "./mediaFiles";
+import { chooseConfiguredStorageDirectory } from "../features/storage/directoryPicker";
 
 import type {
   AppStatus,
@@ -1251,18 +1252,16 @@ export async function exportLearningCards(
   });
 }
 
-export async function chooseSubtitleDeliveryDirectory(): Promise<
-  string | null
-> {
+export async function chooseSubtitleDeliveryDirectory(
+  outputKind: "subtitle" | "video" = "subtitle",
+): Promise<string | null> {
   if (!isDesktopApp) {
     return null;
   }
-  const selected = await open({
-    multiple: false,
-    directory: true,
-    title: "选择字幕或烧录视频保存位置",
-  });
-  return typeof selected === "string" ? selected : null;
+  return chooseConfiguredStorageDirectory(
+    outputKind,
+    "选择字幕或烧录视频保存位置",
+  );
 }
 
 export async function exportSubtitles(

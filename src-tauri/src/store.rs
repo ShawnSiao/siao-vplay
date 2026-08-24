@@ -657,7 +657,19 @@ impl ProjectStore {
         Ok(changed)
     }
 
+    #[cfg(test)]
     pub fn delete_project(&self, project_id: &str) -> Result<DeleteProjectResult, StoreError> {
+        self.delete_project_with_remote_media_root(
+            project_id,
+            &self.data_directory().join("remote-media"),
+        )
+    }
+
+    pub fn delete_project_with_remote_media_root(
+        &self,
+        project_id: &str,
+        remote_media_root: &Path,
+    ) -> Result<DeleteProjectResult, StoreError> {
         validate_project_id(project_id)?;
         let project = match self.get_project(project_id) {
             Ok(project) => Some(project),
@@ -682,7 +694,10 @@ impl ProjectStore {
                 .as_ref()
                 .filter(|project| project.media_source.origin_url.is_some())
                 .is_some_and(|project| {
-                    self.remove_remote_media_cache(&project.media_source.locator)
+                    crate::storage::remove_remote_project_directory(
+                        remote_media_root,
+                        &project.media_source.locator,
+                    )
                 })
         } else {
             false
@@ -699,23 +714,6 @@ impl ProjectStore {
             source_media_deleted: false,
             cached_media_deleted,
         })
-    }
-
-    fn remove_remote_media_cache(&self, locator: &str) -> bool {
-        let cache_root = self.data_directory().join("remote-media");
-        let Ok(cache_root) = dunce::canonicalize(cache_root) else {
-            return false;
-        };
-        let Some(parent) = Path::new(locator).parent() else {
-            return false;
-        };
-        let Ok(parent) = dunce::canonicalize(parent) else {
-            return false;
-        };
-        if parent == cache_root || !parent.starts_with(&cache_root) {
-            return false;
-        }
-        fs::remove_dir_all(parent).is_ok()
     }
 
     fn remove_agent_task_materials(&self, task_ids: &[String]) {

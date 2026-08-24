@@ -277,6 +277,7 @@ pub fn inspect_remote_media_url(
 
 pub fn import_remote_media_url(
     store: &ProjectStore,
+    remote_media_root: &Path,
     input: ImportRemoteMediaUrlInput,
 ) -> Result<Project, RemoteMediaError> {
     let operation = ImportOperation::register(&input.operation_id)?;
@@ -286,10 +287,7 @@ pub fn import_remote_media_url(
         return Err(RemoteMediaError::PreviewChanged);
     }
 
-    let import_directory = store
-        .data_directory()
-        .join("remote-media")
-        .join(Uuid::new_v4().to_string());
+    let import_directory = remote_media_root.join(Uuid::new_v4().to_string());
     fs::create_dir_all(&import_directory)?;
 
     let result = (|| {
@@ -1273,6 +1271,7 @@ mod tests {
 
         let project = import_remote_media_url(
             &store,
+            &store.data_directory().join("remote-media"),
             ImportRemoteMediaUrlInput {
                 url,
                 expected_preview_token: preview.preview_token,
@@ -1320,6 +1319,7 @@ mod tests {
 
         let project = import_remote_media_url(
             &store,
+            &store.data_directory().join("remote-media"),
             ImportRemoteMediaUrlInput {
                 url: url.clone(),
                 expected_preview_token: preview.preview_token,
