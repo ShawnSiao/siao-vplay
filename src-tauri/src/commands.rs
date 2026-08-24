@@ -103,15 +103,7 @@ impl From<StoreError> for CommandError {
 
 impl From<StorageError> for CommandError {
     fn from(error: StorageError) -> Self {
-        let code = match &error {
-            StorageError::InvalidPath(_) => "storage_path_invalid",
-            StorageError::RootUnavailable(_) => "storage_root_unavailable",
-            StorageError::RevisionConflict { .. } => "storage_revision_conflict",
-            StorageError::UnsupportedVersion(_) => "storage_version_unsupported",
-            StorageError::FileSystem(_) => "storage_filesystem_error",
-            StorageError::Serialization(_) => "storage_serialization_error",
-            StorageError::StatePoisoned => "storage_state_unavailable",
-        };
+        let code = error.code();
         Self {
             code,
             message: error.to_string(),

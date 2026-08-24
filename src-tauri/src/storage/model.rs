@@ -1,5 +1,80 @@
 use serde::{Deserialize, Serialize};
 
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum StorageArea {
+    AppData,
+    RemoteMedia,
+    MediaCache,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum StorageMigrationMode {
+    Copy,
+    Rebuild,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum StorageMigrationStatus {
+    Prepared,
+    Running,
+    Interrupted,
+    Cancelled,
+    Failed,
+    Completed,
+    RestartRequired,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PrepareStorageMigrationInput {
+    pub area: StorageArea,
+    pub destination_directory: String,
+    #[serde(default = "default_migration_mode")]
+    pub mode: StorageMigrationMode,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StartStorageMigrationInput {
+    pub task_id: String,
+    pub confirmed: bool,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StorageMigrationTaskInput {
+    pub task_id: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StorageMigrationTask {
+    pub id: String,
+    pub area: StorageArea,
+    pub mode: StorageMigrationMode,
+    pub status: StorageMigrationStatus,
+    pub source_root: String,
+    pub destination_root: String,
+    pub bytes_to_copy: u64,
+    pub copied_bytes: u64,
+    pub file_count: usize,
+    pub verified_file_count: usize,
+    pub free_space_bytes: Option<u64>,
+    pub previous_root_retained: bool,
+    pub restart_required: bool,
+    pub error_code: Option<String>,
+    pub error_message: Option<String>,
+    pub created_at_ms: i64,
+    pub updated_at_ms: i64,
+}
+
+fn default_migration_mode() -> StorageMigrationMode {
+    StorageMigrationMode::Copy
+}
+
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SaveStorageSettingsInput {

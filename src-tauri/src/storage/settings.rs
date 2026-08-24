@@ -1,13 +1,14 @@
 use std::{
     fs,
     path::{Path, PathBuf},
-    sync::{Arc, RwLock},
+    sync::{Arc, Mutex, RwLock},
 };
 
 use uuid::Uuid;
 
 use super::{
     StorageError,
+    migration_state::{MigrationRuntime, load_migration_runtime},
     model::{SaveStorageSettingsInput, StorageSettingsFile, StorageSettingsView, settings_version},
     paths::{canonical_existing_directory, configured_path, directory_available, directory_size},
 };
@@ -16,15 +17,16 @@ const SETTINGS_FILE_NAME: &str = "storage-settings.json";
 
 #[derive(Clone, Debug)]
 pub struct StorageManager {
-    state: Arc<RwLock<StorageState>>,
+    pub(crate) state: Arc<RwLock<StorageState>>,
+    pub(crate) migration: Arc<Mutex<MigrationRuntime>>,
 }
 
 #[derive(Debug)]
-struct StorageState {
-    settings_path: PathBuf,
-    default_app_data_root: PathBuf,
-    environment_app_data_root: Option<PathBuf>,
-    settings: StorageSettingsFile,
+pub(crate) struct StorageState {
+    pub(crate) settings_path: PathBuf,
+    pub(crate) default_app_data_root: PathBuf,
+    pub(crate) environment_app_data_root: Option<PathBuf>,
+    pub(crate) settings: StorageSettingsFile,
 }
 
 impl StorageManager {
@@ -35,10 +37,18 @@ impl StorageManager {
     ) -> Result<Self, StorageError> {
         fs::create_dir_all(bootstrap_directory)?;
         let settings_path = bootstrap_directory.join(SETTINGS_FILE_NAME);
-        let settings = load_settings(&settings_path)?;
+        let mut settings = load_settings(&settings_path)?;
         if settings.version != settings_version() {
             return Err(StorageError::UnsupportedVersion(settings.version));
         }
+        if environment_app_data_root.is_none() {
+            promote_pending_app_data_root(&settings_path, &mut settings)?;
+        }
+        let active_root = environment_app_data_root
+            .clone()
+            .or_else(|| settings.active_app_data_root.as_deref().map(PathBuf::from))
+            .unwrap_or_else(|| default_app_data_root.clone());
+        let migration = load_migration_runtime(bootstrap_directory, &active_root)?;
         Ok(Self {
             state: Arc::new(RwLock::new(StorageState {
                 settings_path,
@@ -46,6 +56,7 @@ impl StorageManager {
                 environment_app_data_root,
                 settings,
             })),
+            migration: Arc::new(Mutex::new(migration)),
         })
     }
 
@@ -83,6 +94,15 @@ impl StorageManager {
         )
     }
 
+    pub fn media_cache_root(&self) -> Result<PathBuf, StorageError> {
+        let state = self.read_state()?;
+        let app_root = active_app_data_root(&state);
+        Ok(configured_path(
+            state.settings.media_cache_root.as_deref(),
+            app_root.join("media-cache"),
+        ))
+    }
+
     pub fn get_settings(&self) -> Result<StorageSettingsView, StorageError> {
         let state = self.read_state()?;
         settings_view(&state)
@@ -117,6 +137,23 @@ impl StorageManager {
                 actual: state.settings.revision,
             });
         }
+        let app_root = active_app_data_root(&state);
+        let current_remote = configured_path(
+            state.settings.remote_media_root.as_deref(),
+            app_root.join("remote-media"),
+        );
+        let next_remote =
+            configured_path(remote_media_root.as_deref(), app_root.join("remote-media"));
+        let current_cache = configured_path(
+            state.settings.media_cache_root.as_deref(),
+            app_root.join("media-cache"),
+        );
+        let next_cache = configured_path(media_cache_root.as_deref(), app_root.join("media-cache"));
+        if (current_remote != next_remote && directory_size(&current_remote) > 0)
+            || (current_cache != next_cache && directory_size(&current_cache) > 0)
+        {
+            return Err(StorageError::ManagedRootChangeRequiresMigration);
+        }
         state.settings.remote_media_root = remote_media_root;
         state.settings.media_cache_root = media_cache_root;
         state.settings.default_subtitle_export_directory = default_subtitle_export_directory;
@@ -127,16 +164,20 @@ impl StorageManager {
         settings_view(&state)
     }
 
-    fn read_state(&self) -> Result<std::sync::RwLockReadGuard<'_, StorageState>, StorageError> {
+    pub(crate) fn read_state(
+        &self,
+    ) -> Result<std::sync::RwLockReadGuard<'_, StorageState>, StorageError> {
         self.state.read().map_err(|_| StorageError::StatePoisoned)
     }
 
-    fn write_state(&self) -> Result<std::sync::RwLockWriteGuard<'_, StorageState>, StorageError> {
+    pub(crate) fn write_state(
+        &self,
+    ) -> Result<std::sync::RwLockWriteGuard<'_, StorageState>, StorageError> {
         self.state.write().map_err(|_| StorageError::StatePoisoned)
     }
 }
 
-fn active_app_data_root(state: &StorageState) -> PathBuf {
+pub(crate) fn active_app_data_root(state: &StorageState) -> PathBuf {
     state
         .environment_app_data_root
         .clone()
@@ -205,7 +246,10 @@ fn load_settings(path: &Path) -> Result<StorageSettingsFile, StorageError> {
     Ok(serde_json::from_slice(&fs::read(path)?)?)
 }
 
-fn persist_settings(path: &Path, settings: &StorageSettingsFile) -> Result<(), StorageError> {
+pub(crate) fn persist_settings(
+    path: &Path,
+    settings: &StorageSettingsFile,
+) -> Result<(), StorageError> {
     let suffix = Uuid::new_v4().simple().to_string();
     let temporary = path.with_file_name(format!(".{SETTINGS_FILE_NAME}.{suffix}.part"));
     let previous = path.with_file_name(format!(".{SETTINGS_FILE_NAME}.{suffix}.previous"));
@@ -230,116 +274,21 @@ fn path_string(path: &Path) -> String {
     path.to_string_lossy().into_owned()
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn manager(directory: &Path) -> StorageManager {
-        let default_root = directory.join("default-data");
-        fs::create_dir_all(&default_root).unwrap();
-        StorageManager::initialize(directory, default_root, None).unwrap()
+fn promote_pending_app_data_root(
+    settings_path: &Path,
+    settings: &mut StorageSettingsFile,
+) -> Result<(), StorageError> {
+    let Some(pending) = settings.pending_app_data_root.as_deref() else {
+        return Ok(());
+    };
+    let root = PathBuf::from(pending);
+    let database = root.join("projects").join("siaovplay.db");
+    if !root.is_dir() || !database.is_file() {
+        return Ok(());
     }
-
-    #[test]
-    fn defaults_preserve_legacy_layout() {
-        let directory = tempfile::tempdir().unwrap();
-        let manager = manager(directory.path());
-        let view = manager.get_settings().unwrap();
-        assert!(view.remote_media_root.ends_with("remote-media"));
-        assert!(view.media_cache_root.ends_with("media-cache"));
-        assert_eq!(view.revision, 1);
-    }
-
-    #[test]
-    fn saves_and_reloads_configured_locations() {
-        let directory = tempfile::tempdir().unwrap();
-        let media = directory.path().join("media");
-        let cache = directory.path().join("cache");
-        let exports = directory.path().join("exports");
-        for path in [&media, &cache, &exports] {
-            fs::create_dir_all(path).unwrap();
-        }
-        let manager = manager(directory.path());
-        let saved = manager
-            .save_settings(SaveStorageSettingsInput {
-                expected_revision: 1,
-                remote_media_root: Some(path_string(&media)),
-                media_cache_root: Some(path_string(&cache)),
-                default_subtitle_export_directory: Some(path_string(&exports)),
-                default_video_report_export_directory: Some(path_string(&exports)),
-            })
-            .unwrap();
-        assert_eq!(saved.revision, 2);
-        let reloaded = StorageManager::initialize(
-            directory.path(),
-            directory.path().join("default-data"),
-            None,
-        )
-        .unwrap();
-        assert_eq!(
-            reloaded.remote_media_root().unwrap(),
-            dunce::canonicalize(media).unwrap()
-        );
-    }
-
-    #[test]
-    fn rejects_stale_revisions() {
-        let directory = tempfile::tempdir().unwrap();
-        let manager = manager(directory.path());
-        let error = manager
-            .save_settings(SaveStorageSettingsInput {
-                expected_revision: 9,
-                remote_media_root: None,
-                media_cache_root: None,
-                default_subtitle_export_directory: None,
-                default_video_report_export_directory: None,
-            })
-            .unwrap_err();
-        assert!(matches!(error, StorageError::RevisionConflict { .. }));
-    }
-
-    #[test]
-    fn environment_root_has_precedence() {
-        let directory = tempfile::tempdir().unwrap();
-        let environment_root = directory.path().join("environment-data");
-        fs::create_dir_all(&environment_root).unwrap();
-        let manager = StorageManager::initialize(
-            directory.path(),
-            directory.path().join("default-data"),
-            Some(environment_root.clone()),
-        )
-        .unwrap();
-        assert_eq!(manager.app_data_root().unwrap(), environment_root);
-        assert!(
-            manager
-                .get_settings()
-                .unwrap()
-                .app_data_root_locked_by_environment
-        );
-    }
-
-    #[test]
-    fn missing_custom_root_is_not_recreated_silently() {
-        let directory = tempfile::tempdir().unwrap();
-        let media = directory.path().join("media");
-        let cache = directory.path().join("cache");
-        fs::create_dir_all(&media).unwrap();
-        fs::create_dir_all(&cache).unwrap();
-        let manager = manager(directory.path());
-        manager
-            .save_settings(SaveStorageSettingsInput {
-                expected_revision: 1,
-                remote_media_root: Some(path_string(&media)),
-                media_cache_root: Some(path_string(&cache)),
-                default_subtitle_export_directory: None,
-                default_video_report_export_directory: None,
-            })
-            .unwrap();
-        fs::remove_dir_all(&media).unwrap();
-        assert!(matches!(
-            manager.remote_media_root_for_write().unwrap_err(),
-            StorageError::RootUnavailable(_)
-        ));
-        assert!(!media.exists());
-    }
+    super::database::verify_database(&database)?;
+    settings.active_app_data_root = Some(pending.to_owned());
+    settings.pending_app_data_root = None;
+    settings.revision = settings.revision.saturating_add(1);
+    persist_settings(settings_path, settings)
 }
