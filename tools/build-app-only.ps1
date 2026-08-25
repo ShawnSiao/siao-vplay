@@ -98,7 +98,7 @@ $signatureStatus = Get-SignatureStatus $candidate.FullName
 [pscustomobject]@{
     path = $candidate.FullName
     buildPath = $installer.FullName
-    version = '0.4.0'
+    version = '0.4.1'
     sizeBytes = $candidate.Length
     sha256 = $hash
     signatureStatus = $signatureStatus
