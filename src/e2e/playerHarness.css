@@ -1,0 +1,21 @@
+:root[data-caption-validation-background] .video-stage video,
+:root[data-caption-validation-background] .video-loading {
+  opacity: 0;
+  pointer-events: none;
+}
+
+:root[data-caption-validation-background="light"] .video-stage {
+  background: #e7dfd2;
+}
+
+:root[data-caption-validation-background="complex"] .video-stage {
+  background-color: #26313a;
+  background-image:
+    linear-gradient(125deg, rgb(244 197 116 / 88%) 0 22%, transparent 22% 100%),
+    linear-gradient(35deg, transparent 0 44%, rgb(87 146 159 / 90%) 44% 68%, transparent 68% 100%),
+    linear-gradient(160deg, #202933 0 48%, #7c5265 48% 72%, #d5c6a3 72% 100%);
+}
+
+:root[data-caption-validation-background="dark"] .video-stage {
+  background: #05070b;
+}

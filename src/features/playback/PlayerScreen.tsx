@@ -6,8 +6,6 @@ import type {
   Project,
   SubtitleVersion,
 } from "../../types";
-import { LearningPanel } from "../../components/LearningPanel";
-import { UnderstandingPanel } from "../../components/UnderstandingPanel";
 import type {
   ShellContextMenu,
   ShellDrawerTab,
@@ -18,15 +16,15 @@ import {
 } from "./usePlaybackController";
 import { PlayerContextMenu } from "./PlayerContextMenu";
 import { PlayerCaptionStack } from "./PlayerCaptionStack";
-import { PlayerDrawer } from "./PlayerDrawer";
 import { PlayerErrorCard } from "./PlayerErrorCard";
-import { EpisodeDrawer } from "./EpisodeDrawer";
 import type { EpisodeNavigationState } from "../library/useEpisodeNavigation";
 import { PlayerControls } from "./PlayerControls";
+import { CaptionsOffNotice } from "./CaptionQuickToolbar";
+import { PlayerAuxiliaryDrawer } from "./PlayerAuxiliaryDrawer";
 import { useFullscreenControlVisibility } from "./useFullscreenControlVisibility";
 import {
   useSeekStepPreference,
-  useSubtitleFollowPreferences,
+  useSubtitleDisplayPreferences,
 } from "./playbackPreferences";
 import "./player-feedback.css";
 import "./player-fullscreen.css";
@@ -72,14 +70,23 @@ export function PlayerScreen({
   onRetryPlayback,
 }: PlayerScreenProps) {
   const stageRef = useRef<HTMLDivElement>(null);
+  const transcriptButtonRef = useRef<HTMLButtonElement>(null);
   const [switchingEpisode, setSwitchingEpisode] = useState(false);
   const [playerError, setPlayerError] = useState<string | null>(null);
+  const [captionsVisible, setCaptionsVisible] = useState(true);
   useSummaryCompletionNotice(project.id, onNotice);
   const { seekStepSeconds, changeSeekStep } = useSeekStepPreference();
   const {
-    subtitleFollowPreferences,
-    changeSubtitleFollowPreferences,
-  } = useSubtitleFollowPreferences();
+    subtitleDisplayPreferences,
+    changeSubtitleDisplayPreferences,
+  } = useSubtitleDisplayPreferences();
+  const closeDrawer = useCallback(() => {
+    const restoreTranscriptFocus = drawerTab === "transcript";
+    onCloseDrawer();
+    if (restoreTranscriptFocus) {
+      window.setTimeout(() => transcriptButtonRef.current?.focus(), 0);
+    }
+  }, [drawerTab, onCloseDrawer]);
   const {
     playerRef,
     videoRef,
@@ -125,7 +132,7 @@ export function PlayerScreen({
     contextMenu,
     seekStepMs: seekStepSeconds * 1_000,
     onBack,
-    onCloseDrawer,
+    onCloseDrawer: closeDrawer,
     onCloseContextMenu,
     onNeedProxy,
     onPersist,
@@ -151,6 +158,7 @@ export function PlayerScreen({
     : "当前视频";
   const drawerContextStatus =
     currentSubtitle || currentTranslation ? "字幕已同步" : "等待字幕";
+  const transcriptOpen = drawerTab === "transcript";
   const switchEpisode = useCallback(
     async (episode: EpisodeReference, currentStateAlreadyPersisted = false) => {
       if (switchingEpisode || episode.projectId === project.id) {
@@ -247,25 +255,46 @@ export function PlayerScreen({
               </div>
             ) : null}
 
-            <PlayerCaptionStack
-              mode={effectiveSubtitleMode}
-              original={activeOriginal}
-              translation={activeTranslation}
-              originalLanguage={currentSubtitle?.languageCode}
-              videoRef={videoRef}
-              stageRef={stageRef}
-              playing={playing}
-              positionMs={positionMs}
-              fullscreen={fullscreen}
-              preferences={subtitleFollowPreferences}
-              onPositionCommit={(position) =>
-                changeSubtitleFollowPreferences({
-                  ...subtitleFollowPreferences,
-                  position,
-                })
-              }
-              onTogglePlayback={() => void togglePlayback()}
-            />
+            {captionsVisible ? (
+              <PlayerCaptionStack
+                mode={effectiveSubtitleMode}
+                original={activeOriginal}
+                translation={activeTranslation}
+                originalLanguage={currentSubtitle?.languageCode}
+                videoRef={videoRef}
+                stageRef={stageRef}
+                playing={playing}
+                positionMs={positionMs}
+                fullscreen={fullscreen}
+                preferences={subtitleDisplayPreferences}
+                transcriptOpen={transcriptOpen}
+                quickToolbarVisible={
+                  subtitleDisplayPreferences.quickToolbar === "always" ||
+                  !playing ||
+                  transcriptOpen
+                }
+                transcriptButtonRef={transcriptButtonRef}
+                onPositionCommit={(position) =>
+                  changeSubtitleDisplayPreferences({
+                    ...subtitleDisplayPreferences,
+                    position,
+                  })
+                }
+                onTogglePlayback={() => void togglePlayback()}
+                onChangeMode={(mode) => {
+                  setCaptionsVisible(true);
+                  changeSubtitleMode(mode);
+                }}
+                onChangePreferences={changeSubtitleDisplayPreferences}
+                onToggleTranscript={() => {
+                  if (transcriptOpen) closeDrawer();
+                  else onSelectDrawer("transcript");
+                }}
+                onHideCaptions={() => setCaptionsVisible(false)}
+              />
+            ) : currentSubtitle || currentTranslation ? (
+              <CaptionsOffNotice onRestore={() => setCaptionsVisible(true)} />
+            ) : null}
 
             {ended &&
             episodeNavigation.neighbors.next &&
@@ -312,7 +341,8 @@ export function PlayerScreen({
             nextEpisode={episodeNavigation.neighbors.next}
             switchingEpisode={switchingEpisode}
             seekStepSeconds={seekStepSeconds}
-            subtitleFollowPreferences={subtitleFollowPreferences}
+            subtitleDisplayPreferences={subtitleDisplayPreferences}
+            captionsVisible={captionsVisible}
             onSwitchEpisode={(episode) => void switchEpisode(episode)}
             onTogglePlayback={() => void togglePlayback()}
             onToggleMuted={toggleMuted}
@@ -322,64 +352,34 @@ export function PlayerScreen({
             onChangePlaybackRate={changePlaybackRate}
             onChangeSubtitleMode={changeSubtitleMode}
             onChangeSeekStep={changeSeekStep}
-            onChangeSubtitleFollowPreferences={changeSubtitleFollowPreferences}
+            onChangeSubtitleDisplayPreferences={changeSubtitleDisplayPreferences}
+            onChangeCaptionsVisible={setCaptionsVisible}
           />
         </main>
 
         {drawerTab ? (
-          <PlayerDrawer
+          <PlayerAuxiliaryDrawer
             activeTab={drawerTab}
+            projectId={project.id}
             mediaTitle={project.title}
             contextLabel={drawerContextLabel}
             contextStatus={drawerContextStatus}
             episodeSummary={drawerEpisodeSummary}
+            originalVersion={currentSubtitle}
+            translatedVersion={currentTranslation}
+            activeOriginal={activeOriginal}
+            activeTranslation={activeTranslation}
+            episodeNavigation={episodeNavigation}
+            switchingEpisode={switchingEpisode}
+            positionMs={positionMs}
+            durationMs={durationMs}
             onSelectTab={onSelectDrawer}
-            onClose={onCloseDrawer}
-          >
-            {drawerTab === "episodes" ? (
-              <EpisodeDrawer
-                projectId={project.id}
-                detail={episodeNavigation.detail}
-                episodes={episodeNavigation.episodes}
-                neighbors={episodeNavigation.neighbors}
-                loading={episodeNavigation.loading}
-                error={episodeNavigation.error}
-                switching={switchingEpisode}
-                playbackPositionMs={positionMs}
-                playbackDurationMs={durationMs}
-                onSwitch={(episode) => void switchEpisode(episode)}
-              />
-            ) : drawerTab === "understand" ? (
-              <UnderstandingPanel
-                embedded
-                key={project.id}
-                projectId={project.id}
-                playbackCutoffMs={positionMs}
-                durationMs={durationMs}
-                sourceVersion={currentSubtitle}
-                translationVersion={currentTranslation}
-                onPrepareSubtitles={onManageSubtitles}
-                onClose={onCloseDrawer}
-                onJump={seekTo}
-                onPausePlayback={pausePlayback}
-              />
-            ) : (
-              <LearningPanel
-                embedded
-                key={`${project.id}:${activeOriginal?.id ?? "no-line"}`}
-                projectId={project.id}
-                playbackPositionMs={positionMs}
-                sourceVersion={currentSubtitle}
-                translationVersion={currentTranslation}
-                sourceSegment={activeOriginal}
-                translationSegment={activeTranslation}
-                onPrepareSubtitles={onManageSubtitles}
-                onClose={onCloseDrawer}
-                onJump={seekTo}
-                onPausePlayback={pausePlayback}
-              />
-            )}
-          </PlayerDrawer>
+            onClose={closeDrawer}
+            onSwitchEpisode={(episode) => void switchEpisode(episode)}
+            onManageSubtitles={onManageSubtitles}
+            onSeekTo={seekTo}
+            onPausePlayback={pausePlayback}
+          />
         ) : null}
       </div>
 

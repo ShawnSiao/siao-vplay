@@ -490,11 +490,11 @@ test("subtitle following, appearance, dragging, and controls remain complete", a
   });
   expect(colorState).toMatchObject({
     base: "#fef3c7",
-    background: "rgba(5, 7, 9, 0.76)",
+    background: "rgba(5, 7, 9, 0.82)",
     filter: "none",
     spokenColor: "rgb(254, 243, 199)",
     currentDecoration: "none",
-    originalWeight: 650,
+    originalWeight: 560,
     textShadow: "none",
     translationColor: "rgb(254, 243, 199)",
     translationWeight: 700,
@@ -506,8 +506,8 @@ test("subtitle following, appearance, dragging, and controls remain complete", a
   expect(settingsBox!.x + settingsBox!.width).toBeLessThanOrEqual(960);
   expect(settingsBox!.y).toBeGreaterThanOrEqual(0);
   expect(settingsBox!.y + settingsBox!.height).toBeLessThanOrEqual(640);
-  await expect.poll(() => page.evaluate(() => JSON.parse(window.localStorage.getItem("siaovplay-subtitle-follow-preferences-v1") ?? "{}").baseTextColor)).toBe("#fef3c7");
-  await expect.poll(() => page.evaluate(() => JSON.parse(window.localStorage.getItem("siaovplay-subtitle-follow-preferences-v1") ?? "{}").highlightColor)).toBe("#fb923c");
+  await expect.poll(() => page.evaluate(() => JSON.parse(window.localStorage.getItem("siaovplay-subtitle-display-preferences-v2") ?? "{}").baseTextColor)).toBe("#fef3c7");
+  await expect.poll(() => page.evaluate(() => JSON.parse(window.localStorage.getItem("siaovplay-subtitle-display-preferences-v2") ?? "{}").highlightColor)).toBe("#fb923c");
   await settings.getByRole("checkbox", { name: "原文逐词跟随" }).uncheck();
   await expect(page.locator(".caption-word")).toHaveCount(0);
   await settings.getByRole("checkbox", { name: "原文逐词跟随" }).check();
@@ -525,7 +525,7 @@ test("subtitle following, appearance, dragging, and controls remain complete", a
   await page.mouse.up();
   const moved = await caption.boundingBox();
   expect(moved?.x).toBeLessThan(before.x - 40);
-  const storedPosition = await page.evaluate(() => JSON.parse(window.localStorage.getItem("siaovplay-subtitle-follow-preferences-v1") ?? "{}").position);
+  const storedPosition = await page.evaluate(() => JSON.parse(window.localStorage.getItem("siaovplay-subtitle-display-preferences-v2") ?? "{}").position);
   expect(storedPosition.x).toBeLessThan(0.5);
   await page.reload();
   const restored = await caption.boundingBox();

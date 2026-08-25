@@ -194,6 +194,10 @@ export function DesktopShell({
                     <span>剧集</span>
                     <small>当前合集</small>
                   </button>
+                  <button type="button" role="menuitem" onClick={() => onToggleDrawer("transcript")}>
+                    <span>逐字稿</span>
+                    <small>同步字幕</small>
+                  </button>
                   <button
                     type="button"
                     role="menuitem"

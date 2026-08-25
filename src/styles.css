@@ -6314,7 +6314,7 @@ h3 {
 
 .player-drawer-tabs {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 4px;
   padding: 8px;
   border-bottom: 1px solid var(--border-subtle);
@@ -6351,6 +6351,12 @@ h3 {
   color: var(--learning);
   border-color: var(--learning-border);
   background: var(--learning-soft);
+}
+
+.player-drawer-tabs button.transcript.active {
+  color: var(--brand);
+  border-color: var(--brand-border);
+  background: var(--brand-soft);
 }
 
 .player-drawer-content {

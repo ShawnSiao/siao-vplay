@@ -10,6 +10,14 @@ export type SubtitleFollowPreferences = {
   highlightColor: string;
   position: SubtitlePosition;
 };
+export const subtitleTextSizes = ["small", "medium", "large"] as const;
+export type SubtitleTextSize = (typeof subtitleTextSizes)[number];
+export const subtitleQuickToolbarModes = ["auto", "always", "hidden"] as const;
+export type SubtitleQuickToolbarMode = (typeof subtitleQuickToolbarModes)[number];
+export type SubtitleDisplayPreferences = SubtitleFollowPreferences & {
+  textSize: SubtitleTextSize;
+  quickToolbar: SubtitleQuickToolbarMode;
+};
 
 export const subtitleBaseColorPresets = [
   "#ffffff",
@@ -35,10 +43,16 @@ export const defaultSubtitleFollowPreferences: SubtitleFollowPreferences = {
   highlightColor: subtitleHighlightPresets[0],
   position: { x: 0.5, y: 0.9 },
 };
+export const defaultSubtitleDisplayPreferences: SubtitleDisplayPreferences = {
+  ...defaultSubtitleFollowPreferences,
+  textSize: "medium",
+  quickToolbar: "auto",
+};
 
 const seekStepStorageKey = "siaovplay-playback-seek-step-seconds";
 const defaultSeekStepSeconds: SeekStepSeconds = 10;
 const subtitleFollowStorageKey = "siaovplay-subtitle-follow-preferences-v1";
+const subtitleDisplayStorageKey = "siaovplay-subtitle-display-preferences-v2";
 const hexColorPattern = /^#[0-9a-f]{6}$/i;
 
 function validSeekStep(value: number): value is SeekStepSeconds {
@@ -92,42 +106,118 @@ function isNormalizedPosition(value: unknown): value is SubtitlePosition {
   );
 }
 
-export function readSubtitleFollowPreferences(): SubtitleFollowPreferences {
-  try {
-    const raw = window.localStorage.getItem(subtitleFollowStorageKey);
-    if (!raw) return defaultSubtitleFollowPreferences;
-    const value = JSON.parse(raw) as Partial<SubtitleFollowPreferences>;
-    if (
-      typeof value.enabled !== "boolean" ||
-      typeof value.highlightColor !== "string" ||
-      !isValidSubtitleHighlightColor(value.highlightColor) ||
-      !isNormalizedPosition(value.position)
-    ) {
-      return defaultSubtitleFollowPreferences;
-    }
-    return {
-      enabled: value.enabled,
-      baseTextColor:
-        typeof value.baseTextColor === "string" &&
-        isValidSubtitleColor(value.baseTextColor)
-          ? value.baseTextColor.toLowerCase()
-          : defaultSubtitleFollowPreferences.baseTextColor,
-      highlightColor: value.highlightColor.toLowerCase(),
-      position: { ...value.position },
-    };
-  } catch {
-    return defaultSubtitleFollowPreferences;
+function validSubtitleTextSize(value: unknown): value is SubtitleTextSize {
+  return subtitleTextSizes.some((size) => size === value);
+}
+
+function validQuickToolbarMode(value: unknown): value is SubtitleQuickToolbarMode {
+  return subtitleQuickToolbarModes.some((mode) => mode === value);
+}
+
+function parseSubtitleFollowPreferences(
+  value: unknown,
+): SubtitleFollowPreferences | null {
+  if (!value || typeof value !== "object") return null;
+  const candidate = value as Partial<SubtitleFollowPreferences>;
+  if (
+    typeof candidate.enabled !== "boolean" ||
+    typeof candidate.highlightColor !== "string" ||
+    !isValidSubtitleHighlightColor(candidate.highlightColor) ||
+    !isNormalizedPosition(candidate.position)
+  ) {
+    return null;
   }
+  return {
+    enabled: candidate.enabled,
+    baseTextColor:
+      typeof candidate.baseTextColor === "string" &&
+      isValidSubtitleColor(candidate.baseTextColor)
+        ? candidate.baseTextColor.toLowerCase()
+        : defaultSubtitleFollowPreferences.baseTextColor,
+    highlightColor: candidate.highlightColor.toLowerCase(),
+    position: { ...candidate.position },
+  };
+}
+
+function parseSubtitleDisplayPreferences(
+  value: unknown,
+): SubtitleDisplayPreferences | null {
+  const follow = parseSubtitleFollowPreferences(value);
+  if (!follow || !value || typeof value !== "object") return null;
+  const candidate = value as Partial<SubtitleDisplayPreferences>;
+  if (
+    !validSubtitleTextSize(candidate.textSize) ||
+    !validQuickToolbarMode(candidate.quickToolbar)
+  ) {
+    return null;
+  }
+  return {
+    ...follow,
+    textSize: candidate.textSize,
+    quickToolbar: candidate.quickToolbar,
+  };
+}
+
+export function readSubtitleDisplayPreferences(): SubtitleDisplayPreferences {
+  try {
+    const currentRaw = window.localStorage.getItem(subtitleDisplayStorageKey);
+    if (currentRaw) {
+      const current = parseSubtitleDisplayPreferences(JSON.parse(currentRaw));
+      if (current) return current;
+    }
+
+    const legacyRaw = window.localStorage.getItem(subtitleFollowStorageKey);
+    if (!legacyRaw) return defaultSubtitleDisplayPreferences;
+    const legacy = parseSubtitleFollowPreferences(JSON.parse(legacyRaw));
+    if (!legacy) return defaultSubtitleDisplayPreferences;
+    const migrated = { ...legacy, textSize: "medium", quickToolbar: "auto" } as const;
+    saveSubtitleDisplayPreferences(migrated);
+    return migrated;
+  } catch {
+    return defaultSubtitleDisplayPreferences;
+  }
+}
+
+export function saveSubtitleDisplayPreferences(
+  value: SubtitleDisplayPreferences,
+) {
+  try {
+    window.localStorage.setItem(subtitleDisplayStorageKey, JSON.stringify(value));
+  } catch {
+    // Playback remains usable when local preferences cannot be written.
+  }
+}
+
+export function useSubtitleDisplayPreferences() {
+  const [subtitleDisplayPreferences, setPreferences] = useState(
+    readSubtitleDisplayPreferences,
+  );
+  const changeSubtitleDisplayPreferences = useCallback(
+    (next: SubtitleDisplayPreferences) => {
+      saveSubtitleDisplayPreferences(next);
+      setPreferences(next);
+    },
+    [],
+  );
+  return {
+    subtitleDisplayPreferences,
+    changeSubtitleDisplayPreferences,
+  };
+}
+
+export function readSubtitleFollowPreferences(): SubtitleFollowPreferences {
+  const { enabled, baseTextColor, highlightColor, position } =
+    readSubtitleDisplayPreferences();
+  return { enabled, baseTextColor, highlightColor, position };
 }
 
 export function saveSubtitleFollowPreferences(
   value: SubtitleFollowPreferences,
 ) {
-  try {
-    window.localStorage.setItem(subtitleFollowStorageKey, JSON.stringify(value));
-  } catch {
-    // Playback remains usable when local preferences cannot be written.
-  }
+  saveSubtitleDisplayPreferences({
+    ...readSubtitleDisplayPreferences(),
+    ...value,
+  });
 }
 
 export function useSubtitleFollowPreferences() {

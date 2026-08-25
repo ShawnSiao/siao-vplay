@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useReducer } from "react";
 
 export type ShellView = "library" | "preparing" | "player";
-export type ShellDrawerTab = "episodes" | "understand" | "learn";
+export type ShellDrawerTab = "episodes" | "understand" | "learn" | "transcript";
 export type ShellContextMenu = { x: number; y: number };
 
 type ShellState = {

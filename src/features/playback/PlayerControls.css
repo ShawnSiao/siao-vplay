@@ -120,6 +120,25 @@
   font-size: 13px;
 }
 
+.subtitle-display-setting {
+  display: flex;
+  min-height: 34px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.subtitle-display-setting select {
+  min-width: 112px;
+  height: 30px;
+  border: 1px solid #3a4650;
+  border-radius: 4px;
+  color: var(--text-secondary);
+  background: #0c1013;
+}
+
 .subtitle-drag-hint {
   color: var(--text-muted);
   font-size: 11px;

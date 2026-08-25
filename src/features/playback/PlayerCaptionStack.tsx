@@ -6,13 +6,15 @@ import {
   type RefObject,
 } from "react";
 import type { SubtitleSegment } from "../../types";
-import type { SubtitleFollowPreferences, SubtitlePosition } from "./playbackPreferences";
+import type { SubtitleDisplayMode } from "../../types";
+import type { SubtitleDisplayPreferences, SubtitlePosition } from "./playbackPreferences";
+import { CaptionQuickToolbar } from "./CaptionQuickToolbar";
 import { KaraokeCaptionLine } from "./KaraokeCaptionLine";
 import { useMediaPlaybackClock } from "./useMediaPlaybackClock";
 import "./PlayerCaptionStack.css";
 
 type PlayerCaptionStackProps = {
-  mode: "translation" | "original" | "bilingual";
+  mode: SubtitleDisplayMode;
   original: SubtitleSegment | null;
   translation: SubtitleSegment | null;
   originalLanguage?: string;
@@ -21,9 +23,16 @@ type PlayerCaptionStackProps = {
   playing: boolean;
   positionMs: number;
   fullscreen: boolean;
-  preferences: SubtitleFollowPreferences;
+  preferences: SubtitleDisplayPreferences;
+  transcriptOpen: boolean;
+  quickToolbarVisible: boolean;
+  transcriptButtonRef: RefObject<HTMLButtonElement | null>;
   onPositionCommit: (position: SubtitlePosition) => void;
   onTogglePlayback: () => void;
+  onChangeMode: (mode: SubtitleDisplayMode) => void;
+  onChangePreferences: (preferences: SubtitleDisplayPreferences) => void;
+  onToggleTranscript: () => void;
+  onHideCaptions: () => void;
 };
 
 const safeMargin = 12;
@@ -40,8 +49,15 @@ export function PlayerCaptionStack({
   positionMs,
   fullscreen,
   preferences,
+  transcriptOpen,
+  quickToolbarVisible,
+  transcriptButtonRef,
   onPositionCommit,
   onTogglePlayback,
+  onChangeMode,
+  onChangePreferences,
+  onToggleTranscript,
+  onHideCaptions,
 }: PlayerCaptionStackProps) {
   const captionRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<{ pointerId: number; startX: number; startY: number; startPosition: SubtitlePosition; currentPosition: SubtitlePosition; moved: boolean } | null>(null);
@@ -94,9 +110,10 @@ export function PlayerCaptionStack({
     <div
       ref={captionRef}
       className={`caption-stack${dragging ? " dragging" : ""}`}
+      data-text-size={preferences.textSize}
       aria-live="off"
       aria-label="字幕，可拖动调整位置"
-      style={{ left: `${renderedPosition.x * 100}%`, top: `${renderedPosition.y * 100}%`, "--caption-base": preferences.baseTextColor } as CSSProperties}
+      style={{ left: `${renderedPosition.x * 100}%`, top: `${renderedPosition.y * 100}%`, "--caption-base": preferences.baseTextColor, "--caption-transcript-overlay-shift": `${renderedPosition.x * 396}px` } as CSSProperties}
       onPointerDown={(event) => {
         if (event.button !== 0) return;
         event.preventDefault();
@@ -108,14 +125,32 @@ export function PlayerCaptionStack({
       onPointerUp={finishDrag}
       onPointerCancel={finishDrag}
     >
-      {(mode === "original" || mode === "bilingual") && original ? (
-        <KaraokeCaptionLine segment={original} positionMs={playbackPositionMs} enabled={preferences.enabled} highlightColor={preferences.highlightColor} language={originalLanguage} />
+      {preferences.quickToolbar !== "hidden" ? (
+        <CaptionQuickToolbar
+          mode={mode}
+          size={preferences.textSize}
+          targetLabel={translation ? "中文" : "暂无译文"}
+          originalAvailable={Boolean(original)}
+          translationAvailable={Boolean(translation)}
+          transcriptOpen={transcriptOpen}
+          visible={quickToolbarVisible}
+          transcriptButtonRef={transcriptButtonRef}
+          onChangeMode={onChangeMode}
+          onChangeSize={(textSize) => onChangePreferences({ ...preferences, textSize })}
+          onToggleTranscript={onToggleTranscript}
+          onHideCaptions={onHideCaptions}
+        />
       ) : null}
-      {(mode === "translation" || mode === "bilingual") && translation ? (
-        <p className="caption-line translation" lang="zh-CN">
-          {translation.text}
-        </p>
-      ) : null}
+      <div className="caption-copy">
+        {(mode === "original" || mode === "bilingual") && original ? (
+          <KaraokeCaptionLine segment={original} positionMs={playbackPositionMs} enabled={preferences.enabled} highlightColor={preferences.highlightColor} language={originalLanguage} />
+        ) : null}
+        {(mode === "translation" || mode === "bilingual") && translation ? (
+          <p className="caption-line translation" lang="zh-CN">
+            {translation.text}
+          </p>
+        ) : null}
+      </div>
     </div>
   );
 }

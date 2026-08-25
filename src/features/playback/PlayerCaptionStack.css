@@ -4,12 +4,12 @@
   display: grid;
   width: max-content;
   max-width: min(760px, calc(100% - 24px));
-  padding: 5px 11px 6px;
+  padding: 0;
   justify-items: center;
   gap: 1px;
   border: 1px solid rgb(255 255 255 / 10%);
   border-radius: 7px;
-  background: rgb(5 7 9 / 76%);
+  background: rgb(5 7 9 / 82%);
   box-shadow: 0 3px 10px rgb(0 0 0 / 16%);
   transform: translate(-50%, -100%);
   cursor: grab;
@@ -17,6 +17,14 @@
   text-align: center;
   touch-action: none;
   user-select: none;
+}
+
+.caption-copy {
+  display: grid;
+  max-width: 100%;
+  justify-items: center;
+  gap: 2px;
+  padding: 7px 13px 8px;
 }
 
 .caption-stack.dragging {
@@ -29,7 +37,7 @@
   padding: 0;
   color: var(--caption-base, #fff);
   background: transparent;
-  font-size: clamp(17px, 1.65vw, 23px);
+  font-size: calc(21px * var(--caption-text-scale, 1));
   font-weight: 650;
   line-height: 1.32;
   text-shadow: none;
@@ -38,13 +46,25 @@
 
 .caption-line.original {
   color: var(--caption-base, #fff);
-  font-size: clamp(15px, 1.35vw, 19px);
-  font-weight: 650;
+  font-size: calc(16px * var(--caption-text-scale, 1));
+  font-weight: 560;
 }
 
 .caption-line.translation {
-  font-size: clamp(18px, 1.65vw, 23px);
+  font-size: calc(21px * var(--caption-text-scale, 1));
   font-weight: 700;
+}
+
+.caption-stack[data-text-size="small"] {
+  --caption-text-scale: 0.86;
+}
+
+.caption-stack[data-text-size="medium"] {
+  --caption-text-scale: 1;
+}
+
+.caption-stack[data-text-size="large"] {
+  --caption-text-scale: 1.17;
 }
 
 .caption-word {

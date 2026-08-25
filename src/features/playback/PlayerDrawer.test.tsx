@@ -54,4 +54,26 @@ describe("PlayerDrawer reading-first shell", () => {
       screen.getByRole("complementary", { name: "当前内容抽屉" }),
     ).toHaveAttribute("data-density", "compact");
   });
+
+  it("exposes synchronized transcript as a fourth peer tab", () => {
+    const onSelectTab = vi.fn();
+    render(
+      <PlayerDrawer
+        activeTab="transcript"
+        mediaTitle="测试视频"
+        onSelectTab={onSelectTab}
+        onClose={vi.fn()}
+      >
+        <p>逐字稿正文</p>
+      </PlayerDrawer>,
+    );
+    expect(screen.getAllByRole("tab")).toHaveLength(4);
+    expect(screen.getByRole("tab", { name: "逐字稿" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(screen.queryByText("阅读密度")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("tab", { name: "理解" }));
+    expect(onSelectTab).toHaveBeenCalledWith("understand");
+  });
 });

@@ -11,6 +11,10 @@
   display: none;
 }
 
+.player-screen.fullscreen-player .player-drawer[data-active-tab="transcript"] {
+  display: grid;
+}
+
 .player-screen.fullscreen-player .player-controls {
   position: absolute;
   z-index: 10;

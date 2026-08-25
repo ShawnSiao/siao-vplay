@@ -1,10 +1,13 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
 import {
+  defaultSubtitleDisplayPreferences,
   defaultSubtitleFollowPreferences,
   readSeekStepSeconds,
+  readSubtitleDisplayPreferences,
   readSubtitleFollowPreferences,
   saveSeekStepSeconds,
+  saveSubtitleDisplayPreferences,
   saveSubtitleFollowPreferences,
 } from "./playbackPreferences";
 
@@ -87,6 +90,69 @@ describe("subtitle follow preferences", () => {
     );
     expect(readSubtitleFollowPreferences()).toEqual(
       defaultSubtitleFollowPreferences,
+    );
+  });
+});
+
+describe("subtitle display preferences", () => {
+  beforeEach(() => window.localStorage.clear());
+
+  it("restores a complete v2 display preference", () => {
+    saveSubtitleDisplayPreferences({
+      ...defaultSubtitleDisplayPreferences,
+      enabled: false,
+      textSize: "large",
+      quickToolbar: "always",
+      position: { x: 0.34, y: 0.78 },
+    });
+
+    expect(readSubtitleDisplayPreferences()).toEqual({
+      ...defaultSubtitleDisplayPreferences,
+      enabled: false,
+      textSize: "large",
+      quickToolbar: "always",
+      position: { x: 0.34, y: 0.78 },
+    });
+  });
+
+  it("migrates a valid v1 preference into the v2 key", () => {
+    window.localStorage.setItem(
+      "siaovplay-subtitle-follow-preferences-v1",
+      JSON.stringify({
+        enabled: false,
+        baseTextColor: "#DBEAFE",
+        highlightColor: "#FB923C",
+        position: { x: 0.41, y: 0.83 },
+      }),
+    );
+
+    expect(readSubtitleDisplayPreferences()).toEqual({
+      enabled: false,
+      baseTextColor: "#dbeafe",
+      highlightColor: "#fb923c",
+      position: { x: 0.41, y: 0.83 },
+      textSize: "medium",
+      quickToolbar: "auto",
+    });
+    expect(
+      JSON.parse(
+        window.localStorage.getItem(
+          "siaovplay-subtitle-display-preferences-v2",
+        ) ?? "null",
+      ),
+    ).toMatchObject({ textSize: "medium", quickToolbar: "auto" });
+  });
+
+  it.each([
+    { textSize: "huge", quickToolbar: "auto" },
+    { textSize: "medium", quickToolbar: "sometimes" },
+  ])("rejects unknown display values", (invalid) => {
+    window.localStorage.setItem(
+      "siaovplay-subtitle-display-preferences-v2",
+      JSON.stringify({ ...defaultSubtitleDisplayPreferences, ...invalid }),
+    );
+    expect(readSubtitleDisplayPreferences()).toEqual(
+      defaultSubtitleDisplayPreferences,
     );
   });
 });

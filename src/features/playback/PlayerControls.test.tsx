@@ -2,11 +2,13 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { PlayerControls } from "./PlayerControls";
-import { defaultSubtitleFollowPreferences } from "./playbackPreferences";
+import { defaultSubtitleDisplayPreferences } from "./playbackPreferences";
 
 function renderControls() {
   const onSeekTo = vi.fn();
   const onChangeSeekStep = vi.fn();
+  const onChangeSubtitleMode = vi.fn();
+  const onChangeCaptionsVisible = vi.fn();
   render(
     <PlayerControls
       playing={false}
@@ -24,7 +26,8 @@ function renderControls() {
       nextEpisode={null}
       switchingEpisode={false}
       seekStepSeconds={10}
-      subtitleFollowPreferences={defaultSubtitleFollowPreferences}
+      subtitleDisplayPreferences={defaultSubtitleDisplayPreferences}
+      captionsVisible
       onSwitchEpisode={() => undefined}
       onTogglePlayback={() => undefined}
       onToggleMuted={() => undefined}
@@ -32,12 +35,13 @@ function renderControls() {
       onSeekTo={onSeekTo}
       onChangeVolume={() => undefined}
       onChangePlaybackRate={() => undefined}
-      onChangeSubtitleMode={() => undefined}
+      onChangeSubtitleMode={onChangeSubtitleMode}
       onChangeSeekStep={onChangeSeekStep}
-      onChangeSubtitleFollowPreferences={() => undefined}
+      onChangeSubtitleDisplayPreferences={() => undefined}
+      onChangeCaptionsVisible={onChangeCaptionsVisible}
     />,
   );
-  return { onSeekTo, onChangeSeekStep };
+  return { onSeekTo, onChangeSeekStep, onChangeSubtitleMode, onChangeCaptionsVisible };
 }
 
 describe("PlayerControls", () => {
@@ -51,5 +55,15 @@ describe("PlayerControls", () => {
       target: { value: "30" },
     });
     expect(onChangeSeekStep).toHaveBeenCalledWith(30);
+  });
+
+  it("uses one bottom selector for display modes and temporary close", () => {
+    const { onChangeSubtitleMode, onChangeCaptionsVisible } = renderControls();
+    const selector = screen.getByRole("combobox", { name: "字幕显示" });
+    fireEvent.change(selector, { target: { value: "off" } });
+    expect(onChangeCaptionsVisible).toHaveBeenCalledWith(false);
+    fireEvent.change(selector, { target: { value: "original" } });
+    expect(onChangeCaptionsVisible).toHaveBeenCalledWith(true);
+    expect(onChangeSubtitleMode).toHaveBeenCalledWith("original");
   });
 });

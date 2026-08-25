@@ -5,7 +5,7 @@ import type {
 } from "../../types";
 import {
   seekStepOptions,
-  type SubtitleFollowPreferences,
+  type SubtitleDisplayPreferences,
   type SeekStepSeconds,
 } from "./playbackPreferences";
 import { SubtitleAppearancePopover } from "./SubtitleAppearancePopover";
@@ -27,7 +27,8 @@ type PlayerControlsProps = {
   nextEpisode: EpisodeReference | null;
   switchingEpisode: boolean;
   seekStepSeconds: SeekStepSeconds;
-  subtitleFollowPreferences: SubtitleFollowPreferences;
+  subtitleDisplayPreferences: SubtitleDisplayPreferences;
+  captionsVisible: boolean;
   onSwitchEpisode: (episode: EpisodeReference) => void;
   onTogglePlayback: () => void;
   onToggleMuted: () => void;
@@ -37,7 +38,8 @@ type PlayerControlsProps = {
   onChangePlaybackRate: (rate: number) => void;
   onChangeSubtitleMode: (mode: SubtitleDisplayMode) => void;
   onChangeSeekStep: (seconds: SeekStepSeconds) => void;
-  onChangeSubtitleFollowPreferences: (preferences: SubtitleFollowPreferences) => void;
+  onChangeSubtitleDisplayPreferences: (preferences: SubtitleDisplayPreferences) => void;
+  onChangeCaptionsVisible: (visible: boolean) => void;
 };
 
 export function PlayerControls({
@@ -56,7 +58,8 @@ export function PlayerControls({
   nextEpisode,
   switchingEpisode,
   seekStepSeconds,
-  subtitleFollowPreferences,
+  subtitleDisplayPreferences,
+  captionsVisible,
   onSwitchEpisode,
   onTogglePlayback,
   onToggleMuted,
@@ -66,7 +69,8 @@ export function PlayerControls({
   onChangePlaybackRate,
   onChangeSubtitleMode,
   onChangeSeekStep,
-  onChangeSubtitleFollowPreferences,
+  onChangeSubtitleDisplayPreferences,
+  onChangeCaptionsVisible,
 }: PlayerControlsProps) {
   const seekStepMs = seekStepSeconds * 1_000;
   return (
@@ -162,14 +166,22 @@ export function PlayerControls({
           <select
             aria-label="字幕显示"
             className="caption-select"
-            value={subtitleMode}
-            onChange={(event) => onChangeSubtitleMode(event.target.value as SubtitleDisplayMode)}
+            value={captionsVisible ? subtitleMode : "off"}
+            onChange={(event) => {
+              if (event.target.value === "off") {
+                onChangeCaptionsVisible(false);
+                return;
+              }
+              onChangeCaptionsVisible(true);
+              onChangeSubtitleMode(event.target.value as SubtitleDisplayMode);
+            }}
           >
             <option value="translation" disabled={!translationAvailable}>中文字幕</option>
             <option value="original" disabled={!originalSubtitleAvailable}>原文字幕</option>
             <option value="bilingual" disabled={!originalSubtitleAvailable || !translationAvailable}>双语字幕</option>
+            <option value="off">关闭字幕</option>
           </select>
-          <SubtitleAppearancePopover preferences={subtitleFollowPreferences} onChange={onChangeSubtitleFollowPreferences} />
+          <SubtitleAppearancePopover preferences={subtitleDisplayPreferences} onChange={onChangeSubtitleDisplayPreferences} />
           <label className="seek-step-field" title="设置快进和快退的跳转时长">
             <span>跳转</span>
             <select

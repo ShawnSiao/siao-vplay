@@ -6,7 +6,6 @@ import { UnderstandingResultView } from "../features/analysis/UnderstandingResul
 import { SummaryPreview } from "./SummaryPreview";
 import { LearningSpeechPreview } from "./LearningSpeechPreview";
 import { DesktopShell } from "../features/shell/DesktopShell";
-import type { MediaDropFeedback } from "../features/shell/useDesktopMediaDrop";
 import type {
   ShellContextMenu,
   ShellDrawerTab,
@@ -23,6 +22,13 @@ import { createUnderstandingFixtures } from "../test-fixtures/understanding";
 import "../styles.css";
 import "../features/summary/summary.css";
 import "../features/summary/summary-results.css";
+import "./playerHarness.css";
+import {
+  configurePlayerHarnessValidation,
+  requestedDropFeedback,
+} from "./playerHarnessValidation";
+
+const subtitleScriptSample = configurePlayerHarnessValidation();
 
 const project: Project = {
   id: "e2e-project",
@@ -167,6 +173,12 @@ const translatedSubtitle: SubtitleVersion = {
   }],
 };
 
+if (subtitleScriptSample) {
+  originalSubtitle.segments[0].text = subtitleScriptSample.original;
+  originalSubtitle.segments[0].words = [];
+  translatedSubtitle.segments[0].text = subtitleScriptSample.translation;
+}
+
 const collectionDetail: CollectionDetail = {
   summary: {
     id: "e2e-series",
@@ -224,13 +236,6 @@ const nextEpisode: EpisodeReference = {
   episodeNumber: 2,
   absoluteOrder: 1,
 };
-
-function requestedDropFeedback(): MediaDropFeedback | null {
-  const drop = new URLSearchParams(window.location.search).get("drop");
-  return drop === "ready"
-    ? { tone: "ready", message: "松开以导入这个视频" }
-    : null;
-}
 
 function UnderstandingResultPreview() {
   const [factsExpanded, setFactsExpanded] = useState(false);

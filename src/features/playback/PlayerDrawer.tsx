@@ -25,6 +25,7 @@ const drawerTabs: ReadonlyArray<{
   { id: "episodes", label: "剧集", description: "当前季" },
   { id: "understand", label: "理解", description: "当前场景" },
   { id: "learn", label: "学习", description: "当前台词" },
+  { id: "transcript", label: "逐字稿", description: "完整字幕" },
 ];
 
 function readDensity(): DrawerDensity {
@@ -60,13 +61,16 @@ export function PlayerDrawer({
   return (
     <aside
       className="player-drawer"
+      data-active-tab={activeTab}
       data-density={density}
       aria-label="当前内容抽屉"
     >
       <header className="player-drawer-header">
         <div>
           <span>当前内容</span>
-          <strong title={mediaTitle}>{mediaTitle}</strong>
+          <strong title={activeTab === "transcript" ? "逐字稿" : mediaTitle}>
+            {activeTab === "transcript" ? "逐字稿" : mediaTitle}
+          </strong>
         </div>
         <button aria-label="关闭右侧抽屉" type="button" onClick={onClose}>
           ×
@@ -105,7 +109,7 @@ export function PlayerDrawer({
         ))}
       </div>
 
-      <div className="player-drawer-toolbar">
+      {activeTab !== "transcript" ? <div className="player-drawer-toolbar">
         <div>
           <span>阅读密度</span>
           <strong>{density === "compact" ? "紧凑" : "舒适"}</strong>
@@ -126,7 +130,7 @@ export function PlayerDrawer({
             紧凑
           </button>
         </div>
-      </div>
+      </div> : null}
 
       <div
         className="player-drawer-content"
