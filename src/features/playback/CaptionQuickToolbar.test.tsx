@@ -12,7 +12,7 @@ function renderToolbar(mode: "translation" | "original" | "bilingual") {
     <CaptionQuickToolbar
       mode={mode}
       size="medium"
-      targetLabel="中文"
+      targetLabel="简体中文"
       originalAvailable
       translationAvailable
       transcriptOpen={false}
@@ -39,10 +39,11 @@ describe("CaptionQuickToolbar", () => {
 
   it("emits size, transcript and temporary-close actions", () => {
     const callbacks = renderToolbar("bilingual");
+    expect(screen.getByLabelText("译文语言：简体中文")).toHaveTextContent("译文简体中文");
     fireEvent.change(screen.getByRole("combobox", { name: "字幕字号" }), {
       target: { value: "large" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "展开字幕" }));
+    fireEvent.click(screen.getByRole("button", { name: "展开逐字稿" }));
     fireEvent.click(screen.getByRole("button", { name: "关闭字幕" }));
     expect(callbacks.onChangeSize).toHaveBeenCalledWith("large");
     expect(callbacks.onToggleTranscript).toHaveBeenCalledOnce();

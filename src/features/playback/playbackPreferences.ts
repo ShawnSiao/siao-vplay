@@ -4,6 +4,10 @@ export const seekStepOptions = [5, 10, 15, 30] as const;
 export type SeekStepSeconds = (typeof seekStepOptions)[number];
 
 export type SubtitlePosition = { x: number; y: number };
+export type SubtitleFrameSize = {
+  widthRatio: number | null;
+  minHeightRatio: number | null;
+};
 export type SubtitleFollowPreferences = {
   enabled: boolean;
   baseTextColor: string;
@@ -17,6 +21,7 @@ export type SubtitleQuickToolbarMode = (typeof subtitleQuickToolbarModes)[number
 export type SubtitleDisplayPreferences = SubtitleFollowPreferences & {
   textSize: SubtitleTextSize;
   quickToolbar: SubtitleQuickToolbarMode;
+  frameSize: SubtitleFrameSize;
 };
 
 export const subtitleBaseColorPresets = [
@@ -43,16 +48,22 @@ export const defaultSubtitleFollowPreferences: SubtitleFollowPreferences = {
   highlightColor: subtitleHighlightPresets[0],
   position: { x: 0.5, y: 0.9 },
 };
+export const defaultSubtitleFrameSize: SubtitleFrameSize = {
+  widthRatio: null,
+  minHeightRatio: null,
+};
 export const defaultSubtitleDisplayPreferences: SubtitleDisplayPreferences = {
   ...defaultSubtitleFollowPreferences,
   textSize: "medium",
   quickToolbar: "auto",
+  frameSize: defaultSubtitleFrameSize,
 };
 
 const seekStepStorageKey = "siaovplay-playback-seek-step-seconds";
 const defaultSeekStepSeconds: SeekStepSeconds = 10;
 const subtitleFollowStorageKey = "siaovplay-subtitle-follow-preferences-v1";
-const subtitleDisplayStorageKey = "siaovplay-subtitle-display-preferences-v2";
+const subtitleDisplayStorageKey = "siaovplay-subtitle-display-preferences-v3";
+const legacySubtitleDisplayStorageKey = "siaovplay-subtitle-display-preferences-v2";
 const hexColorPattern = /^#[0-9a-f]{6}$/i;
 
 function validSeekStep(value: number): value is SeekStepSeconds {
@@ -114,6 +125,23 @@ function validQuickToolbarMode(value: unknown): value is SubtitleQuickToolbarMod
   return subtitleQuickToolbarModes.some((mode) => mode === value);
 }
 
+function isValidFrameSize(value: unknown): value is SubtitleFrameSize {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Partial<SubtitleFrameSize>;
+  return (
+    (candidate.widthRatio === null ||
+      (typeof candidate.widthRatio === "number" &&
+        Number.isFinite(candidate.widthRatio) &&
+        candidate.widthRatio >= 0.3 &&
+        candidate.widthRatio <= 0.94)) &&
+    (candidate.minHeightRatio === null ||
+      (typeof candidate.minHeightRatio === "number" &&
+        Number.isFinite(candidate.minHeightRatio) &&
+        candidate.minHeightRatio >= 0.1 &&
+        candidate.minHeightRatio <= 0.55))
+  );
+}
+
 function parseSubtitleFollowPreferences(
   value: unknown,
 ): SubtitleFollowPreferences | null {
@@ -141,13 +169,15 @@ function parseSubtitleFollowPreferences(
 
 function parseSubtitleDisplayPreferences(
   value: unknown,
+  allowMissingFrameSize = false,
 ): SubtitleDisplayPreferences | null {
   const follow = parseSubtitleFollowPreferences(value);
   if (!follow || !value || typeof value !== "object") return null;
   const candidate = value as Partial<SubtitleDisplayPreferences>;
   if (
     !validSubtitleTextSize(candidate.textSize) ||
-    !validQuickToolbarMode(candidate.quickToolbar)
+    !validQuickToolbarMode(candidate.quickToolbar) ||
+    (!allowMissingFrameSize && !isValidFrameSize(candidate.frameSize))
   ) {
     return null;
   }
@@ -155,6 +185,9 @@ function parseSubtitleDisplayPreferences(
     ...follow,
     textSize: candidate.textSize,
     quickToolbar: candidate.quickToolbar,
+    frameSize: isValidFrameSize(candidate.frameSize)
+      ? { ...candidate.frameSize }
+      : { ...defaultSubtitleFrameSize },
   };
 }
 
@@ -166,11 +199,30 @@ export function readSubtitleDisplayPreferences(): SubtitleDisplayPreferences {
       if (current) return current;
     }
 
+    const previousDisplayRaw = window.localStorage.getItem(
+      legacySubtitleDisplayStorageKey,
+    );
+    if (previousDisplayRaw) {
+      const previousDisplay = parseSubtitleDisplayPreferences(
+        JSON.parse(previousDisplayRaw),
+        true,
+      );
+      if (previousDisplay) {
+        saveSubtitleDisplayPreferences(previousDisplay);
+        return previousDisplay;
+      }
+    }
+
     const legacyRaw = window.localStorage.getItem(subtitleFollowStorageKey);
     if (!legacyRaw) return defaultSubtitleDisplayPreferences;
     const legacy = parseSubtitleFollowPreferences(JSON.parse(legacyRaw));
     if (!legacy) return defaultSubtitleDisplayPreferences;
-    const migrated = { ...legacy, textSize: "medium", quickToolbar: "auto" } as const;
+    const migrated = {
+      ...legacy,
+      textSize: "medium",
+      quickToolbar: "auto",
+      frameSize: { ...defaultSubtitleFrameSize },
+    } as const;
     saveSubtitleDisplayPreferences(migrated);
     return migrated;
   } catch {

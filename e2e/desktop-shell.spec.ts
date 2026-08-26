@@ -426,7 +426,7 @@ test("seek buttons, keyboard shortcuts, and the saved interval stay in sync", as
   await expect(page.locator(".player-time")).toContainText("00:45 / 02:00");
 });
 
-test("subtitle following, appearance, dragging, and controls remain complete", async ({
+test("subtitle following, appearance, dragging, resizing, and controls remain complete", async ({
   page,
 }) => {
   const consoleErrors: string[] = [];
@@ -506,8 +506,8 @@ test("subtitle following, appearance, dragging, and controls remain complete", a
   expect(settingsBox!.x + settingsBox!.width).toBeLessThanOrEqual(960);
   expect(settingsBox!.y).toBeGreaterThanOrEqual(0);
   expect(settingsBox!.y + settingsBox!.height).toBeLessThanOrEqual(640);
-  await expect.poll(() => page.evaluate(() => JSON.parse(window.localStorage.getItem("siaovplay-subtitle-display-preferences-v2") ?? "{}").baseTextColor)).toBe("#fef3c7");
-  await expect.poll(() => page.evaluate(() => JSON.parse(window.localStorage.getItem("siaovplay-subtitle-display-preferences-v2") ?? "{}").highlightColor)).toBe("#fb923c");
+  await expect.poll(() => page.evaluate(() => JSON.parse(window.localStorage.getItem("siaovplay-subtitle-display-preferences-v3") ?? "{}").baseTextColor)).toBe("#fef3c7");
+  await expect.poll(() => page.evaluate(() => JSON.parse(window.localStorage.getItem("siaovplay-subtitle-display-preferences-v3") ?? "{}").highlightColor)).toBe("#fb923c");
   await settings.getByRole("checkbox", { name: "原文逐词跟随" }).uncheck();
   await expect(page.locator(".caption-word")).toHaveCount(0);
   await settings.getByRole("checkbox", { name: "原文逐词跟随" }).check();
@@ -525,7 +525,7 @@ test("subtitle following, appearance, dragging, and controls remain complete", a
   await page.mouse.up();
   const moved = await caption.boundingBox();
   expect(moved?.x).toBeLessThan(before.x - 40);
-  const storedPosition = await page.evaluate(() => JSON.parse(window.localStorage.getItem("siaovplay-subtitle-display-preferences-v2") ?? "{}").position);
+  const storedPosition = await page.evaluate(() => JSON.parse(window.localStorage.getItem("siaovplay-subtitle-display-preferences-v3") ?? "{}").position);
   expect(storedPosition.x).toBeLessThan(0.5);
   await page.reload();
   const restored = await caption.boundingBox();
@@ -535,6 +535,52 @@ test("subtitle following, appearance, dragging, and controls remain complete", a
   await resetSettings.getByRole("button", { name: "恢复默认位置" }).click();
   await resetSettings.getByRole("button", { name: "关闭字幕设置" }).click();
   expect((await caption.boundingBox())?.x).toBeGreaterThan(restored?.x ?? 0);
+
+  const beforeResize = await caption.boundingBox();
+  if (!beforeResize) throw new Error("missing caption before resize");
+  await caption.hover();
+  const widthHandle = page.getByRole("button", {
+    name: "调整字幕框宽度",
+    exact: true,
+  });
+  const widthHandleBox = await widthHandle.boundingBox();
+  if (!widthHandleBox) throw new Error("missing caption width handle");
+  await page.mouse.move(
+    widthHandleBox.x + widthHandleBox.width / 2,
+    widthHandleBox.y + widthHandleBox.height / 2,
+  );
+  await page.mouse.down();
+  await page.mouse.move(
+    widthHandleBox.x + widthHandleBox.width / 2 + 90,
+    widthHandleBox.y + widthHandleBox.height / 2,
+  );
+  await page.mouse.up();
+  const resized = await caption.boundingBox();
+  expect(resized?.width).toBeGreaterThan(beforeResize.width + 60);
+  expect(Math.abs((resized?.x ?? 0) - beforeResize.x)).toBeLessThanOrEqual(2);
+  await expect.poll(() => page.evaluate(() => JSON.parse(window.localStorage.getItem("siaovplay-subtitle-display-preferences-v3") ?? "{}").frameSize.widthRatio)).toBeGreaterThan(0.3);
+  await page.reload();
+  const restoredSize = await caption.boundingBox();
+  expect(restoredSize?.width).toBeGreaterThan(beforeResize.width + 60);
+  await page.getByRole("button", { name: "字幕设置" }).click();
+  const sizeSettings = page.getByRole("dialog", { name: "字幕设置" });
+  await sizeSettings.getByRole("button", { name: "恢复默认尺寸" }).click();
+  await sizeSettings.getByRole("button", { name: "关闭字幕设置" }).click();
+  expect((await caption.boundingBox())?.width).toBeLessThan(restoredSize?.width ?? Number.POSITIVE_INFINITY);
+
+  const beforeHeightResize = await caption.boundingBox();
+  if (!beforeHeightResize) throw new Error("missing caption before height resize");
+  await caption.hover();
+  await page.getByRole("button", { name: "调整字幕框高度", exact: true }).focus();
+  await page.keyboard.press("ArrowDown");
+  const heightResized = await caption.boundingBox();
+  expect(heightResized?.height).toBeGreaterThan(beforeHeightResize.height + 10);
+  await expect.poll(() => page.evaluate(() => JSON.parse(window.localStorage.getItem("siaovplay-subtitle-display-preferences-v3") ?? "{}").frameSize.minHeightRatio)).toBeGreaterThan(0.1);
+  await page.getByRole("button", { name: "字幕设置" }).click();
+  const resetSizeSettings = page.getByRole("dialog", { name: "字幕设置" });
+  await resetSizeSettings.getByRole("button", { name: "恢复默认尺寸" }).click();
+  await resetSizeSettings.getByRole("button", { name: "关闭字幕设置" }).click();
+
   const reset = await caption.boundingBox();
   if (!reset) throw new Error("missing reset caption");
   await page.mouse.move(reset.x + reset.width / 2, reset.y + reset.height / 2);

@@ -68,19 +68,28 @@
 }
 
 .caption-quick-toolbar select {
-  max-width: 70px;
   padding: 0 22px 0 6px;
   border-color: rgb(255 255 255 / 10%);
   background: #0c1013;
 }
 
-.caption-language-control {
+.caption-language-control,
+.caption-size-control {
   display: flex;
   align-items: center;
   gap: 4px;
   color: var(--text-muted);
   font-size: 12px;
   white-space: nowrap;
+}
+
+.caption-language-control strong {
+  color: var(--text-primary);
+  font-weight: 650;
+}
+
+.caption-size-control select {
+  min-width: 72px;
 }
 
 .caption-quick-toolbar .caption-quick-close {
@@ -118,13 +127,15 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .caption-quick-toolbar {
+  .caption-quick-toolbar,
+  .caption-resize-handle {
     transition: none;
   }
 }
 
 @media (max-width: 720px) {
-  .caption-language-control > span {
+  .caption-language-control > span,
+  .caption-size-control > span {
     display: none;
   }
 

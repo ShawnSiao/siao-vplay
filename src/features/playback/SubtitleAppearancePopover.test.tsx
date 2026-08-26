@@ -23,6 +23,11 @@ describe("SubtitleAppearancePopover", () => {
       ...defaultSubtitleDisplayPreferences,
       position: { x: 0.5, y: 0.9 },
     });
+    fireEvent.click(screen.getByRole("button", { name: "恢复默认尺寸" }));
+    expect(onChange).toHaveBeenLastCalledWith({
+      ...defaultSubtitleDisplayPreferences,
+      frameSize: { widthRatio: null, minHeightRatio: null },
+    });
   });
 
   it("changes and resets the two colors independently", () => {

@@ -9,6 +9,8 @@ import type { SubtitleSegment } from "../../types";
 import type { SubtitleDisplayMode } from "../../types";
 import type { SubtitleDisplayPreferences, SubtitlePosition } from "./playbackPreferences";
 import { CaptionQuickToolbar } from "./CaptionQuickToolbar";
+import { CaptionResizeHandles } from "./CaptionResizeHandles";
+import type { CaptionFrameUpdate } from "./captionFrameSizing";
 import { KaraokeCaptionLine } from "./KaraokeCaptionLine";
 import { useMediaPlaybackClock } from "./useMediaPlaybackClock";
 import "./PlayerCaptionStack.css";
@@ -62,9 +64,11 @@ export function PlayerCaptionStack({
   const captionRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<{ pointerId: number; startX: number; startY: number; startPosition: SubtitlePosition; currentPosition: SubtitlePosition; moved: boolean } | null>(null);
   const [dragPosition, setDragPosition] = useState<SubtitlePosition | null>(null);
+  const [resizePreview, setResizePreview] = useState<CaptionFrameUpdate | null>(null);
   const [dragging, setDragging] = useState(false);
   const playbackPositionMs = useMediaPlaybackClock(videoRef, playing, positionMs);
-  const position = dragPosition ?? preferences.position;
+  const position = dragPosition ?? resizePreview?.position ?? preferences.position;
+  const frameSize = resizePreview?.frameSize ?? preferences.frameSize;
   const renderedPosition = fullscreen
     ? { ...position, y: Math.min(position.y, 0.82) }
     : position;
@@ -109,11 +113,12 @@ export function PlayerCaptionStack({
   return (
     <div
       ref={captionRef}
-      className={`caption-stack${dragging ? " dragging" : ""}`}
+      className={`caption-stack${dragging ? " dragging" : ""}${resizePreview ? " resizing" : ""}`}
       data-text-size={preferences.textSize}
+      data-controls-visible={quickToolbarVisible}
       aria-live="off"
-      aria-label="字幕，可拖动调整位置"
-      style={{ left: `${renderedPosition.x * 100}%`, top: `${renderedPosition.y * 100}%`, "--caption-base": preferences.baseTextColor, "--caption-transcript-overlay-shift": `${renderedPosition.x * 396}px` } as CSSProperties}
+      aria-label="字幕，可拖动调整位置或边缘调整尺寸"
+      style={{ left: `${renderedPosition.x * 100}%`, top: `${renderedPosition.y * 100}%`, width: frameSize.widthRatio === null ? undefined : `${frameSize.widthRatio * 100}%`, minHeight: frameSize.minHeightRatio === null ? undefined : `${frameSize.minHeightRatio * 100}%`, "--caption-base": preferences.baseTextColor, "--caption-transcript-overlay-shift": `${renderedPosition.x * 396}px` } as CSSProperties}
       onPointerDown={(event) => {
         if (event.button !== 0) return;
         event.preventDefault();
@@ -129,7 +134,7 @@ export function PlayerCaptionStack({
         <CaptionQuickToolbar
           mode={mode}
           size={preferences.textSize}
-          targetLabel={translation ? "中文" : "暂无译文"}
+          targetLabel={translation ? "简体中文" : "暂无译文"}
           originalAvailable={Boolean(original)}
           translationAvailable={Boolean(translation)}
           transcriptOpen={transcriptOpen}
@@ -151,6 +156,22 @@ export function PlayerCaptionStack({
           </p>
         ) : null}
       </div>
+      <CaptionResizeHandles
+        captionRef={captionRef}
+        stageRef={stageRef}
+        position={renderedPosition}
+        frameSize={frameSize}
+        fullscreen={fullscreen}
+        onPreview={setResizePreview}
+        onCommit={(update) => {
+          onChangePreferences({
+            ...preferences,
+            frameSize: update.frameSize,
+            position: update.position,
+          });
+          setResizePreview(null);
+        }}
+      />
     </div>
   );
 }

@@ -34,7 +34,7 @@ test("subtitle quick controls share state with the player and open the transcrip
     "translation",
   );
 
-  await page.getByRole("button", { name: "展开字幕" }).click();
+  await page.getByRole("button", { name: "展开逐字稿" }).click();
   const drawer = page.getByRole("complementary", { name: "当前内容抽屉" });
   await expect(drawer).toBeVisible();
   await expect(drawer.getByRole("tab", { name: "逐字稿" })).toHaveAttribute(
@@ -60,7 +60,7 @@ test("subtitle quick controls share state with the player and open the transcrip
 
   await page.keyboard.press("Escape");
   await expect(drawer).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "展开字幕" })).toBeFocused();
+  await expect(page.getByRole("button", { name: "展开逐字稿" })).toBeFocused();
 
   await page.getByRole("button", { name: "关闭字幕" }).click();
   await expect(page.getByText("字幕已关闭")).toBeVisible();
@@ -89,7 +89,7 @@ for (const viewport of [
   }) => {
     await page.setViewportSize(viewport);
     await page.goto("/e2e/player.html", { waitUntil: "domcontentloaded" });
-    await page.getByRole("button", { name: "展开字幕" }).click();
+    await page.getByRole("button", { name: "展开逐字稿" }).click();
     const drawer = page.getByRole("complementary", { name: "当前内容抽屉" });
     await expect(drawer).toHaveCSS("width", `${viewport.drawerWidth}px`);
     const overflow = await page.evaluate(() => ({

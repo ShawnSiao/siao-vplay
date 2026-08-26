@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { SubtitleColorControl } from "./SubtitleColorControl";
 import {
+  defaultSubtitleDisplayPreferences,
   defaultSubtitleFollowPreferences,
   subtitleBaseColorPresets,
   subtitleHighlightPresets,
@@ -41,7 +42,7 @@ export function SubtitleAppearancePopover({ preferences, onChange }: Props) {
       <label className="subtitle-display-setting">
         <span>字幕大小</span>
         <select aria-label="字幕大小" value={preferences.textSize} onChange={(event) => onChange({ ...preferences, textSize: event.target.value as SubtitleTextSize })}>
-          <option value="small">小号</option><option value="medium">中号</option><option value="large">大号</option>
+          <option value="small">小</option><option value="medium">标准</option><option value="large">大</option>
         </select>
       </label>
       <label className="subtitle-display-setting">
@@ -54,8 +55,9 @@ export function SubtitleAppearancePopover({ preferences, onChange }: Props) {
       <SubtitleColorControl label="当前词颜色" value={preferences.highlightColor} defaultValue={defaultSubtitleFollowPreferences.highlightColor} presets={subtitleHighlightPresets} warning={contrastRatio(preferences.highlightColor, preferences.baseTextColor) < 1.5 ? "当前词颜色与字幕默认颜色过于接近。" : null} onChange={(highlightColor) => onChange({ ...preferences, highlightColor })}/>
       <div className="subtitle-settings-actions">
         <button type="button" onClick={() => onChange({ ...preferences, position: { ...defaultSubtitleFollowPreferences.position } })}>恢复默认位置</button>
+        <button type="button" onClick={() => onChange({ ...preferences, frameSize: { ...defaultSubtitleDisplayPreferences.frameSize } })}>恢复默认尺寸</button>
       </div>
-      <small className="subtitle-drag-hint">可直接拖动视频中的字幕框调整位置。</small>
+      <small className="subtitle-drag-hint">可拖动字幕框调整位置，也可拖动右边缘、下边缘或右下角调整尺寸。</small>
     </section> : null}
   </div>;
 }

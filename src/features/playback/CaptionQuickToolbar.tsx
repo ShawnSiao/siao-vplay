@@ -55,12 +55,10 @@ export function CaptionQuickToolbar({
       role="toolbar"
       onPointerDown={(event) => event.stopPropagation()}
     >
-      <label className="caption-language-control">
-        <span>翻译为</span>
-        <select aria-label="译文轨" disabled={!translationAvailable} value={targetLabel}>
-          <option value={targetLabel}>{targetLabel}</option>
-        </select>
-      </label>
+      <div className="caption-language-control" aria-label={`译文语言：${targetLabel}`}>
+        <span>译文</span>
+        <strong>{targetLabel}</strong>
+      </div>
       <button
         aria-pressed={mode === "bilingual"}
         type="button"
@@ -70,15 +68,15 @@ export function CaptionQuickToolbar({
         {sourceToggleLabel(mode)}
       </button>
       <label className="caption-size-control">
-        <span className="sr-only">字幕字号</span>
+        <span>字号</span>
         <select
           aria-label="字幕字号"
           value={size}
           onChange={(event) => onChangeSize(event.target.value as SubtitleTextSize)}
         >
-          <option value="small">小号</option>
-          <option value="medium">中号</option>
-          <option value="large">大号</option>
+          <option value="small">小</option>
+          <option value="medium">标准</option>
+          <option value="large">大</option>
         </select>
       </label>
       <button
@@ -88,7 +86,7 @@ export function CaptionQuickToolbar({
         type="button"
         onClick={onToggleTranscript}
       >
-        {transcriptOpen ? "收起字幕" : "展开字幕"}
+        {transcriptOpen ? "收起逐字稿" : "展开逐字稿"}
       </button>
       <button
         aria-label="关闭字幕"
