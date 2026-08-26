@@ -19,6 +19,7 @@ use thiserror::Error;
 use uuid::Uuid;
 
 use crate::{
+    burn_style::subtitle_force_style,
     delivery::{
         DeliveryError, ExportSubtitlesInput, SubtitleExportFormat, SubtitleExportMode,
         export_subtitles,
@@ -26,6 +27,10 @@ use crate::{
     media::{self, MediaError},
     store::{ProjectStore, StoreError},
 };
+
+pub use crate::burn_style::SubtitleBurnStyle;
+#[cfg(test)]
+use crate::burn_style::SubtitleBurnTextSize;
 
 const POLL_INTERVAL: Duration = Duration::from_millis(100);
 const BURN_MANIFEST_FORMAT: &str = "siaovplay-subtitle-burn-v1";
@@ -137,6 +142,7 @@ pub struct StartSubtitleBurnInput {
     pub source_version_id: Option<String>,
     pub translation_version_id: String,
     pub destination_directory: String,
+    pub style: SubtitleBurnStyle,
     pub confirm_version_selection: bool,
 }
 
@@ -184,6 +190,7 @@ struct StoredBurnJob {
     subtitle_sha256: String,
     runtime_path: PathBuf,
     runtime_sha256: String,
+    style: SubtitleBurnStyle,
 }
 
 #[derive(Serialize)]
@@ -200,6 +207,7 @@ struct SubtitleBurnManifest<'a> {
     output_file_sha256: &'a str,
     runtime_version: &'a str,
     runtime_sha256: &'a str,
+    style: SubtitleBurnStyle,
     completed_at_ms: i64,
 }
 
@@ -207,6 +215,7 @@ pub fn start_subtitle_burn(
     store: &ProjectStore,
     input: StartSubtitleBurnInput,
 ) -> Result<SubtitleBurnJob, SubtitleBurnError> {
+    validate_burn_style(input.style)?;
     if !input.confirm_version_selection {
         return Err(SubtitleBurnError::Delivery(DeliveryError::InvalidExport(
             "烧录前必须确认字幕版本".to_owned(),
@@ -274,7 +283,7 @@ pub fn start_subtitle_burn(
             expected_project_revision, expected_media_sha256, media_duration_ms,
             destination_directory, output_path, temporary_output_path,
             manifest_path, output_sha256, subtitle_path, subtitle_sha256,
-            runtime_path, runtime_version, runtime_sha256,
+            runtime_path, runtime_version, runtime_sha256, burn_style_json,
             cancel_requested_at_ms, error_code, error_message,
             created_at_ms, updated_at_ms, started_at_ms, completed_at_ms
          ) VALUES (
@@ -283,9 +292,9 @@ pub fn start_subtitle_burn(
             ?7, ?8, ?9,
             ?10, ?11, ?12,
             ?13, NULL, ?14, ?15,
-            ?16, ?17, ?18,
+            ?16, ?17, ?18, ?19,
             NULL, NULL, NULL,
-            ?19, ?19, NULL, NULL
+            ?20, ?20, NULL, NULL
          )",
         params![
             job_id,
@@ -306,6 +315,7 @@ pub fn start_subtitle_burn(
             path_to_string(&runtime_path),
             runtime_version,
             runtime_sha256,
+            serde_json::to_string(&input.style)?,
             timestamp,
         ],
     );
@@ -584,7 +594,8 @@ fn run_job(
         .and_then(|value| value.to_str())
         .ok_or_else(|| SubtitleBurnError::BurnFailed("临时字幕文件名无效".to_owned()))?;
     let filter = format!(
-        "subtitles={subtitle_file_name}:force_style='FontName=Microsoft YaHei,FontSize=20,PrimaryColour=&H00FFFFFF,OutlineColour=&H80000000,BorderStyle=1,Outline=2,Shadow=0,MarginV=32,Alignment=2'"
+        "subtitles={subtitle_file_name}:force_style='{}'",
+        subtitle_force_style(job.style)
     );
     let mut command = hidden_command(&job.runtime_path);
     command
@@ -651,6 +662,7 @@ fn run_job(
         output_file_sha256: &output_sha256,
         runtime_version: &job.public.runtime_version,
         runtime_sha256: &job.runtime_sha256,
+        style: job.style,
         completed_at_ms,
     };
     let temporary_manifest_path = temporary_manifest_path(&job);
@@ -679,6 +691,15 @@ fn run_job(
         ));
     }
     let _ = remove_job_directory(store, &job.public.project_id, job_id);
+    Ok(())
+}
+
+fn validate_burn_style(style: SubtitleBurnStyle) -> Result<(), SubtitleBurnError> {
+    if !style.position_y.is_finite() || !(0.0..=1.0).contains(&style.position_y) {
+        return Err(SubtitleBurnError::Delivery(DeliveryError::InvalidExport(
+            "字幕纵向位置必须位于视频画面范围内".to_owned(),
+        )));
+    }
     Ok(())
 }
 
@@ -860,7 +881,7 @@ fn load_stored_job(store: &ProjectStore, job_id: &str) -> Result<StoredBurnJob, 
                 source_media_id, expected_project_revision, expected_media_sha256,
                 media_duration_ms, destination_directory, output_path,
                 temporary_output_path, manifest_path, subtitle_path, subtitle_sha256,
-                runtime_path, runtime_sha256
+                runtime_path, runtime_sha256, burn_style_json
              FROM subtitle_burn_jobs
              WHERE id = ?1",
             params![job_id],
@@ -898,6 +919,7 @@ type StoredJobRow = (
     i64,
     String,
     i64,
+    String,
     String,
     String,
     String,
@@ -969,6 +991,7 @@ fn map_stored_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<StoredJobRow> {
         row.get(27)?,
         row.get(28)?,
         row.get(29)?,
+        row.get(30)?,
     ))
 }
 
@@ -987,6 +1010,7 @@ fn stored_row(row: StoredJobRow) -> Result<StoredBurnJob, SubtitleBurnError> {
         subtitle_sha256: row.10,
         runtime_path: PathBuf::from(row.11),
         runtime_sha256: row.12,
+        style: serde_json::from_str(&row.13)?,
     })
 }
 
@@ -1485,6 +1509,10 @@ mod tests {
                 source_version_id: Some(source_version_id),
                 translation_version_id,
                 destination_directory: path_to_string(&destination),
+                style: SubtitleBurnStyle {
+                    text_size: SubtitleBurnTextSize::Medium,
+                    position_y: 0.96,
+                },
                 confirm_version_selection: true,
             },
         )
@@ -1622,6 +1650,10 @@ mod tests {
                     },
                     translation_version_id: translation_version_id.clone(),
                     destination_directory: path_to_string(&destination),
+                    style: SubtitleBurnStyle {
+                        text_size: SubtitleBurnTextSize::Medium,
+                        position_y: 0.96,
+                    },
                     confirm_version_selection: true,
                 },
             )

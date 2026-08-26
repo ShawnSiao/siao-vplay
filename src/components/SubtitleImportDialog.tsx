@@ -15,9 +15,15 @@ import type {
   SubtitleImportPreview,
   SubtitleStream,
   SubtitleVersion,
+  TranslationTask,
 } from "../types";
 import { Dialog } from "./Dialog";
 import { TranscriptionPanel } from "./TranscriptionPanel";
+import { TranslationDialog } from "./TranslationDialog";
+import {
+  SubtitleWorkflowTabs,
+  type SubtitleWorkflow,
+} from "./SubtitleWorkflowTabs";
 
 type SubtitleSelection =
   | {
@@ -34,9 +40,14 @@ type SubtitleImportDialogProps = {
   projectId: string;
   streams: SubtitleStream[];
   currentVersion: SubtitleVersion | null;
+  translationVersions: SubtitleVersion[];
   onClose: () => void;
   onImported: (version: SubtitleVersion) => void;
   onTranscriptionTracked: (jobId: string) => void;
+  onTranslationTaskCompleted: (
+    task: TranslationTask,
+    version?: SubtitleVersion,
+  ) => Promise<void>;
   localResourceCatalog?: LocalResourceCatalog | null;
   localResourceStatus?: LocalResourceStatus | null;
   onPrepareTranscriptionResources?: (
@@ -85,14 +96,16 @@ export function SubtitleImportDialog({
   projectId,
   streams,
   currentVersion,
+  translationVersions,
   onClose,
   onImported,
   onTranscriptionTracked,
+  onTranslationTaskCompleted,
   localResourceCatalog,
   localResourceStatus,
   onPrepareTranscriptionResources,
 }: SubtitleImportDialogProps) {
-  const [workflow, setWorkflow] = useState<"import" | "transcribe">("import");
+  const [workflow, setWorkflow] = useState<SubtitleWorkflow>("import");
   const [selection, setSelection] = useState<SubtitleSelection | null>(null);
   const [language, setLanguage] = useState("");
   const [otherLanguage, setOtherLanguage] = useState("");
@@ -213,7 +226,7 @@ export function SubtitleImportDialog({
       eyebrow="导入已有字幕，或从视频原声生成"
       onClose={workflow === "import" && busy ? () => undefined : onClose}
       actions={
-        workflow === "transcribe" ? undefined : (
+        workflow !== "import" ? undefined : (
           <>
             <button
               className="button quiet"
@@ -256,35 +269,14 @@ export function SubtitleImportDialog({
         )
       }
     >
-      <div
-        className="subtitle-workflow-switch"
-        role="tablist"
-        aria-label="字幕准备方式"
-      >
-        <button
-          className={workflow === "import" ? "active" : ""}
-          type="button"
-          role="tab"
-          aria-selected={workflow === "import"}
-          disabled={busy}
-          onClick={() => setWorkflow("import")}
-        >
-          导入字幕
-        </button>
-        <button
-          className={workflow === "transcribe" ? "active" : ""}
-          type="button"
-          role="tab"
-          aria-selected={workflow === "transcribe"}
-          disabled={busy}
-          onClick={() => {
-            setWorkflow("transcribe");
-            resetPreview();
-          }}
-        >
-          从视频生成
-        </button>
-      </div>
+      <SubtitleWorkflowTabs
+        workflow={workflow}
+        disabled={busy}
+        onChange={(nextWorkflow) => {
+          setWorkflow(nextWorkflow);
+          if (nextWorkflow !== "import") resetPreview();
+        }}
+      />
 
       {currentVersion ? (
         <div className="subtitle-current-note">
@@ -463,7 +455,7 @@ export function SubtitleImportDialog({
             </div>
           ) : null}
         </>
-      ) : (
+      ) : workflow === "transcribe" ? (
         <TranscriptionPanel
           projectId={projectId}
           currentVersion={currentVersion}
@@ -472,6 +464,16 @@ export function SubtitleImportDialog({
           localResourceCatalog={localResourceCatalog}
           localResourceStatus={localResourceStatus}
           onPrepareResources={onPrepareTranscriptionResources}
+        />
+      ) : (
+        <TranslationDialog
+          embedded
+          projectId={projectId}
+          sourceVersion={currentVersion}
+          translationVersions={translationVersions}
+          onClose={onClose}
+          onPrepareOriginal={() => setWorkflow("import")}
+          onTaskCompleted={onTranslationTaskCompleted}
         />
       )}
     </Dialog>

@@ -1159,8 +1159,12 @@ export default function App() {
               (version) => version.role === "original" && version.isCurrent,
             ) ?? null
           }
+          translationVersions={subtitleVersions.filter(
+            (version) => version.role === "translation",
+          )}
           onClose={() => setSubtitleDialogOpen(false)}
           onTranscriptionTracked={setTrackedTranscriptionJobId}
+          onTranslationTaskCompleted={handleTranslationCompleted}
           localResourceCatalog={localResources.catalog}
           localResourceStatus={localResources.status}
           onPrepareTranscriptionResources={async (profileId) => {
@@ -1194,12 +1198,9 @@ export default function App() {
               (version) => version.role === "original" && version.isCurrent,
             ) ?? null
           }
-          translationVersion={
-            subtitleVersions.find(
-              (version) =>
-                version.role === "translation" && version.isCurrent,
-            ) ?? null
-          }
+          translationVersions={subtitleVersions.filter(
+            (version) => version.role === "translation",
+          )}
           requestedSegmentIds={translationSegmentIds}
           onClose={() => {
             setTranslationDialogOpen(false);

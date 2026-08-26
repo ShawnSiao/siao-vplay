@@ -929,7 +929,7 @@ export type TranslationTask = {
   materialScope: string[];
   sourceVersionId: string;
   sourceLanguageCode: string;
-  targetLanguageCode: "zh-cn";
+  targetLanguageCode: string;
   authorizedSegmentIds: string[];
   segmentCount: number;
   expectedProjectRevision: number;
@@ -1197,6 +1197,11 @@ export type SubtitleExport = {
 };
 
 export type SubtitleBurnMode = "translation" | "bilingual";
+
+export type SubtitleBurnStyle = {
+  textSize: "small" | "medium" | "large";
+  positionY: number;
+};
 
 export type SubtitleBurnJob = {
   id: string;

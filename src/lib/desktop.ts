@@ -46,6 +46,7 @@ import type {
   SubtitleGlobalReplacement,
   SubtitleBurnJob,
   SubtitleBurnMode,
+  SubtitleBurnStyle,
   SubtitleExport,
   SubtitleExportFormat,
   SubtitleExportMode,
@@ -926,10 +927,18 @@ export async function chooseTranslationResultFile(): Promise<string | null> {
 export async function prepareTranslationTask(
   projectId: string,
   handoffKind: "manual" | "codex",
+  sourceLanguageCode: string,
+  targetLanguageCode: string,
   segmentIds?: string[],
 ): Promise<TranslationTask> {
   return invoke<TranslationTask>("prepare_translation_task", {
-    input: { projectId, handoffKind, segmentIds },
+    input: {
+      projectId,
+      handoffKind,
+      sourceLanguageCode,
+      targetLanguageCode,
+      segmentIds,
+    },
   });
 }
 
@@ -1291,6 +1300,7 @@ export async function startSubtitleBurn(
   sourceVersionId: string | null,
   translationVersionId: string,
   destinationDirectory: string,
+  style: SubtitleBurnStyle,
 ): Promise<SubtitleBurnJob> {
   return invoke<SubtitleBurnJob>("start_subtitle_burn", {
     input: {
@@ -1299,6 +1309,7 @@ export async function startSubtitleBurn(
       sourceVersionId,
       translationVersionId,
       destinationDirectory,
+      style,
       confirmVersionSelection: true,
     },
   });

@@ -1776,6 +1776,10 @@ describe("App", () => {
         null,
         translatedVersion.id,
         "W:\\exports",
+        {
+          textSize: "medium",
+          positionY: 0.9,
+        },
       ),
     );
     expect(
@@ -2567,6 +2571,35 @@ describe("App", () => {
     ).toBeInTheDocument();
   });
 
+  it("offers source and target language selection in the CC translation tab", async () => {
+    desktopMocks.listSubtitleVersions.mockResolvedValue([subtitleVersion]);
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: /继续播放/ }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "原文字幕 · 1" }),
+    );
+    fireEvent.click(await screen.findByRole("tab", { name: "翻译" }));
+
+    fireEvent.change(await screen.findByLabelText("原始语言"), {
+      target: { value: "ko" },
+    });
+    fireEvent.change(screen.getByLabelText("目标语言"), {
+      target: { value: "de" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "确认范围并开始翻译" }),
+    );
+
+    await waitFor(() =>
+      expect(desktopMocks.prepareTranslationTask).toHaveBeenCalledWith(
+        project.id,
+        "codex",
+        "ko",
+        "de",
+      ),
+    );
+  });
+
   it("refreshes player subtitles when generation finishes after the dialog closes", async () => {
     const completedJob: TranscriptionJob = {
       ...transcriptionJob,
@@ -2758,6 +2791,8 @@ describe("App", () => {
       expect(desktopMocks.prepareTranslationTask).toHaveBeenCalledWith(
         project.id,
         "codex",
+        "ja",
+        "zh-cn",
       ),
     );
     await waitFor(() =>
@@ -2814,7 +2849,9 @@ describe("App", () => {
       screen.getByRole("button", { name: /手动选择 JSON/ }),
     );
     expect(await screen.findByText("result.json")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "检查并生成中文字幕" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "检查并生成简体中文字幕" }),
+    );
 
     await waitFor(() =>
       expect(desktopMocks.importTranslationResult).toHaveBeenCalledWith(
@@ -3065,6 +3102,8 @@ describe("App", () => {
       expect(desktopMocks.prepareTranslationTask).toHaveBeenCalledWith(
         project.id,
         "codex",
+        "ja",
+        "zh-cn",
         [subtitleVersion.segments[0].id],
       ),
     );

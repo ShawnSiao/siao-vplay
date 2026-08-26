@@ -59,7 +59,7 @@ impl SubtitleExportMode {
     fn as_file_label(self) -> &'static str {
         match self {
             Self::Original => "original",
-            Self::Translation => "zh-cn",
+            Self::Translation => "translation",
             Self::Bilingual => "bilingual",
         }
     }
@@ -163,7 +163,7 @@ pub fn export_subtitles(
     let translation = optional_version(
         &versions,
         input.translation_version_id.as_deref(),
-        "简体中文字幕版本",
+        "目标语言字幕版本",
     )?;
     let (cues, source, translation, media_sha256) = match input.mode {
         SubtitleExportMode::Original => {
@@ -178,7 +178,7 @@ pub fn export_subtitles(
             )
         }
         SubtitleExportMode::Translation => {
-            let translation = require_version(translation, "简体中文字幕版本")?;
+            let translation = require_version(translation, "目标语言字幕版本")?;
             validate_translation_version(translation)?;
             validate_current_media(&project.media_source.source_sha256, translation)?;
             (
@@ -190,12 +190,12 @@ pub fn export_subtitles(
         }
         SubtitleExportMode::Bilingual => {
             let source = require_version(source, "原文字幕版本")?;
-            let translation = require_version(translation, "简体中文字幕版本")?;
+            let translation = require_version(translation, "目标语言字幕版本")?;
             validate_source_version(source)?;
             validate_translation_version(translation)?;
             if source.media_sha256 != translation.media_sha256 {
                 return Err(DeliveryError::InvalidExport(
-                    "原文与简体中文字幕不属于同一媒体版本".to_owned(),
+                    "原文与目标语言字幕不属于同一媒体版本".to_owned(),
                 ));
             }
             validate_current_media(&project.media_source.source_sha256, source)?;
@@ -318,9 +318,9 @@ fn validate_source_version(version: &SubtitleVersion) -> Result<(), DeliveryErro
 }
 
 fn validate_translation_version(version: &SubtitleVersion) -> Result<(), DeliveryError> {
-    if version.role != "translation" || version.language_code != "zh-cn" {
+    if version.role != "translation" {
         return Err(DeliveryError::InvalidExport(
-            "所选字幕版本不是简体中文字幕".to_owned(),
+            "所选字幕版本不属于翻译字幕轨".to_owned(),
         ));
     }
     validate_version_status(version)
@@ -376,13 +376,13 @@ fn bilingual_cues(
     for segment in &translation.segments {
         let source_segment_id = segment.source_segment_id.as_deref().ok_or_else(|| {
             DeliveryError::InvalidExport(format!(
-                "中文字幕第 {} 段缺少原文字幕关联",
+                "目标语言字幕第 {} 段缺少原文字幕关联",
                 segment.ordinal + 1
             ))
         })?;
         if !source_ids.contains(source_segment_id) {
             return Err(DeliveryError::InvalidExport(
-                "简体中文字幕与所选原文字幕版本不匹配".to_owned(),
+                "目标语言字幕与所选原文字幕版本不匹配".to_owned(),
             ));
         }
         if translated_by_source
@@ -390,13 +390,13 @@ fn bilingual_cues(
             .is_some()
         {
             return Err(DeliveryError::InvalidExport(
-                "简体中文字幕包含重复的原文字幕关联".to_owned(),
+                "目标语言字幕包含重复的原文字幕关联".to_owned(),
             ));
         }
     }
     if translated_by_source.len() != source.segments.len() {
         return Err(DeliveryError::InvalidExport(
-            "简体中文字幕没有完整覆盖所选原文字幕版本".to_owned(),
+            "目标语言字幕没有完整覆盖所选原文字幕版本".to_owned(),
         ));
     }
 
@@ -408,7 +408,7 @@ fn bilingual_cues(
                 .get(source_segment.id.as_str())
                 .ok_or_else(|| {
                     DeliveryError::InvalidExport(format!(
-                        "原文字幕第 {} 段缺少简体中文翻译",
+                        "原文字幕第 {} 段缺少目标语言翻译",
                         source_segment.ordinal + 1
                     ))
                 })?;

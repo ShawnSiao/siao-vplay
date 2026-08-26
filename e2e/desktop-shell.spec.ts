@@ -692,6 +692,33 @@ test("dialog keeps its frame fixed and scrolls only the content at 900px", async
   expect(await actions.boundingBox()).toEqual(before.actions);
 });
 
+test("CC dialog keeps translation as its third tab with two language selectors", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 960, height: 640 });
+  await page.goto("/e2e/subtitle-translation.html");
+
+  const dialog = page.getByRole("dialog", { name: "准备原文字幕" });
+  const tabs = dialog.getByRole("tab");
+  await expect(tabs).toHaveCount(3);
+  await expect(tabs.nth(2)).toHaveText("翻译");
+  await tabs.nth(2).click();
+
+  const source = dialog.getByRole("combobox", { name: "原始语言" });
+  const target = dialog.getByRole("combobox", { name: "目标语言" });
+  await source.selectOption("ko");
+  await target.selectOption("de");
+  await expect(source).toHaveValue("ko");
+  await expect(target).toHaveValue("de");
+  await expect(target.locator('option[value="ko"]')).toHaveCount(0);
+  await expect(
+    dialog.getByRole("button", { name: "确认范围并开始翻译" }),
+  ).toBeVisible();
+  expect(await dialog.evaluate((element) => element.scrollWidth)).toBe(
+    await dialog.evaluate((element) => element.clientWidth),
+  );
+});
+
 test("local resources stay product-focused, accessible, and scrollable at 1280 by 720", async ({
   page,
 }) => {
