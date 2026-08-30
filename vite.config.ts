@@ -36,6 +36,7 @@ export default defineConfig(({ mode }) => ({
             library: resolve(__dirname, "e2e/library.html"),
             player: resolve(__dirname, "e2e/player.html"),
             dialog: resolve(__dirname, "e2e/dialog.html"),
+            subtitleTranslation: resolve(__dirname, "e2e/subtitle-translation.html"),
             runtime: resolve(__dirname, "e2e/runtime.html"),
           },
         },

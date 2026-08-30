@@ -18,15 +18,26 @@ import type {
   CodexRuntimeStatus,
   SubtitleVersion,
   TranslationTask,
-  TranslationValidation,
 } from "../types";
-import { Dialog } from "./Dialog";
+import {
+  defaultTargetLanguage,
+  translationLanguageLabel,
+} from "../config/translationLanguages";
+import { TranslationDialogFrame } from "./TranslationDialogFrame";
+import { TranslationLanguageSelectors } from "./TranslationLanguageSelectors";
+import {
+  translationResultFileName,
+  translationStatusTone,
+  translationTaskStage,
+  translationValidationCopy,
+} from "./translationPresentation";
 
 type TranslationDialogProps = {
   projectId: string;
   sourceVersion: SubtitleVersion | null;
-  translationVersion: SubtitleVersion | null;
+  translationVersions: SubtitleVersion[];
   requestedSegmentIds?: string[];
+  embedded?: boolean;
   onClose: () => void;
   onPrepareOriginal: () => void;
   onTaskCompleted: (
@@ -44,66 +55,12 @@ const activeStatuses = new Set([
   "validating",
 ]);
 
-function fileName(path: string): string {
-  return path.split(/[\\/]/).filter(Boolean).at(-1) ?? "result.json";
-}
-
-function taskStage(task: TranslationTask): string {
-  if (task.status === "awaiting_external_result") {
-    return "等待导入 Agent 返回的结果";
-  }
-  if (task.status === "queued") {
-    return "任务已经准备好，等待启动本机 Codex";
-  }
-  if (task.status === "validating") {
-    return "正在检查任务、版本、字幕范围和完整性";
-  }
-  if (task.status === "completed") {
-    return "简体中文字幕草稿已经生成";
-  }
-  if (task.status === "interrupted") {
-    return "应用上次关闭时任务尚未完成";
-  }
-  if (task.status === "cancelled") {
-    return "任务已经取消";
-  }
-  if (task.status === "failed") {
-    return "任务处理失败";
-  }
-  const match = /^translating_batch_(\d+)_of_(\d+)$/.exec(task.stage);
-  if (match) {
-    return `正在翻译第 ${match[1]} / ${match[2]} 批字幕`;
-  }
-  return "正在启动本机 Codex";
-}
-
-function statusTone(task: TranslationTask): string {
-  if (task.status === "completed") {
-    return "ready";
-  }
-  if (task.status === "failed") {
-    return "danger";
-  }
-  if (task.status === "cancelled" || task.status === "interrupted") {
-    return "warning";
-  }
-  return "agent";
-}
-
-function validationCopy(validation: TranslationValidation | null): string {
-  if (!validation) {
-    return "结构检查通过后仍需抽查人名、称谓和人物语气。";
-  }
-  return validation.warningCount > 0
-    ? `结构检查通过，另有 ${validation.warningCount} 项一致性提示。`
-    : `已检查 ${validation.translationCount} 条字幕的任务、版本、范围和完整性。`;
-}
-
 export function TranslationDialog({
   projectId,
   sourceVersion,
-  translationVersion,
+  translationVersions,
   requestedSegmentIds,
+  embedded = false,
   onClose,
   onPrepareOriginal,
   onTaskCompleted,
@@ -119,6 +76,12 @@ export function TranslationDialog({
     requestedSet.size > 0 &&
     requestedSet.size < (sourceVersion?.segments.length ?? 0);
   const [handoff, setHandoff] = useState<HandoffKind>("codex");
+  const [sourceLanguageCode, setSourceLanguageCode] = useState(
+    sourceVersion?.languageCode.toLowerCase() ?? "en",
+  );
+  const [targetLanguageCode, setTargetLanguageCode] = useState(() =>
+    defaultTargetLanguage(sourceVersion?.languageCode ?? "en"),
+  );
   const [runtime, setRuntime] = useState<CodexRuntimeStatus | null>(null);
   const [task, setTask] = useState<TranslationTask | null>(null);
   const [loading, setLoading] = useState(true);
@@ -129,10 +92,19 @@ export function TranslationDialog({
   const [resultPath, setResultPath] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const currentTranslation = useMemo(
+    () =>
+      translationVersions.find(
+        (version) =>
+          version.isCurrent &&
+          version.languageCode.toLowerCase() === targetLanguageCode,
+      ) ?? null,
+    [targetLanguageCode, translationVersions],
+  );
   const taskVersion =
-    task?.outputVersionId === translationVersion?.id
-      ? translationVersion
-      : null;
+    translationVersions.find((version) => version.id === task?.outputVersionId) ??
+    null;
+  const targetLanguageLabel = translationLanguageLabel(targetLanguageCode);
   const sourceById = useMemo(
     () =>
       new Map(
@@ -155,10 +127,16 @@ export function TranslationDialog({
         const activeTask = tasks.find((item) => activeStatuses.has(item.status));
         const taskMatchesSelection = (item: TranslationTask) => {
           const taskKey = [...item.authorizedSegmentIds].sort().join("|");
-          if (requestedKey) {
-            return taskKey === requestedKey;
-          }
-          return item.segmentCount === sourceVersion?.segments.length;
+          const scopeMatches = requestedKey
+            ? taskKey === requestedKey
+            : item.segmentCount === sourceVersion?.segments.length;
+          return (
+            scopeMatches &&
+            item.sourceLanguageCode.toLowerCase() ===
+              sourceLanguageCode.toLowerCase() &&
+            item.targetLanguageCode.toLowerCase() ===
+              targetLanguageCode.toLowerCase()
+          );
         };
         const currentTask =
           activeTask ??
@@ -166,7 +144,7 @@ export function TranslationDialog({
             (item) =>
               taskMatchesSelection(item) &&
               item.sourceVersionId === sourceVersion?.id &&
-              item.outputVersionId === translationVersion?.id,
+              item.outputVersionId === currentTranslation?.id,
           ) ??
           tasks.find(
             (item) =>
@@ -195,9 +173,11 @@ export function TranslationDialog({
   }, [
     projectId,
     requestedKey,
+    sourceLanguageCode,
     sourceVersion?.id,
     sourceVersion?.segments.length,
-    translationVersion?.id,
+    targetLanguageCode,
+    currentTranslation?.id,
   ]);
 
   useEffect(() => {
@@ -263,13 +243,13 @@ export function TranslationDialog({
     ) {
       return;
     }
-    if (translationVersion?.id === task.outputVersionId) {
+    if (translationVersions.some((version) => version.id === task.outputVersionId)) {
       notifiedTaskRef.current = task.id;
       return;
     }
     notifiedTaskRef.current = task.id;
     void onTaskCompleted(task);
-  }, [onTaskCompleted, task, translationVersion?.id]);
+  }, [onTaskCompleted, task, translationVersions]);
 
   const prepare = async () => {
     if (!sourceVersion) {
@@ -280,8 +260,19 @@ export function TranslationDialog({
     setCopyNotice(null);
     try {
       const prepared = requestedSegmentIds?.length
-        ? await prepareTranslationTask(projectId, handoff, requestedSegmentIds)
-        : await prepareTranslationTask(projectId, handoff);
+        ? await prepareTranslationTask(
+            projectId,
+            handoff,
+            sourceLanguageCode,
+            targetLanguageCode,
+            requestedSegmentIds,
+          )
+        : await prepareTranslationTask(
+            projectId,
+            handoff,
+            sourceLanguageCode,
+            targetLanguageCode,
+          );
       setTask(prepared);
       if (handoff === "codex") {
         const started = await startCodexTranslationTask(prepared.id);
@@ -440,7 +431,11 @@ export function TranslationDialog({
         <button
           className="button primary"
           type="button"
-          disabled={busy || (handoff === "codex" && !runtime?.available)}
+          disabled={
+            busy ||
+            sourceLanguageCode === targetLanguageCode ||
+            (handoff === "codex" && !runtime?.available)
+          }
           onClick={() => void prepare()}
         >
           {operation === "prepare"
@@ -517,7 +512,9 @@ export function TranslationDialog({
           disabled={!resultPath || busy}
           onClick={() => void importResult()}
         >
-          {operation === "import" ? "正在检查并导入…" : "检查并生成中文字幕"}
+          {operation === "import"
+            ? "正在检查并导入…"
+            : `检查并生成${targetLanguageLabel}字幕`}
         </button>
       </>
     );
@@ -552,17 +549,8 @@ export function TranslationDialog({
     );
   }
 
-  return (
-    <Dialog
-      title={isSelectedRetranslation ? "重新翻译选中字幕" : "生成简体中文字幕"}
-      eyebrow={
-        isSelectedRetranslation
-          ? `只处理选中的 ${selectedCount} 条原文字幕`
-          : "原文字幕保持不变，结果先保存为草稿"
-      }
-      onClose={running ? onClose : busy ? () => undefined : onClose}
-      actions={actions}
-    >
+  const content = (
+    <>
       {loading ? (
         <div className="translation-loading" role="status">
           <span className="spinner"></span>
@@ -587,27 +575,16 @@ export function TranslationDialog({
         </div>
       ) : setup ? (
         <div className="translation-setup">
-          <div className="translation-source-summary">
-            <div>
-              <span>当前原文</span>
-              <strong>{sourceVersion.sourceLabel}</strong>
-              <small>
-                {sourceVersion.languageCode.toUpperCase()} ·{" "}
-                {sourceVersion.segments.length} 条 · 版本{" "}
-                {sourceVersion.versionNumber}
-              </small>
-            </div>
-            <span className="translation-arrow">→</span>
-            <div>
-              <span>目标字幕</span>
-              <strong>简体中文</strong>
-              <small>
-                {isSelectedRetranslation
-                  ? `更新 ${selectedCount} 条 · 其余译文保持不变`
-                  : "独立草稿 · 不覆盖原文"}
-              </small>
-            </div>
-          </div>
+          <TranslationLanguageSelectors
+            sourceLanguageCode={sourceLanguageCode}
+            targetLanguageCode={targetLanguageCode}
+            sourceVersionLanguageCode={sourceVersion.languageCode}
+            sourceSegmentCount={sourceVersion.segments.length}
+            selectedCount={selectedCount}
+            isSelectedRetranslation={isSelectedRetranslation}
+            onSourceLanguageChange={setSourceLanguageCode}
+            onTargetLanguageChange={setTargetLanguageCode}
+          />
 
           <section className="translation-section">
             <h3>选择处理方式</h3>
@@ -686,9 +663,11 @@ export function TranslationDialog({
         <div className="translation-complete">
           <div className="translation-result-heading">
             <div>
-              <span className="status-pill ready">中文字幕草稿</span>
+              <span className="status-pill ready">
+                {targetLanguageLabel}字幕草稿
+              </span>
               <h3>翻译完成，可以开始抽查</h3>
-              <p>{validationCopy(task.validation)}</p>
+              <p>{translationValidationCopy(task.validation)}</p>
             </div>
             <strong>{task.segmentCount} 条</strong>
           </div>
@@ -724,7 +703,7 @@ export function TranslationDialog({
           ) : (
             <div className="translation-loading" role="status">
               <span className="spinner"></span>
-              <span>正在读取中文字幕草稿</span>
+              <span>正在读取{targetLanguageLabel}字幕草稿</span>
             </div>
           )}
         </div>
@@ -812,7 +791,7 @@ export function TranslationDialog({
             <span>
               <strong>
                 {resultPath
-                  ? fileName(resultPath)
+                  ? translationResultFileName(resultPath)
                   : "未自动识别？手动选择 JSON"}
               </strong>
               <small>
@@ -828,14 +807,14 @@ export function TranslationDialog({
         <div className="translation-running">
           <div className="translation-task-heading">
             <div>
-              <span className={`status-pill ${statusTone(task)}`}>
+              <span className={`status-pill ${translationStatusTone(task)}`}>
                 {task.status === "queued"
                   ? "等待开始"
                   : task.handoffKind === "manual"
                     ? "正在检查"
                     : "本机处理中"}
               </span>
-              <h3>{taskStage(task)}</h3>
+              <h3>{translationTaskStage(task)}</h3>
               <p>
                 {task.handoffKind === "manual"
                   ? "已自动检测到 result.json，正在核对任务、版本和字幕范围。"
@@ -864,7 +843,7 @@ export function TranslationDialog({
             </div>
             <div>
               <small>目标</small>
-              <strong>简体中文</strong>
+              <strong>{translationLanguageLabel(task.targetLanguageCode)}</strong>
             </div>
             <div>
               <small>字幕段</small>
@@ -874,15 +853,18 @@ export function TranslationDialog({
         </div>
       ) : (
         <div className="translation-failed">
-          <span className={`status-pill ${statusTone(task)}`}>
+          <span className={`status-pill ${translationStatusTone(task)}`}>
             {task.status === "failed"
               ? "处理失败"
               : task.status === "interrupted"
                 ? "处理已中断"
                 : "任务已取消"}
           </span>
-          <h3>{taskStage(task)}</h3>
-          <p>{task.errorMessage ?? "原文字幕和已有中文字幕没有改变。"}</p>
+          <h3>{translationTaskStage(task)}</h3>
+          <p>
+            {task.errorMessage ??
+              `原文字幕和已有${targetLanguageLabel}字幕没有改变。`}
+          </p>
           <p className="translation-recovery-note">
             重新开始会从受控任务包的第一批字幕开始，不复用未确认的中间结果。
           </p>
@@ -891,10 +873,32 @@ export function TranslationDialog({
 
       {error ? (
         <div className="notice danger translation-error" role="alert">
-          <strong>中文字幕处理没有完成</strong>
+          <strong>{targetLanguageLabel}字幕处理没有完成</strong>
           <p>{error}</p>
         </div>
       ) : null}
-    </Dialog>
+    </>
+  );
+
+  return (
+    <TranslationDialogFrame
+      title={
+        isSelectedRetranslation
+          ? "重新翻译选中字幕"
+          : `生成${targetLanguageLabel}字幕`
+      }
+      eyebrow={
+        isSelectedRetranslation
+          ? `只处理选中的 ${selectedCount} 条原文字幕`
+          : "原文字幕保持不变，结果先保存为草稿"
+      }
+      embedded={embedded}
+      running={Boolean(running)}
+      busy={busy}
+      onClose={onClose}
+      actions={actions}
+    >
+      {content}
+    </TranslationDialogFrame>
   );
 }

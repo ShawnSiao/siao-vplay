@@ -3446,7 +3446,7 @@ h3 {
 
 .subtitle-workflow-switch {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 4px;
   margin: 18px 0;
   padding: 4px;
@@ -3781,6 +3781,16 @@ h3 {
   min-width: 0;
 }
 
+.translation-language-selectors > label {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+}
+
+.translation-language-selectors select {
+  width: 100%;
+}
+
 .translation-source-summary span,
 .translation-source-summary strong,
 .translation-source-summary small {
@@ -3806,6 +3816,19 @@ h3 {
   color: var(--agent) !important;
   font-size: 18px !important;
   text-align: center;
+}
+
+.translation-embedded {
+  display: grid;
+  gap: 16px;
+}
+
+.translation-embedded-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-subtle);
 }
 
 .translation-section {

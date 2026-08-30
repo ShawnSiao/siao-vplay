@@ -15,7 +15,7 @@ use crate::domain::{
 };
 use crate::library::migration::{self as library_migration, MigrationError};
 
-const CURRENT_SCHEMA_VERSION: i64 = 18;
+const CURRENT_SCHEMA_VERSION: i64 = 19;
 
 #[derive(Clone, Debug)]
 pub(crate) struct RemoteImportProvenance {
@@ -945,6 +945,14 @@ impl ProjectStore {
             transaction.commit()?;
         }
         crate::summary::migrate(connection, database_path, existing_database)?;
+        let current_version: i64 = connection.query_row(
+            "SELECT COALESCE(MAX(version), 0) FROM schema_migrations",
+            [],
+            |row| row.get(0),
+        )?;
+        if current_version < 19 {
+            crate::burn_migration::migrate_schema_19(connection, now_ms()?)?;
+        }
         Ok(())
     }
     fn apply_migration_1(transaction: &Transaction<'_>) -> Result<(), StoreError> {

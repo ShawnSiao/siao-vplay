@@ -1999,7 +1999,7 @@ mod tests {
         subtitles::{
             GeneratedSubtitleCue, PersistTranscriptionInput, SubtitleCue, persist_transcription,
         },
-        translation::{PrepareTranslationTaskInput, TranslationError, prepare_translation_task},
+        translation::{TranslationError, prepare_translation_task},
     };
 
     struct Fixture {
@@ -2276,11 +2276,11 @@ mod tests {
         fixture.prepare();
         let error = prepare_translation_task(
             &fixture.store,
-            PrepareTranslationTaskInput {
-                project_id: fixture.project_id.clone(),
-                handoff_kind: "manual".to_owned(),
-                segment_ids: None,
-            },
+            crate::translation_test_support::translation_input(
+                fixture.project_id.clone(),
+                "manual",
+                "en",
+            ),
         )
         .expect_err("active learning must block translation");
         assert!(matches!(error, TranslationError::ActiveTaskExists));
@@ -2288,11 +2288,11 @@ mod tests {
         let reverse = Fixture::new();
         prepare_translation_task(
             &reverse.store,
-            PrepareTranslationTaskInput {
-                project_id: reverse.project_id.clone(),
-                handoff_kind: "manual".to_owned(),
-                segment_ids: None,
-            },
+            crate::translation_test_support::translation_input(
+                reverse.project_id.clone(),
+                "manual",
+                "en",
+            ),
         )
         .expect("translation should prepare");
         let reverse_error = prepare_learning_task(

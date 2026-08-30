@@ -19,6 +19,8 @@ import type {
   SubtitleVersion,
 } from "../types";
 import { Dialog } from "./Dialog";
+import { readSubtitleDisplayPreferences } from "../features/playback/playbackPreferences";
+import { translationLanguageLabel } from "../config/translationLanguages";
 
 type SubtitleDeliveryDialogProps = {
   project: Project;
@@ -34,7 +36,10 @@ const activeStatuses = new Set(["queued", "running", "validating"]);
 const retryableStatuses = new Set(["failed", "cancelled", "interrupted"]);
 
 function versionLabel(version: SubtitleVersion) {
-  const role = version.role === "original" ? "原文" : "简体中文";
+  const role =
+    version.role === "original"
+      ? "原文"
+      : translationLanguageLabel(version.languageCode);
   const current = version.isCurrent ? " · 当前" : "";
   const status = version.status === "draft" ? " · 草稿" : "";
   return `${role} · 版本 ${version.versionNumber}${current}${status}`;
@@ -62,12 +67,7 @@ export function SubtitleDeliveryDialog({
     [versions],
   );
   const translationVersions = useMemo(
-    () =>
-      versions.filter(
-        (version) =>
-          version.role === "translation" &&
-          version.languageCode.toLowerCase() === "zh-cn",
-      ),
+    () => versions.filter((version) => version.role === "translation"),
     [versions],
   );
   const [outputKind, setOutputKind] = useState<OutputKind>("subtitle");
@@ -191,6 +191,13 @@ export function SubtitleDeliveryDialog({
         mode === "bilingual" ? sourceVersionId : null,
         translationVersionId,
         destination,
+        (() => {
+          const preferences = readSubtitleDisplayPreferences();
+          return {
+            textSize: preferences.textSize,
+            positionY: preferences.position.y,
+          };
+        })(),
       );
       setJob(nextJob);
       setRecentJob(nextJob);
@@ -284,7 +291,7 @@ export function SubtitleDeliveryDialog({
           <div className="delivery-job-heading">
             <span>
               <strong>
-                {job.mode === "bilingual" ? "烧录双语字幕" : "烧录中文字幕"}
+                {job.mode === "bilingual" ? "烧录双语字幕" : "烧录翻译字幕"}
               </strong>
               <small>
                 {active ? "关闭窗口不会停止任务。" : `FFmpeg ${job.runtimeVersion}`}
@@ -356,7 +363,7 @@ export function SubtitleDeliveryDialog({
             {exported.mode === "bilingual"
               ? "双语字幕"
               : exported.mode === "translation"
-                ? "简体中文字幕"
+                ? "翻译字幕"
                 : "原文字幕"}
             {" · "}
             {exported.format.toUpperCase()}
@@ -439,7 +446,7 @@ export function SubtitleDeliveryDialog({
             {(
               [
                 ["original", "原文", Boolean(sourceVersions.length)],
-                ["translation", "简体中文", Boolean(translationVersions.length)],
+                ["translation", "翻译字幕", Boolean(translationVersions.length)],
                 [
                   "bilingual",
                   "双语",
@@ -486,9 +493,9 @@ export function SubtitleDeliveryDialog({
           ) : null}
           {needsTranslation ? (
             <label>
-              <span>简体中文字幕版本</span>
+              <span>目标语言字幕版本</span>
               <select
-                aria-label="简体中文字幕版本"
+                aria-label="目标语言字幕版本"
                 value={translationVersionId}
                 onChange={(event) => {
                   setTranslationVersionId(event.target.value);
