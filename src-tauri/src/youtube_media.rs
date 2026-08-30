@@ -23,6 +23,7 @@ use uuid::Uuid;
 use crate::{
     domain::Project,
     media::{self, MediaError},
+    public_video_source::PublicVideoSource,
     remote_media::{self, RemoteMediaError},
     resource_download,
     store::{ProjectStore, RemoteImportProvenance, StoreError},
@@ -44,7 +45,7 @@ static IMPORT_OPERATIONS: OnceLock<Mutex<HashMap<String, Arc<AtomicBool>>>> = On
 pub enum YouTubeMediaError {
     #[error(transparent)]
     Network(#[from] RemoteMediaError),
-    #[error("只支持 YouTube 公开单视频页面")]
+    #[error("只支持 YouTube 或 X 公开单视频页面")]
     UnsupportedUrl,
     #[error("不支持播放列表或合集，请使用不带播放列表参数的单视频链接")]
     PlaylistNotAllowed,
@@ -181,9 +182,9 @@ struct CapturedOutput {
 pub fn inspect_youtube_url(
     input: InspectYouTubeUrlInput,
 ) -> Result<YouTubeMediaPreview, YouTubeMediaError> {
-    let original = validate_public_youtube_source(&input.url)?;
+    let (original, source) = PublicVideoSource::detect_and_validate(&input.url)?;
     let tool = verify_tool(&resolve_yt_dlp_path()?)?;
-    inspect_with_tool(&original, &tool)
+    inspect_with_tool(&original, source, &tool)
 }
 
 pub fn import_youtube_url(
@@ -192,11 +193,11 @@ pub fn import_youtube_url(
     input: ImportYouTubeUrlInput,
 ) -> Result<Project, YouTubeMediaError> {
     let operation = ImportOperation::register(&input.operation_id)?;
-    let original = validate_public_youtube_source(&input.url)?;
+    let (original, source) = PublicVideoSource::detect_and_validate(&input.url)?;
     operation.check()?;
 
     let tool = verify_tool(&resolve_yt_dlp_path()?)?;
-    let refreshed = inspect_with_tool(&original, &tool)?;
+    let refreshed = inspect_with_tool(&original, source, &tool)?;
     operation.check()?;
     if refreshed.preview_token != input.expected_preview_token {
         return Err(YouTubeMediaError::PreviewChanged);
@@ -248,6 +249,7 @@ pub fn cancel_youtube_import(input: CancelYouTubeImportInput) -> Result<bool, Yo
 
 fn inspect_with_tool(
     original: &Url,
+    source: PublicVideoSource,
     tool: &ToolIdentity,
 ) -> Result<YouTubeMediaPreview, YouTubeMediaError> {
     let mut command = hidden_command(&tool.path);
@@ -261,11 +263,12 @@ fn inspect_with_tool(
     }
     let metadata: Value = serde_json::from_slice(&output.stdout)
         .map_err(|error| YouTubeMediaError::MetadataInvalid(error.to_string()))?;
-    parse_metadata(original, &metadata, tool)
+    parse_metadata(original, source, &metadata, tool)
 }
 
 fn parse_metadata(
     original: &Url,
+    source: PublicVideoSource,
     metadata: &Value,
     tool: &ToolIdentity,
 ) -> Result<YouTubeMediaPreview, YouTubeMediaError> {
@@ -280,33 +283,19 @@ fn parse_metadata(
     if source_type != "video" || has_entries {
         return Err(YouTubeMediaError::PlaylistNotAllowed);
     }
-    let extractor = metadata
-        .get("extractor_key")
-        .or_else(|| metadata.get("extractor"))
-        .and_then(Value::as_str)
-        .unwrap_or_default();
-    if !extractor.eq_ignore_ascii_case("youtube") {
-        return Err(YouTubeMediaError::UncertainMedia);
-    }
     let live_status = metadata.get("live_status").and_then(Value::as_str);
     if metadata.get("is_live").and_then(Value::as_bool) == Some(true)
         || live_status.is_some_and(|status| !matches!(status, "not_live" | "was_live"))
     {
         return Err(YouTubeMediaError::LiveNotAllowed);
     }
-    match metadata.get("availability").and_then(Value::as_str) {
-        Some("public") => {}
-        Some("private" | "premium_only" | "subscriber_only" | "needs_auth") => {
-            return Err(YouTubeMediaError::Restricted);
-        }
-        _ => return Err(YouTubeMediaError::UncertainMedia),
-    }
-
-    let webpage_url = required_text(metadata, "webpage_url", "规范页面 URL")?;
-    let webpage_url = validate_youtube_page_url(&webpage_url)?;
+    let webpage_url = source.validate_metadata(original, metadata)?;
     validate_selected_media_urls(metadata)?;
     let video_id = required_text(metadata, "id", "视频标识")?;
-    let title = sanitized_title(&required_text(metadata, "title", "视频标题")?);
+    let title = sanitized_title(
+        &required_text(metadata, "title", "视频标题")?,
+        source.fallback_title(),
+    );
     let duration_seconds = metadata
         .get("duration")
         .and_then(Value::as_f64)
@@ -556,51 +545,6 @@ fn append_proxy_arguments(
     }
 }
 
-fn validate_youtube_page_url(input: &str) -> Result<Url, YouTubeMediaError> {
-    let url = Url::parse(input.trim()).map_err(|_| YouTubeMediaError::UnsupportedUrl)?;
-    if url.scheme() != "https" || !url.username().is_empty() || url.password().is_some() {
-        return Err(YouTubeMediaError::UnsupportedUrl);
-    }
-    let host = url
-        .host_str()
-        .ok_or(YouTubeMediaError::UnsupportedUrl)?
-        .trim_end_matches('.')
-        .to_ascii_lowercase();
-    if !matches!(
-        host.as_str(),
-        "youtube.com" | "www.youtube.com" | "m.youtube.com" | "youtu.be"
-    ) {
-        return Err(YouTubeMediaError::UnsupportedUrl);
-    }
-    if url.query_pairs().any(|(key, _)| key == "list")
-        || url.path().eq_ignore_ascii_case("/playlist")
-    {
-        return Err(YouTubeMediaError::PlaylistNotAllowed);
-    }
-    let valid_shape = if host == "youtu.be" {
-        url.path_segments()
-            .and_then(|mut segments| segments.next())
-            .is_some_and(|segment| !segment.is_empty())
-    } else if url.path().eq_ignore_ascii_case("/watch") {
-        url.query_pairs()
-            .any(|(key, value)| key == "v" && !value.is_empty())
-    } else {
-        let mut segments = url.path_segments().into_iter().flatten();
-        matches!(segments.next(), Some("shorts" | "live"))
-            && segments.next().is_some_and(|segment| !segment.is_empty())
-    };
-    if !valid_shape {
-        return Err(YouTubeMediaError::UnsupportedUrl);
-    }
-    Ok(url)
-}
-
-fn validate_public_youtube_source(input: &str) -> Result<Url, YouTubeMediaError> {
-    let url = validate_youtube_page_url(input)?;
-    remote_media::validate_public_https_url(url.as_str())?;
-    Ok(url)
-}
-
 fn selected_file_size(metadata: &Value) -> Option<u64> {
     metadata
         .get("filesize")
@@ -632,7 +576,7 @@ fn required_text(metadata: &Value, key: &str, label: &str) -> Result<String, You
         .ok_or_else(|| YouTubeMediaError::MetadataInvalid(format!("缺少{label}")))
 }
 
-fn sanitized_title(value: &str) -> String {
+fn sanitized_title(value: &str, fallback: &str) -> String {
     let mut title = value
         .chars()
         .filter(|character| !character.is_control())
@@ -640,7 +584,7 @@ fn sanitized_title(value: &str) -> String {
         .collect::<String>();
     title = title.trim().to_owned();
     if title.is_empty() {
-        "YouTube 视频".to_owned()
+        fallback.to_owned()
     } else {
         title
     }
@@ -949,19 +893,32 @@ mod tests {
 
     #[test]
     fn accepts_only_single_video_page_shapes() {
-        assert!(validate_youtube_page_url("https://www.youtube.com/watch?v=jNQXAC9IVRw").is_ok());
-        assert!(validate_youtube_page_url("https://youtu.be/jNQXAC9IVRw").is_ok());
-        assert!(validate_youtube_page_url("https://www.youtube.com/shorts/jNQXAC9IVRw").is_ok());
+        let source = PublicVideoSource::YouTube;
+        assert!(
+            source
+                .validate_page_url("https://www.youtube.com/watch?v=jNQXAC9IVRw")
+                .is_ok()
+        );
+        assert!(
+            source
+                .validate_page_url("https://youtu.be/jNQXAC9IVRw")
+                .is_ok()
+        );
+        assert!(
+            source
+                .validate_page_url("https://www.youtube.com/shorts/jNQXAC9IVRw")
+                .is_ok()
+        );
         assert!(matches!(
-            validate_youtube_page_url("https://www.youtube.com/watch?v=jNQXAC9IVRw&list=PL123"),
+            source.validate_page_url("https://www.youtube.com/watch?v=jNQXAC9IVRw&list=PL123"),
             Err(YouTubeMediaError::PlaylistNotAllowed)
         ));
         assert!(matches!(
-            validate_youtube_page_url("https://www.youtube.com/@creator"),
+            source.validate_page_url("https://www.youtube.com/@creator"),
             Err(YouTubeMediaError::UnsupportedUrl)
         ));
         assert!(matches!(
-            validate_youtube_page_url("https://example.com/watch?v=jNQXAC9IVRw"),
+            source.validate_page_url("https://example.com/watch?v=jNQXAC9IVRw"),
             Err(YouTubeMediaError::UnsupportedUrl)
         ));
     }
@@ -1031,7 +988,13 @@ mod tests {
     #[test]
     fn parses_a_public_video_and_binds_preview_to_tool_identity() {
         let original = Url::parse("https://www.youtube.com/watch?v=jNQXAC9IVRw").unwrap();
-        let preview = parse_metadata(&original, &public_metadata(), &tool()).unwrap();
+        let preview = parse_metadata(
+            &original,
+            PublicVideoSource::YouTube,
+            &public_metadata(),
+            &tool(),
+        )
+        .unwrap();
 
         assert_eq!(preview.video_id, "jNQXAC9IVRw");
         assert_eq!(preview.file_size_bytes, Some(533_067));
@@ -1046,35 +1009,41 @@ mod tests {
         let mut playlist = public_metadata();
         playlist["_type"] = Value::String("playlist".to_owned());
         assert!(matches!(
-            parse_metadata(&original, &playlist, &tool()),
+            parse_metadata(&original, PublicVideoSource::YouTube, &playlist, &tool()),
             Err(YouTubeMediaError::PlaylistNotAllowed)
         ));
 
         let mut live = public_metadata();
         live["live_status"] = Value::String("is_live".to_owned());
         assert!(matches!(
-            parse_metadata(&original, &live, &tool()),
+            parse_metadata(&original, PublicVideoSource::YouTube, &live, &tool()),
             Err(YouTubeMediaError::LiveNotAllowed)
         ));
 
         let mut archived_live = public_metadata();
         archived_live["live_status"] = Value::String("was_live".to_owned());
         assert!(
-            parse_metadata(&original, &archived_live, &tool()).is_ok(),
+            parse_metadata(
+                &original,
+                PublicVideoSource::YouTube,
+                &archived_live,
+                &tool()
+            )
+            .is_ok(),
             "an archived public live replay should import like other on-demand media"
         );
 
         let mut restricted = public_metadata();
         restricted["availability"] = Value::String("needs_auth".to_owned());
         assert!(matches!(
-            parse_metadata(&original, &restricted, &tool()),
+            parse_metadata(&original, PublicVideoSource::YouTube, &restricted, &tool()),
             Err(YouTubeMediaError::Restricted)
         ));
 
         let mut uncertain = public_metadata();
         uncertain.as_object_mut().unwrap().remove("availability");
         assert!(matches!(
-            parse_metadata(&original, &uncertain, &tool()),
+            parse_metadata(&original, PublicVideoSource::YouTube, &uncertain, &tool()),
             Err(YouTubeMediaError::UncertainMedia)
         ));
     }
@@ -1121,6 +1090,22 @@ mod tests {
         .expect("public video should inspect");
         assert_eq!(preview.video_id, "jNQXAC9IVRw");
         assert!(preview.duration_seconds > 0.0);
+    }
+
+    #[test]
+    #[ignore = "requires an authorized public X status URL, pinned yt-dlp, and network access"]
+    fn inspects_an_authorized_public_x_video_without_cookies() {
+        let url =
+            env::var("SIAOVPLAY_X_ACCEPTANCE_URL").expect("SIAOVPLAY_X_ACCEPTANCE_URL must be set");
+        let preview = inspect_youtube_url(InspectYouTubeUrlInput { url: url.clone() })
+            .expect("authorized public X video should inspect");
+        assert_eq!(preview.original_url, url);
+        assert!(preview.duration_seconds > 0.0);
+        assert!(
+            preview
+                .file_size_bytes
+                .is_none_or(|size| size <= MAX_MEDIA_BYTES)
+        );
     }
 
     #[test]

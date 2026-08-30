@@ -53,7 +53,7 @@ const errorMessages: Record<string, string> = {
   remote_preview_changed: "远程媒体在检查后发生变化。请重新检查链接。",
   remote_import_cancelled: "在线视频导入已取消。",
   remote_hls_failed: "无法读取这个 HLS 视频。请检查播放列表是否仍然公开。",
-  youtube_url_unsupported: "当前只支持单个公开 YouTube 视频页面。",
+  youtube_url_unsupported: "当前只支持 YouTube 或 X 的公开单视频页面。",
   youtube_playlist_not_allowed: "暂不支持播放列表。请使用单个公开视频页面。",
   youtube_live_not_allowed: "暂不支持直播内容。请选择已发布的公开视频。",
   youtube_restricted: "这个视频需要登录、付费或其他访问条件，无法导入。",

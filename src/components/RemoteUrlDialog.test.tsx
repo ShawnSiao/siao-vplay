@@ -42,6 +42,17 @@ const preview: YouTubeMediaPreview = {
   previewToken: "preview-token",
 };
 
+const xPreview: YouTubeMediaPreview = {
+  ...preview,
+  originalUrl: "https://x.com/openai/status/1234567890",
+  webpageUrl: "https://x.com/openai/status/1234567890",
+  videoId: "1234567800",
+  title: "Public X video",
+  durationSeconds: 28.5,
+  fileSizeBytes: 733_067,
+  previewToken: "x-preview-token",
+};
+
 describe("RemoteUrlDialog", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -74,5 +85,35 @@ describe("RemoteUrlDialog", () => {
     expect(alert).toHaveTextContent("公开视频暂时无法下载");
     expect(alert).toHaveTextContent("更新公开视频组件");
     expect(alert).not.toHaveTextContent(/ERROR|403|yt-dlp|C:\\/i);
+  });
+
+  it("inspects and imports an X status URL through the managed public-page pipeline", async () => {
+    desktopMocks.inspectYouTubeUrl.mockResolvedValueOnce(xPreview);
+    desktopMocks.importYouTubeUrl.mockResolvedValueOnce({ id: "x-project" });
+
+    render(
+      <RemoteUrlDialog
+        previewMode={false}
+        onClose={() => undefined}
+        onImported={() => undefined}
+      />,
+    );
+    fireEvent.change(screen.getByLabelText("视频 URL"), {
+      target: { value: xPreview.originalUrl },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "检查 URL" }));
+
+    expect(await screen.findByText("X 公开视频")).toBeVisible();
+    expect(screen.getByText("x.com")).toBeVisible();
+    expect(screen.getByText("0:29")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "确认并导入" }));
+
+    await waitFor(() =>
+      expect(desktopMocks.importYouTubeUrl).toHaveBeenCalledWith(
+        xPreview.originalUrl,
+        xPreview.previewToken,
+        expect.any(String),
+      ),
+    );
   });
 });

@@ -42,7 +42,7 @@ fn message(code: &str) -> &'static str {
     match code {
         "remote_private_network" => "不能导入本机或局域网地址。请选择公开视频页面。",
         "youtube_preflight_failed" => "无法连接到公开视频页面。请检查网络后重试。",
-        "youtube_url_unsupported" => "当前只支持单个公开 YouTube 视频页面。",
+        "youtube_url_unsupported" => "当前只支持 YouTube 或 X 的公开单视频页面。",
         "youtube_playlist_not_allowed" => "暂不支持播放列表。请使用单个公开视频页面。",
         "youtube_live_not_allowed" => "暂不支持直播内容。请选择已发布的公开视频。",
         "youtube_restricted" => "这个视频需要登录、付费或其他访问条件，无法导入。",

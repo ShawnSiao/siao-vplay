@@ -25,7 +25,11 @@ type RemoteUrlDialogProps = {
 
 type UrlImportPreview =
   | { kind: "remote"; value: RemoteMediaPreview }
-  | { kind: "youtube"; value: YouTubeMediaPreview };
+  | {
+      kind: "public_page";
+      platform: "youtube" | "x";
+      value: YouTubeMediaPreview;
+    };
 
 function formatBytes(bytes: number | null): string {
   if (bytes === null) {
@@ -49,17 +53,36 @@ function displayHost(url: string): string {
   }
 }
 
-function isYouTubePageUrl(value: string): boolean {
+function publicPagePlatform(value: string): "youtube" | "x" | null {
   try {
     const host = new URL(value).hostname.toLowerCase().replace(/\.$/, "");
-    return [
-      "youtube.com",
-      "www.youtube.com",
-      "m.youtube.com",
-      "youtu.be",
-    ].includes(host);
+    if (
+      [
+        "youtube.com",
+        "www.youtube.com",
+        "m.youtube.com",
+        "youtu.be",
+      ].includes(host)
+    ) {
+      return "youtube";
+    }
+    if (
+      [
+        "x.com",
+        "www.x.com",
+        "m.x.com",
+        "mobile.x.com",
+        "twitter.com",
+        "www.twitter.com",
+        "m.twitter.com",
+        "mobile.twitter.com",
+      ].includes(host)
+    ) {
+      return "x";
+    }
+    return null;
   } catch {
-    return false;
+    return null;
   }
 }
 
@@ -102,9 +125,11 @@ export function RemoteUrlDialog({
     setPreview(null);
     setError(null);
     try {
-      if (isYouTubePageUrl(candidate)) {
+      const platform = publicPagePlatform(candidate);
+      if (platform) {
         setPreview({
-          kind: "youtube",
+          kind: "public_page",
+          platform,
           value: await inspectYouTubeUrl(candidate),
         });
       } else {
@@ -131,7 +156,7 @@ export function RemoteUrlDialog({
     setError(null);
     try {
       const project =
-        preview.kind === "youtube"
+        preview.kind === "public_page"
           ? await importYouTubeUrl(
               preview.value.originalUrl,
               preview.value.previewToken,
@@ -162,7 +187,7 @@ export function RemoteUrlDialog({
     }
     setCancelRequested(true);
     try {
-      if (preview?.kind === "youtube") {
+      if (preview?.kind === "public_page") {
         await cancelYouTubeImport(operationId);
       } else {
         await cancelRemoteMediaImport(operationId);
@@ -215,7 +240,7 @@ export function RemoteUrlDialog({
       }
     >
       <p>
-        支持公开 HTTPS 媒体直链、点播 M3U8 和 YouTube 公开单视频。不会读取浏览器 Cookie、账号内容或会员资源，也不会访问本机和内网地址。
+        支持公开 HTTPS 媒体直链、点播 M3U8、YouTube 和 X 公开单视频。不会读取浏览器 Cookie、账号内容或会员资源，也不会访问本机和内网地址。
       </p>
       {previewMode ? (
         <div className="notice remote-url-preview-mode">
@@ -230,7 +255,7 @@ export function RemoteUrlDialog({
           aria-label="视频 URL"
           type="url"
           inputMode="url"
-          placeholder="https://www.youtube.com/watch?v=…"
+          placeholder="https://x.com/…/status/…"
           value={url}
           disabled={checking || importing}
           onChange={(event) => {
@@ -260,9 +285,15 @@ export function RemoteUrlDialog({
       {preview ? (
         <section className="remote-url-preview" aria-label="URL 检查结果">
           <div>
-            <span>{preview.kind === "youtube" ? "公开视频" : "媒体"}</span>
+            <span>
+              {preview.kind === "public_page"
+                ? preview.platform === "x"
+                  ? "X 公开视频"
+                  : "公开视频"
+                : "媒体"}
+            </span>
             <strong>
-              {preview.kind === "youtube"
+              {preview.kind === "public_page"
                 ? preview.value.title
                 : preview.value.displayName}
             </strong>
@@ -272,7 +303,7 @@ export function RemoteUrlDialog({
               <dt>来源</dt>
               <dd>
                 {displayHost(
-                  preview.kind === "youtube"
+                  preview.kind === "public_page"
                     ? preview.value.webpageUrl
                     : preview.value.finalUrl,
                 )}
@@ -281,7 +312,7 @@ export function RemoteUrlDialog({
             <div>
               <dt>类型</dt>
               <dd>
-                {preview.kind === "youtube"
+                {preview.kind === "public_page"
                   ? "公开单视频"
                   : preview.value.mediaKind === "hls"
                     ? "HLS 点播清单"
@@ -289,9 +320,9 @@ export function RemoteUrlDialog({
               </dd>
             </div>
             <div>
-              <dt>{preview.kind === "youtube" ? "时长" : "大小"}</dt>
+              <dt>{preview.kind === "public_page" ? "时长" : "大小"}</dt>
               <dd>
-                {preview.kind === "youtube"
+                {preview.kind === "public_page"
                   ? formatDuration(preview.value.durationSeconds)
                   : formatBytes(preview.value.contentLength)}
               </dd>
