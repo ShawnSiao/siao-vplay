@@ -194,7 +194,7 @@ impl SafeHttp {
             let port = validated.port_or_known_default().unwrap_or(443);
             let client_key = format!("{host}:{port}");
             if !self.clients.contains_key(&client_key) {
-                let addresses = public_socket_addresses(&host, port)?;
+                let addresses = public_addrs(&host, port)?;
                 self.clients
                     .insert(client_key.clone(), pinned_client(&validated, &addresses)?);
             }
@@ -498,7 +498,7 @@ pub(crate) fn validate_public_https_url(input: &str) -> Result<Url, RemoteMediaE
     let url = validate_url_syntax(input)?;
     let host = url.host_str().ok_or(RemoteMediaError::InvalidUrl)?;
     let port = url.port_or_known_default().unwrap_or(443);
-    public_socket_addresses(host, port)?;
+    public_addrs(host, port)?;
     Ok(url)
 }
 
@@ -516,7 +516,7 @@ fn validate_url_syntax(input: &str) -> Result<Url, RemoteMediaError> {
     Ok(url)
 }
 
-fn public_socket_addresses(host: &str, port: u16) -> Result<Vec<SocketAddr>, RemoteMediaError> {
+pub(crate) fn public_addrs(host: &str, port: u16) -> Result<Vec<SocketAddr>, RemoteMediaError> {
     let host = host.trim_end_matches('.').to_ascii_lowercase();
     if host == "localhost"
         || host.ends_with(".localhost")

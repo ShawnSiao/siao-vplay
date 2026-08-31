@@ -23,9 +23,9 @@ use uuid::Uuid;
 use crate::{
     domain::Project,
     media::{self, MediaError},
-    public_video_source::PublicVideoSource,
+    public_connect_proxy::SafeConnectProxy,
+    public_video_source::{validate_generic_metadata, validate_public_video_page},
     remote_media::{self, RemoteMediaError},
-    resource_download,
     store::{ProjectStore, RemoteImportProvenance, StoreError},
 };
 
@@ -45,16 +45,12 @@ static IMPORT_OPERATIONS: OnceLock<Mutex<HashMap<String, Arc<AtomicBool>>>> = On
 pub enum YouTubeMediaError {
     #[error(transparent)]
     Network(#[from] RemoteMediaError),
-    #[error("只支持 YouTube 或 X 公开单视频页面")]
+    #[error("只支持公开 HTTPS 单视频页面")]
     UnsupportedUrl,
     #[error("不支持播放列表或合集，请使用不带播放列表参数的单视频链接")]
     PlaylistNotAllowed,
-    #[error("不支持直播、首播等待页或正在进行的直播")]
-    LiveNotAllowed,
     #[error("这个视频需要登录、订阅、会员或其他访问权限")]
     Restricted,
-    #[error("无法确认这是可公开读取的单个视频")]
-    UncertainMedia,
     #[error("公开视频导入运行时不可用：{0}")]
     ToolUnavailable(String),
     #[error("公开视频导入运行时未通过完整性检查")]
@@ -182,9 +178,9 @@ struct CapturedOutput {
 pub fn inspect_youtube_url(
     input: InspectYouTubeUrlInput,
 ) -> Result<YouTubeMediaPreview, YouTubeMediaError> {
-    let (original, source) = PublicVideoSource::detect_and_validate(&input.url)?;
+    let original = validate_public_video_page(&input.url)?;
     let tool = verify_tool(&resolve_yt_dlp_path()?)?;
-    inspect_with_tool(&original, source, &tool)
+    inspect_with_tool(&original, &tool)
 }
 
 pub fn import_youtube_url(
@@ -193,11 +189,11 @@ pub fn import_youtube_url(
     input: ImportYouTubeUrlInput,
 ) -> Result<Project, YouTubeMediaError> {
     let operation = ImportOperation::register(&input.operation_id)?;
-    let (original, source) = PublicVideoSource::detect_and_validate(&input.url)?;
+    let original = validate_public_video_page(&input.url)?;
     operation.check()?;
 
     let tool = verify_tool(&resolve_yt_dlp_path()?)?;
-    let refreshed = inspect_with_tool(&original, source, &tool)?;
+    let refreshed = inspect_with_tool(&original, &tool)?;
     operation.check()?;
     if refreshed.preview_token != input.expected_preview_token {
         return Err(YouTubeMediaError::PreviewChanged);
@@ -249,11 +245,11 @@ pub fn cancel_youtube_import(input: CancelYouTubeImportInput) -> Result<bool, Yo
 
 fn inspect_with_tool(
     original: &Url,
-    source: PublicVideoSource,
     tool: &ToolIdentity,
 ) -> Result<YouTubeMediaPreview, YouTubeMediaError> {
+    let proxy = SafeConnectProxy::start()?;
     let mut command = hidden_command(&tool.path);
-    command.args(inspection_arguments(original));
+    command.args(inspection_arguments(original, &proxy.url()));
     let output = capture_command(command, INSPECTION_TIMEOUT, None, true)?;
     if !output.status.success() {
         return Err(YouTubeMediaError::InspectionFailed(safe_tool_message(
@@ -263,12 +259,11 @@ fn inspect_with_tool(
     }
     let metadata: Value = serde_json::from_slice(&output.stdout)
         .map_err(|error| YouTubeMediaError::MetadataInvalid(error.to_string()))?;
-    parse_metadata(original, source, &metadata, tool)
+    parse_metadata(original, &metadata, tool)
 }
 
 fn parse_metadata(
     original: &Url,
-    source: PublicVideoSource,
     metadata: &Value,
     tool: &ToolIdentity,
 ) -> Result<YouTubeMediaPreview, YouTubeMediaError> {
@@ -283,19 +278,10 @@ fn parse_metadata(
     if source_type != "video" || has_entries {
         return Err(YouTubeMediaError::PlaylistNotAllowed);
     }
-    let live_status = metadata.get("live_status").and_then(Value::as_str);
-    if metadata.get("is_live").and_then(Value::as_bool) == Some(true)
-        || live_status.is_some_and(|status| !matches!(status, "not_live" | "was_live"))
-    {
-        return Err(YouTubeMediaError::LiveNotAllowed);
-    }
-    let webpage_url = source.validate_metadata(original, metadata)?;
+    let (webpage_url, _extractor) = validate_generic_metadata(metadata)?;
     validate_selected_media_urls(metadata)?;
     let video_id = required_text(metadata, "id", "视频标识")?;
-    let title = sanitized_title(
-        &required_text(metadata, "title", "视频标题")?,
-        source.fallback_title(),
-    );
+    let title = sanitized_title(&required_text(metadata, "title", "视频标题")?, "公开视频");
     let duration_seconds = metadata
         .get("duration")
         .and_then(Value::as_f64)
@@ -373,8 +359,14 @@ fn download_video(
     cancelled: &Arc<AtomicBool>,
 ) -> Result<PathBuf, YouTubeMediaError> {
     let ffmpeg_path = media::ffmpeg_path()?;
+    let proxy = SafeConnectProxy::start()?;
     let mut command = hidden_command(&tool.path);
-    command.args(download_arguments(original, output_directory, &ffmpeg_path));
+    command.args(download_arguments(
+        original,
+        output_directory,
+        &ffmpeg_path,
+        &proxy.url(),
+    ));
     let output = capture_command(
         command,
         DOWNLOAD_TIMEOUT,
@@ -435,33 +427,17 @@ fn completed_output_path(
     Ok(canonical_candidate)
 }
 
-fn inspection_arguments(url: &Url) -> Vec<String> {
-    let (proxy_url, proxy_source) = resource_download::effective_proxy();
-    inspection_arguments_with_proxy(url, proxy_url.as_deref(), proxy_source)
-}
-
-fn inspection_arguments_with_proxy(
-    url: &Url,
-    proxy_url: Option<&str>,
-    proxy_source: &str,
-) -> Vec<String> {
-    let mut arguments = [
-        "--ignore-config",
-        "--no-plugin-dirs",
-        "--no-playlist",
-        "--no-cache-dir",
-    ]
-    .into_iter()
-    .map(str::to_owned)
-    .collect::<Vec<_>>();
-    append_proxy_arguments(&mut arguments, proxy_url, proxy_source);
+fn inspection_arguments(url: &Url, proxy_url: &str) -> Vec<String> {
+    let mut arguments = ["--ignore-config", "--no-plugin-dirs", "--no-playlist"]
+        .into_iter()
+        .map(str::to_owned)
+        .collect::<Vec<_>>();
+    append_proxy_arguments(&mut arguments, proxy_url);
     arguments.extend(
         [
             "--dump-single-json",
             "--skip-download",
             "--no-warnings",
-            "--format",
-            FORMAT_SELECTOR,
             "--",
             url.as_str(),
         ]
@@ -471,23 +447,11 @@ fn inspection_arguments_with_proxy(
     arguments
 }
 
-fn download_arguments(url: &Url, output_directory: &Path, ffmpeg_path: &Path) -> Vec<String> {
-    let (proxy_url, proxy_source) = resource_download::effective_proxy();
-    download_arguments_with_proxy(
-        url,
-        output_directory,
-        ffmpeg_path,
-        proxy_url.as_deref(),
-        proxy_source,
-    )
-}
-
-fn download_arguments_with_proxy(
+fn download_arguments(
     url: &Url,
     output_directory: &Path,
     ffmpeg_path: &Path,
-    proxy_url: Option<&str>,
-    proxy_source: &str,
+    proxy_url: &str,
 ) -> Vec<String> {
     let mut arguments = vec![
         "--ignore-config".to_owned(),
@@ -495,7 +459,7 @@ fn download_arguments_with_proxy(
         "--no-playlist".to_owned(),
         "--no-cache-dir".to_owned(),
     ];
-    append_proxy_arguments(&mut arguments, proxy_url, proxy_source);
+    append_proxy_arguments(&mut arguments, proxy_url);
     arguments.extend([
         "--continue".to_owned(),
         "--part".to_owned(),
@@ -531,18 +495,9 @@ fn download_arguments_with_proxy(
     arguments
 }
 
-fn append_proxy_arguments(
-    arguments: &mut Vec<String>,
-    proxy_url: Option<&str>,
-    proxy_source: &str,
-) {
-    if let Some(proxy_url) = proxy_url {
-        arguments.push("--proxy".to_owned());
-        arguments.push(proxy_url.to_owned());
-    } else if proxy_source != "environment" {
-        arguments.push("--proxy".to_owned());
-        arguments.push(String::new());
-    }
+fn append_proxy_arguments(arguments: &mut Vec<String>, proxy_url: &str) {
+    arguments.push("--proxy".to_owned());
+    arguments.push(proxy_url.to_owned());
 }
 
 fn selected_file_size(metadata: &Value) -> Option<u64> {
@@ -892,57 +847,37 @@ mod tests {
     }
 
     #[test]
-    fn accepts_only_single_video_page_shapes() {
-        let source = PublicVideoSource::YouTube;
+    fn inspection_arguments_use_the_safe_proxy_without_selecting_a_format() {
+        let url = Url::parse("https://x.com/i/status/2091959711423996249").unwrap();
+        let arguments = inspection_arguments(&url, "http://127.0.0.1:43129");
+
         assert!(
-            source
-                .validate_page_url("https://www.youtube.com/watch?v=jNQXAC9IVRw")
-                .is_ok()
+            arguments
+                .windows(2)
+                .any(|pair| { pair[0] == "--proxy" && pair[1] == "http://127.0.0.1:43129" })
         );
-        assert!(
-            source
-                .validate_page_url("https://youtu.be/jNQXAC9IVRw")
-                .is_ok()
-        );
-        assert!(
-            source
-                .validate_page_url("https://www.youtube.com/shorts/jNQXAC9IVRw")
-                .is_ok()
-        );
-        assert!(matches!(
-            source.validate_page_url("https://www.youtube.com/watch?v=jNQXAC9IVRw&list=PL123"),
-            Err(YouTubeMediaError::PlaylistNotAllowed)
-        ));
-        assert!(matches!(
-            source.validate_page_url("https://www.youtube.com/@creator"),
-            Err(YouTubeMediaError::UnsupportedUrl)
-        ));
-        assert!(matches!(
-            source.validate_page_url("https://example.com/watch?v=jNQXAC9IVRw"),
-            Err(YouTubeMediaError::UnsupportedUrl)
-        ));
+        assert!(!arguments.iter().any(|argument| argument == "--format"));
+        assert_eq!(arguments.last().map(String::as_str), Some(url.as_str()));
     }
 
     #[test]
     fn arguments_disable_user_configuration_cookies_plugins_and_playlists() {
         let url = Url::parse("https://www.youtube.com/watch?v=jNQXAC9IVRw").unwrap();
-        let inspect = inspection_arguments_with_proxy(&url, None, "direct");
-        let download = download_arguments_with_proxy(
+        let inspect = inspection_arguments(&url, "http://127.0.0.1:43129");
+        let download = download_arguments(
             &url,
             Path::new("W:/SiaoVPlay/app-data/remote-media/test"),
             Path::new("W:/SiaoVPlay/runtimes/ffmpeg/bin/ffmpeg.exe"),
-            None,
-            "direct",
+            "http://127.0.0.1:43129",
         );
         for arguments in [&inspect, &download] {
             assert!(arguments.contains(&"--ignore-config".to_owned()));
             assert!(arguments.contains(&"--no-plugin-dirs".to_owned()));
             assert!(arguments.contains(&"--no-playlist".to_owned()));
-            assert!(arguments.contains(&"--no-cache-dir".to_owned()));
             assert!(
                 arguments
                     .windows(2)
-                    .any(|pair| pair[0] == "--proxy" && pair[1].is_empty())
+                    .any(|pair| pair[0] == "--proxy" && pair[1] == "http://127.0.0.1:43129")
             );
             let joined = arguments.join(" ");
             for forbidden in [
@@ -959,42 +894,32 @@ mod tests {
                 );
             }
         }
+        assert!(!inspect.iter().any(|argument| argument == "--no-cache-dir"));
+        assert!(download.contains(&"--no-cache-dir".to_owned()));
     }
 
     #[test]
-    fn arguments_apply_explicit_proxy_and_inherit_environment_proxy() {
-        let url = Url::parse("https://youtu.be/jNQXAC9IVRw").unwrap();
-        for arguments in [
-            inspection_arguments_with_proxy(&url, Some("http://127.0.0.1:7897"), "windows_system"),
-            download_arguments_with_proxy(
-                &url,
-                Path::new("W:/SiaoVPlay/app-data/remote-media/test"),
-                Path::new("W:/SiaoVPlay/runtimes/ffmpeg/bin/ffmpeg.exe"),
-                Some("http://127.0.0.1:7897"),
-                "custom",
-            ),
-        ] {
-            assert!(
-                arguments
-                    .windows(2)
-                    .any(|pair| { pair[0] == "--proxy" && pair[1] == "http://127.0.0.1:7897" })
-            );
-        }
+    fn download_arguments_keep_the_siaocut_retry_and_mp4_contract() {
+        let url = Url::parse("https://x.com/i/status/2091959711423996249").unwrap();
+        let arguments = download_arguments(
+            &url,
+            Path::new("W:/SiaoVPlay/app-data/remote-media/test"),
+            Path::new("W:/SiaoVPlay/runtimes/ffmpeg/bin/ffmpeg.exe"),
+            "http://127.0.0.1:43129",
+        );
 
-        let inherited = inspection_arguments_with_proxy(&url, None, "environment");
-        assert!(!inherited.iter().any(|argument| argument == "--proxy"));
+        assert!(arguments.windows(2).any(|pair| pair == ["--retries", "2"]));
+        assert!(
+            arguments
+                .windows(2)
+                .any(|pair| pair == ["--merge-output-format", "mp4"])
+        );
     }
 
     #[test]
     fn parses_a_public_video_and_binds_preview_to_tool_identity() {
         let original = Url::parse("https://www.youtube.com/watch?v=jNQXAC9IVRw").unwrap();
-        let preview = parse_metadata(
-            &original,
-            PublicVideoSource::YouTube,
-            &public_metadata(),
-            &tool(),
-        )
-        .unwrap();
+        let preview = parse_metadata(&original, &public_metadata(), &tool()).unwrap();
 
         assert_eq!(preview.video_id, "jNQXAC9IVRw");
         assert_eq!(preview.file_size_bytes, Some(533_067));
@@ -1003,49 +928,32 @@ mod tests {
     }
 
     #[test]
-    fn rejects_playlist_live_restricted_and_uncertain_metadata() {
+    fn generic_metadata_rejects_playlist_and_known_restrictions_only() {
         let original = Url::parse("https://www.youtube.com/watch?v=jNQXAC9IVRw").unwrap();
 
         let mut playlist = public_metadata();
         playlist["_type"] = Value::String("playlist".to_owned());
         assert!(matches!(
-            parse_metadata(&original, PublicVideoSource::YouTube, &playlist, &tool()),
+            parse_metadata(&original, &playlist, &tool()),
             Err(YouTubeMediaError::PlaylistNotAllowed)
         ));
 
         let mut live = public_metadata();
         live["live_status"] = Value::String("is_live".to_owned());
-        assert!(matches!(
-            parse_metadata(&original, PublicVideoSource::YouTube, &live, &tool()),
-            Err(YouTubeMediaError::LiveNotAllowed)
-        ));
-
-        let mut archived_live = public_metadata();
-        archived_live["live_status"] = Value::String("was_live".to_owned());
-        assert!(
-            parse_metadata(
-                &original,
-                PublicVideoSource::YouTube,
-                &archived_live,
-                &tool()
-            )
-            .is_ok(),
-            "an archived public live replay should import like other on-demand media"
-        );
+        assert!(parse_metadata(&original, &live, &tool()).is_ok());
 
         let mut restricted = public_metadata();
         restricted["availability"] = Value::String("needs_auth".to_owned());
         assert!(matches!(
-            parse_metadata(&original, PublicVideoSource::YouTube, &restricted, &tool()),
+            parse_metadata(&original, &restricted, &tool()),
             Err(YouTubeMediaError::Restricted)
         ));
 
-        let mut uncertain = public_metadata();
-        uncertain.as_object_mut().unwrap().remove("availability");
-        assert!(matches!(
-            parse_metadata(&original, PublicVideoSource::YouTube, &uncertain, &tool()),
-            Err(YouTubeMediaError::UncertainMedia)
-        ));
+        let mut unrestricted = public_metadata();
+        unrestricted.as_object_mut().unwrap().remove("availability");
+        unrestricted["age_limit"] = Value::Number(18.into());
+        unrestricted["extractor_key"] = Value::String("Generic".to_owned());
+        assert!(parse_metadata(&original, &unrestricted, &tool()).is_ok());
     }
 
     #[test]

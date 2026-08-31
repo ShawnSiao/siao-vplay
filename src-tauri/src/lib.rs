@@ -17,6 +17,7 @@ mod learning;
 mod library;
 mod local_resources;
 mod media;
+mod public_connect_proxy;
 mod public_video_source;
 mod remote_media;
 mod resource_diagnostics;

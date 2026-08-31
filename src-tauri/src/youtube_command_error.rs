@@ -9,9 +9,7 @@ pub(crate) fn classify(error: &YouTubeMediaError) -> (&'static str, &'static str
         YouTubeMediaError::Network(_) => "youtube_preflight_failed",
         YouTubeMediaError::UnsupportedUrl => "youtube_url_unsupported",
         YouTubeMediaError::PlaylistNotAllowed => "youtube_playlist_not_allowed",
-        YouTubeMediaError::LiveNotAllowed => "youtube_live_not_allowed",
         YouTubeMediaError::Restricted => "youtube_restricted",
-        YouTubeMediaError::UncertainMedia => "youtube_media_uncertain",
         YouTubeMediaError::ToolUnavailable(_) => "youtube_runtime_unavailable",
         YouTubeMediaError::ToolIntegrity | YouTubeMediaError::ToolVersion => {
             "youtube_runtime_invalid"
@@ -42,11 +40,9 @@ fn message(code: &str) -> &'static str {
     match code {
         "remote_private_network" => "不能导入本机或局域网地址。请选择公开视频页面。",
         "youtube_preflight_failed" => "无法连接到公开视频页面。请检查网络后重试。",
-        "youtube_url_unsupported" => "当前只支持 YouTube 或 X 的公开单视频页面。",
+        "youtube_url_unsupported" => "当前只支持公开 HTTPS 单视频页面。",
         "youtube_playlist_not_allowed" => "暂不支持播放列表。请使用单个公开视频页面。",
-        "youtube_live_not_allowed" => "暂不支持直播内容。请选择已发布的公开视频。",
         "youtube_restricted" => "这个视频需要登录、付费或其他访问条件，无法导入。",
-        "youtube_media_uncertain" => "无法确认这是可公开读取的单个视频。",
         "youtube_runtime_unavailable" => "公开视频功能尚未准备。请在环境配置中完成准备。",
         "youtube_runtime_invalid" => "公开视频组件需要更新。请在环境配置中更新后重试。",
         "youtube_inspection_timeout" => "公开视频检查超时。请检查网络后重试。",
