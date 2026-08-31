@@ -46,7 +46,7 @@ fn message(code: &str) -> &'static str {
         "youtube_runtime_unavailable" => "公开视频功能尚未准备。请在环境配置中完成准备。",
         "youtube_runtime_invalid" => "公开视频组件需要更新。请在环境配置中更新后重试。",
         "youtube_inspection_timeout" => "公开视频检查超时。请检查网络后重试。",
-        "youtube_inspection_failed" => "无法读取这个公开页面。请更新公开视频组件或稍后重试。",
+        "youtube_inspection_failed" => "无法读取这个公开页面。请确认页面仍然公开，或稍后重试。",
         "youtube_metadata_invalid" => "公开视频页面返回的信息不完整。请稍后重新检查。",
         "youtube_selected_media_unsafe" => "视频返回的媒体地址未通过公开网络检查。",
         "youtube_preview_changed" => "视频在检查后发生变化。请重新检查后再导入。",

@@ -36,6 +36,7 @@ mod translation_language;
 mod translation_test_support;
 mod understanding;
 mod understanding_v2;
+mod x_public_video;
 mod youtube_command_error;
 mod youtube_media;
 

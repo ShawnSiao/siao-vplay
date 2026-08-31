@@ -27,6 +27,7 @@ use crate::{
     public_video_source::{validate_generic_metadata, validate_public_video_page},
     remote_media::{self, RemoteMediaError},
     store::{ProjectStore, RemoteImportProvenance, StoreError},
+    x_public_video::{self, ResolvedXVideo},
 };
 
 const PINNED_YT_DLP_VERSION: &str = "2026.08.19";
@@ -115,6 +116,8 @@ pub struct YouTubeMediaPreview {
     pub importer_version: String,
     pub importer_sha256: String,
     pub preview_token: String,
+    #[serde(skip)]
+    pub(crate) resolved_download_url: Option<Url>,
 }
 
 #[derive(Clone, Debug)]
@@ -202,7 +205,12 @@ pub fn import_youtube_url(
     let import_directory = remote_media_root.join(Uuid::new_v4().to_string());
     fs::create_dir_all(&import_directory)?;
     let result = (|| {
-        let media_path = download_video(&original, &tool, &import_directory, &operation.cancelled)?;
+        let download_url = refreshed
+            .resolved_download_url
+            .as_ref()
+            .unwrap_or(&original);
+        let media_path =
+            download_video(download_url, &tool, &import_directory, &operation.cancelled)?;
         operation.check()?;
         let metadata = fs::metadata(&media_path)?;
         if metadata.len() > MAX_MEDIA_BYTES {
@@ -217,7 +225,11 @@ pub fn import_youtube_url(
                 &format!("{}.mp4", refreshed.title),
                 Some(&refreshed.title),
                 &RemoteImportProvenance {
-                    importer: "yt-dlp".to_owned(),
+                    importer: if refreshed.resolved_download_url.is_some() {
+                        "yt-dlp+x-public-resolver".to_owned()
+                    } else {
+                        "yt-dlp".to_owned()
+                    },
                     importer_version: tool.version.clone(),
                     importer_sha256: tool.sha256.clone(),
                 },
@@ -252,6 +264,9 @@ fn inspect_with_tool(
     command.args(inspection_arguments(original, &proxy.url()));
     let output = capture_command(command, INSPECTION_TIMEOUT, None, true)?;
     if !output.status.success() {
+        if let Some(resolved) = x_public_video::resolve(original)? {
+            return fallback_preview(original, resolved, tool);
+        }
         return Err(YouTubeMediaError::InspectionFailed(safe_tool_message(
             &output.stderr,
             &output.stdout,
@@ -310,6 +325,47 @@ fn parse_metadata(
         importer_version: tool.version.clone(),
         importer_sha256: tool.sha256.clone(),
         preview_token,
+        resolved_download_url: None,
+    })
+}
+
+fn fallback_preview(
+    original: &Url,
+    resolved: ResolvedXVideo,
+    tool: &ToolIdentity,
+) -> Result<YouTubeMediaPreview, YouTubeMediaError> {
+    if resolved.video_id.trim().is_empty() {
+        return Err(YouTubeMediaError::MetadataInvalid(
+            "X 公开解析服务未返回视频标识".to_owned(),
+        ));
+    }
+    if resolved
+        .file_size_bytes
+        .is_some_and(|size| size > MAX_MEDIA_BYTES)
+    {
+        return Err(YouTubeMediaError::SizeLimit);
+    }
+    let title = sanitized_title(&resolved.title, "X 视频");
+    let preview_token = preview_token(
+        original,
+        &resolved.webpage_url,
+        &resolved.video_id,
+        &title,
+        resolved.duration_seconds,
+        resolved.file_size_bytes,
+        tool,
+    );
+    Ok(YouTubeMediaPreview {
+        original_url: original.to_string(),
+        webpage_url: resolved.webpage_url.to_string(),
+        video_id: resolved.video_id,
+        title,
+        duration_seconds: resolved.duration_seconds,
+        file_size_bytes: resolved.file_size_bytes,
+        importer_version: tool.version.clone(),
+        importer_sha256: tool.sha256.clone(),
+        preview_token,
+        resolved_download_url: Some(resolved.media_url),
     })
 }
 
@@ -925,6 +981,31 @@ mod tests {
         assert_eq!(preview.file_size_bytes, Some(533_067));
         assert_eq!(preview.preview_token.len(), 64);
         assert_eq!(preview.importer_version, PINNED_YT_DLP_VERSION);
+    }
+
+    #[test]
+    fn binds_a_public_x_fallback_to_the_resolved_media_url() {
+        let original =
+            Url::parse("https://x.com/example/status/2062110003566362779/video/1").unwrap();
+        let media_url = Url::parse("https://video.twimg.com/amplify/video.mp4").unwrap();
+        let preview = fallback_preview(
+            &original,
+            ResolvedXVideo {
+                webpage_url: Url::parse("https://x.com/example/status/2062110003566362779")
+                    .unwrap(),
+                media_url: media_url.clone(),
+                video_id: "2062108988083494912".to_owned(),
+                title: "Public X video".to_owned(),
+                duration_seconds: 124.11,
+                file_size_bytes: Some(20_069_341),
+            },
+            &tool(),
+        )
+        .unwrap();
+
+        assert_eq!(preview.resolved_download_url, Some(media_url));
+        assert_eq!(preview.video_id, "2062108988083494912");
+        assert_eq!(preview.preview_token.len(), 64);
     }
 
     #[test]
