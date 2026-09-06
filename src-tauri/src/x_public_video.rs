@@ -1,4 +1,4 @@
-use std::{env, io::Read, time::Duration};
+use std::{io::Read, time::Duration};
 
 use reqwest::{
     Proxy,
@@ -15,10 +15,9 @@ use crate::{
     youtube_media::YouTubeMediaError,
 };
 
-const DEFAULT_RESOLVER_BASE: &str = "https://api.fxtwitter.com/status/";
 const RESOLVER_RESPONSE_LIMIT: u64 = 2 * 1024 * 1024;
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
-const USER_AGENT_VALUE: &str = "SiaoVPlay/0.4 public-X-resolver";
+const USER_AGENT_VALUE: &str = concat!("SiaoVPlay/", env!("CARGO_PKG_VERSION"), " public-X-resolver");
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct ResolvedXVideo {
@@ -65,11 +64,12 @@ struct ResolverFormat {
     container: Option<String>,
 }
 
-pub(crate) fn resolve(original: &Url) -> Result<Option<ResolvedXVideo>, YouTubeMediaError> {
+pub(crate) fn resolve(original: &Url, authorized_resolver_base: Option<&str>) -> Result<Option<ResolvedXVideo>, YouTubeMediaError> {
     let Some(request) = XStatusRequest::parse(original)? else {
         return Ok(None);
     };
-    let resolver_url = resolver_url(&request.status_id)?;
+    let Some(resolver_url) = crate::x_resolver_policy::authorized_url(authorized_resolver_base, &request.status_id)? else { return Ok(None); };
+    let resolver_url = remote_media::validate_public_https_url(resolver_url.as_str())?;
     let bytes = fetch_limited_json(&resolver_url)?;
     let envelope: ResolverEnvelope = serde_json::from_slice(&bytes)
         .map_err(|_| metadata_error("X 公开解析服务返回了无效数据"))?;
@@ -127,12 +127,7 @@ fn best_mp4_url(video: &ResolverVideo) -> Option<&str> {
         .or(video.url.as_deref())
 }
 
-fn resolver_url(status_id: &str) -> Result<Url, YouTubeMediaError> {
-    let configured = env::var("SIAOVPLAY_X_PUBLIC_RESOLVER")
-        .unwrap_or_else(|_| DEFAULT_RESOLVER_BASE.to_owned());
-    resolver_url_from_base(&configured, status_id)
-}
-
+#[cfg(test)]
 fn resolver_url_from_base(configured: &str, status_id: &str) -> Result<Url, YouTubeMediaError> {
     let mut base = remote_media::validate_public_https_url(configured)?;
     base.set_query(None);

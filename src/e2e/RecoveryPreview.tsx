@@ -1,3 +1,4 @@
+import { RemoteUrlDialog } from "../components/RemoteUrlDialog";
 import { useState } from "react";
 import { mockIPC } from "@tauri-apps/api/mocks";
 import { PreparationScreen } from "../components/PreparationScreen";
@@ -12,6 +13,7 @@ const versions = (["original", "translation"] as const).map((role) => ({
 
 let saveCount = 1;
 mockIPC((command, args) => {
+  if (command === "get_public_resolver_disclosure") return { receiver: "https://resolver.example", resolverBase: "https://resolver.example/status/" };
   if (command !== "revise_subtitle_version") throw new Error(`Unexpected fixture command: ${command}`);
   const input = (args as Record<string, unknown>).input as { baseVersionId: string; segmentEdits: SubtitleSegmentEdit[] };
   const base = versions.find((v) => v.id === input.baseVersionId)!;
@@ -25,10 +27,11 @@ mockIPC((command, args) => {
   return version;
 });
 
-export function RecoveryPreview({ preparation = false }: { preparation?: boolean }) {
+export function RecoveryPreview({ preparation = false, remoteUrl = false }: { preparation?: boolean; remoteUrl?: boolean }) {
   const [closed, setClosed] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   if (closed) return <p>已返回媒体库</p>;
+  if (remoteUrl) return <RemoteUrlDialog previewMode={false} onClose={() => setClosed(true)} onImported={() => setClosed(true)} />;
   return preparation ? <PreparationScreen project={project} forceProxy={false} error={null}
     progress={{ requestId: "fixture", projectId: project.id, stage: "transcode", status: cancelling ? "cancelling" : "running" }}
     canCancel cancelling={cancelling} onRetry={() => undefined} onBack={() => setClosed(true)}

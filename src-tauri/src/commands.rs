@@ -490,9 +490,10 @@ pub fn cancel_remote_media_import(
 #[tauri::command]
 pub async fn inspect_youtube_url(
     input: InspectYouTubeUrlInput,
+    authorized_resolver_base: Option<String>,
 ) -> Result<YouTubeMediaPreview, CommandError> {
     tauri::async_runtime::spawn_blocking(move || {
-        youtube_media::inspect_youtube_url(input).map_err(CommandError::from)
+        youtube_media::inspect_youtube_url_authorized(input, authorized_resolver_base).map_err(CommandError::from)
     })
     .await
     .map_err(CommandError::background_task_failed)?
@@ -503,11 +504,12 @@ pub async fn import_youtube_url(
     store: State<'_, ProjectStore>,
     storage: State<'_, StorageManager>,
     input: ImportYouTubeUrlInput,
+    authorized_resolver_base: Option<String>,
 ) -> Result<Project, CommandError> {
     let store = store.inner().clone();
     let remote_media_root = storage.remote_media_root_for_write()?;
     tauri::async_runtime::spawn_blocking(move || {
-        youtube_media::import_youtube_url(&store, &remote_media_root, input)
+        youtube_media::import_youtube_url_authorized(&store, &remote_media_root, input, authorized_resolver_base)
             .map_err(CommandError::from)
     })
     .await
@@ -1429,4 +1431,9 @@ fn allow_learning_screenshot(app: &AppHandle, card: &LearningCard) -> Result<(),
             code: "learning_screenshot_scope_failed",
             message: format!("场景截图未能加入本地显示范围：{error}"),
         })
+}
+
+#[tauri::command]
+pub fn get_public_resolver_disclosure() -> Result<crate::x_resolver_policy::ResolverDisclosure, CommandError> {
+    crate::x_resolver_policy::disclosure().map_err(Into::into)
 }

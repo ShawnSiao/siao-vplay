@@ -63,6 +63,7 @@ const errorMessages: Record<string, string> = {
   youtube_inspection_failed: "无法读取这个公开页面。请确认页面仍然公开，或稍后重试。",
   youtube_metadata_invalid: "公开视频页面返回的信息不完整。请更新公开视频组件或稍后重试。",
   youtube_selected_media_unsafe: "视频返回的媒体地址未通过公开网络检查，已停止导入。",
+  public_resolver_consent_changed: "第三方解析服务已改变。请重新检查地址并确认接收方。",
   youtube_preview_changed: "视频在检查后发生变化。请重新检查后再导入。",
   youtube_download_timeout: "公开视频导入超时。现有媒体库内容没有改变，可以稍后重试。",
   youtube_download_failed: "公开视频暂时无法下载。请更新公开视频组件并重新检查；如果已经是最新版本，可以稍后或更换网络重试。",

@@ -1,18 +1,20 @@
 use super::*;
 
-pub fn inspect_youtube_url(
+pub fn inspect_youtube_url_authorized(
     input: InspectYouTubeUrlInput,
+    authorized_resolver_base: Option<String>,
 ) -> Result<YouTubeMediaPreview, YouTubeMediaError> {
     let _resources = crate::resource_leases::configured(&["yt-dlp", "ffmpeg-cpu"])?;
     let original = validate_public_video_page(&input.url)?;
     let tool = verify_tool(&resolve_yt_dlp_path()?)?;
-    inspect_with_tool(&original, &tool)
+    inspect_with_tool(&original, &tool, authorized_resolver_base.as_deref())
 }
 
-pub fn import_youtube_url(
+pub fn import_youtube_url_authorized(
     store: &ProjectStore,
     remote_media_root: &Path,
     input: ImportYouTubeUrlInput,
+    authorized_resolver_base: Option<String>,
 ) -> Result<Project, YouTubeMediaError> {
     let _resources = crate::resource_leases::configured(&["yt-dlp", "ffmpeg-cpu"])?;
     let operation = ImportOperation::register(&input.operation_id)?;
@@ -20,7 +22,7 @@ pub fn import_youtube_url(
     operation.check()?;
 
     let tool = verify_tool(&resolve_yt_dlp_path()?)?;
-    let refreshed = inspect_with_tool(&original, &tool)?;
+    let refreshed = inspect_with_tool(&original, &tool, authorized_resolver_base.as_deref())?;
     operation.check()?;
     if refreshed.preview_token != input.expected_preview_token {
         return Err(YouTubeMediaError::PreviewChanged);
@@ -64,4 +66,19 @@ pub fn import_youtube_url(
         let _ = fs::remove_dir_all(&import_directory);
     }
     result
+}
+
+#[cfg(test)]
+pub fn inspect_youtube_url(
+    input: InspectYouTubeUrlInput,
+) -> Result<YouTubeMediaPreview, YouTubeMediaError> {
+    inspect_youtube_url_authorized(input, None)
+}
+#[cfg(test)]
+pub fn import_youtube_url(
+    store: &ProjectStore,
+    root: &Path,
+    input: ImportYouTubeUrlInput,
+) -> Result<Project, YouTubeMediaError> {
+    import_youtube_url_authorized(store, root, input, None)
 }

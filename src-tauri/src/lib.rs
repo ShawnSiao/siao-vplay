@@ -45,6 +45,7 @@ mod translation_test_support;
 mod understanding;
 mod understanding_v2;
 mod x_public_video;
+mod x_resolver_policy;
 mod youtube_command_error;
 mod youtube_media;
 
@@ -191,6 +192,7 @@ pub fn run() {
             commands::import_remote_media_url,
             commands::cancel_remote_media_import,
             commands::inspect_youtube_url,
+            commands::get_public_resolver_disclosure,
             commands::import_youtube_url,
             commands::cancel_youtube_import,
             commands::list_projects,

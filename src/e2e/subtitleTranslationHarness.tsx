@@ -60,6 +60,6 @@ const root = document.getElementById("root");
 if (!root) throw new Error("Subtitle translation test root is missing.");
 createRoot(root).render(
   <StrictMode>
-    {new URLSearchParams(location.search).has("recovery") ? <RecoveryPreview preparation={new URLSearchParams(location.search).get("recovery") === "preparation"} /> : <SubtitleTranslationHarness />}
+    {new URLSearchParams(location.search).has("recovery") ? <RecoveryPreview remoteUrl={new URLSearchParams(location.search).get("recovery") === "url"} preparation={new URLSearchParams(location.search).get("recovery") === "preparation"} /> : <SubtitleTranslationHarness />}
   </StrictMode>,
 );

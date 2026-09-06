@@ -1,3 +1,4 @@
+import { youtubePreview } from "./test-fixtures/publicVideo";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -19,7 +20,6 @@ import type {
   SubtitleVersion,
   TranscriptionJob,
   TranslationTask,
-  YouTubeMediaPreview,
 } from "./types";
 import { createUnderstandingFixtures } from "./test-fixtures/understanding";
 
@@ -497,18 +497,6 @@ const remoteProject: Project = {
     locator: "W:\\SiaoVPlay\\app-data\\remote-media\\import-1\\source.mp4",
     originUrl: remotePreview.originalUrl,
   },
-};
-
-const youtubePreview: YouTubeMediaPreview = {
-  originalUrl: "https://www.youtube.com/watch?v=jNQXAC9IVRw",
-  webpageUrl: "https://www.youtube.com/watch?v=jNQXAC9IVRw",
-  videoId: "jNQXAC9IVRw",
-  title: "Me at the zoo",
-  durationSeconds: 19,
-  fileSizeBytes: 533_067,
-  importerVersion: "2026.08.19",
-  importerSha256: "3".repeat(64),
-  previewToken: "d".repeat(64),
 };
 
 const subtitlePreview: SubtitleImportPreview = {
@@ -2468,6 +2456,7 @@ describe("App", () => {
     await waitFor(() =>
       expect(desktopMocks.inspectYouTubeUrl).toHaveBeenCalledWith(
         youtubePreview.originalUrl,
+        null,
       ),
     );
     expect(desktopMocks.importYouTubeUrl).not.toHaveBeenCalled();
@@ -2480,6 +2469,7 @@ describe("App", () => {
         youtubePreview.originalUrl,
         youtubePreview.previewToken,
         expect.any(String),
+        null,
       ),
     );
   });

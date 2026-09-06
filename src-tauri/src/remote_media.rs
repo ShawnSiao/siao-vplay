@@ -445,7 +445,7 @@ pub(crate) fn validate_public_https_url(input: &str) -> Result<Url, RemoteMediaE
     Ok(url)
 }
 
-fn validate_url_syntax(input: &str) -> Result<Url, RemoteMediaError> {
+pub(crate) fn validate_url_syntax(input: &str) -> Result<Url, RemoteMediaError> {
     let url = Url::parse(input.trim()).map_err(|_| RemoteMediaError::InvalidUrl)?;
     if url.scheme() != "https" {
         return Err(RemoteMediaError::HttpsRequired);

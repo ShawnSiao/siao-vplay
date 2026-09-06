@@ -1,5 +1,7 @@
 mod operations;
-pub use operations::{inspect_youtube_url, import_youtube_url};
+pub use operations::{inspect_youtube_url_authorized, import_youtube_url_authorized};
+#[cfg(test)]
+use operations::{inspect_youtube_url, import_youtube_url};
 
 use std::{
     collections::HashMap,
@@ -71,6 +73,8 @@ pub enum YouTubeMediaError {
     SelectedMediaUnsafe,
     #[error("视频在确认后发生变化，请重新检查")]
     PreviewChanged,
+    #[error("第三方解析服务已改变，请重新确认接收方")]
+    ResolverConsentChanged,
     #[error("视频下载超过 20 GB 导入上限")]
     SizeLimit,
     #[error("公开视频导入超时")]
@@ -199,13 +203,14 @@ pub fn cancel_youtube_import(input: CancelYouTubeImportInput) -> Result<bool, Yo
 fn inspect_with_tool(
     original: &Url,
     tool: &ToolIdentity,
+    authorized_resolver_base: Option<&str>,
 ) -> Result<YouTubeMediaPreview, YouTubeMediaError> {
     let proxy = SafeConnectProxy::start()?;
     let mut command = hidden_command(&tool.path);
     command.args(inspection_arguments(original, &proxy.url()));
     let output = capture_command(command, INSPECTION_TIMEOUT, None, true)?;
     if !output.status.success() {
-        if let Some(resolved) = x_public_video::resolve(original)? {
+        if let Some(resolved) = x_public_video::resolve(original, authorized_resolver_base)? {
             return fallback_preview(original, resolved, tool);
         }
         return Err(YouTubeMediaError::InspectionFailed(safe_tool_message(
