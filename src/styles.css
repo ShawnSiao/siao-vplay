@@ -6874,3 +6874,16 @@ h3 {
     flex-direction: column;
   }
 }
+
+
+@media (max-height: 480px) {
+  .dialog-backdrop { padding: 12px; }
+  .dialog {
+    max-height: calc(100vh - 24px);
+    max-height: calc(100dvh - 24px);
+    padding: 16px;
+    gap: 12px;
+  }
+  .dialog-actions { padding-top: 10px; }
+  .dialog-close { top: 8px; right: 8px; }
+}
