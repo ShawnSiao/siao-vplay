@@ -43,7 +43,7 @@ pub fn serve_once_after(status: u16, body: &'static str, delay: Duration) -> Moc
     }
 }
 
-fn read_request(stream: &mut impl Read) -> String {
+pub(crate) fn read_request(stream: &mut impl Read) -> String {
     let mut bytes = Vec::new();
     let mut buffer = [0_u8; 4096];
     loop {
@@ -89,6 +89,7 @@ impl MockServer {
             image_data_urls: Vec::new(),
             max_output_tokens: 2_048,
             timeout: Duration::from_secs(90),
+            cancellation: None,
         }
     }
 

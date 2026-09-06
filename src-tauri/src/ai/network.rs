@@ -158,6 +158,18 @@ pub fn build_client(builder: ClientBuilder) -> Result<Client, String> {
         .map_err(|_| "无法创建网络连接".to_owned())
 }
 
+pub(crate) fn build_async_client(
+    mut builder: reqwest::ClientBuilder,
+) -> Result<reqwest::Client, String> {
+    let (proxy_url, source) = effective_proxy();
+    if let Some(proxy_url) = proxy_url {
+        builder = builder.proxy(Proxy::all(&proxy_url).map_err(|_| "代理地址无效".to_owned())?);
+    } else if source != "environment" {
+        builder = builder.no_proxy();
+    }
+    builder.build().map_err(|_| "无法创建网络连接".to_owned())
+}
+
 fn effective_proxy_from(custom: Option<String>) -> (Option<String>, &'static str) {
     if let Some(proxy) = custom {
         return (Some(proxy), "custom");

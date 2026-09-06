@@ -3,7 +3,7 @@ use serde_json::{Value, json};
 
 use super::{
     GenerationInput, ProviderFailure, ProviderOutput, checked, client, endpoint, generation_client,
-    json_value, parse_data_url, send_error,
+    json_value, send_generation, parse_data_url, send_error,
 };
 use crate::ai::{
     error::AiError,
@@ -59,15 +59,13 @@ pub fn generate(
         "system": format!("{}\n只返回符合此 JSON Schema 的 JSON：{}", input.system, input.schema),
         "messages": [{"role": "user", "content": content}]
     });
-    let response = generation_client(input)?
+    let request = generation_client(input)?
         .post(endpoint(&service.base_url, "/v1/messages"))
         .header("x-api-key", &service.api_key)
         .header("anthropic-version", "2023-06-01")
         .header(CONTENT_TYPE, "application/json")
-        .json(&body)
-        .send()
-        .map_err(send_error)?;
-    let (payload, request_id) = json_value(checked(response, AiError::ModelNotFound)?)?;
+        .json(&body);
+    let (payload, request_id) = send_generation(request, input)?;
     let output_text = payload
         .get("content")
         .and_then(Value::as_array)

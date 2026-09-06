@@ -34,8 +34,10 @@ pub(crate) fn receiver(
 
 pub(crate) fn generate(
     input: SummaryProviderInput<'_>,
-    mut cancelled: impl FnMut() -> Result<bool, super::AiError>,
+    store: &crate::store::ProjectStore,
+    task_id: &str,
 ) -> Result<ProviderOutput, ProviderFailure> {
+    let cancelled = super::task_cancellation::for_task(store, task_id);
     if cancelled()? {
         return Err(super::AiError::Cancelled.into());
     }
@@ -50,7 +52,7 @@ pub(crate) fn generate(
         .as_deref()
         .unwrap_or(&service.base_url);
     let _permit = global_request_coordinator()
-        .acquire_summary_cancellable(lane, cancelled)?
+        .acquire_summary_cancellable(lane, || cancelled())?
         .ok_or(super::AiError::Cancelled)?;
     providers::generate(
         &service,
@@ -63,6 +65,7 @@ pub(crate) fn generate(
             image_data_urls: input.image_data_urls,
             max_output_tokens: input.max_output_tokens,
             timeout: Duration::from_secs(180),
+            cancellation: Some(cancelled),
         },
     )
 }

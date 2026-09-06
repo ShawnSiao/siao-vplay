@@ -64,6 +64,7 @@ const activeStatuses = new Set([
 ]);
 
 function statusCopy(task: LearningTask): string {
+  if (task.stage === "cancelling") return "正在取消请求…";
   if (task.status === "queued") {
     return "材料已准备好，请查看发送清单";
   }

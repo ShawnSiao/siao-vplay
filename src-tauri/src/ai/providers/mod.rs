@@ -2,9 +2,13 @@ mod anthropic_messages;
 mod gemini_generate_content;
 mod openai_compatible;
 mod openai_responses;
+mod generation_transport;
+use generation_transport::{client as generation_client, send as send_generation};
 
 #[cfg(test)]
 pub(crate) mod test_support;
+#[cfg(test)]
+mod cancellation_tests;
 
 use std::time::Duration;
 
@@ -21,6 +25,8 @@ use super::{
     types::{AiModelInfo, AiProtocol, AiProviderId, ResolvedAiService},
 };
 
+pub type CancellationCheck = std::sync::Arc<dyn Fn() -> Result<bool, AiError> + Send + Sync>;
+
 pub struct GenerationInput {
     pub model_id: String,
     pub system: String,
@@ -30,6 +36,7 @@ pub struct GenerationInput {
     pub image_data_urls: Vec<String>,
     pub max_output_tokens: u32,
     pub timeout: Duration,
+    pub cancellation: Option<CancellationCheck>,
 }
 
 #[derive(Clone, Debug)]
@@ -108,10 +115,6 @@ fn client_with_timeout(timeout: Duration) -> Result<Client, ProviderFailure> {
         .connect_timeout(timeout.min(Duration::from_secs(30)))
         .timeout(timeout);
     network::build_client(builder).map_err(|_| ProviderFailure::from(AiError::ProviderUnavailable))
-}
-
-pub(super) fn generation_client(input: &GenerationInput) -> Result<Client, ProviderFailure> {
-    client_with_timeout(input.timeout)
 }
 
 pub(super) fn endpoint(base_url: &str, path: &str) -> String {

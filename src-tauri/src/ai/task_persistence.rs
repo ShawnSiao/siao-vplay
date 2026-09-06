@@ -15,6 +15,8 @@ pub enum AiTaskKind {
     Learning,
 }
 
+use super::active_execution::ApiExecutionLease;
+
 impl AiTaskKind {
     fn table(self) -> &'static str {
         match self {
@@ -49,7 +51,8 @@ pub fn claim_api(
     service: &ResolvedAiService,
     service_revision: u64,
     resume: bool,
-) -> Result<(), AiTaskError> {
+) -> Result<ApiExecutionLease, AiTaskError> {
+    let lease = ApiExecutionLease::acquire(store, task_id)?;
     let expected = if resume {
         "status IN ('failed', 'cancelled', 'interrupted')"
     } else {
@@ -63,7 +66,7 @@ pub fn claim_api(
              provider_request_id = NULL, usage_json = NULL,
              receiver_label = '已选择的 AI 服务',
              status = 'running', stage = 'running', progress = 0.1,
-             error_code = NULL, error_message = NULL,
+             error_code = NULL, error_message = NULL, cancel_requested_at_ms = NULL,
              started_at_ms = ?6, completed_at_ms = NULL, updated_at_ms = ?6
          WHERE id = ?1 AND {expected}",
         kind.table()
@@ -82,7 +85,7 @@ pub fn claim_api(
         ],
     )?;
     if changed == 1 {
-        Ok(())
+        Ok(lease)
     } else {
         Err(super::error::AiError::Validation("AI 任务当前状态不允许开始或重试".to_owned()).into())
     }
@@ -153,7 +156,7 @@ pub fn record_provider_output(
         "UPDATE {}
          SET provider_request_id = ?2, usage_json = ?3,
              progress = 0.85, updated_at_ms = ?4
-         WHERE id = ?1 AND status = 'running'",
+         WHERE id = ?1 AND status = 'running' AND cancel_requested_at_ms IS NULL",
         kind.table()
     );
     let changed = store
@@ -176,8 +179,10 @@ pub fn fail(
 ) {
     let query = format!(
         "UPDATE {}
-         SET status = 'failed', stage = 'failed',
-             error_code = ?2, error_message = ?3,
+         SET status = CASE WHEN cancel_requested_at_ms IS NULL THEN 'failed' ELSE 'cancelled' END,
+             stage = CASE WHEN cancel_requested_at_ms IS NULL THEN 'failed' ELSE 'cancelled' END,
+             error_code = CASE WHEN cancel_requested_at_ms IS NULL THEN ?2 ELSE NULL END,
+             error_message = CASE WHEN cancel_requested_at_ms IS NULL THEN ?3 ELSE NULL END,
              provider_request_id = COALESCE(?4, provider_request_id),
              completed_at_ms = ?5, updated_at_ms = ?5
          WHERE id = ?1 AND status IN ('queued', 'running', 'validating')",
@@ -211,6 +216,62 @@ fn now_ms() -> Result<i64, crate::store::StoreError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn retry_waits_for_the_previous_api_execution_to_release_ownership() {
+        use crate::ai::types::{AiProtocol, AiProviderId};
+        let fixture = crate::understanding::test_fixture::Fixture::new();
+        let task = fixture.prepare_with_options(crate::summary::PromptSelection::default(), false);
+        fixture
+            .store
+            .connect()
+            .unwrap()
+            .execute(
+                "UPDATE explanation_tasks SET status = 'queued' WHERE id = ?1",
+                [&task.id],
+            )
+            .unwrap();
+        let service = ResolvedAiService {
+            service_config_id: Some("test".into()),
+            provider_id: AiProviderId::Openai,
+            protocol: AiProtocol::OpenaiResponses,
+            base_url: "https://example.invalid".into(),
+            model_id: Some("test".into()),
+            api_key: "unused-test-key".into(),
+        };
+        let first = claim_api(
+            &fixture.store,
+            AiTaskKind::Explanation,
+            &task.id,
+            &service,
+            1,
+            false,
+        )
+        .unwrap();
+        fixture.store.connect().unwrap().execute("UPDATE explanation_tasks SET status = 'cancelled', cancel_requested_at_ms = 1 WHERE id = ?1", [&task.id]).unwrap();
+        let restarted_too_early = claim_api(
+            &fixture.store,
+            AiTaskKind::Explanation,
+            &task.id,
+            &service,
+            1,
+            true,
+        );
+        assert!(restarted_too_early.is_err());
+        drop(first);
+        let _retry = claim_api(
+            &fixture.store,
+            AiTaskKind::Explanation,
+            &task.id,
+            &service,
+            1,
+            true,
+        )
+        .unwrap();
+        assert!(
+            !crate::codex_task_state::cancellation_requested(&fixture.store, &task.id).unwrap()
+        );
+    }
     #[test]
     fn prepared_api_task_records_receiver_without_starting_execution() {
         use crate::ai::types::{AiProtocol, AiProviderId, ResolvedAiService};

@@ -3,7 +3,7 @@ use serde_json::{Value, json};
 
 use super::{
     GenerationInput, ProviderFailure, ProviderOutput, checked, client, endpoint, generation_client,
-    json_value, send_error,
+    json_value, send_generation, send_error,
 };
 use crate::ai::{
     error::AiError,
@@ -50,14 +50,12 @@ pub fn generate(
         "max_tokens": input.max_output_tokens,
         "stream": false
     });
-    let response = generation_client(input)?
+    let request = generation_client(input)?
         .post(endpoint(&service.base_url, "/chat/completions"))
         .header(AUTHORIZATION, format!("Bearer {}", service.api_key))
         .header(CONTENT_TYPE, "application/json")
-        .json(&body)
-        .send()
-        .map_err(send_error)?;
-    let (payload, request_id) = json_value(checked(response, AiError::ModelNotFound)?)?;
+        .json(&body);
+    let (payload, request_id) = send_generation(request, input)?;
     let output_text = payload
         .pointer("/choices/0/message/content")
         .and_then(Value::as_str)

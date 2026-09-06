@@ -1309,7 +1309,7 @@ pub(crate) fn set_task_validating(
         "UPDATE learning_tasks
          SET status = 'validating', stage = 'validating', progress = 0.9,
              error_code = NULL, error_message = NULL, updated_at_ms = ?3
-         WHERE id = ?1 AND status = ?2",
+         WHERE id = ?1 AND status = ?2 AND cancel_requested_at_ms IS NULL",
         params![task_id, expected_status, timestamp],
     )?;
     if changed != 1 {

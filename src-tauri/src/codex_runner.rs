@@ -352,11 +352,10 @@ pub fn cancel_learning_task(
     let timestamp = now_ms()?;
     let mut connection = store.connect()?;
     let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
-    let immediate = task.handoff_kind == "api"
-        || matches!(
-            task.status.as_str(),
-            "awaiting_external_result" | "queued" | "validating"
-        );
+    let immediate = matches!(
+        task.status.as_str(),
+        "awaiting_external_result" | "queued" | "validating"
+    );
     let changed = if immediate {
         transaction.execute(
             "UPDATE learning_tasks
@@ -401,11 +400,10 @@ pub fn cancel_explanation_task(
     let timestamp = now_ms()?;
     let mut connection = store.connect()?;
     let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
-    let immediate = task.handoff_kind == "api"
-        || matches!(
-            task.status.as_str(),
-            "awaiting_external_result" | "queued" | "validating"
-        );
+    let immediate = matches!(
+        task.status.as_str(),
+        "awaiting_external_result" | "queued" | "validating"
+    );
     let changed = if immediate {
         transaction.execute(
             "UPDATE explanation_tasks

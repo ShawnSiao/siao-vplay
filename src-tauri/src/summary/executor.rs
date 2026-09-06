@@ -286,10 +286,8 @@ fn run_api(
                 max_output_tokens: budget,
                 image_data_urls: image_data_urls.clone(),
             },
-            || {
-                crate::codex_task_state::cancellation_requested(store, &task.id)
-                    .map_err(|_| crate::ai::AiError::ConfigurationRead)
-            },
+            store,
+            &task.id,
         );
         match response {
             Ok(output) => return Ok(output.output_text),
