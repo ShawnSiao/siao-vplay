@@ -59,7 +59,8 @@ export function AiExecutionConfirm({
         <div className="ai-execution-service">
           <label>
             <span>接收服务</span>
-            <select value={controller.serviceId ?? ""} onChange={(event) => controller.selectService(event.target.value)}>
+            <select value={controller.service?.id ?? ""} onChange={(event) => controller.selectService(event.target.value)}>
+              {!controller.service ? <option value="" disabled>请选择可用服务</option> : null}
               {controller.services.map((service) => <option key={service.id} value={service.id}>{service.displayName}</option>)}
             </select>
           </label>

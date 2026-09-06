@@ -42,6 +42,8 @@ import { LearningResultSection } from "../features/learning/LearningResultSectio
 import { LearningSelectionSection } from "../features/learning/LearningSelectionSection";
 import { selectionKind, splitForSelection } from "../features/learning/learningSelection";
 import { useLocalSpeech } from "../features/learning/useLocalSpeech";
+import { loadLearningDraft, writeLearningDraft, discardLearningDraft } from "../features/learning/learningDraft";
+import { readLearningContextReference } from "../features/learning/learningTaskContext";
 import { useLearningTaskContext } from "../features/learning/useLearningTaskContext";
 import { useLearningContext } from "../features/learning/learningContext";
 
@@ -110,11 +112,16 @@ function LearningPanelSession({
   onJump,
   onPausePlayback,
 }: LearningPanelProps) {
+  const [savedDraft, setSavedDraft] = useState(() => loadLearningDraft(projectId));
+  const [bootstrapAttempt, setBootstrapAttempt] = useState(0);
+  const [bootstrapFailed, setBootstrapFailed] = useState(false);
+  const [draftSaveError, setDraftSaveError] = useState<string | null>(null);
   const learningContext = useLearningContext({ projectId, playbackPositionMs: livePositionMs,
     sourceVersion: liveSourceVersion, translationVersion: liveTranslationVersion,
     sourceSegment: liveSourceSegment, translationSegment: liveTranslationSegment });
   const { playbackPositionMs, sourceVersion, translationVersion, sourceSegment, translationSegment } = learningContext.context;
   const [initialContext] = useState(learningContext.context);
+  const restoreLearningContext = learningContext.restoreContext;
   const handledCompletionRef = useRef<string | null>(null);
   const [resultReadAttempt, setResultReadAttempt] = useState(0);
   const selectableParts = useMemo(
@@ -125,8 +132,8 @@ function LearningPanelSession({
       ),
     [sourceSegment?.text, sourceVersion?.languageCode],
   );
-  const [selectedText, setSelectedText] = useState(sourceSegment?.text ?? "");
-  const executionChoice = useAiExecutionChoice(false);
+  const [selectedText, setSelectedText] = useState(savedDraft.draft?.selectedText ?? sourceSegment?.text ?? "");
+  const executionChoice = useAiExecutionChoice(false, savedDraft.draft?.execution);
   const [runtime, setRuntime] = useState<CodexRuntimeStatus | null>(null);
   const [task, setTask] = useState<LearningTask | null>(null);
   const recovery = useLearningTaskContext(task, learningContext.context, (context, text) => {
@@ -170,7 +177,7 @@ function LearningPanelSession({
       listDictionaryEntries(projectId),
       listLearningCards(projectId),
     ])
-      .then(([nextRuntime, tasks, nextEntries, nextCards]) => {
+      .then(async ([nextRuntime, tasks, nextEntries, nextCards]) => {
         if (!active) {
           return;
         }
@@ -179,8 +186,15 @@ function LearningPanelSession({
         setCards(nextCards);
         const activeTask = tasks.find((item) => activeStatuses.has(item.status))
           ?? (tasks[0] && ["failed", "interrupted"].includes(tasks[0].status) ? tasks[0] : null);
-        if (activeTask) {
+        if (savedDraft.error) throw new Error(savedDraft.error);
+        if (activeTask && (activeStatuses.has(activeTask.status) || !savedDraft.draft || savedDraft.draft.taskId === activeTask.id)) {
           setTask(activeTask);
+        } else if (savedDraft.draft) {
+          const restored = await readLearningContextReference(savedDraft.draft, initialContext);
+          if (!active) return;
+          restoreLearningContext(restored);
+          setSelectedText(savedDraft.draft.selectedText);
+          setEntry(nextEntries.find((item) => item.sourceSegmentId === restored.sourceSegment?.id && item.selectedText === savedDraft.draft?.selectedText) ?? null);
         } else {
           setEntry(
             nextEntries.find(
@@ -195,6 +209,7 @@ function LearningPanelSession({
       .catch((cause: unknown) => {
         if (active) {
           setError(commandError(cause).message);
+          setBootstrapFailed(true);
         }
       })
       .finally(() => {
@@ -205,7 +220,7 @@ function LearningPanelSession({
     return () => {
       active = false;
     };
-  }, [projectId, initialContext]);
+  }, [projectId, initialContext, savedDraft, bootstrapAttempt, restoreLearningContext]);
 
   useEffect(() => {
     if (
@@ -289,6 +304,19 @@ function LearningPanelSession({
       });
     return () => { active = false; };
   }, [task, resultReadAttempt]);
+
+  useEffect(() => {
+    if (loading || bootstrapFailed || recovery.blocked || executionChoice.loading) return;
+    let active = true;
+    try {
+      writeLearningDraft(learningContext.context, selectedText, task?.id ?? null, {
+        kind: executionChoice.kind, serviceId: executionChoice.serviceId, modelId: executionChoice.modelId,
+      });
+      queueMicrotask(() => { if (active) setDraftSaveError(null); });
+    } catch (cause) { queueMicrotask(() => { if (active) setDraftSaveError(commandError(cause).message); }); }
+    return () => { active = false; };
+  }, [loading, bootstrapFailed, recovery.blocked, executionChoice.loading, executionChoice.kind,
+    executionChoice.serviceId, executionChoice.modelId, learningContext.context, selectedText, task?.id]);
 
   const selectText = (value: string) => {
     if (operation || (task && activeStatuses.has(task.status))) return;
@@ -576,6 +604,7 @@ function LearningPanelSession({
               }}>学习当前台词</button>
           </div>
         ) : null}
+        {draftSaveError ? <p role="alert">当前窗口无法暂存学习输入，关闭或重新准备播放前请复制保留。{draftSaveError}</p> : null}
         {error ? (
           <div className="learning-error" role="alert">
             {error}
@@ -586,6 +615,15 @@ function LearningPanelSession({
           <div className="learning-loading" role="status">
             <span className="spinner"></span>
             <span>正在读取学习记录</span>
+          </div>
+        ) : bootstrapFailed ? (
+          <div className="learning-empty">
+            <button className="button quiet small" type="button" onClick={() => { setLoading(true); setBootstrapFailed(false); setError(null); setBootstrapAttempt((value) => value + 1); }}>重新读取学习记录</button>
+            {savedDraft.draft || savedDraft.error ? <button className="button quiet small" type="button" onClick={() => {
+              if (!window.confirm("放弃当前窗口保存的学习草稿，改为学习当前台词？")) return;
+              try { discardLearningDraft(projectId); setLoading(true); setBootstrapFailed(false); setError(null); setSavedDraft({ draft: null, error: null }); setSelectedText(liveSourceSegment?.text ?? ""); }
+              catch (cause) { setError(commandError(cause).message); }
+            }}>放弃无法恢复的草稿</button> : null}
           </div>
         ) : recovery.blocked ? (
           <div className="learning-empty">

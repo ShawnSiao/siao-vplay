@@ -49,11 +49,13 @@ function usableServices(settings: AiServiceSettings | null): AiServiceSummary[] 
   ) ?? [];
 }
 
-export function useAiExecutionChoice(allowFrames: boolean) {
+export type AiExecutionChoiceDraft = { kind: AiExecutionChoiceKind; serviceId: string | null; modelId: string };
+export function useAiExecutionChoice(allowFrames: boolean, initialChoice?: AiExecutionChoiceDraft) {
+  const [restoredChoice] = useState(initialChoice);
   const [settings, setSettings] = useState<AiServiceSettings | null>(null);
-  const [kind, setKindState] = useState<AiExecutionChoiceKind>("codex");
-  const [serviceId, setServiceId] = useState<string | null>(null);
-  const [modelId, setModelId] = useState("");
+  const [kind, setKindState] = useState<AiExecutionChoiceKind>(restoredChoice?.kind ?? "codex");
+  const [serviceId, setServiceId] = useState<string | null>(restoredChoice?.serviceId ?? null);
+  const [modelId, setModelId] = useState(restoredChoice?.modelId ?? "");
   const [frames, setFrames] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -65,7 +67,7 @@ export function useAiExecutionChoice(allowFrames: boolean) {
         if (!active) return;
         setSettings(next);
         const preferred = next.services.find((service) => service.id === next.defaultServiceId);
-        if (preferred?.credentialState === "stored" && preferred.modelId) {
+        if (!restoredChoice && preferred?.credentialState === "stored" && preferred.modelId) {
           setKindState("api");
           setServiceId(preferred.id);
           setModelId(preferred.modelId);
@@ -79,10 +81,10 @@ export function useAiExecutionChoice(allowFrames: boolean) {
         if (active) setLoading(false);
       });
     return () => { active = false; };
-  }, []);
+  }, [restoredChoice]);
 
   const services = useMemo(() => usableServices(settings), [settings]);
-  const service = services.find((item) => item.id === serviceId) ?? services[0] ?? null;
+  const service = services.find((item) => item.id === serviceId) ?? (serviceId === null ? services[0] ?? null : null);
 
   const setKind = useCallback((nextKind: AiExecutionChoiceKind) => {
     setKindState(nextKind);
@@ -136,7 +138,7 @@ export function useAiExecutionChoice(allowFrames: boolean) {
     services,
     service,
     kind,
-    serviceId: service?.id ?? null,
+    serviceId: serviceId ?? service?.id ?? null,
     modelId,
     frames,
     loading,

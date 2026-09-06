@@ -68,3 +68,21 @@ describe("useAiExecutionChoice", () => {
     expect(result.current.error).toBe("请求超时");
   });
 });
+
+
+it("restores a manual draft without replacing it with the default API", async () => {
+  gatewayMocks.getAiServiceSettings.mockResolvedValue(settings);
+  const { result } = renderHook(() => useAiExecutionChoice(false, { kind: "manual", serviceId: null, modelId: "" }));
+  await waitFor(() => expect(result.current.loading).toBe(false));
+  expect(result.current.kind).toBe("manual");
+  expect(result.current.frames).toBe(false);
+});
+it("requires a new choice when a draft's saved service is no longer available", async () => {
+  gatewayMocks.getAiServiceSettings.mockResolvedValue(settings);
+  const { result } = renderHook(() => useAiExecutionChoice(false, { kind: "api", serviceId: "removed", modelId: "saved-model" }));
+  await waitFor(() => expect(result.current.loading).toBe(false));
+  expect(result.current.service).toBeNull();
+  expect(result.current.serviceId).toBe("removed");
+  expect(result.current.execution).toBeNull();
+  await expect(result.current.preview()).rejects.toThrow("选择");
+});

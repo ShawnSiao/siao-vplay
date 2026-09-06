@@ -751,6 +751,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   dispatchMocks.previewTaskDispatch.mockImplementation(async (kind) => taskDispatchFixture(await (kind === "explanation" ? desktopMocks.prepareExplanationTask : desktopMocks.prepareLearningTask).mock.results.at(-1)!.value));
   window.localStorage.clear();
+  window.sessionStorage.clear();
   libraryGatewayMocks.listLibrarySection.mockResolvedValue({
     items: [],
     totalCount: 0,
@@ -2216,6 +2217,23 @@ describe("App", () => {
     expect(
       screen.getByAltText("待っていたの？ 的场景截图"),
     ).toBeInTheDocument();
+  });
+
+  it("keeps learning input through automatic compatibility preparation", async () => {
+    const captionProject = { ...project, playbackState: { ...project.playbackState, positionMs: 500 } };
+    desktopMocks.markProjectOpened.mockResolvedValue(captionProject);
+    desktopMocks.listSubtitleVersions.mockResolvedValue([subtitleVersion, translatedVersion]);
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: /继续播放/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "学习" }));
+    const input = await screen.findByRole("textbox", { name: "要查询的原文" });
+    fireEvent.change(input, { target: { value: "未发送的修改" } });
+    const video = screen.getByLabelText("视频画面，单击播放或暂停");
+    desktopMocks.prepareProjectMedia.mockResolvedValue({ ...preparation, playbackPath: "W:/fixture-proxy.mp4", playbackSourceKind: "proxy" });
+    fireEvent.error(video);
+    await waitFor(() => expect(desktopMocks.prepareProjectMedia).toHaveBeenCalledWith(project.id, true, expect.any(String)));
+    await waitFor(() => expect(screen.getByLabelText("视频画面，单击播放或暂停")).not.toBe(video));
+    await waitFor(() => expect(screen.getByRole("textbox", { name: "要查询的原文" })).toHaveValue("未发送的修改"));
   });
 
   it("opens the local import dialog with Ctrl+O", async () => {
