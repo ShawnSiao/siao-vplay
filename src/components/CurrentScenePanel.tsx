@@ -110,6 +110,8 @@ export function CurrentScenePanel({
   const [copyNotice, setCopyNotice] = useState<string | null>(null);
   const [resultPath, setResultPath] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [bootstrapFailed, setBootstrapFailed] = useState(false);
+  const [bootstrapAttempt, setBootstrapAttempt] = useState(0);
   const [operation, setOperation] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const handlePromptError = useCallback((cause: unknown) => {
@@ -150,6 +152,7 @@ export function CurrentScenePanel({
       })
       .catch((cause: unknown) => {
         if (active) {
+          setBootstrapFailed(true);
           setError(commandError(cause).message);
         }
       })
@@ -161,7 +164,7 @@ export function CurrentScenePanel({
     return () => {
       active = false;
     };
-  }, [projectId]);
+  }, [projectId, bootstrapAttempt]);
 
   useEffect(() => {
     if (
@@ -480,6 +483,15 @@ export function CurrentScenePanel({
           <div className="understanding-loading" role="status">
             <span className="spinner"></span>
             <span>正在读取此前的场景理解</span>
+          </div>
+        ) : bootstrapFailed ? (
+          <div className="understanding-empty">
+            <strong>此前的场景理解尚未读取完成</strong>
+            <p>重新读取后可恢复原有任务和结果。</p>
+            <button className="button quiet small" type="button" onClick={() => {
+              setLoading(true); setBootstrapFailed(false); setError(null);
+              setBootstrapAttempt((value) => value + 1);
+            }}>重新读取场景理解</button>
           </div>
         ) : visibleExplanation ? (
           <UnderstandingResultView
