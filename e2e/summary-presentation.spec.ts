@@ -40,3 +40,25 @@ for (const width of [960, 1440]) {
     expect(await panel.evaluate((node) => node.scrollWidth <= node.clientWidth + 1)).toBe(true);
   });
 }
+
+
+for (const zoom of [1, 1.1, 1.25, 1.5]) {
+  test(`summary progress text fits a narrow drawer at reduced layout viewport for scale ${zoom}`, async ({ page }) => {
+    const viewport = { width: Math.floor(960 / zoom), height: Math.floor(640 / zoom) };
+    await page.setViewportSize(viewport);
+    await page.goto("/e2e/player.html?summary=progress&drawer");
+    const drawer = await page.locator(".player-drawer").boundingBox();
+    expect(drawer!.x).toBeGreaterThanOrEqual(0);
+    expect(drawer!.x + drawer!.width).toBeLessThanOrEqual(viewport.width + 1);
+    await expect(page.getByText("已完成 3 / 7 段")).toBeVisible();
+    if (process.env.SIAOVPLAY_DESIGN_CAPTURE_DIR) await page.screenshot({ path: join(process.env.SIAOVPLAY_DESIGN_CAPTURE_DIR, `summary-progress-reading-${zoom}.png`) });
+    const texts = await page.locator(".summary-intro p, .summary-progress-card small, .summary-chunk-list li").evaluateAll((elements) => elements.map((element) => ({
+      text: element.textContent, size: parseFloat(getComputedStyle(element).fontSize), overflow: element.scrollWidth > element.clientWidth + 1,
+    })));
+    expect(texts.length).toBeGreaterThan(5);
+    expect(texts.filter((item) => item.size < 12 || item.overflow)).toEqual([]);
+    await page.getByRole("button", { name: "取消总结", exact: true }).focus();
+    await expect(page.getByRole("button", { name: "取消总结", exact: true })).toBeFocused();
+    expect(await page.locator(".video-summary-panel").evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
+  });
+}
