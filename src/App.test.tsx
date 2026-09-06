@@ -1,4 +1,4 @@
-import { youtubePreview } from "./test-fixtures/publicVideo";
+import { youtubePreview, directVideoFixture } from "./test-fixtures/publicVideo";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -13,7 +13,6 @@ import type {
   LocalResourceStatus,
   MediaPreparation,
   Project,
-  RemoteMediaPreview,
   SubtitleBurnJob,
   SubtitleExport,
   SubtitleImportPreview,
@@ -478,26 +477,7 @@ const preparation: MediaPreparation = {
   reusedProxy: false,
 };
 
-const remotePreview: RemoteMediaPreview = {
-  originalUrl: "https://media.example.com/rain-platform.mp4",
-  finalUrl: "https://cdn.example.com/rain-platform.mp4",
-  displayName: "rain-platform.mp4",
-  mediaKind: "direct_file",
-  contentType: "video/mp4",
-  contentLength: 12_500_000,
-  previewToken: "c".repeat(64),
-};
-
-const remoteProject: Project = {
-  ...project,
-  id: "171f95a8-938c-4d0c-887b-e4c626f27c70",
-  mediaSource: {
-    ...project.mediaSource,
-    id: "29645135-bcb4-4f56-b4c7-3ec1bf59cd28",
-    locator: "W:\\SiaoVPlay\\app-data\\remote-media\\import-1\\source.mp4",
-    originUrl: remotePreview.originalUrl,
-  },
-};
+const { remotePreview, remoteProject } = directVideoFixture(project);
 
 const subtitlePreview: SubtitleImportPreview = {
   format: "srt",
@@ -1336,6 +1316,18 @@ describe("App", () => {
     fireEvent.click((await screen.findAllByRole("button", { name: "返回媒体库" }))[0]);
     await act(async () => { release(project); });
     expect(desktopMocks.prepareProjectMedia).not.toHaveBeenCalled();
+  });
+
+  it("ignores an earlier project lookup after a later open request succeeds", async () => {
+    let release!: (value: Project) => void;
+    desktopMocks.getProject.mockReturnValueOnce(new Promise<Project>((resolve) => { release = resolve; }));
+    render(<App />);
+    const open = await screen.findByRole("button", { name: "打开最近观看的 雨站台" });
+    fireEvent.click(open);
+    fireEvent.click(open);
+    await waitFor(() => expect(desktopMocks.prepareProjectMedia).toHaveBeenCalledTimes(1));
+    await act(async () => { release(project); });
+    expect(desktopMocks.prepareProjectMedia).toHaveBeenCalledTimes(1);
   });
 
   it("prepares a project before opening the player", async () => {

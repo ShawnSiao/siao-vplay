@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { useOpeningIntent, type IsCurrentOpening } from "./features/playback/useOpeningIntent";
+import { useLibrarySearchOpening } from "./features/library/useLibrarySearchOpening";
 import { SummaryActivityMenu } from "./features/summary/SummaryActivityMenu";
 import { Dialog } from "./components/Dialog";
 import { AppToast, type ToastNotice } from "./components/AppToast";
@@ -54,7 +56,6 @@ import type {
   TranscriptionJob,
   TranslationTask,
   LibraryMediaSummary,
-  LibrarySearchResult,
   EpisodeReference,
 } from "./types";
 
@@ -112,6 +113,7 @@ export default function App() {
   const screen = shellController.state.activeView;
   const setScreen = shellController.setActiveView;
   const operationTokenRef = useRef(0);
+  const openingIntent = useOpeningIntent();
   const [sessionId, setSessionId] = useState(0);
   const startupMediaHandledRef = useRef(false);
   const externalResultScanRef = useRef(false);
@@ -241,12 +243,15 @@ export default function App() {
       label: string,
       resume: () => Promise<void> | void,
       profileId?: "fast" | "standard",
+      isCurrent: IsCurrentOpening = () => true,
     ) => {
+      if (!isCurrent()) return;
       if (!isDesktopApp) {
         await resume();
         return;
       }
       const currentStatus = await refreshLocalResources();
+      if (!isCurrent()) return;
       const capability = currentStatus.capabilities.find(
         (item) => item.id === capabilityId,
       );
@@ -340,7 +345,10 @@ export default function App() {
       project: Project,
       shouldForceProxy: boolean,
       nextEpisodeContext: EpisodePlaybackContext | null,
+      isCurrent: IsCurrentOpening = () => true,
     ) => {
+      if (!isCurrent()) return;
+      setBusyMessage(null);
       resetMediaPreparation();
       const token = operationTokenRef.current + 1;
       operationTokenRef.current = token;
@@ -403,21 +411,19 @@ export default function App() {
   );
 
   const prepareAndOpen = useCallback(
-    async (
-      project: Project,
-      shouldForceProxy: boolean,
-      nextEpisodeContext: EpisodePlaybackContext | null,
-    ) => {
-      await requestCapability(
-        "basic_media",
-        `继续播放「${project.title}」`,
-        () => prepareAndOpenReady(project, shouldForceProxy, nextEpisodeContext),
-      );
-    },
-    [prepareAndOpenReady, requestCapability],
+    async (source: Project | (() => Promise<Project>), shouldForceProxy: boolean, context: EpisodePlaybackContext | null) => {
+      await openingIntent.run(async (isCurrent) => {
+        const project = typeof source === "function" ? await source() : source;
+        if (!isCurrent()) return;
+        await requestCapability("basic_media", `继续播放「${project.title}」`,
+          () => prepareAndOpenReady(project, shouldForceProxy, context, isCurrent), undefined, isCurrent);
+      });
+    }, [openingIntent, prepareAndOpenReady, requestCapability],
   );
 
   const returnToLibrary = useCallback(() => {
+    openingIntent.invalidate();
+    setBusyMessage(null);
     operationTokenRef.current += 1;
     setSessionId(operationTokenRef.current);
     setLibrarySection("home");
@@ -433,11 +439,12 @@ export default function App() {
     setRevisionDialogOpen(false);
     setRemoteUrlDialogOpen(false);
     void refreshProjects();
-  }, [refreshProjects, setLibrarySection, setScreen]);
+  }, [openingIntent, refreshProjects, setLibrarySection, setScreen]);
 
   const importMediaPathReady = useCallback(
-    async (mediaPath: string) => {
+    async (mediaPath: string, isCurrent: IsCurrentOpening) => {
       try {
+        if (!isCurrent()) return;
         const existingProject = projects.find(
           (project) =>
             project.mediaSource.locator.toLocaleLowerCase() ===
@@ -450,9 +457,11 @@ export default function App() {
         );
         const project =
           existingProject ?? (await createLocalProject(mediaPath));
+        if (!isCurrent()) return;
         setBusyMessage(null);
-        await prepareAndOpenReady(project, false, null);
+        await prepareAndOpenReady(project, false, null, isCurrent);
       } catch (error) {
+        if (!isCurrent()) return;
         setBusyMessage(null);
         setLibraryError(userFacingCommandError(error, "library"));
       }
@@ -461,12 +470,14 @@ export default function App() {
   );
 
   const importMediaPath = useCallback(
-    async (mediaPath: string) => {
-      await requestCapability("basic_media", "继续打开本地视频", () =>
-        importMediaPathReady(mediaPath),
-      );
-    },
-    [importMediaPathReady, requestCapability],
+    async (source: string | (() => Promise<string | null>)) => {
+      await openingIntent.run(async (isCurrent) => {
+        const path = typeof source === "function" ? await source() : source;
+        if (!path || !isCurrent()) return;
+        await requestCapability("basic_media", "继续打开本地视频",
+          () => importMediaPathReady(path, isCurrent), undefined, isCurrent);
+      });
+    }, [importMediaPathReady, openingIntent, requestCapability],
   );
 
   const importLocalVideo = useCallback(async () => {
@@ -475,11 +486,7 @@ export default function App() {
       return;
     }
     try {
-      const mediaPath = await chooseLocalVideo();
-      if (!mediaPath) {
-        return;
-      }
-      await importMediaPath(mediaPath);
+      await importMediaPath(chooseLocalVideo);
     } catch (error) {
       setBusyMessage(null);
       setLibraryError(userFacingCommandError(error, "library"));
@@ -602,28 +609,32 @@ export default function App() {
     translationDialogOpen,
   ]);
 
-  const relinkProject = useCallback(async (project: Project) => {
-    try {
-      const mediaPath = await chooseLocalVideo();
-      if (!mediaPath) {
-        return;
+  const relinkProject = useCallback(async (source: Project | (() => Promise<Project>)) => {
+    await openingIntent.run(async (isCurrent) => {
+      try {
+        const project = typeof source === "function" ? await source() : source;
+        if (!isCurrent()) return;
+        const mediaPath = await chooseLocalVideo();
+        if (!mediaPath || !isCurrent()) return;
+        setBusyMessage("正在重新关联媒体…");
+        const relinked = await relinkProjectMedia(project.id, mediaPath);
+        if (!isCurrent()) return;
+        setBusyMessage(null);
+        await requestCapability("basic_media", `继续播放「${project.title}」`,
+          () => prepareAndOpenReady(relinked, false, null, isCurrent), undefined, isCurrent);
+      } catch (error) {
+        if (!isCurrent()) return;
+        setBusyMessage(null);
+        setLibraryError(userFacingCommandError(error, "library"));
       }
-      setBusyMessage("正在重新关联媒体…");
-      const relinked = await relinkProjectMedia(project.id, mediaPath);
-      setBusyMessage(null);
-      await prepareAndOpen(relinked, false, null);
-    } catch (error) {
-      setBusyMessage(null);
-      setLibraryError(userFacingCommandError(error, "library"));
-    }
-  }, [prepareAndOpen]);
+    });
+  }, [openingIntent, prepareAndOpenReady, requestCapability]);
 
   const openLibraryMedia = useCallback(
     async (media: LibraryMediaSummary) => {
       try {
-        const project = await getProject(media.projectId);
         await prepareAndOpen(
-          project,
+          () => getProject(media.projectId),
           false,
           media.collectionId
             ? {
@@ -641,8 +652,7 @@ export default function App() {
 
   const relinkLibraryMedia = useCallback(async (media: LibraryMediaSummary) => {
     try {
-      const project = await getProject(media.projectId);
-      await relinkProject(project);
+      await relinkProject(() => getProject(media.projectId));
     } catch (error) {
       setLibraryError(userFacingCommandError(error, "library"));
     }
@@ -658,44 +668,20 @@ export default function App() {
 
   const selectLibrarySection = useCallback(
     (section: Parameters<typeof setLibrarySection>[0]) => {
+      openingIntent.invalidate();
       if (screen !== "library") {
         returnToLibrary();
       }
       setLibrarySection(section);
     },
-    [returnToLibrary, screen, setLibrarySection],
+    [openingIntent, returnToLibrary, screen, setLibrarySection],
   );
 
-  const openLibrarySearchResult = useCallback(
-    (result: LibrarySearchResult) => {
-      setSearchQuery("");
-      if (result.kind === "collection" && result.collectionId) {
-        selectLibrarySection("series");
-        void openCollection(result.collectionId);
-      } else if (result.projectId) {
-        void getProject(result.projectId)
-          .then((project) =>
-            prepareAndOpen(
-              project,
-              false,
-              result.collectionId
-                ? {
-                    collectionId: result.collectionId,
-                    seasonNumber: result.seasonNumber,
-                  }
-                : null,
-            ),
-          )
-          .catch((error: unknown) => setLibraryError(userFacingCommandError(error, "library")));
-      }
-    },
-    [
-      openCollection,
-      prepareAndOpen,
-      setSearchQuery,
-      selectLibrarySection,
-    ],
-  );
+  const reportLibraryError = useCallback((error: unknown) => setLibraryError(userFacingCommandError(error, "library")), []);
+  const openLibrarySearchResult = useLibrarySearchOpening({
+    clearSearch: setSearchQuery, selectSection: selectLibrarySection, openCollection,
+    openProject: prepareAndOpen, onError: reportLibraryError,
+  });
 
   const switchEpisode = useCallback(
     async (episode: EpisodeReference) => {
@@ -703,8 +689,7 @@ export default function App() {
         throw new Error("当前视频不属于可导航的剧集");
       }
       try {
-        const project = await getProject(episode.projectId);
-        await prepareAndOpen(project, false, {
+        await prepareAndOpen(() => getProject(episode.projectId), false, {
           collectionId: episodeContext.collectionId,
           seasonNumber: episode.seasonNumber,
         });
