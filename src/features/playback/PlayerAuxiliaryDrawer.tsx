@@ -98,7 +98,7 @@ export function PlayerAuxiliaryDrawer({
       ) : activeTab === "learn" ? (
         <LearningPanel
           embedded
-          key={`${projectId}:${activeOriginal?.id ?? "no-line"}`}
+          key={projectId}
           projectId={projectId}
           playbackPositionMs={positionMs}
           sourceVersion={originalVersion}

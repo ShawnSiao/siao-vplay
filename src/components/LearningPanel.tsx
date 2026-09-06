@@ -3,6 +3,7 @@ import { executeLearningDispatch, previewTaskDispatch, type TaskDispatchPreview 
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import "../features/learning/learning-speech.css";
+import "../features/learning/learning-context.css";
 
 import {
   cancelLearningTask,
@@ -41,6 +42,7 @@ import { LearningResultSection } from "../features/learning/LearningResultSectio
 import { LearningSelectionSection } from "../features/learning/LearningSelectionSection";
 import { selectionKind, splitForSelection } from "../features/learning/learningSelection";
 import { useLocalSpeech } from "../features/learning/useLocalSpeech";
+import { useLearningContext } from "../features/learning/learningContext";
 
 type LearningPanelProps = {
   projectId: string;
@@ -88,19 +90,27 @@ function fileName(path: string): string {
   return path.split(/[\\/]/).filter(Boolean).at(-1) ?? "result.json";
 }
 
-export function LearningPanel({
+export function LearningPanel(props: LearningPanelProps) {
+  return <LearningPanelSession key={props.projectId} {...props} />;
+}
+
+function LearningPanelSession({
   projectId,
-  playbackPositionMs,
-  sourceVersion,
-  translationVersion,
-  sourceSegment,
-  translationSegment,
+  playbackPositionMs: livePositionMs,
+  sourceVersion: liveSourceVersion,
+  translationVersion: liveTranslationVersion,
+  sourceSegment: liveSourceSegment,
+  translationSegment: liveTranslationSegment,
   onPrepareSubtitles,
   onClose,
   embedded = false,
   onJump,
   onPausePlayback,
 }: LearningPanelProps) {
+  const learningContext = useLearningContext({ projectId, playbackPositionMs: livePositionMs,
+    sourceVersion: liveSourceVersion, translationVersion: liveTranslationVersion,
+    sourceSegment: liveSourceSegment, translationSegment: liveTranslationSegment });
+  const { playbackPositionMs, sourceVersion, translationVersion, sourceSegment, translationSegment } = learningContext.context;
   const handledCompletionRef = useRef<string | null>(null);
   const [resultReadAttempt, setResultReadAttempt] = useState(0);
   const selectableParts = useMemo(
@@ -540,6 +550,19 @@ export function LearningPanel({
       </header> : null}
 
       <div className="learning-scroll">
+        {learningContext.changed && liveSourceVersion && liveSourceSegment ? (
+          <div className="learning-context-notice">
+            <span>{sourceSegment ? "已保留正在学习的台词。" : "当前已有可学习的台词。"}</span>
+            <button className="button quiet small" type="button" disabled={loading || busy || Boolean(task && activeStatuses.has(task.status))}
+              onClick={() => {
+                if (selectedText !== (sourceSegment?.text ?? "") && !window.confirm("更换台词会放弃当前未发送的输入，是否继续？")) return;
+                speech.stop();
+                resetQuery();
+                setSelectedText(liveSourceSegment.text);
+                learningContext.selectCurrent();
+              }}>学习当前台词</button>
+          </div>
+        ) : null}
         {error ? (
           <div className="learning-error" role="alert">
             {error}
