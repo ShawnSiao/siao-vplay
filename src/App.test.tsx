@@ -2377,6 +2377,9 @@ describe("App", () => {
         expect.any(String),
       ),
     );
+    await waitFor(() => expect(desktopMocks.openLocalProject).toHaveBeenCalledWith(project.mediaSource.locator));
+    expect(desktopMocks.chooseLocalVideo).toHaveBeenCalledTimes(1);
+    expect(desktopMocks.openLocalProject).toHaveBeenCalledTimes(1);
     await waitFor(() =>
       expect(desktopMocks.prepareProjectMedia).toHaveBeenCalledWith(
         project.id,
