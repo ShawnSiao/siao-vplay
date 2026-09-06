@@ -32,16 +32,45 @@ pub(crate) struct RequestCoordinator {
 }
 
 impl RequestCoordinator {
-    pub(crate) fn acquire_interactive(&self, lane: impl Into<String>) -> RequestPermit {
+    pub(crate) fn acquire_interactive_cancellable<E>(
+        &self,
+        lane: impl Into<String>,
+        cancelled: impl FnMut() -> Result<bool, E>,
+    ) -> Result<Option<RequestPermit>, E> {
+        self.acquire_cancellable(lane.into(), RequestClass::Interactive, cancelled)
+    }
+
+    pub(crate) fn acquire_summary_cancellable<E>(
+        &self,
+        lane: impl Into<String>,
+        cancelled: impl FnMut() -> Result<bool, E>,
+    ) -> Result<Option<RequestPermit>, E> {
+        self.acquire_cancellable(lane.into(), RequestClass::Summary, cancelled)
+    }
+
+    #[cfg(test)]
+    fn acquire_interactive(&self, lane: impl Into<String>) -> RequestPermit {
         self.acquire(lane.into(), RequestClass::Interactive)
     }
 
-    #[allow(dead_code)] // Used by the chunk executor introduced in Phase 5.
-    pub(crate) fn acquire_summary(&self, lane: impl Into<String>) -> RequestPermit {
+    #[cfg(test)]
+    fn acquire_summary(&self, lane: impl Into<String>) -> RequestPermit {
         self.acquire(lane.into(), RequestClass::Summary)
     }
 
+    #[cfg(test)]
     fn acquire(&self, lane: String, class: RequestClass) -> RequestPermit {
+        self.acquire_cancellable(lane, class, || Ok::<_, std::convert::Infallible>(false))
+            .unwrap()
+            .expect("uncancellable request always receives a permit")
+    }
+
+    fn acquire_cancellable<E>(
+        &self,
+        lane: String,
+        class: RequestClass,
+        mut cancelled: impl FnMut() -> Result<bool, E>,
+    ) -> Result<Option<RequestPermit>, E> {
         let mut state = lock_state(&self.inner);
         if class == RequestClass::Interactive {
             state
@@ -51,6 +80,21 @@ impl RequestCoordinator {
                 .waiting_interactive += 1;
         }
         loop {
+            match cancelled() {
+                Ok(false) => {}
+                stopped => {
+                    if let Some(waiting) = state.lanes.get_mut(&lane) {
+                        if class == RequestClass::Interactive {
+                            waiting.waiting_interactive -= 1;
+                        }
+                        if !waiting.active && waiting.waiting_interactive == 0 {
+                            state.lanes.remove(&lane);
+                        }
+                    }
+                    self.inner.changed.notify_all();
+                    return stopped.map(|_| None);
+                }
+            }
             let lane_state = state.lanes.entry(lane.clone()).or_default();
             let can_start = !lane_state.active
                 && (class == RequestClass::Interactive || lane_state.waiting_interactive == 0);
@@ -59,16 +103,17 @@ impl RequestCoordinator {
                 if class == RequestClass::Interactive {
                     lane_state.waiting_interactive -= 1;
                 }
-                return RequestPermit {
+                return Ok(Some(RequestPermit {
                     inner: self.inner.clone(),
                     lane,
-                };
+                }));
             }
             state = self
                 .inner
                 .changed
-                .wait(state)
-                .unwrap_or_else(|poisoned| poisoned.into_inner());
+                .wait_timeout(state, std::time::Duration::from_millis(50))
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .0;
         }
     }
 
@@ -112,8 +157,13 @@ pub(crate) fn global_request_coordinator() -> &'static RequestCoordinator {
     COORDINATOR.get_or_init(RequestCoordinator::default)
 }
 
-pub(crate) fn acquire_interactive(lane: &str) -> RequestPermit {
-    global_request_coordinator().acquire_interactive(lane)
+pub(crate) fn acquire_interactive<E>(
+    lane: &str,
+    mut check: impl FnMut() -> Result<(), E>,
+) -> Result<RequestPermit, E> {
+    global_request_coordinator()
+        .acquire_interactive_cancellable(lane, || check().map(|_| false))
+        .map(|permit| permit.expect("check returns an error when cancelled"))
 }
 
 #[cfg(test)]
@@ -125,6 +175,32 @@ mod tests {
     };
 
     use super::*;
+
+    #[test]
+    fn cancellation_releases_a_waiting_request_before_the_active_request_finishes() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        let coordinator = RequestCoordinator::default();
+        let first = coordinator.acquire_summary("service");
+        let cancelled = Arc::new(AtomicBool::new(false));
+        let worker_cancelled = cancelled.clone();
+        let worker_coordinator = coordinator.clone();
+        let (sent, received) = mpsc::channel();
+        let worker = thread::spawn(move || {
+            let result = worker_coordinator.acquire_interactive_cancellable("service", || {
+                Ok::<_, ()>(worker_cancelled.load(Ordering::Acquire))
+            });
+            sent.send(result.unwrap().is_none()).unwrap();
+        });
+        while coordinator.waiting_interactive("service") == 0 {
+            thread::yield_now();
+        }
+        cancelled.store(true, Ordering::Release);
+        let stopped_before_release = received.recv_timeout(Duration::from_millis(500));
+        drop(first);
+        worker.join().unwrap();
+        assert_eq!(stopped_before_release, Ok(true));
+        assert_eq!(coordinator.waiting_interactive("service"), 0);
+    }
 
     #[test]
     fn interactive_request_runs_before_the_next_summary_chunk() {

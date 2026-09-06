@@ -21,6 +21,11 @@ pub(crate) fn invoke(
 ) -> Result<String, CodexRunnerError> {
     std::fs::create_dir_all(directory)?;
     let runtime = codex_runner::require_ready_codex()?;
+    let _permit = crate::ai::request_coordinator::global_request_coordinator()
+        .acquire_summary_cancellable("codex", || {
+            crate::codex_task_state::cancellation_requested(store, task_id)
+        })?
+        .ok_or(CodexRunnerError::Cancelled)?;
     let cancellation = AtomicBool::new(false);
     codex_runner::invoke_codex_raw_with_images(
         store,

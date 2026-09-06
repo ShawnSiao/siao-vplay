@@ -826,7 +826,7 @@ fn run_explanation_task(
             dunce::canonicalize(destination).map_err(CodexRunnerError::from)
         })
         .collect::<Result<Vec<_>, CodexRunnerError>>()?;
-    let _request_permit = crate::ai::request_coordinator::acquire_interactive("codex");
+    let _request_permit = crate::ai::request_coordinator::acquire_interactive("codex", || ensure_not_cancelled(store, task_id, cancellation))?;
     let (raw, thread_id) = invoke_codex_raw_with_images(
         store,
         task_id,
@@ -877,7 +877,7 @@ fn run_learning_task(
             .join("runtime")
             .join(format!("run-{}-{}", now_ms()?, Uuid::new_v4().simple()));
     fs::create_dir_all(&attempt_directory)?;
-    let _request_permit = crate::ai::request_coordinator::acquire_interactive("codex");
+    let _request_permit = crate::ai::request_coordinator::acquire_interactive("codex", || ensure_not_cancelled(store, task_id, cancellation))?;
     let (raw, thread_id) = invoke_codex_raw(
         store,
         task_id,

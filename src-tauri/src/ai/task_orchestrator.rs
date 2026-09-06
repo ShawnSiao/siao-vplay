@@ -290,7 +290,9 @@ fn execute_provider(
         .service_config_id
         .as_deref()
         .unwrap_or(&service.base_url);
-    let _request_permit = global_request_coordinator().acquire_interactive(lane);
+    let _request_permit = global_request_coordinator().acquire_interactive_cancellable(lane, ||
+        crate::codex_task_state::cancellation_requested(store, task_id))?
+        .ok_or(super::AiError::Cancelled)?;
     let output = providers::generate(service, &input).map_err(|failure| {
         fail_provider(store, kind, task_id, &failure);
         AiTaskError::from(failure)

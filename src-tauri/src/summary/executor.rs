@@ -72,7 +72,7 @@ pub(crate) fn start_or_resume(
             task.status
         )));
     }
-    repository.set_task_state(task_id, "queued", "queued", task.progress)?;
+    repository.claim_for_execution(task_id)?;
     let worker_store = store.clone();
     let worker_task_id = task_id.to_owned();
     thread::spawn(move || {
@@ -209,6 +209,9 @@ fn run_request(
     prompt: String,
     budget: u32,
 ) -> Result<String, SummaryExecutionError> {
+    if crate::codex_task_state::cancellation_requested(store, &task.id)? {
+        return Err(StoreError::Validation("总结任务已取消".to_owned()).into());
+    }
     match task.execution_kind {
         SummaryExecutionKind::Api => run_api(store, task, chunk_id, images, prompt, budget),
         SummaryExecutionKind::Codex => {
@@ -271,17 +274,23 @@ fn run_api(
         .collect::<Vec<_>>();
     let mut retry = 0;
     loop {
-        let response = summary_provider::generate(SummaryProviderInput {
-            service_config_id: service,
-            service_revision: revision,
-            model_id: model,
-            system: SYSTEM,
-            prompt: prompt.clone(),
-            schema_name: "video_summary",
-            schema: result_schema(),
-            max_output_tokens: budget,
-            image_data_urls: image_data_urls.clone(),
-        });
+        let response = summary_provider::generate(
+            SummaryProviderInput {
+                service_config_id: service,
+                service_revision: revision,
+                model_id: model,
+                system: SYSTEM,
+                prompt: prompt.clone(),
+                schema_name: "video_summary",
+                schema: result_schema(),
+                max_output_tokens: budget,
+                image_data_urls: image_data_urls.clone(),
+            },
+            || {
+                crate::codex_task_state::cancellation_requested(store, &task.id)
+                    .map_err(|_| crate::ai::AiError::ConfigurationRead)
+            },
+        );
         match response {
             Ok(output) => return Ok(output.output_text),
             Err(failure) if retry < retry_delays(&failure).len() => {
@@ -365,32 +374,5 @@ fn resume_manual(store: &ProjectStore, task: &SummaryTask) -> Result<SummaryTask
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::ai::AiError;
-
-    #[test]
-    fn retries_only_transient_provider_failures() {
-        for error in [
-            AiError::Timeout,
-            AiError::RateLimited,
-            AiError::ProviderUnavailable,
-        ] {
-            assert_eq!(
-                retry_delays(&ProviderFailure {
-                    error,
-                    provider_request_id: None
-                })
-                .len(),
-                2
-            );
-        }
-        assert!(
-            retry_delays(&ProviderFailure {
-                error: AiError::Unauthorized,
-                provider_request_id: None
-            })
-            .is_empty()
-        );
-    }
-}
+#[path = "executor_tests.rs"]
+mod tests;
