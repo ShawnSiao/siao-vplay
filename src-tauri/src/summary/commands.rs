@@ -158,3 +158,17 @@ pub fn export_video_summary(
 ) -> Result<SummaryExport, SummaryCommandError> {
     report::export(store.inner(), input).map_err(Into::into)
 }
+
+#[tauri::command]
+pub async fn list_summary_activity(
+    store: State<'_, ProjectStore>,
+) -> Result<Vec<super::activity::SummaryActivity>, SummaryCommandError> {
+    let store = store.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || super::activity::list(&store))
+        .await
+        .map_err(|_| SummaryCommandError {
+            code: "summary_activity_failed",
+            message: "暂时无法读取处理动态".to_owned(),
+        })?
+        .map_err(Into::into)
+}

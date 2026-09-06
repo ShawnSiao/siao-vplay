@@ -278,6 +278,7 @@ pub fn run() {
             summary::commands::cancel_summary_task,
             summary::commands::get_summary_task,
             summary::commands::list_summary_tasks,
+            summary::commands::list_summary_activity,
             summary::commands::get_video_summary,
             summary::commands::list_video_summaries,
             summary::commands::export_video_summary,

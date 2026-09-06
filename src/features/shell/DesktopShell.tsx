@@ -52,6 +52,7 @@ type DesktopShellProps = {
   onReviseSubtitles: () => void;
   onDeliverSubtitles: () => void;
   onOpenSettings: () => void;
+  activityControl?: ReactNode;
   children: ReactNode;
 };
 
@@ -87,6 +88,7 @@ export function DesktopShell({
   onReviseSubtitles,
   onDeliverSubtitles,
   onOpenSettings,
+  activityControl,
   children,
 }: DesktopShellProps) {
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -254,6 +256,7 @@ export function DesktopShell({
             onOpenFolder={onOpenFolder}
             onOpenUrl={onOpenUrl}
           />}
+          {activityControl}
         </div>
         {!playerActive ? <div className="desktop-commandbar-secondary">
           <div className="shell-search-wrap">

@@ -1,3 +1,4 @@
+mod activity;
 pub mod commands;
 
 mod backup;

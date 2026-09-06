@@ -28,7 +28,6 @@ import {
 } from "./playbackPreferences";
 import "./player-feedback.css";
 import "./player-fullscreen.css";
-import { useSummaryCompletionNotice } from "../summary/useSummaryCompletionNotice";
 type PlayerScreenProps = {
   project: Project;
   preparation: MediaPreparation;
@@ -74,7 +73,6 @@ export function PlayerScreen({
   const [switchingEpisode, setSwitchingEpisode] = useState(false);
   const [playerError, setPlayerError] = useState<string | null>(null);
   const [captionsVisible, setCaptionsVisible] = useState(true);
-  useSummaryCompletionNotice(project.id, onNotice);
   const { seekStepSeconds, changeSeekStep } = useSeekStepPreference();
   const {
     subtitleDisplayPreferences,

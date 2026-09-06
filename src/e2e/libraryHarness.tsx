@@ -1,3 +1,4 @@
+import { ActivityPreview } from "./ActivityPreview";
 import { StrictMode, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { LibraryFolderImportDialog } from "../components/LibraryFolderImportDialog";
@@ -11,7 +12,7 @@ import type {
 } from "../features/library/useLibraryController";
 import { DesktopShell } from "../features/shell/DesktopShell";
 import type { LibraryHome, LibraryMediaSummary, Project } from "../types";
-import { emptyLibraryHome } from "./libraryHarnessData";
+import { emptyLibraryHome, offlineRecovery } from "./libraryHarnessData";
 import "../styles.css";
 
 const project: Project = {
@@ -166,33 +167,6 @@ const folderPreview: LibraryFolderImportState = {
   error: null,
 };
 
-const offlineRecovery: LibraryRecoveryState = {
-  stage: "rescan_preview",
-  rootId: "e2e-library-root",
-  rescanPreview: {
-    previewToken: "e2e-rescan-preview",
-    rootId: "e2e-library-root",
-    rootPath: "W:\\Series\\Rain",
-    rootDisplayName: "Rain",
-    collectionId: "e2e-library-collection",
-    rootOffline: true,
-    newCandidates: [],
-    missingItems: [],
-    changedItems: [],
-    availableItemCount: 0,
-    ignoredCount: 0,
-    expiresAtMs: 1_900_000_000_000,
-  },
-  relocationPreview: null,
-  rebuildPreview: null,
-  newItems: [],
-  rebuildCollectionTitle: "",
-  confirmMissing: false,
-  confirmChanged: false,
-  confirmUncertainMatches: false,
-  confirmFingerprintDuplicates: false,
-  error: null,
-};
 export function LibraryHarness() {
   const emptyMode = new URLSearchParams(window.location.search).has("empty");
   const [folderImport, setFolderImport] = useState<LibraryFolderImportState | null>(null); const [section, setSection] = useState<LibrarySection>("home");
@@ -256,6 +230,7 @@ export function LibraryHarness() {
       onSelectLibrarySection={setSection}
       onSearchQueryChange={() => undefined}
       onOpenSearchResult={() => undefined}
+      activityControl={new URLSearchParams(location.search).has("activity") ? <ActivityPreview /> : undefined}
       onOpenFile={() => undefined}
       onOpenFolder={openFolderImport}
       onOpenUrl={() => undefined}

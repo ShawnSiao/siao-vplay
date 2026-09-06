@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { SummaryActivityMenu } from "./features/summary/SummaryActivityMenu";
 import { Dialog } from "./components/Dialog";
 import { AppToast, type ToastNotice } from "./components/AppToast";
 import { LibraryFolderImportDialog } from "./components/LibraryFolderImportDialog";
@@ -1005,6 +1006,7 @@ export default function App() {
         onSelectLibrarySection={selectLibrarySection}
         onSearchQueryChange={setSearchQuery}
         onOpenSearchResult={openLibrarySearchResult}
+        activityControl={<SummaryActivityMenu onNotice={setToast} onOpen={openLibrarySearchResult} />}
         onOpenFile={() => void importLocalVideo()}
         onOpenFolder={() => void importLocalFolder()}
         onOpenUrl={openRemoteUrlImport}
