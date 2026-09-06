@@ -1,4 +1,5 @@
-import { useEffect, useId, useLayoutEffect, useRef } from "react";
+import { useId } from "react";
+import { isTopModal, useModalFocus } from "./useModalFocus";
 
 type DialogProps = {
   title: string;
@@ -15,74 +16,15 @@ export function Dialog({
   onClose,
   actions,
 }: DialogProps) {
-  const dialogRef = useRef<HTMLElement>(null);
-  const onCloseRef = useRef(onClose);
+  const dialogRef = useModalFocus(onClose);
   const titleId = useId();
-
-  useLayoutEffect(() => {
-    onCloseRef.current = onClose;
-  }, [onClose]);
-
-  useEffect(() => {
-    const previouslyFocused =
-      document.activeElement instanceof HTMLElement
-        ? document.activeElement
-        : null;
-    const focusableSelector =
-      'button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), a[href], [tabindex]:not([tabindex="-1"])';
-    const focusableElements = () =>
-      Array.from(
-        dialogRef.current?.querySelectorAll<HTMLElement>(focusableSelector) ??
-          [],
-      ).filter((element) => !element.hasAttribute("hidden"));
-    focusableElements()[0]?.focus();
-
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        event.stopPropagation();
-        onCloseRef.current();
-      } else if (event.key === "Tab") {
-        const focusable = focusableElements();
-        if (focusable.length === 0) {
-          event.preventDefault();
-          dialogRef.current?.focus();
-          return;
-        }
-        const first = focusable[0];
-        const last = focusable[focusable.length - 1];
-        if (
-          event.shiftKey &&
-          (document.activeElement === first ||
-            !dialogRef.current?.contains(document.activeElement))
-        ) {
-          event.preventDefault();
-          last.focus();
-        } else if (
-          !event.shiftKey &&
-          (document.activeElement === last ||
-            !dialogRef.current?.contains(document.activeElement))
-        ) {
-          event.preventDefault();
-          first.focus();
-        }
-      }
-    };
-    window.addEventListener("keydown", onKeyDown, true);
-    return () => {
-      window.removeEventListener("keydown", onKeyDown, true);
-      if (previouslyFocused?.isConnected) {
-        previouslyFocused.focus();
-      }
-    };
-  }, []);
 
   return (
     <div
       className="dialog-backdrop"
       role="presentation"
       onMouseDown={(event) => {
-        if (event.target === event.currentTarget) {
+        if (event.target === event.currentTarget && isTopModal(dialogRef.current)) {
           onClose();
         }
       }}

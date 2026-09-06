@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { isTopModal, useModalFocus } from "../../components/useModalFocus";
+import { useCallback, useEffect, useId, useState } from "react";
 
 import type { PendingResourceAction } from "../../components/LocalResourcesDialog";
 import type { LocalResourcesController } from "../resources/useLocalResources";
@@ -38,7 +39,7 @@ export function EnvironmentSettingsDialog({
   const [codexRefreshKey, setCodexRefreshKey] = useState(0);
   const controller = useEnvironmentSettings(true, previewMode);
   const storage = useStorageSettings(tab === "storage", previewMode, onNotice);
-  const dialogRef = useRef<HTMLElement>(null);
+
   const titleId = useId();
   const requestClose = useCallback(() => {
     if (controller.operation || storage.operation) return;
@@ -46,43 +47,7 @@ export function EnvironmentSettingsDialog({
         !window.confirm("还有未保存的 AI 服务配置。确定放弃这些修改并关闭？选择取消可继续编辑和保存。")) return;
     onClose();
   }, [controller.dirtySelectionIds, controller.operation, onClose, storage.operation]);
-  const requestCloseRef = useRef(requestClose);
-  useLayoutEffect(() => { requestCloseRef.current = requestClose; }, [requestClose]);
-
-  useEffect(() => {
-    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const focusable = () => {
-      const scope = dialogRef.current?.querySelector(".storage-migration-dialog") ?? dialogRef.current;
-      return Array.from(scope?.querySelectorAll<HTMLElement>(
-      'button:not(:disabled), input:not(:disabled), select:not(:disabled), summary, [tabindex]:not([tabindex="-1"])',
-      ) ?? []);
-    };
-    focusable()[0]?.focus();
-    const keydown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        if (dialogRef.current?.querySelector(".storage-migration-dialog")) return;
-        event.preventDefault();
-        event.stopPropagation();
-        requestCloseRef.current();
-      } else if (event.key === "Tab") {
-        const items = focusable();
-        const first = items[0];
-        const last = items.at(-1);
-        if (event.shiftKey && document.activeElement === first) {
-          event.preventDefault();
-          last?.focus();
-        } else if (!event.shiftKey && document.activeElement === last) {
-          event.preventDefault();
-          first?.focus();
-        }
-      }
-    };
-    window.addEventListener("keydown", keydown, true);
-    return () => {
-      window.removeEventListener("keydown", keydown, true);
-      if (previous?.isConnected) previous.focus();
-    };
-  }, []);
+  const dialogRef = useModalFocus(requestClose);
 
   useEffect(() => listenEnvironmentSettings(setTab), []);
 
@@ -104,7 +69,7 @@ export function EnvironmentSettingsDialog({
 
   return (
     <div className="environment-settings-scrim" role="presentation" onMouseDown={(event) => {
-      if (event.target === event.currentTarget) requestClose();
+      if (event.target === event.currentTarget && isTopModal(dialogRef.current)) requestClose();
     }}>
       <section ref={dialogRef} className="environment-settings-dialog" role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1}>
         <header className="environment-settings-header">

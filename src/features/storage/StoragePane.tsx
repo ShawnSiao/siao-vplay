@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useModalFocus } from "../../components/useModalFocus";
 
 import type { StorageArea, StorageLocationKind, StorageMigrationMode } from "./types";
 import type { StorageSettingsController } from "./useStorageSettings";
@@ -64,6 +65,7 @@ function MigrationDialog({
   const [mode, setMode] = useState<StorageMigrationMode>(existing?.mode ?? "copy");
   const task = controller.migration?.id === taskId ? controller.migration : existing?.id === taskId ? existing : null;
   const active = task?.status === "running";
+  const dialogRef = useModalFocus(() => { if (!active) onClose(); });
   const terminal = task && ["completed", "restart_required"].includes(task.status);
   const resumable = task && ["interrupted", "cancelled", "failed"].includes(task.status);
   const progress = task?.bytesToCopy
@@ -84,7 +86,7 @@ function MigrationDialog({
 
   return (
     <div className="storage-modal-scrim" role="presentation">
-      <section className="storage-migration-dialog" role="dialog" aria-modal="true" aria-label={`迁移${areaLabels[area]}`} onKeyDown={(event) => { if (event.key === "Escape" && !active) { event.preventDefault(); onClose(); } }}>
+      <section ref={dialogRef} tabIndex={-1} className="storage-migration-dialog" role="dialog" aria-modal="true" aria-label={`迁移${areaLabels[area]}`}>
         <header><h2>迁移{areaLabels[area]}</h2><button type="button" aria-label="关闭迁移窗口" autoFocus disabled={active} onClick={onClose}>×</button></header>
         <div className="storage-migration-body">
           {!task ? (
