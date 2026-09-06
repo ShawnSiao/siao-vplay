@@ -18,6 +18,10 @@ mod learning;
 mod library;
 mod local_resources;
 mod media;
+mod process_group;
+mod cancellable_process;
+mod preparation;
+mod preparation_commands;
 mod public_connect_proxy;
 mod public_video_source;
 mod remote_media;
@@ -293,7 +297,9 @@ pub fn run() {
             commands::set_preferred_model,
             commands::download_runtime_component,
             commands::inspect_project_media,
-            commands::prepare_project_media,
+            preparation_commands::prepare_project_media,
+            preparation_commands::get_media_preparation,
+            preparation_commands::cancel_media_preparation,
             commands::ensure_project_poster,
             commands::inspect_subtitle_file,
             commands::import_subtitle_file,

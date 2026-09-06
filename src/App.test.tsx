@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type {
@@ -1340,6 +1340,16 @@ describe("App", () => {
     );
   });
 
+  it("does not start preparation after the opening session has been left", async () => {
+    let release!: (value: Project) => void;
+    desktopMocks.markProjectOpened.mockReturnValueOnce(new Promise<Project>((resolve) => { release = resolve; }));
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "打开最近观看的 雨站台" }));
+    fireEvent.click((await screen.findAllByRole("button", { name: "返回媒体库" }))[0]);
+    await act(async () => { release(project); });
+    expect(desktopMocks.prepareProjectMedia).not.toHaveBeenCalled();
+  });
+
   it("prepares a project before opening the player", async () => {
     render(<App />);
     fireEvent.click(
@@ -1350,7 +1360,7 @@ describe("App", () => {
     expect(desktopMocks.markProjectOpened).toHaveBeenCalledWith(project.id);
     expect(desktopMocks.prepareProjectMedia).toHaveBeenCalledWith(
       project.id,
-      false,
+      false, expect.any(String),
     );
     expect(screen.queryByText(/H264\s*\/ AAC/)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "进入全屏" })).toBeInTheDocument();
@@ -1517,7 +1527,7 @@ describe("App", () => {
       expect(libraryGatewayMocks.searchLibrary).toHaveBeenCalledWith("雨站台"),
     );
     await waitFor(() =>
-      expect(desktopMocks.prepareProjectMedia).toHaveBeenCalledWith(project.id, false),
+      expect(desktopMocks.prepareProjectMedia).toHaveBeenCalledWith(project.id, false, expect.any(String)),
     );
   });
 
@@ -2270,7 +2280,7 @@ describe("App", () => {
     );
     expect(desktopMocks.prepareProjectMedia).toHaveBeenCalledWith(
       project.id,
-      false,
+      false, expect.any(String),
     );
   });
 
@@ -2383,7 +2393,7 @@ describe("App", () => {
     await waitFor(() =>
       expect(desktopMocks.prepareProjectMedia).toHaveBeenCalledWith(
         project.id,
-        false,
+        false, expect.any(String),
       ),
     );
   });
@@ -2417,7 +2427,7 @@ describe("App", () => {
     await waitFor(() =>
       expect(desktopMocks.prepareProjectMedia).toHaveBeenCalledWith(
         remoteProject.id,
-        false,
+        false, expect.any(String),
       ),
     );
   });

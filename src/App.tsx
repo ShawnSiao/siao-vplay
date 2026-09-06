@@ -6,6 +6,7 @@ import { LibraryFolderImportDialog } from "./components/LibraryFolderImportDialo
 import { LibraryRecoveryDialog } from "./components/LibraryRecoveryDialog";
 import { LibraryScreen } from "./components/LibraryScreen";
 import { PlayerScreen } from "./features/playback/PlayerScreen";
+import { useMediaPreparation } from "./features/playback/useMediaPreparation";
 import { usePlaybackPersistence } from "./features/playback/usePlaybackPersistence";
 import { useLibraryController } from "./features/library/useLibraryController";
 import { usePosterQueue } from "./features/library/usePosterQueue";
@@ -39,7 +40,6 @@ import {
   listProjects,
   listSubtitleVersions,
   markProjectOpened,
-  prepareProjectMedia,
   reconcileExternalAgentResults,
   relinkProjectMedia,
   setMainWindowMediaTitle,
@@ -66,6 +66,9 @@ type PendingResourceResume = PendingResourceAction & { resume: () => Promise<voi
 
 export default function App() {
   const shellController = useShellController();
+  const mediaPreparation = useMediaPreparation();
+  const startMediaPreparation = mediaPreparation.start;
+  const resetMediaPreparation = mediaPreparation.reset;
   const localResources = useLocalResources();
   const localResourceLoading = localResources.loading;
   const localResourceStatus = localResources.status;
@@ -337,6 +340,7 @@ export default function App() {
       shouldForceProxy: boolean,
       nextEpisodeContext: EpisodePlaybackContext | null,
     ) => {
+      resetMediaPreparation();
       const token = operationTokenRef.current + 1;
       operationTokenRef.current = token;
       setSessionId(token);
@@ -356,7 +360,11 @@ export default function App() {
         const openedProject = shouldForceProxy
           ? project
           : await markProjectOpened(project.id);
-        const result = await prepareProjectMedia(
+        if (operationTokenRef.current !== token) {
+          window.clearTimeout(preparationTimer);
+          return;
+        }
+        const result = await startMediaPreparation(
           openedProject.id,
           shouldForceProxy,
         );
@@ -390,7 +398,7 @@ export default function App() {
         setPreparationError(userFacingCommandError(error, "playback"));
       }
     },
-    [refreshProjects, setScreen],
+    [refreshProjects, setScreen, startMediaPreparation, resetMediaPreparation],
   );
 
   const prepareAndOpen = useCallback(
@@ -1061,6 +1069,15 @@ export default function App() {
             project={activeProject}
             forceProxy={forceProxy}
             error={preparationError}
+            progress={mediaPreparation.progress}
+            cancelling={mediaPreparation.cancelling}
+            canCancel={mediaPreparation.canCancel}
+            onCancel={() => {
+              const token = operationTokenRef.current;
+              void mediaPreparation.cancel().then(() => {
+                if (operationTokenRef.current === token) returnToLibrary();
+              }).catch((error: unknown) => setToast(userFacingCommandError(error, "playback")));
+            }}
             onRetry={() =>
               void prepareAndOpen(activeProject, forceProxy, episodeContext)
             }

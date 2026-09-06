@@ -1,3 +1,4 @@
+import { RecoveryPreview } from "./RecoveryPreview";
 import { StrictMode, useState } from "react";
 import { createRoot } from "react-dom/client";
 
@@ -59,6 +60,6 @@ const root = document.getElementById("root");
 if (!root) throw new Error("Subtitle translation test root is missing.");
 createRoot(root).render(
   <StrictMode>
-    <SubtitleTranslationHarness />
+    {new URLSearchParams(location.search).has("recovery") ? <RecoveryPreview preparation={new URLSearchParams(location.search).get("recovery") === "preparation"} /> : <SubtitleTranslationHarness />}
   </StrictMode>,
 );

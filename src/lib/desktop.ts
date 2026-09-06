@@ -1,3 +1,4 @@
+export { getMediaPreparation, cancelMediaPreparation } from "./mediaPreparationGateway";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
@@ -697,9 +698,11 @@ export async function markProjectOpened(projectId: string): Promise<Project> {
 export async function prepareProjectMedia(
   projectId: string,
   forceProxy: boolean,
+  requestId?: string,
 ): Promise<MediaPreparation> {
   return invoke<MediaPreparation>("prepare_project_media", {
     input: { projectId, forceProxy },
+    requestId,
   });
 }
 

@@ -1,22 +1,37 @@
 import { useEffect, useState } from "react";
 
+import type { MediaPreparationProgress } from "../lib/mediaPreparationGateway";
+
 import type { Project } from "../types";
 
 type PreparationScreenProps = {
   project: Project;
   forceProxy: boolean;
   error: string | null;
+  progress: MediaPreparationProgress | null;
+  cancelling: boolean;
+  canCancel: boolean;
+  onCancel: () => void;
   onRetry: () => void;
   onBack: () => void;
 };
 
 export function PreparationScreen({
   project,
-  forceProxy,
   error,
+  progress,
+  cancelling,
+  canCancel,
+  onCancel,
   onRetry,
   onBack,
 }: PreparationScreenProps) {
+  const stageLabels: Record<MediaPreparationProgress["stage"], string> = {
+    queued: "等待开始", runtime: "检查播放组件", fingerprint: "核对视频文件",
+    inspect: "检查视频与音频", transcode: "生成兼容播放版本", validate: "检查生成的播放版本", finalize: "保存播放版本",
+  };
+  const stageLabel = cancelling ? "正在停止处理" : progress ? stageLabels[progress.stage] : "正在检查";
+  const generating = progress?.stage === "transcode";
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   useEffect(() => {
     if (error) return undefined;
@@ -36,8 +51,8 @@ export function PreparationScreen({
           <p className="lead">
             {error
               ? "项目和源视频都没有改变。可以重新尝试，或返回项目库重新定位媒体。"
-              : forceProxy
-                ? "检测到原片在当前播放器中没有有效画面，正在生成兼容的本地播放版本。"
+              : generating
+                ? "正在生成兼容的本地播放版本，原片保持不变。"
                 : "正在读取音视频轨道并确认当前电脑能否直接播放。"}
           </p>
 
@@ -60,10 +75,10 @@ export function PreparationScreen({
                 <span>2</span>
                 <div>
                   <strong>
-                    {forceProxy ? "生成兼容播放版本" : "检查视频与音频"}
+                    {stageLabel}
                   </strong>
                   <small>
-                    {forceProxy
+                    {generating
                       ? "原片保持不变，输出保存在 SiaoVPlay 本地缓存。"
                       : "按真实轨道、编码、分辨率和像素格式判断。"}
                   </small>
@@ -96,12 +111,11 @@ export function PreparationScreen({
               <div>
                 <span className="working-indicator">
                   <span className="spinner"></span>
-                  {elapsedSeconds < 5
-                    ? "正在检查"
-                    : `仍在处理 · ${elapsedSeconds} 秒`}
+                  {`${cancelling ? "正在停止" : "已处理"} · ${elapsedSeconds} 秒`}
                 </span>
-                <button className="button quiet" type="button" onClick={onBack}>
-                  取消并返回媒体库
+                <button className="button quiet" type="button" onClick={onBack}>返回媒体库</button>
+                <button className="button quiet" type="button" onClick={onCancel} disabled={!canCancel || cancelling}>
+                  {cancelling ? "正在取消…" : "取消并返回媒体库"}
                 </button>
               </div>
             )}

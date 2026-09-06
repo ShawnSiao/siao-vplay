@@ -8,7 +8,7 @@ use crate::{
     codex_runner::{self, CodexRunnerError, CodexRuntimeStatus, StartCodexTranslationInput},
     delivery::{self, DeliveryError, ExportSubtitlesInput, SubtitleExport},
     domain::{
-        CreateLocalProjectInput, DeleteProjectResult, PrepareProjectMediaInput, Project,
+        CreateLocalProjectInput, DeleteProjectResult, Project,
         RelinkProjectMediaInput, UpdatePlaybackStateInput,
     },
     external_handoff::{self, ExternalAgentResultUpdate, ExternalHandoffError},
@@ -23,7 +23,7 @@ use crate::{
         LocalResourceLocationPlan, LocalResourceStatus, PlanLocalResourceLocationInput,
         SetLocalResourceProfileInput,
     },
-    media::{self, MediaError, MediaInspection, MediaPreparation, MediaRuntimeStatus},
+    media::{self, MediaError, MediaInspection, MediaRuntimeStatus},
     remote_media::{
         self, CancelRemoteMediaImportInput, ImportRemoteMediaUrlInput, InspectRemoteMediaUrlInput,
         RemoteMediaError, RemoteMediaPreview,
@@ -71,8 +71,8 @@ use crate::{
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CommandError {
-    code: &'static str,
-    message: String,
+    pub(crate) code: &'static str,
+    pub(crate) message: String,
 }
 
 impl From<StoreError> for CommandError {
@@ -780,29 +780,6 @@ pub async fn inspect_project_media(
     })
     .await
     .map_err(CommandError::background_task_failed)?
-}
-
-#[tauri::command]
-pub async fn prepare_project_media(
-    app: AppHandle,
-    store: State<'_, ProjectStore>,
-    storage: State<'_, StorageManager>,
-    input: PrepareProjectMediaInput,
-) -> Result<MediaPreparation, CommandError> {
-    let store = store.inner().clone();
-    let media_cache_root = storage.media_cache_root_for_write()?;
-    let preparation = tauri::async_runtime::spawn_blocking(move || {
-        media::prepare_project_media(&store, &media_cache_root, input).map_err(CommandError::from)
-    })
-    .await
-    .map_err(CommandError::background_task_failed)??;
-    app.asset_protocol_scope()
-        .allow_file(&preparation.playback_path)
-        .map_err(|error| CommandError {
-            code: "asset_scope_error",
-            message: format!("无法授权播放器读取已准备的媒体：{error}"),
-        })?;
-    Ok(preparation)
 }
 
 #[tauri::command]
