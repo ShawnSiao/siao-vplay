@@ -6,6 +6,7 @@ import { LibraryFolderImportDialog } from "./components/LibraryFolderImportDialo
 import { LibraryRecoveryDialog } from "./components/LibraryRecoveryDialog";
 import { LibraryScreen } from "./components/LibraryScreen";
 import { PlayerScreen } from "./features/playback/PlayerScreen";
+import { usePlaybackPersistence } from "./features/playback/usePlaybackPersistence";
 import { useLibraryController } from "./features/library/useLibraryController";
 import { usePosterQueue } from "./features/library/usePosterQueue";
 import { openProjectMediaLocation } from "./features/library/libraryGateway";
@@ -42,7 +43,6 @@ import {
   reconcileExternalAgentResults,
   relinkProjectMedia,
   setMainWindowMediaTitle,
-  updatePlaybackState,
 } from "./lib/desktop";
 import { userFacingCommandError } from "./lib/userFacingError";
 import type {
@@ -108,6 +108,7 @@ export default function App() {
   const screen = shellController.state.activeView;
   const setScreen = shellController.setActiveView;
   const operationTokenRef = useRef(0);
+  const [sessionId, setSessionId] = useState(0);
   const startupMediaHandledRef = useRef(false);
   const externalResultScanRef = useRef(false);
   const pendingResourceResumeRef = useRef<PendingResourceResume | null>(null);
@@ -338,6 +339,7 @@ export default function App() {
     ) => {
       const token = operationTokenRef.current + 1;
       operationTokenRef.current = token;
+      setSessionId(token);
       setActiveProject(project);
       setPreparation(null);
       setPreparationError(null);
@@ -408,6 +410,7 @@ export default function App() {
 
   const returnToLibrary = useCallback(() => {
     operationTokenRef.current += 1;
+    setSessionId(operationTokenRef.current);
     setLibrarySection("home");
     setScreen("library");
     setPreparation(null);
@@ -731,29 +734,16 @@ export default function App() {
     }
   };
 
-  const persistPlayback = useCallback(
-    async (values: {
-      positionMs: number;
-      durationMs: number | null;
-      volume: number;
-      playbackRate: number;
-      subtitleMode: "original" | "translation" | "bilingual";
-    }) => {
-      if (!activeProject) {
-        return;
-      }
-      const updated = await updatePlaybackState(activeProject.id, values);
-      setActiveProject(updated);
-      setProjects((current) =>
-        current.map((project) =>
-          project.id === updated.id ? updated : project,
-        ),
-      );
-    },
-    [activeProject],
-  );
+  const persistPlayback = usePlaybackPersistence({
+    project: activeProject, sessionId, currentSession: operationTokenRef,
+    setProject: setActiveProject, setProjects, onFailure: setToast,
+  });
+  const isCurrentSession = useCallback((projectId: string) =>
+    operationTokenRef.current === sessionId && activeProject?.id === projectId,
+  [activeProject?.id, sessionId]);
 
   const mergeSubtitleVersion = useCallback((version: SubtitleVersion) => {
+    if (!isCurrentSession(version.projectId)) return;
     setSubtitleVersions((current) => [
       version,
       ...current
@@ -764,7 +754,7 @@ export default function App() {
             : item,
         ),
     ]);
-  }, []);
+  }, [isCurrentSession]);
 
   const handleTranslationCompleted = useCallback(
     async (task: TranslationTask, version?: SubtitleVersion) => {
@@ -772,7 +762,7 @@ export default function App() {
         mergeSubtitleVersion(version);
       } else {
         const versions = await listSubtitleVersions(task.projectId);
-        setSubtitleVersions(versions);
+        if (isCurrentSession(task.projectId)) setSubtitleVersions(versions);
       }
       setToast(
         task.validation?.warningCount
@@ -788,7 +778,7 @@ export default function App() {
             },
       );
       const updatedProject = await getProject(task.projectId);
-      setActiveProject(updatedProject);
+      if (isCurrentSession(task.projectId)) setActiveProject(updatedProject);
       setProjects((current) =>
         current.map((project) =>
           project.id === updatedProject.id ? updatedProject : project,
@@ -796,7 +786,7 @@ export default function App() {
       );
       void refreshProjects();
     },
-    [mergeSubtitleVersion, refreshProjects],
+    [isCurrentSession, mergeSubtitleVersion, refreshProjects],
   );
   const activeProjectId = activeProject?.id;
 
@@ -838,7 +828,7 @@ export default function App() {
             listSubtitleVersions(activeProjectId),
             getProject(activeProjectId),
           ]);
-          if (active) {
+          if (active && isCurrentSession(activeProjectId)) {
             setSubtitleVersions(versions);
             setActiveProject(updatedProject);
             setProjects((current) =>
@@ -860,13 +850,13 @@ export default function App() {
       active = false;
       window.clearInterval(timer);
     };
-  }, [activeProjectId]);
+  }, [activeProjectId, isCurrentSession]);
 
   const handleSubtitleVersionCreated = useCallback(
     async (version: SubtitleVersion, message: string) => {
       mergeSubtitleVersion(version);
       const updatedProject = await getProject(version.projectId);
-      setActiveProject(updatedProject);
+      if (isCurrentSession(version.projectId)) setActiveProject(updatedProject);
       setProjects((current) =>
         current.map((project) =>
           project.id === updatedProject.id ? updatedProject : project,
@@ -875,7 +865,7 @@ export default function App() {
       setToast(message);
       void refreshProjects();
     },
-    [mergeSubtitleVersion, refreshProjects],
+    [isCurrentSession, mergeSubtitleVersion, refreshProjects],
   );
 
   useEffect(() => {
@@ -1080,7 +1070,7 @@ export default function App() {
 
         {screen === "player" && activeProject && preparation ? (
           <PlayerScreen
-            key={preparation.playbackPath}
+            key={`${sessionId}:${preparation.playbackPath}`}
             project={activeProject}
             preparation={preparation}
             currentSubtitle={currentSubtitle}
