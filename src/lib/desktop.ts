@@ -349,9 +349,11 @@ export async function planLocalResourceMove(
 
 export async function moveLocalResourceRoot(
   parentPath: string,
+  requestId: string,
 ): Promise<LocalResourceMoveResult> {
   return invoke<LocalResourceMoveResult>("move_local_resource_root", {
     input: { parentPath, confirmed: true },
+    requestId,
   });
 }
 

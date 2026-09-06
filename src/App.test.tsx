@@ -1332,7 +1332,7 @@ describe("App", () => {
     render(<App />);
     fireEvent.click(await screen.findByRole("button", { name: "打开最近观看的 雨站台" }));
     fireEvent.click(await screen.findByRole("button", { name: "存储设置" }));
-    await waitFor(() => expect(screen.getByRole("button", { name: "存储", exact: true })).toHaveClass("active"));
+    await waitFor(() => expect(screen.getByRole("button", { name: "存储" })).toHaveClass("active"));
     expect(desktopMocks.prepareProjectMedia).toHaveBeenCalledTimes(1);
   });
 

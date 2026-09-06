@@ -41,8 +41,15 @@ pub async fn plan_local_resource_move(
 #[tauri::command]
 pub async fn move_local_resource_root(
     input: MoveLocalResourceRootInput,
+    request_id: String,
 ) -> Result<LocalResourceMoveResult, CommandError> {
-    run(move || resource_migration::move_resource_root(input).map_err(Into::into)).await
+    let request = resource_migration::move_control::register(&request_id)?;
+    run(move || request.run(|| resource_migration::move_resource_root(input)).map_err(Into::into)).await
+}
+
+#[tauri::command]
+pub fn cancel_local_resource_move(request_id: String) -> Result<bool, CommandError> {
+    resource_migration::move_control::cancel(&request_id).map_err(Into::into)
 }
 
 #[tauri::command]

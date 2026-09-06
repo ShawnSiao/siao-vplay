@@ -240,6 +240,7 @@ pub fn run() {
             resource_commands::adopt_local_resources,
             resource_commands::plan_local_resource_move,
             resource_commands::move_local_resource_root,
+            resource_commands::cancel_local_resource_move,
             resource_commands::reconnect_local_resource_root,
             resource_commands::plan_unused_resource_cleanup,
             resource_commands::cleanup_unused_resources,

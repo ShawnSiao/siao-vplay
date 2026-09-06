@@ -487,6 +487,14 @@ export function LocalResourcesDialog({
           </div>
         ) : null}
 
+        {controller.moving ? <div className="notice" role="status">
+          <strong>{controller.cancellingMove ? "正在停止资源复制…" : "正在复制并校验资源，原位置仍保留"}</strong>
+          <button className="button quiet" type="button" disabled={controller.cancellingMove || !controller.cancelMove} onClick={() => {
+            void controller.cancelMove?.().then((accepted) => {
+              if (!accepted) onNotice("已进入保存位置切换，请等待完成。");
+            }).catch((error: unknown) => setLocalError(error instanceof Error ? error.message : "取消请求没有完成，请重试。"));
+          }}>取消复制</button>
+        </div> : null}
         {localError || controller.error ? (
           <div className="notice danger" role="alert">
             <strong>本地功能未完成准备</strong>

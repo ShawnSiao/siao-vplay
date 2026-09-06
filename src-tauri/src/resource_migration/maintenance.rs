@@ -90,6 +90,10 @@ pub fn move_resource_root(
             fault: MoveFault::None,
         },
     )?;
+    if let Err(error) = move_control::begin_commit() {
+        let _ = fs::remove_dir_all(&staging);
+        return Err(error);
+    }
     if let Err(error) = fs::rename(&staging, &target_root) {
         let _ = fs::remove_dir_all(&staging);
         return Err(error.into());

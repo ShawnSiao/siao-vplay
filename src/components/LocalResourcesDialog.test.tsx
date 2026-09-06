@@ -394,20 +394,14 @@ describe("LocalResourcesDialog", () => {
       destinationExists: false,
       confirmationRequired: true,
     });
-    const moveLocation = vi.fn().mockResolvedValue({
-      previousRoot: "W:\\SiaoVPlay\\SiaoVPlay",
-      currentRoot: "E:\\Resources\\SiaoVPlay",
-      copiedBytes: 194_129_082,
-      verifiedFileCount: 12,
-      crossVolume: true,
-      previousRootRetained: true,
-    });
+    const cancelMove = vi.fn().mockResolvedValue(true);
+    const moveLocation = vi.fn(() => new Promise<never>(() => undefined));
     const controller = makeController({
       status: readyStatus,
       chooseExistingResources,
       adoptResources,
       chooseMoveLocation,
-      moveLocation,
+      moveLocation, moving: true, cancelMove,
     });
     render(
       <LocalResourcesDialog
@@ -434,6 +428,8 @@ describe("LocalResourcesDialog", () => {
     expect(screen.getByText(/切换成功后原目录仍保留/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "确认复制并切换" }));
     await waitFor(() => expect(moveLocation).toHaveBeenCalledWith("E:\\Resources"));
+    fireEvent.click(screen.getByRole("button", { name: "取消复制" }));
+    expect(cancelMove).toHaveBeenCalledOnce();
   });
 
   it("keeps records when the resource disk is unavailable and offers repair or reconnect", async () => {

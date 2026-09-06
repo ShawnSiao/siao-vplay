@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useResourceMove } from "./useResourceMove";
 
 import {
   adoptLocalResources,
@@ -31,7 +32,6 @@ import {
   retryResourceDownload,
   setLocalResourceProfile,
   setLocalResourceProxy,
-  moveLocalResourceRoot,
   updateLocalResource,
   cleanupOldResourceVersions,
 } from "../../lib/desktop";
@@ -86,6 +86,9 @@ export type LocalResourcesController = {
   adoptResources: (sourcePath?: string) => Promise<ResourceAdoptionResult>;
   chooseMoveLocation: () => Promise<LocalResourceMovePlan | null>;
   moveLocation: (parentPath: string) => Promise<LocalResourceMoveResult>;
+  moving?: boolean;
+  cancellingMove?: boolean;
+  cancelMove?: () => Promise<boolean>;
   repairRoot: () => Promise<LocalResourceStatus>;
   reconnectRoot: () => Promise<LocalResourceStatus | null>;
   planCleanup: () => Promise<UnusedResourceCleanupPlan>;
@@ -143,7 +146,6 @@ export function useLocalResources(): LocalResourcesController {
     setError(message);
     return message;
   }, []);
-
   const mergeTask = useCallback((nextTask: ResourceDownloadTask) => {
     const sampledAtMs = Date.now();
     const previous = observationsRef.current.get(nextTask.id);
@@ -202,6 +204,12 @@ export function useLocalResources(): LocalResourcesController {
     },
     [mergeTask],
   );
+
+  const resourceMove = useResourceMove(async () => {
+    setStatus(await getLocalResourceStatus());
+    replaceTasks(await listResourceDownloadTasks());
+    setError(null);
+  }, captureError);
 
   const refresh = useCallback(async () => {
     if (!initializedRef.current) {
@@ -381,18 +389,10 @@ export function useLocalResources(): LocalResourcesController {
         throw cause;
       }
     },
-    moveLocation: async (parentPath) => {
-      try {
-        const result = await moveLocalResourceRoot(parentPath);
-        setStatus(await getLocalResourceStatus());
-        replaceTasks(await listResourceDownloadTasks());
-        setError(null);
-        return result;
-      } catch (cause) {
-        captureError(cause);
-        throw cause;
-      }
-    },
+    moving: resourceMove.moving,
+    cancellingMove: resourceMove.cancelling,
+    cancelMove: resourceMove.cancel,
+    moveLocation: resourceMove.move,
     repairRoot: async () => {
       try {
         const nextStatus = await repairLocalResourceRoot();

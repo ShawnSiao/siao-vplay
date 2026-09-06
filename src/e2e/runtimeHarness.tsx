@@ -206,6 +206,7 @@ const initialTask: ResourceDownloadTask = {
 
 export function RuntimeHarness() {
   const [tasks, setTasks] = useState([initialTask]);
+  const [cancellingMove, setCancellingMove] = useState(false);
   const controller = useMemo<LocalResourcesController>(
     () => ({
       catalog,
@@ -233,6 +234,9 @@ export function RuntimeHarness() {
         reusableBytes: 0,
       }),
       chooseMoveLocation: async () => null,
+      moving: new URLSearchParams(window.location.search).has("moving"),
+      cancellingMove,
+      cancelMove: async () => { setCancellingMove(true); return true; },
       moveLocation: async () => ({
         previousRoot: status.resourceRoot ?? "",
         currentRoot: status.resourceRoot ?? "",
@@ -371,7 +375,7 @@ export function RuntimeHarness() {
         affectedCapabilityIds: [],
       }),
     }),
-    [tasks],
+    [tasks, cancellingMove],
   );
   return <RuntimeView controller={controller} />;
 }

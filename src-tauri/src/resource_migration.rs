@@ -1,4 +1,6 @@
 mod maintenance;
+pub(crate) mod move_control;
+mod move_io;
 pub use maintenance::{adopt_local_resources, move_resource_root, reconnect_resource_root, cleanup_unused_resources};
 
 use std::{
@@ -46,6 +48,8 @@ pub enum ResourceMigrationError {
     DestinationExists(String),
     #[error("资源正在准备，当前不能移动或清理")]
     Busy,
+    #[error("资源复制已取消，原保存位置保持不变")]
+    Cancelled,
     #[error("资源移动空间不足：需要 {required_bytes} 字节，可用 {available_bytes} 字节")]
     InsufficientSpace {
         required_bytes: u64,
@@ -68,6 +72,7 @@ impl ResourceMigrationError {
             Self::InvalidSource(_) => "local_resource_candidate_invalid",
             Self::DestinationExists(_) => "local_resource_destination_exists",
             Self::Busy => "local_resource_busy",
+            Self::Cancelled => "local_resource_move_cancelled",
             Self::InsufficientSpace { .. } => "local_resource_space_insufficient",
             Self::Integrity(_) => "local_resource_integrity_failed",
         }
@@ -787,7 +792,7 @@ fn copy_root_verified(
             staging,
         )));
     }
-    let source_manifest = resource_download::collect_file_manifest(source)?;
+    let source_manifest = move_io::manifest(source)?;
     let bytes = source_manifest
         .iter()
         .fold(0_u64, |total, file| total.saturating_add(file.size));
@@ -800,9 +805,9 @@ fn copy_root_verified(
             available_bytes: available,
         });
     }
-    if let Err(error) = copy_tree(source, staging) {
+    if let Err(error) = move_io::copy_tree(source, staging) {
         let _ = fs::remove_dir_all(staging);
-        return Err(error.into());
+        return Err(error);
     }
     #[cfg(test)]
     match options.fault {
@@ -823,7 +828,10 @@ fn copy_root_verified(
     }
     #[cfg(not(test))]
     let _ = options.fault;
-    let target_manifest = resource_download::collect_file_manifest(staging)?;
+    let target_manifest = match move_io::manifest(staging) {
+        Ok(manifest) => manifest,
+        Err(error) => { let _ = fs::remove_dir_all(staging); return Err(error); }
+    };
     if source_manifest != target_manifest {
         let _ = fs::remove_dir_all(staging);
         return Err(ResourceMigrationError::Integrity(
