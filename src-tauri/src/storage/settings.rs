@@ -30,11 +30,40 @@ pub(crate) struct StorageState {
 }
 
 impl StorageManager {
+    #[cfg(test)]
     pub fn initialize(
         bootstrap_directory: &Path,
         default_app_data_root: PathBuf,
         environment_app_data_root: Option<PathBuf>,
     ) -> Result<Self, StorageError> {
+        Self::initialize_internal(
+            bootstrap_directory,
+            default_app_data_root,
+            environment_app_data_root,
+            false,
+        )
+        .map(|(manager, _)| manager)
+    }
+
+    pub(crate) fn initialize_owned(
+        bootstrap_directory: &Path,
+        default_app_data_root: PathBuf,
+        environment_app_data_root: Option<PathBuf>,
+    ) -> Result<(Self, Option<crate::instance_lock::InstanceLock>), StorageError> {
+        Self::initialize_internal(
+            bootstrap_directory,
+            default_app_data_root,
+            environment_app_data_root,
+            true,
+        )
+    }
+
+    fn initialize_internal(
+        bootstrap_directory: &Path,
+        default_app_data_root: PathBuf,
+        environment_app_data_root: Option<PathBuf>,
+        acquire_owner: bool,
+    ) -> Result<(Self, Option<crate::instance_lock::InstanceLock>), StorageError> {
         fs::create_dir_all(bootstrap_directory)?;
         let settings_path = bootstrap_directory.join(SETTINGS_FILE_NAME);
         let mut settings = load_settings(&settings_path)?;
@@ -48,16 +77,29 @@ impl StorageManager {
             .clone()
             .or_else(|| settings.active_app_data_root.as_deref().map(PathBuf::from))
             .unwrap_or_else(|| default_app_data_root.clone());
+        let owner = if acquire_owner {
+            fs::create_dir_all(&active_root)?;
+            if fs::canonicalize(&active_root)? != fs::canonicalize(bootstrap_directory)? {
+                Some(crate::instance_lock::InstanceLock::acquire(&active_root)?)
+            } else {
+                None
+            }
+        } else {
+            None
+        };
         let migration = load_migration_runtime(bootstrap_directory, &active_root)?;
-        Ok(Self {
-            state: Arc::new(RwLock::new(StorageState {
-                settings_path,
-                default_app_data_root,
-                environment_app_data_root,
-                settings,
-            })),
-            migration: Arc::new(Mutex::new(migration)),
-        })
+        Ok((
+            Self {
+                state: Arc::new(RwLock::new(StorageState {
+                    settings_path,
+                    default_app_data_root,
+                    environment_app_data_root,
+                    settings,
+                })),
+                migration: Arc::new(Mutex::new(migration)),
+            },
+            owner,
+        ))
     }
 
     pub fn app_data_root(&self) -> Result<PathBuf, StorageError> {

@@ -13,6 +13,7 @@ mod delivery;
 mod desktop_frame;
 mod domain;
 mod external_handoff;
+mod instance_lock;
 mod learning;
 mod library;
 mod local_resources;
@@ -68,6 +69,9 @@ fn app_status(data_directory: &Path, startup_media_path: Option<String>) -> AppS
 }
 
 struct StartupMediaPath(Option<String>);
+struct AppInstanceLocks {
+    _guards: Vec<instance_lock::InstanceLock>,
+}
 
 #[tauri::command]
 fn get_app_status(
@@ -93,16 +97,22 @@ fn set_main_window_media_title(
 
 fn initialize_storage(
     app: &tauri::App,
-) -> Result<storage::StorageManager, Box<dyn std::error::Error>> {
+) -> Result<(storage::StorageManager, AppInstanceLocks), Box<dyn std::error::Error>> {
     let default_data_directory = app.path().app_local_data_dir()?;
+    // Protect bootstrap settings and migration recovery before reading them.
+    let mut guards = vec![instance_lock::InstanceLock::acquire(
+        &default_data_directory,
+    )?];
     let environment_data_directory = std::env::var_os("SIAOVPLAY_DATA_DIR")
         .filter(|value| !value.is_empty())
         .map(PathBuf::from);
-    Ok(storage::StorageManager::initialize(
+    let (storage, data_owner) = storage::StorageManager::initialize_owned(
         &default_data_directory,
         default_data_directory.clone(),
         environment_data_directory,
-    )?)
+    )?;
+    guards.extend(data_owner);
+    Ok((storage, AppInstanceLocks { _guards: guards }))
 }
 
 fn resolve_startup_media_path() -> Option<String> {
@@ -111,6 +121,23 @@ fn resolve_startup_media_path() -> Option<String> {
         .map(PathBuf::from)
         .find(|path| path.is_file())
         .map(|path| path.to_string_lossy().into_owned())
+}
+
+fn show_startup_storage_error() {
+    #[cfg(windows)]
+    {
+        use windows_sys::Win32::UI::WindowsAndMessaging::{MB_ICONINFORMATION, MB_OK, MessageBoxW};
+        let title: Vec<u16> = "SiaoVPlay\0".encode_utf16().collect();
+        let message: Vec<u16> = "无法取得数据目录的独占访问权限。请先使用已打开的 SiaoVPlay 窗口；若没有其他窗口，请检查数据目录是否可访问。未打开项目数据库。\0".encode_utf16().collect();
+        unsafe {
+            MessageBoxW(
+                std::ptr::null_mut(),
+                message.as_ptr(),
+                title.as_ptr(),
+                MB_OK | MB_ICONINFORMATION,
+            );
+        }
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -123,7 +150,10 @@ pub fn run() {
             } else {
                 eprintln!("SiaoVPlay: main window was unavailable during native frame setup");
             }
-            let storage = initialize_storage(app)?;
+            let (storage, instance_locks) = initialize_storage(app).inspect_err(|_| {
+                show_startup_storage_error();
+            })?;
+            app.manage(instance_locks);
             let data_directory = storage.app_data_root()?;
             local_resources::initialize(&data_directory)?;
             let legacy_proxy = local_resources::configured_proxy_url();

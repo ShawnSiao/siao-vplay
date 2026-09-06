@@ -2,6 +2,36 @@ use std::{fs, path::Path};
 
 use super::*;
 
+#[test]
+fn owned_startup_locks_shared_data_before_reading_migration_state() {
+    let directory = tempfile::tempdir().unwrap();
+    let bootstrap = directory.path().join("bootstrap");
+    let data = directory.path().join("shared-data");
+    fs::create_dir_all(&bootstrap).unwrap();
+    fs::write(
+        bootstrap.join("storage-migration.json"),
+        b"unread migration sentinel",
+    )
+    .unwrap();
+    let _owner = crate::instance_lock::InstanceLock::acquire(&data).unwrap();
+    let result = StorageManager::initialize_owned(&bootstrap, data.clone(), Some(data));
+    assert!(matches!(result, Err(StorageError::FileSystem(_))));
+    assert_eq!(
+        fs::read(bootstrap.join("storage-migration.json")).unwrap(),
+        b"unread migration sentinel"
+    );
+}
+
+#[test]
+fn migration_does_not_copy_instance_ownership() {
+    let directory = tempfile::tempdir().unwrap();
+    let _owner = crate::instance_lock::InstanceLock::acquire(directory.path()).unwrap();
+    fs::write(directory.path().join("asset.txt"), b"preserve me").unwrap();
+    let files = super::migration_copy::scan_files(directory.path(), None).unwrap();
+    assert_eq!(files.len(), 1);
+    assert_eq!(files[0].relative, Path::new("asset.txt"));
+}
+
 fn manager(directory: &Path) -> StorageManager {
     let default_root = directory.join("default-data");
     fs::create_dir_all(&default_root).unwrap();

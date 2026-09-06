@@ -29,6 +29,9 @@ pub(crate) fn scan_files(
     while let Some(directory) = pending.pop() {
         for entry in fs::read_dir(&directory)? {
             let entry = entry?;
+            if directory == source && entry.file_name() == crate::instance_lock::LOCK_FILE_NAME {
+                continue;
+            }
             let metadata = entry.metadata()?;
             if metadata.is_symlink() {
                 return Err(StorageError::MigrationIntegrity(format!(
