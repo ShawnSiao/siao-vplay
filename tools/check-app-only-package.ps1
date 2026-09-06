@@ -149,7 +149,10 @@ foreach ($resource in @($catalog.resources)) {
 $allowedResources = @(
     'resources/ai-provider-catalog.json',
     'resources/local-resource-catalog.json',
-    'resources/third-party-notices/THIRD-PARTY-NOTICES.md'
+    'resources/third-party-notices/THIRD-PARTY-NOTICES.md',
+    'resources/third-party-notices/SiaoVPlay-MIT.txt',
+    'resources/third-party-notices/LobeHub-MIT.txt',
+    'resources/third-party-notices/DEPENDENCIES.txt'
 )
 $configuredResources = @($tauriConfig.bundle.resources) | ForEach-Object { $_.Replace('\', '/') }
 if (@($configuredResources).Count -ne $allowedResources.Count) {
@@ -189,7 +192,10 @@ if (-not [string]::IsNullOrWhiteSpace($InstallRoot)) {
     foreach ($pair in @(
         @($catalogPath, $installedCatalogPath),
         @($providerCatalogPath, $installedProviderCatalogPath),
-        @($noticePath, $installedNoticePath)
+        @($noticePath, $installedNoticePath),
+        @((Join-Path $sourceResourceRoot 'third-party-notices\SiaoVPlay-MIT.txt'), (Join-Path $installRootPath 'resources\third-party-notices\SiaoVPlay-MIT.txt')),
+        @((Join-Path $sourceResourceRoot 'third-party-notices\LobeHub-MIT.txt'), (Join-Path $installRootPath 'resources\third-party-notices\LobeHub-MIT.txt')),
+        @((Join-Path $sourceResourceRoot 'third-party-notices\DEPENDENCIES.txt'), (Join-Path $installRootPath 'resources\third-party-notices\DEPENDENCIES.txt'))
     )) {
         if (-not (Test-Path -LiteralPath $pair[1] -PathType Leaf)) {
             throw "Installed app-only resource is missing: $($pair[1])"

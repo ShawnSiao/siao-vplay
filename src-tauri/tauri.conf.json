@@ -39,7 +39,10 @@
     "resources": [
       "resources/local-resource-catalog.json",
       "resources/ai-provider-catalog.json",
-      "resources/third-party-notices/THIRD-PARTY-NOTICES.md"
+      "resources/third-party-notices/THIRD-PARTY-NOTICES.md",
+      "resources/third-party-notices/SiaoVPlay-MIT.txt",
+      "resources/third-party-notices/LobeHub-MIT.txt",
+      "resources/third-party-notices/DEPENDENCIES.txt"
     ],
     "icon": [
       "icons/32x32.png",

@@ -1,9 +1,18 @@
 {
   "name": "siao-vplay",
   "private": true,
+  "license": "MIT",
+  "engines": {
+    "node": "24.18.0"
+  },
   "version": "0.4.1",
   "type": "module",
   "scripts": {
+    "check:release": "node tools/release-metadata.mjs",
+    "release:sync": "node tools/release-metadata.mjs --sync",
+    "test:tools": "node --test tools/release-metadata.test.mjs && powershell -NoProfile -ExecutionPolicy Bypass -File tools/build-policy.test.ps1",
+    "notices:generate": "node tools/generate-third-party-notices.mjs",
+    "notices:check": "node tools/generate-third-party-notices.mjs --check",
     "dev": "vite --host 127.0.0.1 --port 1420",
     "build": "tsc -b && vite build",
     "build:e2e": "tsc -b && vite build --mode e2e",

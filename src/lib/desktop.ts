@@ -3,6 +3,7 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 
 import { supportedVideoExtensions } from "./mediaFiles";
+import { browserStatus } from "./appMetadata";
 import { chooseConfiguredStorageDirectory } from "../features/storage/directoryPicker";
 
 import type {
@@ -62,14 +63,6 @@ import type {
 } from "../types";
 
 export const isDesktopApp = "__TAURI_INTERNALS__" in window;
-
-const browserStatus: AppStatus = {
-  appName: "SiaoVPlay",
-  version: "0.3.0",
-  platform: "browser-preview",
-  dataDirectory: "仅桌面应用可用",
-  startupMediaPath: null,
-};
 
 const browserResourceCapabilities = [
   {

@@ -2,6 +2,12 @@
 
 SiaoVPlay 是一款 Windows 本地优先的跨语言智能播放器。它面向已经找到海外视频、但缺少可靠简体中文字幕的中文用户。
 
+**当前为开发版本，尚未提供通过公开 Beta 验收的安装包。** 版本与渠道以 [release.json](release.json) 为准；下载只认 [GitHub Releases](https://github.com/ShawnSiao/siao-vplay/releases) 中对应版本的产物与哈希。
+
+原创代码使用 [MIT](LICENSE)，第三方内容保留原许可，见 [第三方说明](THIRD-PARTY.md)。开发与构建步骤见 [贡献指南](CONTRIBUTING.md)，安全问题见 [报告方式](SECURITY.md)。
+
+目标平台为 Windows 10 22H2 x64 和 Windows 11 x64；正式支持以对应候选的双系统验收结果为准。「本地优先」不代表所有 AI 处理离线：字幕与选定关键帧可能交给所选 API 服务或 Codex 的模型服务，费用与账号由使用者自行提供。
+
 产品围绕三个层级组织：
 
 ```text
@@ -46,15 +52,15 @@ SiaoVPlay 是一款 Windows 本地优先的跨语言智能播放器。它面向�
 
 ## 运行时与安装包
 
-`0.4.0` 的 Windows 安装包只包含 SiaoVPlay 产品本体、内置资源目录清单和必要说明。FFmpeg、FFprobe、yt-dlp、whisper.cpp、VAD、转写模型和 GPU 运行时都不进入安装包。
+当前 Windows 安装包只包含 SiaoVPlay 产品本体、内置资源目录清单和必要说明。FFmpeg、FFprobe、yt-dlp、whisper.cpp、VAD、转写模型和 GPU 运行时都不进入安装包。
 
-构建 NSIS 安装包不需要预先准备第三方运行时或模型。构建缓存仍放在 W 盘：
+构建 NSIS 安装包不需要预先准备第三方运行时或模型：
 
 ```powershell
 npm run desktop:build
 ```
 
-脚本默认使用 `W:\SiaoVPlay\build-cache\v0.4-ai-insight-summary`，将候选包复制到 `W:\SiaoVPlay\candidate-packages\v0.4-ai-insight-summary`，并在构建前检查 Tauri 资源白名单和内置目录清单。安装包生成后还可以通过 `tools\verify-app-only-install.ps1` 执行隔离安装和实际文件清单检查。
+脚本使用 `CARGO_TARGET_DIR` 和 `SIAOVPLAY_ARTIFACT_DIR`，未设置时使用仓库内被忽略的构建与产物目录，也可显式传入路径。维护者本机继续将缓存和候选包放在已登记的非系统盘目录。构建前检查版本、Tauri 资源白名单和内置目录清单，生成后保存哈希与源码清单。隔离安装与文件清单检查使用 `tools/verify-app-only-install.ps1`，不会由构建命令自动安装到正在使用的应用。
 
 组件来源与固定基线：
 
@@ -64,13 +70,15 @@ npm run desktop:build
 
 ## 候选版本状态
 
-`0.4.0` 是「深度理解与学习朗读」本地候选版本，包含无剧透当前场景理解、可恢复的视频总结、Markdown 报告、提示词模板和 Windows 本地朗读。候选包用于本机验收，不代表正式发布。
+当前开发版本包含当前场景理解、视频总结、Markdown 报告、提示词模板和 Windows 本地朗读。候选包用于验收，不代表正式发布。
 
 候选安装包暂未作为公开 Release 提供，原因如下：
 
 - 安装包尚未进行代码签名。
 - Windows 11 安装与启动验收尚未完成。
-- Windows 11、真实长视频人工质量和可信签名尚未全部完成。
+- 双系统完整主流程、真实四语言与长视频人工质量、外部试用尚未全部完成。
+
+Beta 可以明确标注为未签名；正式稳定版要求有效签名与时间戳。签名不保证新文件立即获得 SmartScreen 信誉。下载页须说明真实状态，不建议关闭系统防护。
 
 开发版本仍支持通过 `SIAOVPLAY_RUNTIME_DIR`、`SIAOVPLAY_MODEL_DIR`、`SIAOVPLAY_FFMPEG` 或 `SIAOVPLAY_FFPROBE` 使用受控的本机调试资源。该方式不属于普通用户安装流程。
 
