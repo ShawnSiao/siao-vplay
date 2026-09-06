@@ -16,6 +16,7 @@ import { usePlaybackPersistence } from "./features/playback/usePlaybackPersisten
 import { useLibraryController } from "./features/library/useLibraryController";
 import { usePosterQueue } from "./features/library/usePosterQueue";
 import { openProjectMediaLocation } from "./features/library/libraryGateway";
+import { mergeCurrentSubtitleVersion } from "./features/playback/currentSubtitleVersions";
 import {
   useEpisodeNavigation,
   type EpisodePlaybackContext,
@@ -677,16 +678,7 @@ export default function App() {
 
   const mergeSubtitleVersion = useCallback((version: SubtitleVersion) => {
     if (!isCurrentSession(version.projectId)) return;
-    setSubtitleVersions((current) => [
-      version,
-      ...current
-        .filter((item) => item.id !== version.id)
-        .map((item) =>
-          item.trackId === version.trackId
-            ? { ...item, isCurrent: false }
-            : item,
-        ),
-    ]);
+    setSubtitleVersions((current) => mergeCurrentSubtitleVersion(current, version));
   }, [isCurrentSession]);
 
   const handleTranslationCompleted = useCallback(
