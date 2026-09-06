@@ -1,13 +1,13 @@
+import { PlayerDrawer } from "../features/playback/PlayerDrawer";
 import { SummaryProgress } from "../features/summary/SummaryProgress";
 import { SummaryResultView } from "../features/summary/SummaryResultView";
 import { createSummaryFixtures } from "../test-fixtures/summary";
 import { VideoSummaryPanel } from "../features/summary/VideoSummaryPanel";
 import type { SubtitleVersion } from "../types";
 
-export function SummaryPreview({ state, sourceVersion }: { state: "progress" | "result" | "confirm"; sourceVersion: SubtitleVersion }) {
+export function SummaryPreview({ state, sourceVersion, drawer = false }: { drawer?: boolean; state: "progress" | "result" | "confirm"; sourceVersion: SubtitleVersion }) {
   const { task, summary } = createSummaryFixtures();
-  return (
-    <main className="understanding-preview">
+  const content = (
       <section className="understanding-shell embedded" aria-label="视频总结预览">
         <div className="understanding-inner-tabs" role="tablist" aria-label="理解类型">
           <button type="button" role="tab">当前场景</button>
@@ -37,6 +37,10 @@ export function SummaryPreview({ state, sourceVersion }: { state: "progress" | "
           </div>
         </div>
       </section>
-    </main>
   );
+  return drawer ? <main className="player-workspace with-drawer" style={{ height: "100vh" }}>
+    <div aria-label="视频占位" />
+    <PlayerDrawer activeTab="understand" mediaTitle="总结阅读测试" contextStatus="字幕已就绪"
+      onClose={() => undefined} onSelectTab={() => undefined}>{content}</PlayerDrawer>
+  </main> : <main className="understanding-preview">{content}</main>;
 }
