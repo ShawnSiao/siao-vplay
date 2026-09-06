@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 
 import type { PendingResourceAction } from "../../components/LocalResourcesDialog";
 import type { LocalResourcesController } from "../resources/useLocalResources";
@@ -35,10 +35,19 @@ export function EnvironmentSettingsDialog({
   onNotice,
 }: EnvironmentSettingsDialogProps) {
   const [tab, setTab] = useState<"local" | "ai" | "storage">("local");
+  const [codexRefreshKey, setCodexRefreshKey] = useState(0);
   const controller = useEnvironmentSettings(true, previewMode);
   const storage = useStorageSettings(tab === "storage", previewMode, onNotice);
   const dialogRef = useRef<HTMLElement>(null);
   const titleId = useId();
+  const requestClose = useCallback(() => {
+    if (controller.operation || storage.operation) return;
+    if (controller.dirtySelectionIds.length &&
+        !window.confirm("还有未保存的 AI 服务配置。确定放弃这些修改并关闭？选择取消可继续编辑和保存。")) return;
+    onClose();
+  }, [controller.dirtySelectionIds, controller.operation, onClose, storage.operation]);
+  const requestCloseRef = useRef(requestClose);
+  useLayoutEffect(() => { requestCloseRef.current = requestClose; }, [requestClose]);
 
   useEffect(() => {
     const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -54,7 +63,7 @@ export function EnvironmentSettingsDialog({
         if (dialogRef.current?.querySelector(".storage-migration-dialog")) return;
         event.preventDefault();
         event.stopPropagation();
-        onClose();
+        requestCloseRef.current();
       } else if (event.key === "Tab") {
         const items = focusable();
         const first = items[0];
@@ -73,7 +82,7 @@ export function EnvironmentSettingsDialog({
       window.removeEventListener("keydown", keydown, true);
       if (previous?.isConnected) previous.focus();
     };
-  }, [onClose]);
+  }, []);
 
   useEffect(() => listenEnvironmentSettings(setTab), []);
 
@@ -95,7 +104,7 @@ export function EnvironmentSettingsDialog({
 
   return (
     <div className="environment-settings-scrim" role="presentation" onMouseDown={(event) => {
-      if (event.target === event.currentTarget) onClose();
+      if (event.target === event.currentTarget) requestClose();
     }}>
       <section ref={dialogRef} className="environment-settings-dialog" role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1}>
         <header className="environment-settings-header">
@@ -109,7 +118,7 @@ export function EnvironmentSettingsDialog({
             <button className={tab === "ai" ? "active" : ""} type="button" onClick={() => setTab("ai")}>AI 服务</button>
             <button className={tab === "storage" ? "active" : ""} type="button" onClick={() => setTab("storage")}>存储</button>
           </nav>
-          <button className="environment-settings-close" type="button" aria-label="关闭环境配置" onClick={onClose}>×</button>
+          <button className="environment-settings-close" type="button" aria-label="关闭环境配置" onClick={requestClose}>×</button>
         </header>
 
         <div className="environment-settings-content">
@@ -118,7 +127,7 @@ export function EnvironmentSettingsDialog({
           ) : tab === "ai" ? (
             <div className="environment-ai-layout">
               <AiServiceList controller={controller} />
-              {controller.selectionId === codexSelectionId ? <LocalCodexDetail previewMode={previewMode} /> : <AiServiceEditor key={controller.selectionId} controller={controller} />}
+              {controller.selectionId === codexSelectionId ? <LocalCodexDetail previewMode={previewMode} refreshKey={codexRefreshKey} /> : <AiServiceEditor key={controller.selectionId} controller={controller} />}
             </div>
           ) : <StoragePane controller={storage} />}
         </div>
@@ -128,7 +137,7 @@ export function EnvironmentSettingsDialog({
           {tab === "local" ? (
             <>
               {firstRun ? <button className="button text" type="button" onClick={onDismissFirstRun}>稍后配置</button> : null}
-              <button className="button quiet" type="button" onClick={onClose}>关闭</button>
+              <button className="button quiet" type="button" onClick={requestClose}>关闭</button>
             </>
           ) : tab === "storage" ? (
             <>
@@ -136,7 +145,7 @@ export function EnvironmentSettingsDialog({
               <button className="button primary" type="button" disabled={!storageDirty || storage.operation !== null} onClick={() => void storage.saveDefaults()}>{storage.operation === "saving" ? "正在保存…" : "应用设置"}</button>
             </>
           ) : controller.selectionId === codexSelectionId ? (
-            <button className="button quiet" type="button" onClick={() => controller.select(codexSelectionId)}>重新检测</button>
+            <button className="button quiet" type="button" onClick={() => setCodexRefreshKey((value) => value + 1)}>重新检测</button>
           ) : (
             <>
               <button className="button quiet" type="button" disabled={!canTest || aiBusy || previewMode} onClick={() => void controller.test()}>

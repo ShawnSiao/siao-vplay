@@ -20,6 +20,10 @@ export function executionForTask(
   execution: AiTaskExecutionInfo | undefined,
   fallbackKind: "manual" | "codex" | "api",
 ): AiExecutionTarget {
+  if ((!execution && fallbackKind === "api") ||
+      (execution?.kind === "api" && (!execution.serviceConfigId || !execution.modelId))) {
+    throw new Error("原任务的 API 服务信息不完整，请重新选择服务并确认发送范围。");
+  }
   if (!execution) return fallbackKind === "manual" ? { kind: "manual" } : { kind: "codex" };
   if (execution.kind === "api" && execution.serviceConfigId && execution.modelId) {
     return { kind: "api", serviceConfigId: execution.serviceConfigId, modelId: execution.modelId };
@@ -50,7 +54,7 @@ export function useAiExecutionChoice(allowFrames: boolean) {
   const [kind, setKindState] = useState<AiExecutionChoiceKind>("codex");
   const [serviceId, setServiceId] = useState<string | null>(null);
   const [modelId, setModelId] = useState("");
-  const [frames, setFrames] = useState(allowFrames);
+  const [frames, setFrames] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -82,9 +86,9 @@ export function useAiExecutionChoice(allowFrames: boolean) {
 
   const setKind = useCallback((nextKind: AiExecutionChoiceKind) => {
     setKindState(nextKind);
-    setFrames(nextKind === "api" ? false : allowFrames);
+    setFrames(false);
     setError(null);
-  }, [allowFrames]);
+  }, []);
 
   const selectService = useCallback((id: string) => {
     const next = usableServices(settings).find((service) => service.id === id);

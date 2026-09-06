@@ -23,7 +23,7 @@ function Toggle({ checked, disabled = false, label, onChange }: {
 
 export function AiServiceEditor({ controller }: { controller: EnvironmentSettingsController }) {
   const { draft, provider, service, models, testResult, operation, error, updateDraft } = controller;
-  const [editingKey, setEditingKey] = useState(false);
+  const [editingKey, setEditingKey] = useState(Boolean(controller.draft?.apiKey));
   const [advancedOpen, setAdvancedOpen] = useState(false);
 
   if (!draft || !provider) {
@@ -53,7 +53,7 @@ export function AiServiceEditor({ controller }: { controller: EnvironmentSetting
             <h2>{configured ? draft.displayName : custom ? "添加其他兼容服务" : `配置 ${draft.displayName}`}</h2>
             <p>用于字幕理解与学习辅助</p>
           </div>
-          {configured ? <span className="environment-status-chip">已保存</span> : null}
+          {controller.dirtySelectionIds.includes(controller.selectionId) ? <span className="environment-status-chip">未保存</span> : configured ? <span className="environment-status-chip">已保存</span> : null}
         </div>
 
         <div className="environment-capabilities" aria-label="服务能力">

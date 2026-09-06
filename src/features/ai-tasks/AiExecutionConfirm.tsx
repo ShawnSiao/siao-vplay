@@ -13,7 +13,7 @@ type AiExecutionConfirmProps = {
 
 const choiceLabels: Array<[AiExecutionChoiceKind, string, string]> = [
   ["api", "AI 服务", "使用保存的 API"],
-  ["codex", "本机 Codex", "在这台电脑上处理"],
+  ["codex", "本机 Codex", "调用其配置的模型服务"],
   ["manual", "复制提示词", "自行选择其他工具"],
 ];
 
@@ -78,6 +78,7 @@ export function AiExecutionConfirm({
 
       <div className="ai-execution-scope">
         <div><span>接收方</span><strong>{receiver}</strong></div>
+        {controller.kind === "codex" ? <p>Codex 可能向其配置的模型服务发送下列材料。本机安装不代表离线推理，请先核对 Codex 的接收服务。</p> : null}
         {controller.kind === "api" ? <div><span>模型</span><strong>{controller.modelId || "尚未选择"}</strong></div> : null}
         <ul>
           <li>当前播放点之前的原文字幕</li>

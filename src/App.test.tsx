@@ -1848,7 +1848,7 @@ describe("App", () => {
       screen.getByText("不包含完整视频、音频、本机媒体路径、数据库或凭证。"),
     ).toBeInTheDocument();
     expect(screen.getAllByText("本机 Codex")).toHaveLength(2);
-
+    fireEvent.click(screen.getByRole("checkbox", { name: /允许发送.*关键帧/ }));
     fireEvent.click(
       screen.getByRole("button", { name: "确认范围并理解当前场景" }),
     );
@@ -1929,6 +1929,7 @@ describe("App", () => {
     fireEvent.click(await screen.findByRole("button", { name: /继续播放/ }));
     fireEvent.click(await screen.findByRole("button", { name: "理解" }));
     fireEvent.click(await screen.findByRole("button", { name: /复制提示词/ }));
+    fireEvent.click(screen.getByRole("checkbox", { name: /允许发送.*关键帧/ }));
     fireEvent.click(
       screen.getByRole("button", { name: "确认范围并理解当前场景" }),
     );

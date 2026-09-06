@@ -25,6 +25,7 @@ function controller(): EnvironmentSettingsController {
     models: [],
     testResult: null,
     operation: null,
+    dirtySelectionIds: [],
     error: null,
     service,
     provider,

@@ -1,5 +1,26 @@
 import { expect, test } from "@playwright/test";
 
+test("provider drafts survive navigation and dismissal requires an explicit discard", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "设置" }).click();
+  const settings = page.getByRole("dialog", { name: "环境配置" });
+  await settings.getByRole("button", { name: "AI 服务" }).click();
+  await settings.getByRole("button", { name: "OpenAI 未配置" }).click();
+  const key = settings.getByPlaceholder("粘贴服务商提供的 API Key");
+  await key.fill("synthetic-draft-only");
+  await expect(key).toBeFocused();
+  await settings.getByRole("button", { name: "DeepSeek 未配置" }).click();
+  await settings.getByRole("button", { name: "OpenAI 未配置" }).click();
+  await expect(key).toHaveValue("synthetic-draft-only");
+  page.once("dialog", (dialog) => dialog.dismiss());
+  await page.keyboard.press("Escape");
+  await expect(settings).toBeVisible();
+  await expect(key).toHaveValue("synthetic-draft-only");
+  page.once("dialog", (dialog) => dialog.accept());
+  await settings.getByRole("button", { name: "关闭环境配置" }).click();
+  await expect(settings).toHaveCount(0);
+});
+
 test("environment settings follows the approved compact provider layout", async ({ page }) => {
   await page.setViewportSize({ width: 1200, height: 850 });
   await page.goto("/");
