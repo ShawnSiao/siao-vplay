@@ -40,6 +40,16 @@ cargo test --locked --release --lib --manifest-path src-tauri/Cargo.toml benchma
 
 结果为本机预热缓存下的单次测量。字节数用于验证读取范围，耗时用于比较同一机器的改动前后结果；不能替代应用首屏、内存、真实媒体或安装包验收。
 
+### 媒体库查询基准
+
+以下基准使用 1,000 / 10,000 条合成媒体记录和不可播放的占位文件，比较首页摘要、搜索、分页和旧全量项目读取。测试断言返回条数保持有界；不包含真实视频解码、前端首屏、内存或大型合集验收。
+
+```powershell
+cargo test --locked --release --lib --manifest-path src-tauri/Cargo.toml benchmark_library_summary_reads -- --ignored --nocapture
+```
+
+临时数据库和文件随测试结束清理；耗时包含查询和 JSON 序列化，不包含数据创建。首页和搜索先预热，分页与全量读取共享此前已访问的数据库缓存。
+
 ## 安装包
 
 ```powershell

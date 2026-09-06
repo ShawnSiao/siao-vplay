@@ -1,4 +1,6 @@
 mod local_projects;
+#[cfg(test)]
+mod library_benchmark;
 
 use std::{
     fs,
