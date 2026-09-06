@@ -1,0 +1,20 @@
+.task-dispatch-confirm {
+  min-width: 0;
+  font-size: 12px;
+}
+.task-dispatch-confirm p, .task-dispatch-confirm strong {
+  overflow-wrap: anywhere;
+}
+.task-dispatch-confirm h3 {
+  margin: 0 0 12px;
+  font-size: 14px;
+}
+.task-dispatch-confirm ul {
+  padding-left: 18px;
+}
+.task-dispatch-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}

@@ -820,9 +820,9 @@ fn run_explanation_task(
         .frames
         .iter()
         .map(|frame| {
-            let source = dunce::canonicalize(&frame.path)?;
+            let bytes = crate::verified_task_files::explanation_frame(store, task_id, frame)?;
             let destination = image_directory.join(format!("frame-{:04}.jpg", frame.ordinal + 1));
-            fs::copy(source, &destination)?;
+            fs::write(&destination, bytes)?;
             dunce::canonicalize(destination).map_err(CodexRunnerError::from)
         })
         .collect::<Result<Vec<_>, CodexRunnerError>>()?;

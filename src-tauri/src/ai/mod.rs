@@ -4,6 +4,7 @@ pub(crate) mod request_coordinator;
 
 mod catalog;
 mod config;
+pub(crate) mod dispatch;
 pub(crate) mod connection;
 mod credentials;
 mod error;

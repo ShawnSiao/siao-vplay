@@ -1,5 +1,6 @@
 mod agent_result;
 mod agent_task_files;
+mod verified_task_files;
 mod ai;
 mod ai_migration;
 mod burn;
@@ -287,9 +288,10 @@ pub fn run() {
             summary::commands::export_video_summary,
             speech::commands::list_speech_voices,
             speech::commands::synthesize_speech,
-            ai::commands::start_explanation_task,
+            ai::commands::prepare_ai_explanation_task,
+            ai::commands::preview_ai_task_dispatch,
             ai::commands::resume_explanation_task,
-            ai::commands::start_learning_task,
+            ai::commands::prepare_ai_learning_task,
             ai::commands::resume_learning_task,
             ai::commands::get_network_settings,
             ai::commands::set_network_settings,

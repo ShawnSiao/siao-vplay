@@ -24,6 +24,24 @@ impl AiTaskKind {
     }
 }
 
+pub(crate) fn record_prepared_service(
+    store: &ProjectStore,
+    kind: AiTaskKind,
+    task_id: &str,
+    service: &ResolvedAiService,
+    revision: u64,
+) -> Result<(), AiTaskError> {
+    let revision = i64::try_from(revision).map_err(|_| super::AiError::RevisionConflict)?;
+    let changed = store.connect()?.execute(&format!(
+        "UPDATE {} SET service_config_id = ?2, service_revision = ?3, provider_id = ?4,
+         model_id = ?5, stage = 'awaiting_confirmation' WHERE id = ?1 AND status = 'queued' AND execution_kind = 'api'", kind.table()),
+        params![task_id, service.service_config_id, revision, service.provider_id.as_str(), service.model_id])?;
+    if changed != 1 {
+        return Err(super::AiError::Validation("任务状态已改变，请重新准备".to_owned()).into());
+    }
+    Ok(())
+}
+
 pub fn claim_api(
     store: &ProjectStore,
     kind: AiTaskKind,
@@ -188,4 +206,42 @@ fn now_ms() -> Result<i64, crate::store::StoreError> {
         .map_err(|_| crate::store::StoreError::Validation("系统时间无效".to_owned()))?;
     i64::try_from(duration.as_millis())
         .map_err(|_| crate::store::StoreError::Validation("系统时间超出范围".to_owned()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn prepared_api_task_records_receiver_without_starting_execution() {
+        use crate::ai::types::{AiProtocol, AiProviderId, ResolvedAiService};
+        use crate::summary::PromptSelection;
+        use crate::understanding::{get_explanation_task, test_fixture::Fixture};
+        let fixture = Fixture::new();
+        let task = fixture.prepare_with_options(PromptSelection::default(), false);
+        fixture.store.connect().unwrap().execute(
+            "UPDATE explanation_tasks SET execution_kind = 'api', status = 'queued' WHERE id = ?1", [&task.id],
+        ).unwrap();
+        let service = ResolvedAiService {
+            service_config_id: Some("test-service".into()),
+            provider_id: AiProviderId::Openai,
+            protocol: AiProtocol::OpenaiResponses,
+            base_url: "https://example.invalid".into(),
+            model_id: Some("test-model".into()),
+            api_key: "unused-test-key".into(),
+        };
+        record_prepared_service(
+            &fixture.store,
+            AiTaskKind::Explanation,
+            &task.id,
+            &service,
+            7,
+        )
+        .unwrap();
+        let prepared = get_explanation_task(&fixture.store, &task.id).unwrap();
+        assert_eq!(prepared.status, "queued");
+        assert_eq!(prepared.stage, "awaiting_confirmation");
+        assert_eq!(prepared.execution.service_revision, Some(7));
+        assert_eq!(prepared.execution.model_id.as_deref(), Some("test-model"));
+        assert!(prepared.execution.provider_request_id.is_none());
+    }
 }

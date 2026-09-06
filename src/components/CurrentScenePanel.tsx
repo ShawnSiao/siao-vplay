@@ -1,3 +1,5 @@
+import { AiTaskDispatchConfirm } from "../features/ai-tasks/AiTaskDispatchConfirm";
+import { executeExplanationDispatch, previewTaskDispatch, type TaskDispatchPreview } from "../features/ai-tasks/taskDispatch";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import "../features/analysis/understanding.css";
@@ -16,8 +18,6 @@ import {
   openExternalResultDirectory,
   prepareExplanationTask,
   readExplanationPrompt,
-  resumeCodexExplanationTask,
-  startCodexExplanationTask,
 } from "../lib/desktop";
 import { formatDuration } from "../lib/format";
 import type {
@@ -27,13 +27,11 @@ import type {
   SubtitleVersion,
 } from "../types";
 import { AiTaskExecutionSetup } from "../features/ai-tasks/AiTaskExecutionSetup";
-import { resumeExplanationTask, startExplanationTask } from "../features/ai-tasks/gateway";
+import { prepareAiExplanationTask } from "../features/ai-tasks/gateway";
 import { UnderstandingPromptSelector } from "../features/analysis/UnderstandingPromptSelector";
 import { UnderstandingResultView } from "../features/analysis/UnderstandingResultView";
 import type { PromptSelection } from "../features/analysis/types";
 import {
-  authorizationForTask,
-  executionForTask,
   useAiExecutionChoice,
 } from "../features/ai-tasks/useAiExecutionChoice";
 
@@ -60,7 +58,7 @@ function fileName(path: string): string {
 
 function statusCopy(task: ExplanationTask): string {
   if (task.status === "queued") {
-    return "已准备好，等待本机开始";
+    return "材料已准备好，请查看发送清单";
   }
   if (task.status === "running") {
     return "正在结合字幕和关键帧理解当前场景";
@@ -91,6 +89,7 @@ export function CurrentScenePanel({
   const executionChoice = useAiExecutionChoice(true);
   const [runtime, setRuntime] = useState<CodexRuntimeStatus | null>(null);
   const [task, setTask] = useState<ExplanationTask | null>(null);
+  const [dispatch, setDispatch] = useState<TaskDispatchPreview | null>(null);
   const [explanation, setExplanation] = useState<Explanation | null>(null);
   const [history, setHistory] = useState<Explanation[]>([]);
   const [prompt, setPrompt] = useState<string | null>(null);
@@ -240,6 +239,7 @@ export function CurrentScenePanel({
   const resetForCurrentScene = () => {
     handledCompletionRef.current = null;
     setTask(null);
+    setDispatch(null);
     setExplanation(null);
     setPrompt(null);
     setPromptExpanded(false);
@@ -258,7 +258,7 @@ export function CurrentScenePanel({
     setError(null);
     try {
       const choice = executionChoice.kind === "api" ? await executionChoice.preview() : null;
-      const prepared = choice ? await startExplanationTask({
+      const prepared = choice ? await prepareAiExplanationTask({
         projectId, playbackCutoffMs, promptSelection, execution: choice.execution, authorization: choice.authorization,
       }) : await prepareExplanationTask(
         projectId,
@@ -269,12 +269,7 @@ export function CurrentScenePanel({
       );
       setTask(prepared);
       setExplanation(null);
-      if (executionChoice.kind === "codex") {
-        setTask(await startCodexExplanationTask(prepared.id));
-      } else if (executionChoice.kind === "manual") {
-        setPrompt(await readExplanationPrompt(prepared.id));
-        setPromptExpanded(true);
-      }
+      setDispatch(await previewTaskDispatch("explanation", prepared.id));
     } catch (cause) {
       setError(commandError(cause).message);
       const tasks = await listExplanationTasks(projectId).catch(() => []);
@@ -295,6 +290,7 @@ export function CurrentScenePanel({
     setError(null);
     try {
       setTask(await cancelExplanationTask(task.id));
+      setDispatch(null);
     } catch (cause) {
       setError(commandError(cause).message);
     } finally {
@@ -309,9 +305,25 @@ export function CurrentScenePanel({
     setOperation("resume");
     setError(null);
     try {
-      setTask(task.handoffKind === "api" ? await resumeExplanationTask(
-        task.id, executionForTask(task.execution, task.handoffKind), authorizationForTask(task.execution, task.frames.length > 0),
-      ) : await resumeCodexExplanationTask(task.id));
+      setDispatch(await previewTaskDispatch("explanation", task.id));
+    } catch (cause) {
+      setError(commandError(cause).message);
+    } finally {
+      setOperation(null);
+    }
+  };
+
+  const confirmDispatch = async () => {
+    if (!task || !dispatch) return;
+    setOperation("dispatch");
+    setError(null);
+    try {
+      setTask(await executeExplanationDispatch(task, dispatch));
+      if (dispatch.execution.kind === "manual") {
+        setPrompt(await readExplanationPrompt(task.id));
+        setPromptExpanded(true);
+      }
+      setDispatch(null);
     } catch (cause) {
       setError(commandError(cause).message);
     } finally {
@@ -390,10 +402,10 @@ export function CurrentScenePanel({
 
   const busy = operation !== null;
   const running =
-    task && ["queued", "running", "validating"].includes(task.status);
+    task && ["running", "validating"].includes(task.status);
   const canResume = Boolean(
     task && task.handoffKind !== "manual" &&
-    ["failed", "cancelled", "interrupted"].includes(task.status),
+    ["queued", "failed", "cancelled", "interrupted"].includes(task.status),
   );
   const visibleExplanation =
     explanation && explanation.playbackCutoffMs <= playbackCutoffMs
@@ -429,7 +441,7 @@ export function CurrentScenePanel({
         <div className="spoiler-boundary">
           <span>无剧透范围</span>
           <strong>仅使用 {formatDuration(playbackCutoffMs)} 之前</strong>
-          <small>不会读取或发送这个播放点之后的字幕和画面。</small>
+          <small>使用当前及之前的字幕；画面不晚于此播放点。</small>
         </div>
 
         {error ? (
@@ -438,7 +450,7 @@ export function CurrentScenePanel({
           </div>
         ) : null}
 
-        {task && !visibleExplanation ? (
+        {task && !visibleExplanation && !dispatch ? (
           <div className="understanding-task-material" aria-label="本次任务材料范围">
             <span>本次实际材料</span>
             <strong>
@@ -495,7 +507,7 @@ export function CurrentScenePanel({
               allowFrames
               translationAvailable={Boolean(translationVersion)}
               taskLabel="场景理解"
-              actionLabel="确认范围并理解当前场景"
+              actionLabel="准备理解材料"
               operationLabel="正在准备…"
               buttonClassName="understanding-primary"
               busy={operation === "prepare"}
@@ -503,6 +515,8 @@ export function CurrentScenePanel({
               onStart={() => void prepare()}
             />
           </div>
+        ) : dispatch ? (
+          <AiTaskDispatchConfirm preview={dispatch} busy={busy} onConfirm={() => void confirmDispatch()} onBack={() => setDispatch(null)} />
         ) : task.status === "awaiting_external_result" ? (
           <div className="understanding-manual">
             <div className="understanding-task-heading">
@@ -648,13 +662,16 @@ export function CurrentScenePanel({
                 disabled={busy}
                 onClick={() => void resume()}
               >
-                {operation === "resume" ? "正在重新开始…" : "重新开始"}
+                {operation === "resume" ? "正在重新开始…" : task.status === "queued" ? "查看发送清单" : "重新开始"}
               </button>
             ) : null}
+            {task.status === "queued" ? <button className="button quiet" type="button" disabled={busy} onClick={() => void cancel()}>
+              取消本次准备
+            </button> : null}
             <button
               className="button quiet understanding-again"
               type="button"
-              disabled={busy}
+              disabled={busy || task.status === "queued"}
               onClick={resetForCurrentScene}
             >
               新建当前场景理解
@@ -675,6 +692,7 @@ export function CurrentScenePanel({
                     setInterpretationExpanded(false);
                     setExplanation(item);
                     setTask(null);
+                    setDispatch(null);
                   }}
                 >
                   <span>{formatDuration(item.playbackCutoffMs)}</span>

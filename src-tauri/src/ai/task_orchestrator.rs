@@ -17,7 +17,7 @@ use crate::{
     understanding::{self, ExplanationTask, PrepareExplanationTaskInput},
 };
 
-pub fn start_explanation(
+pub fn prepare_explanation(
     store: &ProjectStore,
     input: StartExplanationTaskInput,
 ) -> Result<ExplanationTask, AiTaskError> {
@@ -35,17 +35,16 @@ pub fn start_explanation(
             prompt_selection: input.prompt_selection,
         },
     )?;
-    match input.execution {
-        AiExecutionTarget::Manual => Ok(task),
-        AiExecutionTarget::Codex => run_codex_explanation(store, &task.id, false),
-        AiExecutionTarget::Api { .. } => run_api_explanation(
+    if let Some(service) = service {
+        task_persistence::record_prepared_service(
             store,
+            AiTaskKind::Explanation,
             &task.id,
-            required_service(service)?,
-            input.authorization,
-            false,
-        ),
+            &service,
+            input.authorization.service_revision.unwrap_or_default(),
+        )?;
     }
+    Ok(understanding::get_explanation_task(store, &task.id)?)
 }
 
 pub fn resume_explanation(
@@ -53,13 +52,19 @@ pub fn resume_explanation(
     input: ResumeAiTaskInput,
 ) -> Result<ExplanationTask, AiTaskError> {
     validate_authorization(&input.authorization)?;
+    super::dispatch::verify_choice(
+        store,
+        crate::verified_task_files::TaskDomain::Explanation,
+        &input,
+    )?;
+    let retry = understanding::get_explanation_task(store, &input.task_id)?.status != "queued";
     match &input.execution {
         AiExecutionTarget::Api { .. } => run_api_explanation(
             store,
             &input.task_id,
             connection::resolve_execution(&input.execution, input.authorization.service_revision)?,
             input.authorization,
-            true,
+            retry,
         ),
         AiExecutionTarget::Manual => {
             task_persistence::switch_local(
@@ -71,18 +76,20 @@ pub fn resume_explanation(
             Ok(understanding::get_explanation_task(store, &input.task_id)?)
         }
         AiExecutionTarget::Codex => {
-            task_persistence::switch_local(
-                store,
-                AiTaskKind::Explanation,
-                &input.task_id,
-                &input.execution,
-            )?;
-            run_codex_explanation(store, &input.task_id, true)
+            if retry {
+                task_persistence::switch_local(
+                    store,
+                    AiTaskKind::Explanation,
+                    &input.task_id,
+                    &input.execution,
+                )?;
+            }
+            run_codex_explanation(store, &input.task_id, retry)
         }
     }
 }
 
-pub fn start_learning(
+pub fn prepare_learning(
     store: &ProjectStore,
     input: StartLearningTaskInput,
 ) -> Result<LearningTask, AiTaskError> {
@@ -99,17 +106,16 @@ pub fn start_learning(
             playback_position_ms: input.playback_position_ms,
         },
     )?;
-    match input.execution {
-        AiExecutionTarget::Manual => Ok(task),
-        AiExecutionTarget::Codex => run_codex_learning(store, &task.id, false),
-        AiExecutionTarget::Api { .. } => run_api_learning(
+    if let Some(service) = service {
+        task_persistence::record_prepared_service(
             store,
+            AiTaskKind::Learning,
             &task.id,
-            required_service(service)?,
-            input.authorization,
-            false,
-        ),
+            &service,
+            input.authorization.service_revision.unwrap_or_default(),
+        )?;
     }
+    Ok(learning::get_learning_task(store, &task.id)?)
 }
 
 pub fn resume_learning(
@@ -117,13 +123,19 @@ pub fn resume_learning(
     input: ResumeAiTaskInput,
 ) -> Result<LearningTask, AiTaskError> {
     validate_authorization(&input.authorization)?;
+    super::dispatch::verify_choice(
+        store,
+        crate::verified_task_files::TaskDomain::Learning,
+        &input,
+    )?;
+    let retry = learning::get_learning_task(store, &input.task_id)?.status != "queued";
     match &input.execution {
         AiExecutionTarget::Api { .. } => run_api_learning(
             store,
             &input.task_id,
             connection::resolve_execution(&input.execution, input.authorization.service_revision)?,
             input.authorization,
-            true,
+            retry,
         ),
         AiExecutionTarget::Manual => {
             task_persistence::switch_local(
@@ -135,13 +147,15 @@ pub fn resume_learning(
             Ok(learning::get_learning_task(store, &input.task_id)?)
         }
         AiExecutionTarget::Codex => {
-            task_persistence::switch_local(
-                store,
-                AiTaskKind::Learning,
-                &input.task_id,
-                &input.execution,
-            )?;
-            run_codex_learning(store, &input.task_id, true)
+            if retry {
+                task_persistence::switch_local(
+                    store,
+                    AiTaskKind::Learning,
+                    &input.task_id,
+                    &input.execution,
+                )?;
+            }
+            run_codex_learning(store, &input.task_id, retry)
         }
     }
 }
@@ -177,7 +191,7 @@ fn run_api_explanation(
         frames_effective,
     );
     let images = if frames_effective {
-        encode_frames(&task)?
+        encode_frames(store, &task)?
     } else {
         Vec::new()
     };
@@ -315,11 +329,6 @@ fn api_service(
     }
 }
 
-fn required_service(service: Option<ResolvedAiService>) -> Result<ResolvedAiService, AiTaskError> {
-    service
-        .ok_or_else(|| super::error::AiError::Validation("AI 服务配置未能解析".to_owned()).into())
-}
-
 fn selected_model(service: &ResolvedAiService) -> Result<&str, AiTaskError> {
     service
         .model_id
@@ -338,11 +347,11 @@ fn validate_authorization(authorization: &AiMaterialAuthorization) -> Result<(),
     }
 }
 
-fn encode_frames(task: &ExplanationTask) -> Result<Vec<String>, AiTaskError> {
+fn encode_frames(store: &ProjectStore, task: &ExplanationTask) -> Result<Vec<String>, AiTaskError> {
     task.frames
         .iter()
         .map(|frame| {
-            let data = std::fs::read(&frame.path)?;
+            let data = crate::verified_task_files::explanation_frame(store, &task.id, frame)?;
             Ok(format!("data:image/jpeg;base64,{}", STANDARD.encode(data)))
         })
         .collect()

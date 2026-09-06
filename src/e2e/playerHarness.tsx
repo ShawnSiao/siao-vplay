@@ -3,8 +3,7 @@ import { createRoot } from "react-dom/client";
 
 import { PlayerScreen } from "../features/playback/PlayerScreen";
 import { UnderstandingResultView } from "../features/analysis/UnderstandingResultView";
-import { SummaryPreview } from "./SummaryPreview";
-import { LearningSpeechPreview } from "./LearningSpeechPreview";
+import { renderFeaturePreview } from "./playerFeaturePreview";
 import { DesktopShell } from "../features/shell/DesktopShell";
 import type {
   ShellContextMenu,
@@ -280,15 +279,11 @@ export function PlayerHarness() {
   const [drawerTab, setDrawerTab] = useState<ShellDrawerTab | null>(null);
   const [contextMenu, setContextMenu] = useState<ShellContextMenu | null>(null);
 
+  const featurePreview = renderFeaturePreview(new URLSearchParams(window.location.search), originalSubtitle);
+  if (featurePreview) return featurePreview;
+
   if (new URLSearchParams(window.location.search).get("understanding") === "result") {
     return <UnderstandingResultPreview />;
-  }
-  const summaryPreview = new URLSearchParams(window.location.search).get("summary");
-  if (summaryPreview === "progress" || summaryPreview === "result" || summaryPreview === "confirm") {
-    return <SummaryPreview state={summaryPreview} sourceVersion={originalSubtitle} />;
-  }
-  if (new URLSearchParams(window.location.search).get("learning") === "speech") {
-    return <LearningSpeechPreview />;
   }
 
   const toggleDrawer = (tab: ShellDrawerTab) => {

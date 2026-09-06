@@ -1,3 +1,4 @@
+import { taskDispatchFixture } from "./test-fixtures/taskDispatch";
 import { youtubePreview, directVideoFixture } from "./test-fixtures/publicVideo";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -166,6 +167,8 @@ vi.mock("./features/library/libraryGateway", async (importOriginal) => ({
 }));
 
 vi.mock("./features/analysis/gateway", () => analysisGatewayMocks);
+const dispatchMocks = vi.hoisted(() => ({ previewTaskDispatch: vi.fn() }));
+vi.mock("./features/ai-tasks/taskDispatch", async (original) => ({ ...await original<object>(), ...dispatchMocks }));
 
 import App from "./App";
 
@@ -771,6 +774,7 @@ beforeEach(() => {
     },
   ]);
   vi.clearAllMocks();
+  dispatchMocks.previewTaskDispatch.mockImplementation(async (kind) => taskDispatchFixture(await (kind === "explanation" ? desktopMocks.prepareExplanationTask : desktopMocks.prepareLearningTask).mock.results.at(-1)!.value));
   window.localStorage.clear();
   libraryGatewayMocks.listLibrarySection.mockResolvedValue({
     items: [],
@@ -1840,7 +1844,7 @@ describe("App", () => {
     expect(screen.getByText("OpenAI（经本机 Codex）")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("checkbox", { name: /允许发送.*关键帧/ }));
     fireEvent.click(
-      screen.getByRole("button", { name: "确认范围并理解当前场景" }),
+      screen.getByRole("button", { name: "准备理解材料" }),
     );
     await waitFor(() =>
       expect(desktopMocks.prepareExplanationTask).toHaveBeenCalledWith(
@@ -1854,9 +1858,11 @@ describe("App", () => {
         },
       ),
     );
+    expect(desktopMocks.startCodexExplanationTask).not.toHaveBeenCalled();
+    fireEvent.click(await screen.findByRole("button", { name: "确认发送并理解" }));
     await waitFor(() =>
       expect(desktopMocks.startCodexExplanationTask).toHaveBeenCalledWith(
-        explanationTask.id,
+        explanationTask.id, undefined, "b".repeat(64),
       ),
     );
     expect(
@@ -1921,9 +1927,10 @@ describe("App", () => {
     fireEvent.click(await screen.findByRole("button", { name: /复制提示词/ }));
     fireEvent.click(screen.getByRole("checkbox", { name: /允许发送.*关键帧/ }));
     fireEvent.click(
-      screen.getByRole("button", { name: "确认范围并理解当前场景" }),
+      screen.getByRole("button", { name: "准备理解材料" }),
     );
 
+    fireEvent.click(await screen.findByRole("button", { name: "确认准备交接" }));
     expect(
       await screen.findByText("复制文字并按提示附上关键帧"),
     ).toBeInTheDocument();
@@ -1989,7 +1996,7 @@ describe("App", () => {
       screen.getByText("不包含完整视频、音频、本机媒体路径、数据库或凭证。"),
     ).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "确认范围并查询" }));
+    fireEvent.click(screen.getByRole("button", { name: "准备查询材料" }));
     await waitFor(() =>
       expect(desktopMocks.prepareLearningTask).toHaveBeenCalledWith(
         project.id,
@@ -2000,9 +2007,11 @@ describe("App", () => {
         500,
       ),
     );
+    expect(desktopMocks.startCodexLearningTask).not.toHaveBeenCalled();
+    fireEvent.click(await screen.findByRole("button", { name: "确认发送并查询" }));
     await waitFor(() =>
       expect(desktopMocks.startCodexLearningTask).toHaveBeenCalledWith(
-        learningTask.id,
+        learningTask.id, undefined, "b".repeat(64),
       ),
     );
     expect(
@@ -2040,8 +2049,9 @@ describe("App", () => {
     fireEvent.click(await screen.findByRole("button", { name: /继续播放/ }));
     fireEvent.click(await screen.findByRole("button", { name: "学习" }));
     fireEvent.click(await screen.findByRole("button", { name: /复制提示词/ }));
-    fireEvent.click(screen.getByRole("button", { name: "确认范围并查询" }));
+    fireEvent.click(screen.getByRole("button", { name: "准备查询材料" }));
 
+    fireEvent.click(await screen.findByRole("button", { name: "确认准备交接" }));
     expect(
       await screen.findByText("复制提示词后，可自动检测 result.json"),
     ).toBeInTheDocument();

@@ -616,7 +616,7 @@ pub fn read_learning_prompt(store: &ProjectStore, task_id: &str) -> Result<Strin
     let task = get_learning_task(store, task_id)?;
     let directory = task_directory(store, task_id)?;
     verify_task_package(store, &task, &directory)?;
-    read_small_utf8(&directory.join("prompt.md"))
+    Ok(crate::verified_task_files::read_text(store, crate::verified_task_files::TaskDomain::Learning, task_id, "prompt.md")?)
 }
 
 pub(crate) fn read_learning_schema(
@@ -626,9 +626,7 @@ pub(crate) fn read_learning_schema(
     let task = get_learning_task(store, task_id)?;
     let directory = task_directory(store, task_id)?;
     verify_task_package(store, &task, &directory)?;
-    Ok(serde_json::from_str(&read_small_utf8(
-        &directory.join("result.schema.json"),
-    )?)?)
+    Ok(serde_json::from_str(&crate::verified_task_files::read_text(store, crate::verified_task_files::TaskDomain::Learning, task_id, "result.schema.json")?)?)
 }
 
 pub fn get_dictionary_entry(

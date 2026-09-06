@@ -58,13 +58,13 @@ pub fn preview_ai_execution(
 }
 
 #[tauri::command]
-pub async fn start_explanation_task(
+pub async fn prepare_ai_explanation_task(
     store: State<'_, ProjectStore>,
     input: StartExplanationTaskInput,
 ) -> Result<ExplanationTask, AiCommandError> {
     let store = store.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
-        task_orchestrator::start_explanation(&store, input)
+        task_orchestrator::prepare_explanation(&store, input)
             .map_err(super::task_types::AiTaskError::command_error)
     })
     .await
@@ -86,13 +86,13 @@ pub async fn resume_explanation_task(
 }
 
 #[tauri::command]
-pub async fn start_learning_task(
+pub async fn prepare_ai_learning_task(
     store: State<'_, ProjectStore>,
     input: StartLearningTaskInput,
 ) -> Result<LearningTask, AiCommandError> {
     let store = store.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
-        task_orchestrator::start_learning(&store, input)
+        task_orchestrator::prepare_learning(&store, input)
             .map_err(super::task_types::AiTaskError::command_error)
     })
     .await
@@ -151,4 +151,12 @@ pub fn set_local_resource_proxy(
     })?;
     network::set_custom_proxy_compat(input.proxy_url.as_deref()).map_err(AiCommandError::from)?;
     Ok(resource_download::network_status())
+}
+
+#[tauri::command]
+pub async fn preview_ai_task_dispatch(store: State<'_, ProjectStore>, input: super::dispatch::PreviewTaskDispatchInput)
+    -> Result<super::dispatch::TaskDispatchPreview, AiCommandError> {
+    let store = store.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || super::dispatch::preview(&store, input.task_kind, &input.task_id)
+        .map_err(super::task_types::AiTaskError::command_error)).await.map_err(background_task_error)?
 }

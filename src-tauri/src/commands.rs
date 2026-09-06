@@ -1120,9 +1120,11 @@ pub async fn import_explanation_result(
 pub async fn start_codex_explanation_task(
     store: State<'_, ProjectStore>,
     input: StartCodexTranslationInput,
+    confirmation_sha256: String,
 ) -> Result<ExplanationTask, CommandError> {
     let store = store.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
+        crate::ai::dispatch::verify_codex(&store, crate::verified_task_files::TaskDomain::Explanation, &input.task_id, &confirmation_sha256)?;
         codex_runner::start_codex_explanation_task(&store, input).map_err(CommandError::from)
     })
     .await
@@ -1141,9 +1143,11 @@ pub fn cancel_explanation_task(
 pub async fn resume_codex_explanation_task(
     store: State<'_, ProjectStore>,
     input: StartCodexTranslationInput,
+    confirmation_sha256: String,
 ) -> Result<ExplanationTask, CommandError> {
     let store = store.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
+        crate::ai::dispatch::verify_codex(&store, crate::verified_task_files::TaskDomain::Explanation, &input.task_id, &confirmation_sha256)?;
         codex_runner::resume_codex_explanation_task(&store, input).map_err(CommandError::from)
     })
     .await
@@ -1220,9 +1224,11 @@ pub async fn import_learning_result(
 pub async fn start_codex_learning_task(
     store: State<'_, ProjectStore>,
     input: StartCodexTranslationInput,
+    confirmation_sha256: String,
 ) -> Result<LearningTask, CommandError> {
     let store = store.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
+        crate::ai::dispatch::verify_codex(&store, crate::verified_task_files::TaskDomain::Learning, &input.task_id, &confirmation_sha256)?;
         codex_runner::start_codex_learning_task(&store, input).map_err(CommandError::from)
     })
     .await
@@ -1241,9 +1247,11 @@ pub fn cancel_learning_task(
 pub async fn resume_codex_learning_task(
     store: State<'_, ProjectStore>,
     input: StartCodexTranslationInput,
+    confirmation_sha256: String,
 ) -> Result<LearningTask, CommandError> {
     let store = store.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
+        crate::ai::dispatch::verify_codex(&store, crate::verified_task_files::TaskDomain::Learning, &input.task_id, &confirmation_sha256)?;
         codex_runner::resume_codex_learning_task(&store, input).map_err(CommandError::from)
     })
     .await

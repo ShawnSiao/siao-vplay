@@ -1040,10 +1040,11 @@ export async function importExplanationResult(
 
 export async function startCodexExplanationTask(
   taskId: string,
-  timeoutSeconds?: number,
+  timeoutSeconds: number | undefined,
+  confirmationSha256: string,
 ): Promise<ExplanationTask> {
   return invoke<ExplanationTask>("start_codex_explanation_task", {
-    input: { taskId, timeoutSeconds },
+    input: { taskId, timeoutSeconds }, confirmationSha256,
   });
 }
 
@@ -1055,10 +1056,11 @@ export async function cancelExplanationTask(
 
 export async function resumeCodexExplanationTask(
   taskId: string,
-  timeoutSeconds?: number,
+  timeoutSeconds: number | undefined,
+  confirmationSha256: string,
 ): Promise<ExplanationTask> {
   return invoke<ExplanationTask>("resume_codex_explanation_task", {
-    input: { taskId, timeoutSeconds },
+    input: { taskId, timeoutSeconds }, confirmationSha256,
   });
 }
 
@@ -1149,10 +1151,11 @@ export async function importLearningResult(
 
 export async function startCodexLearningTask(
   taskId: string,
-  timeoutSeconds?: number,
+  timeoutSeconds: number | undefined,
+  confirmationSha256: string,
 ): Promise<LearningTask> {
   return invoke<LearningTask>("start_codex_learning_task", {
-    input: { taskId, timeoutSeconds },
+    input: { taskId, timeoutSeconds }, confirmationSha256,
   });
 }
 
@@ -1164,10 +1167,11 @@ export async function cancelLearningTask(
 
 export async function resumeCodexLearningTask(
   taskId: string,
-  timeoutSeconds?: number,
+  timeoutSeconds: number | undefined,
+  confirmationSha256: string,
 ): Promise<LearningTask> {
   return invoke<LearningTask>("resume_codex_learning_task", {
-    input: { taskId, timeoutSeconds },
+    input: { taskId, timeoutSeconds }, confirmationSha256,
   });
 }
 

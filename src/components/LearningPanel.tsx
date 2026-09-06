@@ -1,3 +1,5 @@
+import { AiTaskDispatchConfirm } from "../features/ai-tasks/AiTaskDispatchConfirm";
+import { executeLearningDispatch, previewTaskDispatch, type TaskDispatchPreview } from "../features/ai-tasks/taskDispatch";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import "../features/learning/learning-speech.css";
@@ -20,8 +22,6 @@ import {
   openExternalResultDirectory,
   prepareLearningTask,
   readLearningPrompt,
-  resumeCodexLearningTask,
-  startCodexLearningTask,
 } from "../lib/desktop";
 import type {
   CodexRuntimeStatus,
@@ -32,10 +32,8 @@ import type {
   SubtitleVersion,
 } from "../types";
 import { AiTaskExecutionSetup } from "../features/ai-tasks/AiTaskExecutionSetup";
-import { resumeLearningTask, startLearningTask } from "../features/ai-tasks/gateway";
+import { prepareAiLearningTask } from "../features/ai-tasks/gateway";
 import {
-  authorizationForTask,
-  executionForTask,
   useAiExecutionChoice,
 } from "../features/ai-tasks/useAiExecutionChoice";
 import { LearningCardsSection } from "../features/learning/LearningCardsSection";
@@ -67,7 +65,7 @@ const activeStatuses = new Set([
 
 function statusCopy(task: LearningTask): string {
   if (task.status === "queued") {
-    return "已准备好，等待本机开始";
+    return "材料已准备好，请查看发送清单";
   }
   if (task.status === "running") {
     return "正在查询这句台词里的用法";
@@ -114,6 +112,7 @@ export function LearningPanel({
   const executionChoice = useAiExecutionChoice(false);
   const [runtime, setRuntime] = useState<CodexRuntimeStatus | null>(null);
   const [task, setTask] = useState<LearningTask | null>(null);
+  const [dispatch, setDispatch] = useState<TaskDispatchPreview | null>(null);
   const [entry, setEntry] = useState<DictionaryEntry | null>(null);
   const [entries, setEntries] = useState<DictionaryEntry[]>([]);
   const [cards, setCards] = useState<LearningCard[]>([]);
@@ -266,6 +265,7 @@ export function LearningPanel({
   const selectText = (value: string) => {
     setSelectedText(value);
     setTask(null);
+    setDispatch(null);
     setEntry(
       entries.find(
         (item) =>
@@ -291,18 +291,13 @@ export function LearningPanel({
       const normalized = selectedText.trim();
       const choice = executionChoice.kind === "api" ? await executionChoice.preview() : null;
       const kind = selectionKind(normalized, sourceSegment.text, selectableParts);
-      const prepared = choice ? await startLearningTask({
+      const prepared = choice ? await prepareAiLearningTask({
         projectId, sourceSegmentId: sourceSegment.id, selectedText: normalized,
         selectionKind: kind, playbackPositionMs, execution: choice.execution, authorization: choice.authorization,
       }) : await prepareLearningTask(projectId, executionChoice.kind === "manual" ? "manual" : "codex", sourceSegment.id, normalized, kind, playbackPositionMs);
       setTask(prepared);
       setEntry(null);
-      if (executionChoice.kind === "codex") {
-        setTask(await startCodexLearningTask(prepared.id));
-      } else if (executionChoice.kind === "manual") {
-        setPrompt(await readLearningPrompt(prepared.id));
-        setPromptExpanded(true);
-      }
+      setDispatch(await previewTaskDispatch("learning", prepared.id));
     } catch (cause) {
       setError(commandError(cause).message);
       const tasks = await listLearningTasks(projectId).catch(() => []);
@@ -324,6 +319,7 @@ export function LearningPanel({
     setError(null);
     try {
       setTask(await cancelLearningTask(task.id));
+      setDispatch(null);
     } catch (cause) {
       setError(commandError(cause).message);
     } finally {
@@ -338,9 +334,25 @@ export function LearningPanel({
     setOperation("resume");
     setError(null);
     try {
-      setTask(task.handoffKind === "api" ? await resumeLearningTask(
-        task.id, executionForTask(task.execution, task.handoffKind), authorizationForTask(task.execution, false),
-      ) : await resumeCodexLearningTask(task.id));
+      setDispatch(await previewTaskDispatch("learning", task.id));
+    } catch (cause) {
+      setError(commandError(cause).message);
+    } finally {
+      setOperation(null);
+    }
+  };
+
+  const confirmDispatch = async () => {
+    if (!task || !dispatch) return;
+    setOperation("dispatch");
+    setError(null);
+    try {
+      setTask(await executeLearningDispatch(task, dispatch));
+      if (dispatch.execution.kind === "manual") {
+        setPrompt(await readLearningPrompt(task.id));
+        setPromptExpanded(true);
+      }
+      setDispatch(null);
     } catch (cause) {
       setError(commandError(cause).message);
     } finally {
@@ -474,6 +486,7 @@ export function LearningPanel({
   const resetQuery = () => {
     handledCompletionRef.current = null;
     setTask(null);
+    setDispatch(null);
     setEntry(null);
     setPrompt(null);
     setPromptExpanded(false);
@@ -484,10 +497,10 @@ export function LearningPanel({
 
   const busy = operation !== null;
   const running =
-    task && ["queued", "running", "validating"].includes(task.status);
+    task && ["running", "validating"].includes(task.status);
   const canResume = Boolean(
     task && task.handoffKind !== "manual" &&
-    ["failed", "cancelled", "interrupted"].includes(task.status),
+    ["queued", "failed", "cancelled", "interrupted"].includes(task.status),
   );
   const savedEntry = entry
     ? cards.some((card) => card.dictionaryEntryId === entry.id)
@@ -580,7 +593,7 @@ export function LearningPanel({
                   allowFrames={false}
                   translationAvailable={Boolean(translationVersion && translationSegment)}
                   taskLabel="学习辅助"
-                  actionLabel="确认范围并查询"
+                  actionLabel="准备查询材料"
                   operationLabel="正在准备…"
                   buttonClassName="learning-primary"
                   busy={operation === "prepare"}
@@ -588,6 +601,8 @@ export function LearningPanel({
                   onStart={() => void prepare()}
                 />
               </section>
+            ) : dispatch ? (
+              <AiTaskDispatchConfirm preview={dispatch} busy={busy} onConfirm={() => void confirmDispatch()} onBack={() => setDispatch(null)} />
             ) : task.status === "awaiting_external_result" ? (
               <section className="learning-manual">
                 <div className="learning-task-heading">
@@ -719,13 +734,16 @@ export function LearningPanel({
                     disabled={busy}
                     onClick={() => void resume()}
                   >
-                    {operation === "resume" ? "正在重新开始…" : "重新开始"}
+                    {operation === "resume" ? "正在重新开始…" : task.status === "queued" ? "查看发送清单" : "重新开始"}
                   </button>
                 ) : null}
+                {task.status === "queued" ? <button className="button quiet" type="button" disabled={busy} onClick={() => void cancel()}>
+                  取消本次准备
+                </button> : null}
                 <button
                   className="button quiet learning-primary"
                   type="button"
-                  disabled={busy}
+                  disabled={busy || task.status === "queued"}
                   onClick={resetQuery}
                 >
                   新建查询

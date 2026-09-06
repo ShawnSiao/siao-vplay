@@ -38,6 +38,7 @@ pub struct StartLearningTaskInput {
 #[serde(rename_all = "camelCase")]
 pub struct ResumeAiTaskInput {
     pub task_id: String,
+    pub confirmation_sha256: String,
     pub execution: AiExecutionTarget,
     pub authorization: AiMaterialAuthorization,
 }

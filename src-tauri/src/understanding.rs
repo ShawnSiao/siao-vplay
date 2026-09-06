@@ -746,7 +746,7 @@ pub fn read_explanation_prompt(
     let task = get_explanation_task(store, task_id)?;
     let directory = task_directory(store, task_id)?;
     verify_task_package(store, &task, &directory)?;
-    read_small_utf8(&directory.join("prompt.md"))
+    Ok(crate::verified_task_files::read_text(store, crate::verified_task_files::TaskDomain::Explanation, task_id, "prompt.md")?)
 }
 
 pub(crate) fn read_explanation_schema(
@@ -756,9 +756,7 @@ pub(crate) fn read_explanation_schema(
     let task = get_explanation_task(store, task_id)?;
     let directory = task_directory(store, task_id)?;
     verify_task_package(store, &task, &directory)?;
-    Ok(serde_json::from_str(&read_small_utf8(
-        &directory.join("result.schema.json"),
-    )?)?)
+    Ok(serde_json::from_str(&crate::verified_task_files::read_text(store, crate::verified_task_files::TaskDomain::Explanation, task_id, "result.schema.json")?)?)
 }
 
 pub fn open_explanation_materials(
@@ -1609,174 +1607,40 @@ fn default_true() -> bool {
 }
 
 #[cfg(test)]
+#[path = "understanding_test_fixture.rs"]
+pub(crate) mod test_fixture;
+
+#[cfg(test)]
 mod tests {
-    use tempfile::TempDir;
+    use super::test_fixture::Fixture;
 
     use super::*;
     use crate::{
         domain::CreateLocalProjectInput,
-        media::{AudioStream, SubtitleStream, VideoStream},
-        subtitles::{
-            GeneratedSubtitleCue, PersistTranscriptionInput, SubtitleCue, persist_transcription,
-        },
+        subtitles::{GeneratedSubtitleCue, PersistTranscriptionInput, SubtitleCue, persist_transcription},
         translation::{TranslationError, prepare_translation_task},
     };
 
-    struct Fixture {
-        _temporary: TempDir,
-        store: ProjectStore,
-        project_id: String,
-        media_path: PathBuf,
+    #[test]
+    fn dispatch_confirmation_binds_receiver_versions_and_verified_materials() {
+        use crate::{ai::dispatch, verified_task_files::TaskDomain};
+        let fixture = Fixture::new();
+        let task = fixture.prepare();
+        let preview = dispatch::preview(&fixture.store, TaskDomain::Explanation, &task.id).unwrap();
+        assert_eq!(preview.subtitle_count, 3);
+        assert_eq!(preview.playback_cutoff_ms, 4_500);
+        assert_eq!(preview.subtitles[0].version_id, task.source_version_id);
+        assert_eq!(preview.frames.len(), task.frames.len());
+        assert!(preview.frames.iter().all(|frame| frame.timestamp_ms <= 4_500));
+        assert!(dispatch::verify(&fixture.store, TaskDomain::Explanation, &task.id, &preview.confirmation_sha256).is_ok());
+        assert!(dispatch::verify(&fixture.store, TaskDomain::Explanation, &task.id, &"0".repeat(64)).is_err());
+        fixture.store.connect().unwrap().execute(
+            "UPDATE explanation_tasks SET execution_kind = 'codex' WHERE id = ?1", [&task.id],
+        ).unwrap();
+        assert!(dispatch::verify(&fixture.store, TaskDomain::Explanation, &task.id, &preview.confirmation_sha256).is_err());
+        assert!(dispatch::verify_codex(&fixture.store, TaskDomain::Explanation, &task.id, &preview.confirmation_sha256).is_err());
     }
 
-    impl Fixture {
-        fn new() -> Self {
-            let temporary = tempfile::tempdir().expect("temporary directory should work");
-            let media_path = temporary.path().join("scene.mp4");
-            fs::write(&media_path, b"authorized-scene-media")
-                .expect("media fixture should be written");
-            let store = ProjectStore::open(
-                temporary
-                    .path()
-                    .join("data")
-                    .join("projects")
-                    .join("siaovplay.db"),
-            )
-            .expect("store should open");
-            let project = store
-                .create_local_project(CreateLocalProjectInput {
-                    media_path: media_path.to_string_lossy().into_owned(),
-                    title: Some("understanding fixture".to_owned()),
-                })
-                .expect("project should be created");
-            let metadata = fs::metadata(&media_path).expect("metadata should read");
-            let modified = modified_at_ms(&metadata).expect("modified time should read");
-            let probe = MediaProbe {
-                container_formats: vec!["mp4".to_owned()],
-                duration_ms: Some(10_000),
-                size_bytes: Some(metadata.len()),
-                bit_rate: None,
-                video_streams: vec![VideoStream {
-                    index: 0,
-                    codec_name: "h264".to_owned(),
-                    profile: None,
-                    pixel_format: Some("yuv420p".to_owned()),
-                    width: 320,
-                    height: 180,
-                    frame_rate: Some(25.0),
-                    duration_ms: Some(10_000),
-                }],
-                audio_streams: Vec::<AudioStream>::new(),
-                subtitle_streams: Vec::<SubtitleStream>::new(),
-            };
-            store
-                .record_media_probe(
-                    &project.id,
-                    &project.media_source.id,
-                    &"a".repeat(64),
-                    &serde_json::to_string(&probe).expect("probe should serialize"),
-                    metadata.len(),
-                    modified,
-                )
-                .expect("media baseline should persist");
-            let cues = [
-                (0, 0, 1_000, "最初の台詞"),
-                (1, 2_000, 3_000, "今ここで待っている"),
-                (2, 4_000, 5_000, "雨が降り始めた"),
-                (3, 6_000, 7_000, "これは未来の台詞"),
-            ]
-            .into_iter()
-            .map(|(ordinal, start_ms, end_ms, text)| GeneratedSubtitleCue {
-                cue: SubtitleCue {
-                    ordinal,
-                    start_ms,
-                    end_ms,
-                    text: text.to_owned(),
-                    confidence: None,
-                },
-                words: Vec::new(),
-            })
-            .collect();
-            persist_transcription(
-                &store,
-                PersistTranscriptionInput {
-                    project_id: project.id.clone(),
-                    source_label: "real transcription".to_owned(),
-                    source_sha256: "b".repeat(64),
-                    language_code: "ja".to_owned(),
-                    expected_project_revision: project.revision,
-                    expected_media_sha256: "a".repeat(64),
-                    media_duration_ms: Some(10_000),
-                    cues,
-                },
-            )
-            .expect("source subtitle should persist");
-            Self {
-                _temporary: temporary,
-                store,
-                project_id: project.id,
-                media_path,
-            }
-        }
-
-        fn prepare(&self) -> ExplanationTask {
-            self.prepare_with_prompt(PromptSelection::default())
-        }
-
-        fn prepare_with_prompt(&self, prompt_selection: PromptSelection) -> ExplanationTask {
-            self.prepare_with_options(prompt_selection, true)
-        }
-
-        fn prepare_with_options(
-            &self,
-            prompt_selection: PromptSelection,
-            include_frames: bool,
-        ) -> ExplanationTask {
-            prepare_explanation_task_with(
-                &self.store,
-                PrepareExplanationTaskInput {
-                    project_id: self.project_id.clone(),
-                    handoff_kind: "manual".to_owned(),
-                    playback_cutoff_ms: 4_500,
-                    include_frames,
-                    prompt_selection,
-                },
-                |_media_path, timestamp_ms, output_path| {
-                    fs::write(output_path, format!("jpeg-at-{timestamp_ms}"))?;
-                    Ok(())
-                },
-            )
-            .expect("explanation task should prepare")
-        }
-
-        fn result_path(&self, task: &ExplanationTask, cutoff_ms: i64) -> PathBuf {
-            let path = self._temporary.path().join("result.json");
-            fs::write(
-                &path,
-                serde_json::to_vec_pretty(&json!({
-                    "$schema": "https://json-schema.org/draft/2020-12/schema",
-                    "protocolVersion": task.protocol_version,
-                    "taskId": task.id,
-                    "sourceVersionId": task.source_version_id,
-                    "playbackCutoffMs": cutoff_ms,
-                    "confirmedFacts": [{
-                        "text": "人物明确说会在这里等待。",
-                        "subtitleSegmentIds": [task.authorized_segment_ids[0]],
-                        "frameIds": []
-                    }],
-                    "possibleInterpretations": [{
-                        "text": "结合当前语气，人物可能在掩饰不安。",
-                        "subtitleSegmentIds": [task.authorized_segment_ids[0]],
-                        "frameIds": [task.frames[0].id]
-                    }],
-                    "withheldReason": "后续发展未展开，以避免剧透。"
-                }))
-                .expect("result should serialize"),
-            )
-            .expect("result should be written");
-            path
-        }
-    }
 
     #[test]
     fn prepares_a_no_spoiler_task_with_only_past_subtitles_and_frames() {
