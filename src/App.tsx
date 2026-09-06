@@ -1,5 +1,6 @@
+import { posterCandidates } from "./features/library/posterCandidates";
 import { SubtitleHistoryLoader } from "./features/subtitle-revision/SubtitleHistoryLoader";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useOpeningIntent, type IsCurrentOpening } from "./features/playback/useOpeningIntent";
 import { useLibrarySearchOpening } from "./features/library/useLibrarySearchOpening";
@@ -35,13 +36,12 @@ import { useLocalResources } from "./features/resources/useLocalResources";
 import {
   chooseLocalFolder,
   chooseLocalVideo,
-  createLocalProject,
+  openLocalProject,
   deleteProject,
   getAppStatus,
   getTranscriptionJob,
   getProject,
   isDesktopApp,
-  listProjects,
   listSubtitleVersions,
   markProjectOpened,
   reconcileExternalAgentResults,
@@ -119,7 +119,6 @@ export default function App() {
   const externalResultScanRef = useRef(false);
   const pendingResourceResumeRef = useRef<PendingResourceResume | null>(null);
   const [appStatus, setAppStatus] = useState<AppStatus | null>(null);
-  const [projects, setProjects] = useState<Project[]>([]);
   const [libraryError, setLibraryError] = useState<string | null>(null);
   const [activeProject, setActiveProject] = useState<Project | null>(null);
   const [episodeContext, setEpisodeContext] =
@@ -155,11 +154,11 @@ export default function App() {
     activeProject?.id ?? null,
   );
 
+  const posterMedia = useMemo(() => posterCandidates(libraryState), [libraryState]);
   usePosterQueue({
     enabled: isDesktopApp && screen === "library",
-    projects,
+    media: posterMedia,
     refreshLibrary,
-    setProjects,
     setActiveProject,
   });
 
@@ -170,10 +169,8 @@ export default function App() {
     void refreshLocalResources().catch(() => undefined);
   }, [refreshLocalResources]);
 
-  const refreshProjects = useCallback(async () => {
+  const refreshLibraryView = useCallback(async () => {
     try {
-      const nextProjects = await listProjects();
-      setProjects(nextProjects);
       setLibraryError(null);
       await refreshLibrary();
     } catch (error) {
@@ -194,18 +191,6 @@ export default function App() {
           setLibraryError(userFacingCommandError(error, "library"));
         }
       });
-    void listProjects()
-      .then((nextProjects) => {
-        if (active) {
-          setProjects(nextProjects);
-          setLibraryError(null);
-        }
-      })
-      .catch((error: unknown) => {
-        if (active) {
-          setLibraryError(userFacingCommandError(error, "library"));
-        }
-      })
     return () => {
       active = false;
     };
@@ -359,7 +344,7 @@ export default function App() {
               setToast(userFacingCommandError(error, "subtitle"));
             }
           });
-        void refreshProjects();
+        void refreshLibraryView();
       } catch (error) {
         if (operationTokenRef.current !== token) {
           window.clearTimeout(preparationTimer);
@@ -370,7 +355,7 @@ export default function App() {
         setPreparationError(userFacingCommandError(error, "playback"));
       }
     },
-    [refreshProjects, setScreen, startMediaPreparation, resetMediaPreparation],
+    [refreshLibraryView, setScreen, startMediaPreparation, resetMediaPreparation],
   );
 
   const prepareAndOpen = useCallback(
@@ -401,25 +386,15 @@ export default function App() {
     setTranslationSegmentIds(undefined);
     setRevisionDialogOpen(false);
     setRemoteUrlDialogOpen(false);
-    void refreshProjects();
-  }, [openingIntent, refreshProjects, setLibrarySection, setScreen]);
+    void refreshLibraryView();
+  }, [openingIntent, refreshLibraryView, setLibrarySection, setScreen]);
 
   const importMediaPathReady = useCallback(
     async (mediaPath: string, isCurrent: IsCurrentOpening) => {
       try {
         if (!isCurrent()) return;
-        const existingProject = projects.find(
-          (project) =>
-            project.mediaSource.locator.toLocaleLowerCase() ===
-            mediaPath.toLocaleLowerCase(),
-        );
-        setBusyMessage(
-          existingProject
-            ? "正在打开已有项目…"
-            : "正在建立本地项目…",
-        );
-        const project =
-          existingProject ?? (await createLocalProject(mediaPath));
+        setBusyMessage("正在打开本地视频…");
+        const project = await openLocalProject(mediaPath);
         if (!isCurrent()) return;
         setBusyMessage(null);
         await prepareAndOpenReady(project, false, null, isCurrent);
@@ -429,7 +404,7 @@ export default function App() {
         setLibraryError(userFacingCommandError(error, "library"));
       }
     },
-    [prepareAndOpenReady, projects],
+    [prepareAndOpenReady],
   );
 
   const importMediaPath = useCallback(
@@ -683,7 +658,7 @@ export default function App() {
             : "项目已删除，源视频保持不变。",
         );
       }
-      await refreshProjects();
+      await refreshLibraryView();
     } catch (error) {
       setBusyMessage(null);
       setDeleteCandidate(null);
@@ -693,7 +668,7 @@ export default function App() {
 
   const persistPlayback = usePlaybackPersistence({
     project: activeProject, sessionId, currentSession: operationTokenRef,
-    setProject: setActiveProject, setProjects, onFailure: setToast,
+    setProject: setActiveProject, onFailure: setToast,
   });
   const isCurrentSession = useCallback((projectId: string) =>
     operationTokenRef.current === sessionId && activeProject?.id === projectId,
@@ -736,14 +711,9 @@ export default function App() {
       );
       const updatedProject = await getProject(task.projectId);
       if (isCurrentSession(task.projectId)) setActiveProject(updatedProject);
-      setProjects((current) =>
-        current.map((project) =>
-          project.id === updatedProject.id ? updatedProject : project,
-        ),
-      );
-      void refreshProjects();
+      void refreshLibraryView();
     },
-    [isCurrentSession, mergeSubtitleVersion, refreshProjects],
+    [isCurrentSession, mergeSubtitleVersion, refreshLibraryView],
   );
   const activeProjectId = activeProject?.id;
 
@@ -788,11 +758,6 @@ export default function App() {
           if (active && isCurrentSession(activeProjectId)) {
             setSubtitleVersions(versions);
             setActiveProject(updatedProject);
-            setProjects((current) =>
-              current.map((project) =>
-                project.id === updatedProject.id ? updatedProject : project,
-              ),
-            );
           }
         }
       } catch {
@@ -814,15 +779,10 @@ export default function App() {
       mergeSubtitleVersion(version);
       const updatedProject = await getProject(version.projectId);
       if (isCurrentSession(version.projectId)) setActiveProject(updatedProject);
-      setProjects((current) =>
-        current.map((project) =>
-          project.id === updatedProject.id ? updatedProject : project,
-        ),
-      );
       setToast(message);
-      void refreshProjects();
+      void refreshLibraryView();
     },
-    [isCurrentSession, mergeSubtitleVersion, refreshProjects],
+    [isCurrentSession, mergeSubtitleVersion, refreshLibraryView],
   );
 
   useEffect(() => {
@@ -1224,10 +1184,6 @@ export default function App() {
           onClose={() => setRemoteUrlDialogOpen(false)}
           onImported={(project) => {
             setRemoteUrlDialogOpen(false);
-            setProjects((current) => [
-              project,
-              ...current.filter((item) => item.id !== project.id),
-            ]);
             setToast("远程媒体已保存为本地副本。");
             void prepareAndOpen(project, false, null);
           }}

@@ -627,6 +627,10 @@ export async function chooseSubtitleFile(): Promise<string | null> {
   return typeof selected === "string" ? selected : null;
 }
 
+export async function openLocalProject(mediaPath: string): Promise<Project> {
+  return invoke<Project>("open_local_project", { input: { mediaPath, title: null } });
+}
+
 export async function createLocalProject(mediaPath: string): Promise<Project> {
   return invoke<Project>("create_local_project", {
     input: { mediaPath, title: null },

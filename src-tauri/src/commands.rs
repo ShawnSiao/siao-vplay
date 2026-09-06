@@ -456,6 +456,19 @@ pub fn create_local_project(
 }
 
 #[tauri::command]
+pub async fn open_local_project(
+    app: AppHandle,
+    store: State<'_, ProjectStore>,
+    input: CreateLocalProjectInput,
+) -> Result<Project, CommandError> {
+    let store = store.inner().clone();
+    let project = tauri::async_runtime::spawn_blocking(move || store.open_local_project(input).map_err(CommandError::from))
+        .await.map_err(CommandError::background_task_failed)??;
+    allow_project_poster(&app, &project)?;
+    Ok(project)
+}
+
+#[tauri::command]
 pub async fn inspect_remote_media_url(
     input: InspectRemoteMediaUrlInput,
 ) -> Result<RemoteMediaPreview, CommandError> {

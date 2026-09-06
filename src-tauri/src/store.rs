@@ -1,3 +1,5 @@
+mod local_projects;
+
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -92,51 +94,6 @@ impl ProjectStore {
             |row| row.get(0),
         )?;
         Ok(version)
-    }
-
-    pub fn create_local_project(
-        &self,
-        input: CreateLocalProjectInput,
-    ) -> Result<Project, StoreError> {
-        let media_path = canonical_media_path(&input.media_path)?;
-        let display_name = file_display_name(&media_path)?;
-        let title = normalize_project_title(input.title.as_deref(), &media_path)?;
-        let timestamp = now_ms()?;
-        let project_id = Uuid::new_v4().to_string();
-        let media_source_id = Uuid::new_v4().to_string();
-
-        let mut connection = self.connect()?;
-        let transaction = connection.transaction()?;
-        transaction.execute(
-            "INSERT INTO projects (
-                id, title, revision, created_at_ms, updated_at_ms, last_opened_at_ms
-             ) VALUES (?1, ?2, 1, ?3, ?3, ?3)",
-            params![project_id, title, timestamp],
-        )?;
-        transaction.execute(
-            "INSERT INTO media_sources (
-                id, project_id, kind, locator, display_name, is_primary,
-                created_at_ms, updated_at_ms
-             ) VALUES (?1, ?2, ?3, ?4, ?5, 1, ?6, ?6)",
-            params![
-                media_source_id,
-                project_id,
-                MediaSourceKind::LocalFile.as_database_value(),
-                path_to_string(&media_path),
-                display_name,
-                timestamp
-            ],
-        )?;
-        transaction.execute(
-            "INSERT INTO playback_states (
-                project_id, position_ms, duration_ms, volume, playback_rate,
-                subtitle_mode, updated_at_ms
-             ) VALUES (?1, 0, NULL, 1.0, 1.0, 'translation', ?2)",
-            params![project_id, timestamp],
-        )?;
-        transaction.commit()?;
-
-        self.get_project(&project_id)
     }
 
     pub fn create_remote_project(

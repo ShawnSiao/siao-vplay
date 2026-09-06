@@ -22,10 +22,9 @@ function setup() {
   const onFailure = vi.fn();
   const hook = renderHook(({ sessionId }) => {
     const [active, setActive] = useState<Project | null>(project("A"));
-    const [projects, setProjects] = useState([project("A"), project("B")]);
     const persist = usePlaybackPersistence({ project: active, sessionId, currentSession,
-      setProject: setActive, setProjects, onFailure });
-    return { active, projects, setActive, persist };
+      setProject: setActive, onFailure });
+    return { active, setActive, persist };
   }, { initialProps: { sessionId: 1 } });
   return { ...hook, currentSession, onFailure };
 }
@@ -41,7 +40,6 @@ describe("playback persistence sessions", () => {
     rerender({ sessionId: 2 });
     await act(async () => { pending.resolve(project("A", 100)); await save; });
     expect(result.current.active?.id).toBe("B");
-    expect(result.current.projects[0].playbackState.positionMs).toBe(100);
   });
   it("serializes saves for one project without blocking another project", async () => {
     const pending = deferred<Project>(); update.mockReturnValueOnce(pending.promise).mockImplementation(async (id, v) => project(id, v.positionMs));
@@ -54,8 +52,8 @@ describe("playback persistence sessions", () => {
     await act(async () => { await result.current.persist({ ...values, positionMs: 300 }); });
     expect(update.mock.calls.map((call) => call[0])).toEqual(["A", "B"]);
     await act(async () => { pending.resolve(project("A", 100)); await Promise.all([first, second]); });
-    expect(result.current.projects[0].playbackState.positionMs).toBe(200);
     expect(result.current.active?.id).toBe("B");
+    expect(update.mock.calls.at(-1)?.[1].positionMs).toBe(200);
   });
   it("rejects stale UI writes even after reopening the same project", async () => {
     const pending = deferred<Project>(); update.mockReturnValue(pending.promise);

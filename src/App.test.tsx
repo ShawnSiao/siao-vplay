@@ -52,7 +52,7 @@ const desktopMocks = vi.hoisted(() => ({
   chooseLocalFolder: vi.fn(),
   chooseLocalVideo: vi.fn(),
   chooseSubtitleFile: vi.fn(),
-  createLocalProject: vi.fn(),
+  openLocalProject: vi.fn(),
   inspectRemoteMediaUrl: vi.fn(),
   importRemoteMediaUrl: vi.fn(),
   cancelRemoteMediaImport: vi.fn(),
@@ -839,7 +839,7 @@ beforeEach(() => {
   desktopMocks.chooseLocalFolder.mockResolvedValue(null);
   desktopMocks.chooseLocalVideo.mockResolvedValue(null);
   desktopMocks.chooseSubtitleFile.mockResolvedValue(null);
-  desktopMocks.createLocalProject.mockResolvedValue(project);
+  desktopMocks.openLocalProject.mockResolvedValue(project);
   desktopMocks.inspectRemoteMediaUrl.mockResolvedValue(remotePreview);
   desktopMocks.importRemoteMediaUrl.mockResolvedValue(remoteProject);
   desktopMocks.cancelRemoteMediaImport.mockResolvedValue(true);
@@ -1277,6 +1277,7 @@ describe("App", () => {
     expect(screen.getByText(/\d+ 项本地功能已准备/)).toBeInTheDocument();
     expect(await getAddMediaCommand(/打开本地视频/)).toBeEnabled();
     expect(screen.getByLabelText("观看进度 23%")).toBeInTheDocument();
+    expect(desktopMocks.listProjects).not.toHaveBeenCalled();
     await waitFor(() =>
       expect(desktopMocks.ensureProjectPoster).toHaveBeenCalledWith(project.id),
     );
@@ -2251,7 +2252,7 @@ describe("App", () => {
     render(<App />);
 
     await waitFor(() =>
-      expect(desktopMocks.createLocalProject).toHaveBeenCalledWith(
+      expect(desktopMocks.openLocalProject).toHaveBeenCalledWith(
         project.mediaSource.locator,
       ),
     );
@@ -2338,7 +2339,7 @@ describe("App", () => {
       name: "环境配置",
     });
     expect(resources).toHaveTextContent("继续打开本地视频");
-    expect(desktopMocks.createLocalProject).not.toHaveBeenCalled();
+    expect(desktopMocks.openLocalProject).not.toHaveBeenCalled();
     fireEvent.click(
       within(resources).getByRole("button", { name: "开始准备所选功能" }),
     );

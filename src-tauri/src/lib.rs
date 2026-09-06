@@ -197,6 +197,7 @@ pub fn run() {
             ai::translation_api::start_api_translation,
             set_main_window_media_title,
             commands::create_local_project,
+            commands::open_local_project,
             commands::inspect_remote_media_url,
             commands::import_remote_media_url,
             commands::cancel_remote_media_import,

@@ -8,11 +8,10 @@ type Options = {
   sessionId: number;
   currentSession: RefObject<number>;
   setProject: Dispatch<SetStateAction<Project | null>>;
-  setProjects: Dispatch<SetStateAction<Project[]>>;
   onFailure: (message: string) => void;
 };
 
-export function usePlaybackPersistence({ project, sessionId, currentSession, setProject, setProjects, onFailure }: Options) {
+export function usePlaybackPersistence({ project, sessionId, currentSession, setProject, onFailure }: Options) {
   const queues = useRef(new Map<string, Promise<void>>());
   const latestSessions = useRef(new Map<string, number>());
   const failedProjects = useRef(new Set<string>());
@@ -33,7 +32,6 @@ export function usePlaybackPersistence({ project, sessionId, currentSession, set
       if (currentSession.current === sessionId) {
         setProject((current) => current && currentSession.current === sessionId ? merge(current) : current);
       }
-      setProjects((current) => current.map(merge));
     });
     const settled = save.catch(() => undefined);
     queues.current.set(projectId, settled);
@@ -48,5 +46,5 @@ export function usePlaybackPersistence({ project, sessionId, currentSession, set
     } finally {
       if (queues.current.get(projectId) === settled) queues.current.delete(projectId);
     }
-  }, [project, sessionId, currentSession, setProject, setProjects, onFailure]);
+  }, [project, sessionId, currentSession, setProject, onFailure]);
 }
