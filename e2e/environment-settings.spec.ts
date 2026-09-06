@@ -4,7 +4,7 @@ test("provider drafts survive navigation and dismissal requires an explicit disc
   await page.goto("/");
   await page.getByRole("button", { name: "设置" }).click();
   const settings = page.getByRole("dialog", { name: "环境配置" });
-  await settings.getByRole("button", { name: "AI 服务" }).click();
+  await settings.getByRole("tab", { name: "AI 服务" }).click();
   await settings.getByRole("button", { name: "OpenAI 未配置" }).click();
   const key = settings.getByPlaceholder("粘贴服务商提供的 API Key");
   await key.fill("synthetic-draft-only");
@@ -42,7 +42,7 @@ test("environment settings follows the approved compact provider layout", async 
 
   const dialog = page.getByRole("dialog", { name: "环境配置" });
   await expect(dialog).toBeVisible();
-  await dialog.getByRole("button", { name: "AI 服务" }).click();
+  await dialog.getByRole("tab", { name: "AI 服务" }).click();
   await expect(dialog.locator(".environment-provider-list .environment-provider-row")).toHaveCount(7);
   await expect(dialog.getByRole("button", { name: "＋ 添加其他服务" })).toHaveCount(1);
   const providerLogos = dialog.locator(".environment-provider-logo img");
@@ -69,7 +69,7 @@ test("environment settings keeps its header and footer fixed at 960 by 640", asy
   await page.goto("/");
   await page.getByRole("button", { name: "设置" }).click();
   const dialog = page.getByRole("dialog", { name: "环境配置" });
-  await dialog.getByRole("button", { name: "AI 服务" }).click();
+  await dialog.getByRole("tab", { name: "AI 服务" }).click();
   await dialog.getByRole("button", { name: "OpenAI 未配置" }).click();
 
   const header = dialog.locator(".environment-settings-header");
@@ -135,7 +135,7 @@ for (const viewport of [
     await page.setViewportSize(viewport);
     await page.goto("/e2e/runtime.html?environment=1&storage=1");
     const dialog = page.getByRole("dialog", { name: "环境配置" });
-    await dialog.getByRole("button", { name: "存储" }).click();
+    await dialog.getByRole("tab", { name: "存储" }).click();
     await expect(dialog.getByRole("region", { name: "存储位置" })).toBeVisible();
     await expect(dialog.getByText("应用数据与数据库")).toBeVisible();
     await expect(dialog.getByText("URL 导入视频")).toBeVisible();

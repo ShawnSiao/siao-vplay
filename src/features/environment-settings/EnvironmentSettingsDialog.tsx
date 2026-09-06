@@ -1,4 +1,5 @@
 import { isTopModal, useModalFocus } from "../../components/useModalFocus";
+import { useTabNavigation } from "../../components/useTabNavigation";
 import { useCallback, useEffect, useId, useState } from "react";
 
 import type { PendingResourceAction } from "../../components/LocalResourcesDialog";
@@ -36,6 +37,7 @@ export function EnvironmentSettingsDialog({
   onNotice,
 }: EnvironmentSettingsDialogProps) {
   const [tab, setTab] = useState<"local" | "ai" | "storage">("local");
+  const tabs = useTabNavigation(tab, setTab);
   const [codexRefreshKey, setCodexRefreshKey] = useState(0);
   const controller = useEnvironmentSettings(true, previewMode);
   const storage = useStorageSettings(tab === "storage", previewMode, onNotice);
@@ -78,15 +80,15 @@ export function EnvironmentSettingsDialog({
             <h1 id={titleId}>环境配置</h1>
             <p>管理本地功能、AI 服务、存储位置和隐私范围</p>
           </div>
-          <nav className="environment-settings-tabs" aria-label="环境配置分类">
-            <button className={tab === "local" ? "active" : ""} type="button" onClick={() => setTab("local")}>本地功能</button>
-            <button className={tab === "ai" ? "active" : ""} type="button" onClick={() => setTab("ai")}>AI 服务</button>
-            <button className={tab === "storage" ? "active" : ""} type="button" onClick={() => setTab("storage")}>存储</button>
+          <nav className="environment-settings-tabs" {...tabs.listProps} aria-label="环境配置分类">
+            <button className={tab === "local" ? "active" : ""} {...tabs.tabProps("local")}>本地功能</button>
+            <button className={tab === "ai" ? "active" : ""} {...tabs.tabProps("ai")}>AI 服务</button>
+            <button className={tab === "storage" ? "active" : ""} {...tabs.tabProps("storage")}>存储</button>
           </nav>
           <button className="environment-settings-close" type="button" aria-label="关闭环境配置" onClick={requestClose}>×</button>
         </header>
 
-        <div className="environment-settings-content">
+        <div className="environment-settings-content" {...tabs.panelProps}>
           {tab === "local" ? (
             <LocalFeaturesPane controller={localResources} pendingAction={pendingAction} previewMode={previewMode} onNotice={onNotice} />
           ) : tab === "ai" ? (
