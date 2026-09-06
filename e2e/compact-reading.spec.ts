@@ -41,5 +41,6 @@ test("drawer puts content after one context row and tabs, with reading settings 
   await drawer.getByRole("tab", { name: "理解", exact: true }).click();
   await expect(drawer.getByText(/Cannot read|Unexpected fixture IPC/)).toHaveCount(0);
   await expect(drawer.getByRole("button", { name: "准备理解材料" })).toBeVisible();
+  expect((await drawer.locator(".spoiler-boundary").boundingBox())!.height).toBeLessThanOrEqual(76);
   if (process.env.SIAOVPLAY_DESIGN_CAPTURE_DIR) await page.screenshot({ path: join(process.env.SIAOVPLAY_DESIGN_CAPTURE_DIR, "compact-player-actual-960.png") });
 });

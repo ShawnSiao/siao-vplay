@@ -6490,9 +6490,14 @@ h3 {
 }
 
 .player-drawer .spoiler-boundary {
-  gap: 6px;
-  padding: 16px;
-  border-radius: 12px;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: baseline;
+  gap: 4px 8px;
+  padding: 8px 0;
+  border: 0;
+  border-bottom: 1px solid var(--border-subtle);
+  border-radius: 0;
+  background: transparent;
 }
 
 .player-drawer .spoiler-boundary span,
@@ -6503,14 +6508,20 @@ h3 {
 }
 
 .player-drawer .spoiler-boundary strong {
-  font-size: 17px;
+  font-size: 13px;
+  font-weight: 500;
   line-height: 1.4;
 }
 
 .player-drawer .spoiler-boundary small {
+  grid-column: 1 / -1;
   font-size: 12px;
-  line-height: 1.6;
+  line-height: 1.5;
 }
+
+.player-drawer .understanding-intro { padding: 16px 0 12px; }
+.player-drawer .understanding-intro strong { font-size: 15px; }
+.player-drawer .understanding-intro p { font-size: 13px; }
 
 .player-drawer .understanding-result {
   padding-top: 20px;

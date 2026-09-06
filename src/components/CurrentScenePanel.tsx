@@ -454,7 +454,7 @@ export function CurrentScenePanel({
         <div className="spoiler-boundary">
           <span>无剧透范围</span>
           <strong>仅使用 {formatDuration(playbackCutoffMs)} 之前</strong>
-          <small>使用当前及之前的字幕；画面不晚于此播放点。</small>
+          <small>不包含播放点之后的内容。</small>
         </div>
 
         {error ? (
@@ -508,7 +508,7 @@ export function CurrentScenePanel({
           <div className="understanding-setup">
             <div className="understanding-intro">
               <strong>深入理解当前内容</strong>
-              <p>最多回看 3 分钟、40 条字幕和 6 张关键帧，事实与解读均附材料依据。</p>
+              <p>先准备字幕材料，再确认发送范围。关键帧可按需添加。</p>
             </div>
             <UnderstandingPromptSelector
               value={promptSelection}
