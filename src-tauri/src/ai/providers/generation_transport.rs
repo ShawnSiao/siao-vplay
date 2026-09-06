@@ -11,6 +11,7 @@ pub(super) fn client(input: &GenerationInput) -> Result<Client, ProviderFailure>
     check(input.cancellation.as_ref())?;
     network::build_async_client(
         Client::builder()
+            .redirect(reqwest::redirect::Policy::none())
             .user_agent(format!("SiaoVPlay/{}", env!("CARGO_PKG_VERSION")))
             .connect_timeout(input.timeout.min(Duration::from_secs(30)))
             .timeout(input.timeout)
@@ -41,6 +42,7 @@ pub(super) fn send(
                     StatusCode::FORBIDDEN => AiError::Forbidden,
                     StatusCode::NOT_FOUND => AiError::ModelNotFound,
                     StatusCode::TOO_MANY_REQUESTS => AiError::RateLimited,
+                    status if status.is_redirection() => AiError::EndpointRedirected,
                     status if status.is_server_error() => AiError::ProviderUnavailable,
                     _ => AiError::InvalidResponse,
                 };

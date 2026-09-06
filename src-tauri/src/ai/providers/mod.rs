@@ -9,6 +9,8 @@ use generation_transport::{client as generation_client, send as send_generation}
 pub(crate) mod test_support;
 #[cfg(test)]
 mod cancellation_tests;
+#[cfg(test)]
+mod redirect_tests;
 
 use std::time::Duration;
 
@@ -111,6 +113,7 @@ pub(super) fn client() -> Result<Client, ProviderFailure> {
 
 fn client_with_timeout(timeout: Duration) -> Result<Client, ProviderFailure> {
     let builder = Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
         .user_agent(format!("SiaoVPlay/{}", env!("CARGO_PKG_VERSION")))
         .connect_timeout(timeout.min(Duration::from_secs(30)))
         .timeout(timeout);
@@ -135,6 +138,7 @@ pub(super) fn checked(response: Response, not_found: AiError) -> Result<Response
         StatusCode::FORBIDDEN => AiError::Forbidden,
         StatusCode::NOT_FOUND => not_found,
         StatusCode::TOO_MANY_REQUESTS => AiError::RateLimited,
+        status if status.is_redirection() => AiError::EndpointRedirected,
         status if status.is_server_error() => AiError::ProviderUnavailable,
         _ => AiError::InvalidResponse,
     };

@@ -247,11 +247,14 @@ impl<'a> SummaryTaskRepository<'a> {
         let timestamp = now_ms()?;
         let mut connection = self.store.connect()?;
         let transaction = connection.transaction()?;
-        transaction.execute(
+        let changed = transaction.execute(
             "UPDATE summary_tasks SET status = 'cancelled', stage = 'cancelled',
-                    completed_at_ms = ?2, updated_at_ms = ?2 WHERE id = ?1",
+                    completed_at_ms = ?2, updated_at_ms = ?2 WHERE id = ?1 AND status NOT IN ('completed', 'cancelled')",
             params![task_id, timestamp],
         )?;
+        if changed == 0 {
+            return Ok(());
+        }
         transaction.execute(
             "UPDATE summary_chunks SET status = 'cancelled', completed_at_ms = ?2,
                     updated_at_ms = ?2 WHERE task_id = ?1 AND status != 'completed'",
@@ -262,11 +265,25 @@ impl<'a> SummaryTaskRepository<'a> {
     }
 
     pub(crate) fn fail(&self, task_id: &str, code: &str, message: &str) -> Result<(), StoreError> {
-        self.store.connect()?.execute(
-            "UPDATE summary_tasks SET status = 'failed', stage = 'failed', error_code = ?2,
-                    error_message = ?3, completed_at_ms = ?4, updated_at_ms = ?4 WHERE id = ?1",
+        let mut connection = self.store.connect()?;
+        let transaction = connection.transaction()?;
+        transaction.execute(
+            "UPDATE summary_tasks SET
+                    status = CASE WHEN cancel_requested_at_ms IS NULL THEN 'failed' ELSE 'cancelled' END,
+                    stage = CASE WHEN cancel_requested_at_ms IS NULL THEN 'failed' ELSE 'cancelled' END,
+                    error_code = CASE WHEN cancel_requested_at_ms IS NULL THEN ?2 ELSE NULL END,
+                    error_message = CASE WHEN cancel_requested_at_ms IS NULL THEN ?3 ELSE NULL END,
+                    completed_at_ms = ?4, updated_at_ms = ?4
+             WHERE id = ?1 AND status NOT IN ('completed', 'cancelled')",
             params![task_id, code, message, now_ms()?],
         )?;
+        transaction.execute(
+            "UPDATE summary_chunks SET status = 'cancelled', completed_at_ms = ?2, updated_at_ms = ?2
+             WHERE task_id = ?1 AND status != 'completed'
+               AND EXISTS(SELECT 1 FROM summary_tasks WHERE id = ?1 AND status = 'cancelled')",
+            params![task_id, now_ms()?],
+        )?;
+        transaction.commit()?;
         Ok(())
     }
 

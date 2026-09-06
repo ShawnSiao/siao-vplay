@@ -60,19 +60,23 @@ pub(crate) fn start_or_resume(
             "存在活动翻译任务，完成或取消翻译后才能启动视频总结".to_owned(),
         ));
     }
-    if task.execution_kind == SummaryExecutionKind::Manual {
-        return resume_manual(store, &task);
-    }
     if !matches!(
         task.status.as_str(),
         "prepared" | "interrupted" | "failed" | "paused"
-    ) {
+    ) && !(task.execution_kind == SummaryExecutionKind::Manual
+        && task.status == "awaiting_external_result")
+    {
         return Err(StoreError::Validation(format!(
             "总结任务当前状态不可启动：{}",
             task.status
         )));
     }
     repository.claim_for_execution(task_id)?;
+    if task.execution_kind == SummaryExecutionKind::Manual {
+        return resume_manual(store, &task).inspect_err(|error| {
+            let _ = repository.fail(task_id, "summary_result_invalid", &error.to_string());
+        });
+    }
     let worker_store = store.clone();
     let worker_task_id = task_id.to_owned();
     thread::spawn(move || {
@@ -347,6 +351,7 @@ fn resume_manual(store: &ProjectStore, task: &SummaryTask) -> Result<SummaryTask
         )?;
         return repository.get(&task.id);
     }
+    repository.set_task_state(&task.id, "validating", "validating", task.progress)?;
     let result: SummaryResult = serde_json::from_slice(&fs::read(result_path)?)
         .map_err(|error| StoreError::Validation(format!("手动总结结果无效：{error}")))?;
     let allowed = task

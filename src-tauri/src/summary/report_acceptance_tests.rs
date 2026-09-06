@@ -53,6 +53,7 @@ fn real_media_exports_a_verified_private_markdown_report() {
     )
     .unwrap();
     let result = summary_result();
+    SummaryTaskRepository::new(&store).set_task_state(&task.id, "validating", "validating", 0.9).unwrap();
     let summary = SummaryResultRepository::new(&store)
         .save_summary(&task.id, &result, false)
         .unwrap();
@@ -142,6 +143,15 @@ fn real_codex_completes_a_schema_validated_summary() {
 
 #[test]
 fn manual_handoff_imports_a_schema_valid_result() {
+    manual_handoff(false);
+}
+
+#[test]
+fn cancelled_manual_handoff_cannot_import_a_valid_late_result() {
+    manual_handoff(true);
+}
+
+fn manual_handoff(cancel_before_import: bool) {
     let directory = tempfile::tempdir().unwrap();
     let media_path = directory.path().join("fixture.mp4");
     fs::write(&media_path, b"authorized fixture").unwrap();
@@ -181,6 +191,12 @@ fn manual_handoff_imports_a_schema_valid_result() {
         serde_json::to_vec_pretty(&summary_result()).unwrap(),
     )
     .unwrap();
+    if cancel_before_import {
+        SummaryTaskRepository::new(&store).finish_cancelled(&task.id).unwrap();
+        assert!(executor::start_or_resume(&store, &task.id).is_err());
+        assert!(SummaryResultRepository::new(&store).list_summaries(&task.project_id).unwrap().is_empty());
+        return;
+    }
     let completed = executor::start_or_resume(&store, &task.id).unwrap();
     assert_eq!(completed.status, "completed");
     assert!(completed.output_summary_id.is_some());

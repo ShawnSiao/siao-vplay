@@ -40,6 +40,8 @@ pub enum AiError {
     Cancelled,
     #[error("AI 服务暂时不可用")]
     ProviderUnavailable,
+    #[error("AI 服务要求重定向，已停止发送。请在服务设置中填写最终地址，再重新确认材料")]
+    EndpointRedirected,
     #[error("AI 服务返回了无法识别的内容")]
     InvalidResponse,
 }
@@ -65,6 +67,7 @@ impl AiError {
             Self::Timeout => "timeout",
             Self::Cancelled => "ai_task_cancelled",
             Self::ProviderUnavailable => "provider_unavailable",
+            Self::EndpointRedirected => "endpoint_redirected",
             Self::InvalidResponse => "invalid_response",
         }
     }

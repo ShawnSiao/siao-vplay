@@ -98,6 +98,18 @@ impl<'a> SummaryResultRepository<'a> {
             .map_err(|error| StoreError::Validation(error.to_string()))?;
         let mut connection = self.store.connect()?;
         let transaction = connection.transaction()?;
+        let changed = transaction.execute(
+            "UPDATE summary_tasks SET status = 'completed', stage = 'completed', progress = 1,
+                    output_summary_id = ?2, completed_at_ms = ?3, updated_at_ms = ?3,
+                    error_code = NULL, error_message = NULL
+             WHERE id = ?1 AND status = 'validating' AND cancel_requested_at_ms IS NULL",
+            params![task_id, summary_id, timestamp],
+        )?;
+        if changed != 1 {
+            return Err(StoreError::Validation(
+                "总结已结束、正在取消或尚未进入验证，未保存结果".to_owned(),
+            ));
+        }
         transaction.execute(
             "INSERT INTO video_summaries (
                 id, task_id, project_id, protocol_version, scope, playback_cutoff_ms,
@@ -117,12 +129,6 @@ impl<'a> SummaryResultRepository<'a> {
                 visual_material_used,
                 timestamp
             ],
-        )?;
-        transaction.execute(
-            "UPDATE summary_tasks SET status = 'completed', stage = 'completed', progress = 1,
-                    output_summary_id = ?2, completed_at_ms = ?3, updated_at_ms = ?3,
-                    error_code = NULL, error_message = NULL WHERE id = ?1",
-            params![task_id, summary_id, timestamp],
         )?;
         transaction.commit()?;
         self.get_summary(&summary_id)
