@@ -316,10 +316,12 @@ pub fn configure_location(
     parent: &str,
     confirmed: bool,
 ) -> Result<LocalResourceStatus, LocalResourceError> {
+    let _maintenance = crate::resource_leases::maintain_all()?;
     with_manager_write(|manager| manager.configure_location(parent, confirmed))
 }
 
 pub fn repair_configured_root(confirmed: bool) -> Result<LocalResourceStatus, LocalResourceError> {
+    let _maintenance = crate::resource_leases::maintain_all()?;
     with_manager_write(|manager| manager.repair_configured_root(confirmed))
 }
 

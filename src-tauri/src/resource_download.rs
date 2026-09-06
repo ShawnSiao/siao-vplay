@@ -509,6 +509,7 @@ pub fn remove_resource(
     resource_id: &str,
     confirmed: bool,
 ) -> Result<ResourceRemovalResult, ResourceDownloadError> {
+    let _maintenance = crate::resource_leases::maintain_resource(resource_id)?;
     if !confirmed {
         return Err(ResourceDownloadError::RemovalConfirmationRequired);
     }
@@ -792,6 +793,7 @@ fn execute_task_inner(
     app: Option<&AppHandle>,
 ) -> Result<(), ResourceDownloadError> {
     let task = task_snapshot(task_id)?;
+    let _maintenance = crate::resource_leases::maintain_resource(&task.resource_id)?;
     let resource = local_resources::resource_definition(&task.resource_id)?;
     if resource.version != task.version {
         return Err(ResourceDownloadError::Integrity(format!(

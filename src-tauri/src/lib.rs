@@ -22,8 +22,11 @@ mod public_connect_proxy;
 mod public_video_source;
 mod remote_media;
 mod resource_diagnostics;
+mod resource_commands;
 mod resource_download;
 mod resource_migration;
+mod resource_usage;
+mod resource_leases;
 mod runtime;
 mod speech;
 mod storage;
@@ -224,13 +227,13 @@ pub fn run() {
             commands::set_local_resource_profile,
             ai::commands::get_local_resource_network_status,
             ai::commands::set_local_resource_proxy,
-            commands::inspect_local_resource_migration,
-            commands::adopt_local_resources,
-            commands::plan_local_resource_move,
-            commands::move_local_resource_root,
-            commands::reconnect_local_resource_root,
-            commands::plan_unused_resource_cleanup,
-            commands::cleanup_unused_resources,
+            resource_commands::inspect_local_resource_migration,
+            resource_commands::adopt_local_resources,
+            resource_commands::plan_local_resource_move,
+            resource_commands::move_local_resource_root,
+            resource_commands::reconnect_local_resource_root,
+            resource_commands::plan_unused_resource_cleanup,
+            resource_commands::cleanup_unused_resources,
             commands::list_resource_download_tasks,
             commands::prepare_local_capability,
             commands::pause_resource_download,
