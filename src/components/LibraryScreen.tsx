@@ -62,6 +62,7 @@ type LibraryScreenProps = {
   onAddToCollection: (collectionId: string, projectId: string) => Promise<unknown>;
   onRemoveFromCollection: (collectionId: string, projectId: string) => Promise<unknown>;
   onSetWatchLater: (projectId: string, enabled: boolean) => Promise<unknown>;
+  onSetWatched: (projectId: string, watched: boolean) => Promise<unknown>;
 };
 
 export function LibraryScreen(props: LibraryScreenProps) {
@@ -83,6 +84,7 @@ export function LibraryScreen(props: LibraryScreenProps) {
     onAddToCollection: props.onAddToCollection,
     onRemoveFromCollection: props.onRemoveFromCollection,
     onSetWatchLater: props.onSetWatchLater,
+    onSetWatched: props.onSetWatched,
   };
 
   return (

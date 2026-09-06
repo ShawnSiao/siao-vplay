@@ -119,6 +119,7 @@ function renderScreen(
       onAddToCollection: async () => undefined,
       onRemoveFromCollection: async () => undefined,
       onSetWatchLater: async () => undefined,
+      onSetWatched: async () => undefined,
       ...overrides,
   };
   return render(

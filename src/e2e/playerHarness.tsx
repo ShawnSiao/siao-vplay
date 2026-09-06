@@ -378,7 +378,10 @@ export function PlayerHarness() {
         onCloseContextMenu={() => setContextMenu(null)}
         onManageSubtitles={() => undefined}
         onNeedProxy={() => undefined}
-        onPersist={async () => undefined}
+        onPersist={async (values) => {
+          const state = window as unknown as { playbackSaves?: unknown[] };
+          (state.playbackSaves ??= []).push(values);
+        }}
         onSwitchEpisode={async () => undefined}
         onNotice={() => undefined}
         onRetryPlayback={() => undefined}

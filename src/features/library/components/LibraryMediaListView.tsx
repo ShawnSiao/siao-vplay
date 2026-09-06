@@ -16,6 +16,7 @@ type LibraryMediaListViewProps = {
   onAddToCollection: (collectionId: string, projectId: string) => Promise<unknown>;
   onRemoveFromCollection: (collectionId: string, projectId: string) => Promise<unknown>;
   onSetWatchLater: (projectId: string, enabled: boolean) => Promise<unknown>;
+  onSetWatched: (projectId: string, watched: boolean) => Promise<unknown>;
 };
 
 export function LibraryMediaListView({

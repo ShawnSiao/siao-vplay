@@ -114,6 +114,8 @@ pub struct RelinkProjectMediaInput {
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdatePlaybackStateInput {
+    #[serde(default)]
+    pub completed: Option<bool>,
     pub project_id: String,
     pub position_ms: i64,
     pub duration_ms: Option<i64>,

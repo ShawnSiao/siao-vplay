@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { playbackUrl } from "../../lib/desktop";
+import { createPlaybackCompletion } from "./playbackCompletion";
 import type {
   MediaPreparation,
   Project,
@@ -14,6 +15,7 @@ import type {
 } from "../shell/useShellController";
 import { usePlaybackShortcuts } from "./usePlaybackShortcuts";
 export type PlaybackValues = {
+  completed?: boolean;
   positionMs: number;
   durationMs: number | null;
   volume: number;
@@ -66,6 +68,7 @@ export function usePlaybackController({
 }: PlaybackControllerOptions) {
   const playerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const completion = useRef(createPlaybackCompletion());
   const proxyRequestedRef = useRef(false);
   const lastSavedAtRef = useRef(0);
   const performanceTimerRef = useRef<number | null>(null);
@@ -101,7 +104,7 @@ export function usePlaybackController({
   const audioStream = preparation.inspection.probe.audioStreams[0];
 
   const persistCurrentState = useCallback(
-    async (video: HTMLVideoElement | null, nextSubtitleMode = subtitleMode) => {
+    async (video: HTMLVideoElement | null, nextSubtitleMode = subtitleMode, completed?: boolean) => {
       const nextPosition = video
         ? Math.max(0, Math.round(video.currentTime * 1_000))
         : positionMs;
@@ -115,6 +118,7 @@ export function usePlaybackController({
         volume: video?.volume ?? volume,
         playbackRate: video?.playbackRate ?? playbackRate,
         subtitleMode: nextSubtitleMode,
+        ...(completed === undefined ? {} : { completed }),
       });
       lastSavedAtRef.current = Date.now();
     },
@@ -284,6 +288,7 @@ export function usePlaybackController({
         0,
         Math.min(nextPositionMs, durationMs ?? nextPositionMs),
       );
+      completion.current.seek(bounded);
       video.currentTime = bounded / 1_000;
       setPositionMs(bounded);
     },
@@ -373,6 +378,7 @@ export function usePlaybackController({
       return;
     }
     const nextPosition = Math.round(video.currentTime * 1_000);
+    completion.current.observe(nextPosition, !video.paused && !video.seeking);
     setPositionMs(nextPosition);
     if (Date.now() - lastSavedAtRef.current > 5_000) {
       void persistCurrentState(video).catch(() => undefined);
@@ -380,6 +386,7 @@ export function usePlaybackController({
   };
 
   const handlePlay = () => {
+    completion.current.seek((videoRef.current?.currentTime ?? 0) * 1000);
     setEnded(false);
     setPlaying(true);
     beginPerformanceCheck();
@@ -391,7 +398,8 @@ export function usePlaybackController({
   const handleEnded = () => {
     setPlaying(false);
     setEnded(true);
-    return persistCurrentState(videoRef.current);
+    return persistCurrentState(videoRef.current, subtitleMode,
+      videoRef.current?.ended && completion.current.ended() ? true : undefined);
   };
   const persistBeforeSourceChange = useCallback(
     async () => {
@@ -464,6 +472,7 @@ export function usePlaybackController({
     handlePlay,
     handlePause,
     handleEnded,
+    handleSeekBoundary: () => completion.current.seek((videoRef.current?.currentTime ?? 0) * 1000),
     handleSurfaceClick,
     handleSurfaceDoubleClick,
     togglePlayback,

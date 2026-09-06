@@ -70,6 +70,7 @@ function renderList(
     onOpenLocation: vi.fn(),
     onAddToCollection: vi.fn().mockResolvedValue(undefined),
     onRemoveFromCollection: vi.fn().mockResolvedValue(undefined),
+    onSetWatched: vi.fn().mockResolvedValue(undefined),
     onSetWatchLater: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   };
@@ -78,6 +79,13 @@ function renderList(
 }
 
 describe("LibraryMediaListView", () => {
+  it("offers an explicit watched-state correction independent of playback position", () => {
+    const props = renderList("unclassified");
+    fireEvent.click(screen.getByRole("button", { name: "雨站台 的更多操作" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "标记为看完" }));
+    expect(props.onSetWatched).toHaveBeenCalledWith("project", true);
+    expect(props.onOpen).not.toHaveBeenCalled();
+  });
   it("shows total and loaded counts and keeps one watch-later removal action", () => {
     const props = renderList("watch_later");
 

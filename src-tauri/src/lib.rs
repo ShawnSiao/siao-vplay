@@ -14,6 +14,7 @@ mod delivery;
 mod desktop_frame;
 mod domain;
 mod database_upgrade;
+mod watch_state;
 mod external_handoff;
 mod instance_lock;
 mod learning;
@@ -230,6 +231,7 @@ pub fn run() {
             commands::get_project,
             commands::mark_project_opened,
             commands::update_playback_state,
+            watch_state::set_project_watched,
             commands::relink_project_media,
             commands::delete_project,
             commands::get_media_runtime_status,

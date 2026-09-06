@@ -1,3 +1,5 @@
+import { useLibraryWatchActions, type WatchAction } from "./useLibraryWatchActions";
+import { applyWatchedProject } from "./applyWatchedProject";
 import { useCallback, useEffect, useReducer, useRef } from "react";
 
 import { commandError } from "../../lib/desktop";
@@ -41,7 +43,6 @@ import {
   revokeLibraryRoot,
   scanLibraryFolder,
   searchLibrary,
-  setWatchLater,
   toCollectionSummary,
   updateCollection,
 } from "./libraryGateway";
@@ -154,6 +155,7 @@ type LibraryState = {
 };
 
 type LibraryAction =
+  | WatchAction
   | { type: "home_started" }
   | { type: "home_loaded"; home: LibraryHome; sequence: number }
   | { type: "failed"; message: string }
@@ -280,6 +282,8 @@ function initialState(): LibraryState {
 
 function libraryReducer(state: LibraryState, action: LibraryAction): LibraryState {
   switch (action.type) {
+    case "watch_state_changed":
+      return applyWatchedProject(state, action.project);
     case "home_started":
       return { ...state, loading: true };
     case "home_loaded": {
@@ -892,27 +896,7 @@ export function useLibraryController() {
     [loadCollection, runMutation, state.currentCollection?.summary.id, state.selectedSeason],
   );
 
-  const changeWatchLater = useCallback(
-    (projectId: string, enabled: boolean) =>
-      runMutation(
-        () => setWatchLater(projectId, enabled),
-        (detail) => {
-          if (detail) {
-            dispatch({ type: "upsert_detail", detail });
-          }
-          if (enabled) {
-            dispatch({ type: "remove_unclassified", projectId });
-          } else {
-            dispatch({
-              type: "section_page_remove",
-              section: "watch_later",
-              projectId,
-            });
-          }
-        },
-      ),
-    [runMutation],
-  );
+  const { changeWatchLater, changeWatched } = useLibraryWatchActions(runMutation, dispatch);
 
   const setSection = useCallback((section: LibrarySection) => {
     window.localStorage.setItem(librarySectionStorageKey, section);
@@ -1273,6 +1257,7 @@ export function useLibraryController() {
     addToCollection,
     removeFromCollection,
     changeWatchLater,
+    changeWatched,
     startFolderScan,
     cancelFolderScan,
     closeFolderImport,

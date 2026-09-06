@@ -24,6 +24,7 @@ type LibraryMediaItemProps = {
   onAddToCollection: (collectionId: string, projectId: string) => Promise<unknown>;
   onRemoveFromCollection: (collectionId: string, projectId: string) => Promise<unknown>;
   onSetWatchLater: (projectId: string, enabled: boolean) => Promise<unknown>;
+  onSetWatched: (projectId: string, watched: boolean) => Promise<unknown>;
 };
 
 function episodeCode(media: LibraryMediaSummary): string | null {
@@ -64,6 +65,7 @@ export function LibraryMediaItem({
   onAddToCollection,
   onRemoveFromCollection,
   onSetWatchLater,
+  onSetWatched,
 }: LibraryMediaItemProps) {
   const needsRelink = libraryMediaNeedsRelink(media);
   const progress = libraryMediaProgress(media);
@@ -132,6 +134,10 @@ export function LibraryMediaItem({
           label={`${media.projectTitle} 的更多操作`}
           panelClassName="library-row-menu-panel"
         >
+            <button type="button" role="menuitem" disabled={mutationPending}
+              onClick={() => void onSetWatched(media.projectId, !media.completedAtMs)}>
+              {media.completedAtMs ? "标记为未看" : "标记为看完"}
+            </button>
             {context.kind === "watch_later" ? (
               <button
                 type="button"

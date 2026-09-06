@@ -89,6 +89,7 @@ export default function App() {
     addToCollection,
     removeFromCollection,
     changeWatchLater,
+    changeWatched,
     startFolderScan,
     cancelFolderScan,
     closeFolderImport,
@@ -1009,6 +1010,7 @@ export default function App() {
             onAddToCollection={addToCollection}
             onRemoveFromCollection={removeFromCollection}
             onSetWatchLater={changeWatchLater}
+            onSetWatched={changeWatched}
           />
         ) : null}
 

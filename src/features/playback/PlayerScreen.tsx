@@ -115,6 +115,7 @@ export function PlayerScreen({
     toggleMuted,
     toggleFullscreen,
     seekTo,
+    handleSeekBoundary,
     changeVolume,
     changePlaybackRate,
     changeSubtitleMode,
@@ -242,6 +243,8 @@ export function PlayerScreen({
               onPlay={handlePlay}
               onPause={handlePause}
               onEnded={handlePlaybackEnded}
+              onSeeking={handleSeekBoundary}
+              onSeeked={handleSeekBoundary}
               onError={() => requestProxy("media_element_error")}
             />
 

@@ -685,6 +685,7 @@ export async function ensureProjectPoster(projectId: string): Promise<Project> {
 export async function updatePlaybackState(
   projectId: string,
   values: {
+    completed?: boolean;
     positionMs: number;
     durationMs: number | null;
     volume: number;

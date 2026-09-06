@@ -3,6 +3,7 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
 import { isDesktopApp } from "../../lib/desktop";
 import type {
+  Project,
   ApplyLibraryRescanInput,
   ApplyLibraryRootRebuildInput,
   CollectionDetail,
@@ -158,6 +159,10 @@ export async function setWatchLater(
   enabled: boolean,
 ): Promise<CollectionDetail | null> {
   return invoke<CollectionDetail | null>("set_watch_later", { projectId, enabled });
+}
+
+export async function setProjectWatched(projectId: string, watched: boolean): Promise<Project> {
+  return invoke<Project>("set_project_watched", { projectId, watched });
 }
 
 export async function scanLibraryFolder(

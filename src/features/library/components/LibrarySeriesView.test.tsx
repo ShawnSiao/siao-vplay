@@ -42,6 +42,7 @@ describe("LibrarySeriesView", () => {
         onOpenLocation={vi.fn()}
         onAddToCollection={vi.fn().mockResolvedValue(undefined)}
         onRemoveFromCollection={vi.fn().mockResolvedValue(undefined)}
+        onSetWatched={vi.fn().mockResolvedValue(undefined)}
         onSetWatchLater={vi.fn().mockResolvedValue(undefined)}
       />,
     );

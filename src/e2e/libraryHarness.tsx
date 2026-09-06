@@ -317,6 +317,10 @@ export function LibraryHarness() {
           setUncategorizedItems((items) => items.filter((item) => item.projectId !== projectId));
         }}
         onRemoveFromCollection={async () => undefined}
+        onSetWatched={async (projectId, watched) => {
+          const update = (items: LibraryMediaSummary[]) => items.map(item => item.projectId === projectId ? { ...item, completedAtMs: watched ? Date.now() : null } : item);
+          setUncategorizedItems(update); setWatchLaterItems(update);
+        }}
         onSetWatchLater={async (projectId, enabled) => {
           if (enabled) {
             const item = uncategorizedItems.find((candidate) => candidate.projectId === projectId);

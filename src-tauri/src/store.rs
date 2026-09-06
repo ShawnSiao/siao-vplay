@@ -309,9 +309,9 @@ impl ProjectStore {
              SET position_ms = ?2,
                  duration_ms = ?3,
                  completed_at_ms = CASE
-                     WHEN completed_at_ms IS NOT NULL THEN completed_at_ms
-                     WHEN ?3 IS NOT NULL AND ?3 > 0 AND ?2 * 10 >= ?3 * 9 THEN ?7
-                     ELSE NULL
+                     WHEN ?8 = 1 THEN COALESCE(completed_at_ms, ?7)
+                     WHEN ?8 = 0 THEN NULL
+                     ELSE completed_at_ms
                  END,
                  volume = ?4,
                  playback_rate = ?5,
@@ -325,7 +325,8 @@ impl ProjectStore {
                 input.volume,
                 input.playback_rate,
                 input.subtitle_mode.as_database_value(),
-                timestamp
+                timestamp,
+                input.completed
             ],
         )?;
         transaction.execute(
@@ -2383,6 +2384,7 @@ mod tests {
         fixture
             .store
             .update_playback_state(UpdatePlaybackStateInput {
+                completed: None,
                 project_id: project.id.clone(),
                 position_ms: 75_000,
                 duration_ms: Some(120_000),
@@ -2405,57 +2407,6 @@ mod tests {
         assert_eq!(
             restored.playback_state.subtitle_mode,
             SubtitleDisplayMode::Bilingual
-        );
-    }
-
-    #[test]
-    fn records_completion_at_ninety_percent_and_never_clears_it_implicitly() {
-        let fixture = Fixture::new();
-        let project = fixture.create_project(&fixture.media_file("completion.mp4"));
-
-        let before_threshold = fixture
-            .store
-            .update_playback_state(UpdatePlaybackStateInput {
-                project_id: project.id.clone(),
-                position_ms: 89_999,
-                duration_ms: Some(100_000),
-                volume: 1.0,
-                playback_rate: 1.0,
-                subtitle_mode: SubtitleDisplayMode::Original,
-            })
-            .expect("playback below threshold should save");
-        assert_eq!(before_threshold.playback_state.completed_at_ms, None);
-
-        let completed = fixture
-            .store
-            .update_playback_state(UpdatePlaybackStateInput {
-                project_id: project.id.clone(),
-                position_ms: 90_000,
-                duration_ms: Some(100_000),
-                volume: 1.0,
-                playback_rate: 1.0,
-                subtitle_mode: SubtitleDisplayMode::Original,
-            })
-            .expect("playback at threshold should save");
-        let completed_at_ms = completed
-            .playback_state
-            .completed_at_ms
-            .expect("completion should be recorded");
-
-        let replayed = fixture
-            .store
-            .update_playback_state(UpdatePlaybackStateInput {
-                project_id: project.id,
-                position_ms: 0,
-                duration_ms: Some(100_000),
-                volume: 1.0,
-                playback_rate: 1.0,
-                subtitle_mode: SubtitleDisplayMode::Original,
-            })
-            .expect("replay position should save");
-        assert_eq!(
-            replayed.playback_state.completed_at_ms,
-            Some(completed_at_ms)
         );
     }
 
@@ -2640,6 +2591,7 @@ mod tests {
         let result = fixture
             .store
             .update_playback_state(UpdatePlaybackStateInput {
+                completed: None,
                 project_id: project.id,
                 position_ms: -1,
                 duration_ms: None,

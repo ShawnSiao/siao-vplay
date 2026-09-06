@@ -1292,6 +1292,7 @@ mod tests {
         let resumed_position_ms = 8 * 60 * 1_000;
         store
             .update_playback_state(crate::domain::UpdatePlaybackStateInput {
+                completed: None,
                 project_id: project.id.clone(),
                 position_ms: resumed_position_ms,
                 duration_ms: Some(duration_ms),
