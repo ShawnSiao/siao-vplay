@@ -4,6 +4,24 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { PlayerDrawer } from "./PlayerDrawer";
 
 describe("PlayerDrawer reading-first shell", () => {
+  it("moves tab focus without changing the active workflow until activation", () => {
+    const select = vi.fn();
+    render(<PlayerDrawer activeTab="understand" mediaTitle="视频" onSelectTab={select} onClose={vi.fn()}><p>正文</p></PlayerDrawer>);
+    const active = screen.getByRole("tab", { name: "理解" });
+    const next = screen.getByRole("tab", { name: "学习" });
+    active.focus();
+    fireEvent.keyDown(active, { key: "ArrowRight" });
+    expect(next).toHaveFocus();
+    expect(next).toHaveAttribute("tabindex", "0");
+    expect(active).toHaveAttribute("tabindex", "-1");
+    expect(select).not.toHaveBeenCalled();
+    fireEvent.keyDown(next, { key: "Home" });
+    expect(screen.getByRole("tab", { name: "剧集" })).toHaveFocus();
+    fireEvent.keyDown(document.activeElement!, { key: "ArrowLeft" });
+    expect(screen.getByRole("tab", { name: "逐字稿" })).toHaveFocus();
+    fireEvent.click(screen.getByRole("tab", { name: "逐字稿" }));
+    expect(select).toHaveBeenCalledWith("transcript");
+  });
   beforeEach(() => {
     window.localStorage.clear();
   });

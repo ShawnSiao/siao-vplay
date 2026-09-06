@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 
 import type { ShellDrawerTab } from "../shell/useShellController";
+import { useTabNavigation } from "../../components/useTabNavigation";
 
 type PlayerDrawerProps = {
   activeTab: ShellDrawerTab;
@@ -49,6 +50,7 @@ export function PlayerDrawer({
   onClose,
 }: PlayerDrawerProps) {
   const [density, setDensity] = useState<DrawerDensity>(readDensity);
+  const tabs = useTabNavigation(activeTab, onSelectTab);
 
   useEffect(() => {
     try {
@@ -88,20 +90,17 @@ export function PlayerDrawer({
 
       <div
         className="player-drawer-tabs"
-        role="tablist"
+        {...tabs.listProps}
         aria-label="播放器辅助面板"
       >
         {drawerTabs.map((tab) => (
           <button
+            {...tabs.tabProps(tab.id)}
             aria-controls={`player-drawer-panel-${tab.id}`}
             aria-label={tab.label}
-            aria-selected={activeTab === tab.id}
             className={`${tab.id} ${activeTab === tab.id ? "active" : ""}`}
             id={`player-drawer-tab-${tab.id}`}
             key={tab.id}
-            role="tab"
-            type="button"
-            onClick={() => onSelectTab(tab.id)}
           >
             <span>{tab.label}</span>
             <small>{tab.id === "episodes" ? episodeSummary : tab.description}</small>
@@ -136,6 +135,7 @@ export function PlayerDrawer({
         className="player-drawer-content"
         id={`player-drawer-panel-${activeTab}`}
         role="tabpanel"
+        tabIndex={0}
         aria-labelledby={`player-drawer-tab-${activeTab}`}
       >
         {children}

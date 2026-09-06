@@ -22,6 +22,7 @@ import { TranscriptionPanel } from "./TranscriptionPanel";
 import { TranslationDialog } from "./TranslationDialog";
 import {
   SubtitleWorkflowTabs,
+  SubtitleCurrentNote,
   type SubtitleWorkflow,
 } from "./SubtitleWorkflowTabs";
 
@@ -276,19 +277,10 @@ export function SubtitleImportDialog({
           setWorkflow(nextWorkflow);
           if (nextWorkflow !== "import") resetPreview();
         }}
-      />
+      >
 
       {currentVersion ? (
-        <div className="subtitle-current-note">
-          <span>当前原文字幕</span>
-          <strong>{currentVersion.sourceLabel}</strong>
-          <small>
-            {currentVersion.languageCode.toUpperCase()} ·{" "}
-            {currentVersion.segments.length} 条 · 版本{" "}
-            {currentVersion.versionNumber} ·{" "}
-            {currentVersion.status === "draft" ? "草稿" : "已检查"}
-          </small>
-        </div>
+        <SubtitleCurrentNote version={currentVersion} />
       ) : workflow === "import" ? (
         <p className="dialog-copy">
           可以导入 UTF-8 SRT、WebVTT，或读取视频中的文本字幕轨。确认导入前会检查时间轴和媒体范围。
@@ -476,6 +468,7 @@ export function SubtitleImportDialog({
           onTaskCompleted={onTranslationTaskCompleted}
         />
       )}
+      </SubtitleWorkflowTabs>
     </Dialog>
   );
 }

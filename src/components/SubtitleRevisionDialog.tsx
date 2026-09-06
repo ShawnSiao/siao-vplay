@@ -1,5 +1,6 @@
 import type { SubtitleSegment } from "../types";
 import { Dialog } from "./Dialog";
+import { useTabNavigation } from "./useTabNavigation";
 import { useSubtitleRevisionController, type SubtitleRevisionDialogProps } from "../features/subtitle-revision/useSubtitleRevisionController";
 
 const issueOptions = [
@@ -39,6 +40,7 @@ function issueLabel(issueKind: SubtitleSegment["issueKind"]): string | null {
 export function SubtitleRevisionDialog(props: SubtitleRevisionDialogProps) {
   const { onRetranslate } = props;
   const { requestClose, dirty, role, mode, activeSegmentId, selectedIds, search, text, issueKind, findText, replaceText, offsetSeconds, busy, notice, error, currentOriginal, currentTranslation, currentVersion, filteredSegments, history, activeSegment, changeRole, setMode, setSearch, setNotice, setError, toggleSelected, selectSegment, saveSegment, replaceAcrossTrack, shiftTrack, restoreHistory, setText, setIssueKind, setFindText, setReplaceText, setOffsetSeconds } = useSubtitleRevisionController(props);
+  const tabs = useTabNavigation(role, changeRole);
   return (
     <Dialog
       title="轻量字幕修正"
@@ -52,13 +54,10 @@ export function SubtitleRevisionDialog(props: SubtitleRevisionDialogProps) {
     >
       <fieldset className="revision-workspace" disabled={busy} style={{ border: 0, margin: 0, padding: 0, minWidth: 0 }}>
         {dirty ? <p role="status">有未保存的修改；切句或切轨会保留草稿。</p> : null}
-        <div className="revision-track-switch" role="tablist" aria-label="字幕轨">
+        <div className="revision-track-switch" {...tabs.listProps} aria-label="字幕轨">
           <button
             className={role === "original" ? "active" : ""}
-            type="button"
-            role="tab"
-            aria-selected={role === "original"}
-            onClick={() => changeRole("original")}
+            {...tabs.tabProps("original")}
           >
             原文字幕
             <small>
@@ -69,11 +68,8 @@ export function SubtitleRevisionDialog(props: SubtitleRevisionDialogProps) {
           </button>
           <button
             className={role === "translation" ? "active" : ""}
-            type="button"
-            role="tab"
-            aria-selected={role === "translation"}
             disabled={!currentTranslation}
-            onClick={() => changeRole("translation")}
+            {...tabs.tabProps("translation")}
           >
             简体中文
             <small>
@@ -84,6 +80,7 @@ export function SubtitleRevisionDialog(props: SubtitleRevisionDialogProps) {
           </button>
         </div>
 
+        <div {...tabs.panelProps} style={{ display: "grid", gap: "inherit" }}>
         <nav className="revision-mode-tabs" aria-label="修正方式">
           {(
             [
@@ -353,6 +350,7 @@ export function SubtitleRevisionDialog(props: SubtitleRevisionDialogProps) {
             <p>{error}</p>
           </div>
         ) : null}
+        </div>
       </fieldset>
     </Dialog>
   );

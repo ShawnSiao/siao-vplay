@@ -28,7 +28,7 @@ export function SubtitleTranslationHarness() {
         workflow={workflow}
         disabled={false}
         onChange={setWorkflow}
-      />
+      >
       <div className="subtitle-current-note">
         <span>当前原文字幕</span>
         <strong>本地字幕识别 · 标准</strong>
@@ -52,6 +52,7 @@ export function SubtitleTranslationHarness() {
           </section>
         </div>
       ) : null}
+      </SubtitleWorkflowTabs>
     </Dialog>
   );
 }
