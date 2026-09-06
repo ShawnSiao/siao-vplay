@@ -9,6 +9,7 @@ test("compact home keeps resume and search usable at the minimum window", async 
   expect((await hero.boundingBox())!.height).toBeLessThanOrEqual(180);
   await expect(page.getByRole("searchbox", { name: "搜索媒体库" })).toBeVisible();
   await expect(page.getByRole("button", { name: "打开本地视频" })).toBeVisible();
+  expect((await page.getByRole("banner", { name: "应用命令栏" }).boundingBox())!.height).toBeLessThanOrEqual(48);
   expect(await page.locator(".library-scroll").evaluate(e => e.scrollWidth <= e.clientWidth)).toBe(true);
   if (process.env.SIAOVPLAY_DESIGN_CAPTURE_DIR) await page.screenshot({ path: join(process.env.SIAOVPLAY_DESIGN_CAPTURE_DIR, "compact-library-actual-960.png") });
 });
