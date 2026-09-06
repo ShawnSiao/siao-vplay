@@ -16,5 +16,5 @@ export function useLearningContext(incoming: LearningContext) {
     context.translationVersion?.id !== incoming.translationVersion?.id ||
     context.sourceSegment?.id !== incoming.sourceSegment?.id ||
     context.translationSegment?.id !== incoming.translationSegment?.id;
-  return { context, changed, selectCurrent: () => setContext(incoming) };
+  return { context, changed, restoreContext: setContext, selectCurrent: () => setContext(incoming) };
 }

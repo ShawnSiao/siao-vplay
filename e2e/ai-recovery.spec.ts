@@ -6,7 +6,7 @@ for (const kind of ["explanation", "learning"] as const) {
   test(`${kind} restores an interrupted task without preparing or sending again`, async ({ page }) => {
     const { explanationTask } = createUnderstandingFixtures({ projectId: "e2e-project", sourceVersionId: "e2e-original", translationVersionId: "", sourceSegmentId: "e2e-original-segment" });
     const task = { ...explanationTask, status: "interrupted", stage: "interrupted", frames: [], playbackCutoffMs: 15_000,
-      sourceSegmentId: "e2e-original-segment", selectedText: "Okay", selectionKind: "word", playbackPositionMs: 15_000, outputDictionaryEntryId: null };
+      translationVersionId: null, sourceSegmentId: "e2e-original-segment", selectedText: "Okay", selectionKind: "word", playbackPositionMs: 15_000, outputDictionaryEntryId: null };
     const preview = taskDispatchFixture(task);
     preview.taskKind = kind;
     preview.selectedText = kind === "learning" ? task.selectedText : null;

@@ -42,6 +42,7 @@ import { LearningResultSection } from "../features/learning/LearningResultSectio
 import { LearningSelectionSection } from "../features/learning/LearningSelectionSection";
 import { selectionKind, splitForSelection } from "../features/learning/learningSelection";
 import { useLocalSpeech } from "../features/learning/useLocalSpeech";
+import { useLearningTaskContext } from "../features/learning/useLearningTaskContext";
 import { useLearningContext } from "../features/learning/learningContext";
 
 type LearningPanelProps = {
@@ -113,6 +114,7 @@ function LearningPanelSession({
     sourceVersion: liveSourceVersion, translationVersion: liveTranslationVersion,
     sourceSegment: liveSourceSegment, translationSegment: liveTranslationSegment });
   const { playbackPositionMs, sourceVersion, translationVersion, sourceSegment, translationSegment } = learningContext.context;
+  const [initialContext] = useState(learningContext.context);
   const handledCompletionRef = useRef<string | null>(null);
   const [resultReadAttempt, setResultReadAttempt] = useState(0);
   const selectableParts = useMemo(
@@ -127,6 +129,10 @@ function LearningPanelSession({
   const executionChoice = useAiExecutionChoice(false);
   const [runtime, setRuntime] = useState<CodexRuntimeStatus | null>(null);
   const [task, setTask] = useState<LearningTask | null>(null);
+  const recovery = useLearningTaskContext(task, learningContext.context, (context, text) => {
+    learningContext.restoreContext(context);
+    setSelectedText(text);
+  });
   const [dispatch, setDispatch] = useState<TaskDispatchPreview | null>(null);
   const [entry, setEntry] = useState<DictionaryEntry | null>(null);
   const [entries, setEntries] = useState<DictionaryEntry[]>([]);
@@ -175,14 +181,13 @@ function LearningPanelSession({
           ?? (tasks[0] && ["failed", "interrupted"].includes(tasks[0].status) ? tasks[0] : null);
         if (activeTask) {
           setTask(activeTask);
-          setSelectedText(activeTask.selectedText);
         } else {
           setEntry(
             nextEntries.find(
               (item) =>
-                sourceSegment !== null &&
-                item.sourceSegmentId === sourceSegment.id &&
-                item.selectedText === sourceSegment.text,
+                initialContext.sourceSegment !== null &&
+                item.sourceSegmentId === initialContext.sourceSegment.id &&
+                item.selectedText === initialContext.sourceSegment.text,
             ) ?? null,
           );
         }
@@ -200,7 +205,7 @@ function LearningPanelSession({
     return () => {
       active = false;
     };
-  }, [projectId, sourceSegment]);
+  }, [projectId, initialContext]);
 
   useEffect(() => {
     if (
@@ -305,7 +310,7 @@ function LearningPanelSession({
   };
 
   const prepare = async () => {
-    if (!sourceSegment || !selectionValid) {
+    if (recovery.blocked || !sourceSegment || !selectionValid) {
       return;
     }
     setOperation("prepare");
@@ -328,7 +333,6 @@ function LearningPanelSession({
       const activeTask = tasks.find((item) => activeStatuses.has(item.status));
       if (activeTask) {
         setTask(activeTask);
-        setSelectedText(activeTask.selectedText);
       }
     } finally {
       setOperation(null);
@@ -367,7 +371,7 @@ function LearningPanelSession({
   };
 
   const confirmDispatch = async () => {
-    if (!task || !dispatch) return;
+    if (recovery.blocked || !task || !dispatch) return;
     setOperation("dispatch");
     setError(null);
     try {
@@ -582,6 +586,17 @@ function LearningPanelSession({
           <div className="learning-loading" role="status">
             <span className="spinner"></span>
             <span>正在读取学习记录</span>
+          </div>
+        ) : recovery.blocked ? (
+          <div className="learning-empty">
+            <p role={recovery.error ? "alert" : "status"}>{recovery.error ?? "正在恢复查询使用的字幕和播放范围"}</p>
+            {recovery.error ? <button className="button quiet small" type="button" onClick={recovery.retry}>重新读取学习上下文</button> : null}
+            {task && !activeStatuses.has(task.status) && liveSourceSegment ? <button className="button quiet small" type="button" disabled={busy} onClick={() => {
+              resetQuery();
+              setSelectedText(liveSourceSegment.text);
+              learningContext.selectCurrent();
+            }}>放下本次查询，学习当前台词</button> : null}
+            {task && activeStatuses.has(task.status) ? <button className="button quiet small" type="button" disabled={busy} onClick={() => void cancel()}>取消本次查询</button> : null}
           </div>
         ) : !sourceVersion ? (
           <div className="learning-empty">
