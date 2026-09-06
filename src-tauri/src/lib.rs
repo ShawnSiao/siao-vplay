@@ -13,6 +13,7 @@ mod commands;
 mod delivery;
 mod desktop_frame;
 mod domain;
+mod database_upgrade;
 mod external_handoff;
 mod instance_lock;
 mod learning;

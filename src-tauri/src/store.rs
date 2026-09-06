@@ -752,6 +752,7 @@ impl ProjectStore {
 
     pub(crate) fn connect(&self) -> Result<Connection, StoreError> {
         let connection = Connection::open(&self.database_path)?;
+        crate::database_upgrade::check_version(&connection, CURRENT_SCHEMA_VERSION)?;
         connection.execute_batch(
             "PRAGMA foreign_keys = ON;
              PRAGMA journal_mode = WAL;
@@ -762,6 +763,11 @@ impl ProjectStore {
     }
 
     fn migrate(connection: &mut Connection, database_path: &Path) -> Result<(), StoreError> {
+        crate::database_upgrade::backup_before_upgrade(
+            connection,
+            database_path,
+            CURRENT_SCHEMA_VERSION,
+        )?;
         connection.execute_batch(
             "CREATE TABLE IF NOT EXISTS schema_migrations (
                 version INTEGER PRIMARY KEY,
@@ -774,12 +780,6 @@ impl ProjectStore {
             |row| row.get(0),
         )?;
         let existing_database = current_version > 0;
-        if current_version > CURRENT_SCHEMA_VERSION {
-            return Err(StoreError::UnsupportedSchema {
-                found: current_version,
-                supported: CURRENT_SCHEMA_VERSION,
-            });
-        }
 
         if current_version < 1 {
             let transaction = connection.transaction()?;
@@ -2859,7 +2859,7 @@ mod tests {
     }
 
     #[test]
-    fn rolls_back_schema_15_when_foreign_key_check_fails() {
+    fn rejects_schema_15_before_migration_when_backup_has_foreign_key_errors() {
         let temp_dir = tempfile::tempdir().expect("temporary directory should be created");
         let database_path = temp_dir.path().join("foreign-key-failure.sqlite3");
         create_v14_database(&database_path);
@@ -2882,9 +2882,7 @@ mod tests {
         let result = ProjectStore::open(&database_path);
         assert!(matches!(
             result,
-            Err(StoreError::LibraryMigration(
-                MigrationError::ForeignKeyViolation(_)
-            ))
+            Err(StoreError::Validation(message)) if message.contains("备份未通过完整性检查")
         ));
 
         let connection = Connection::open(&database_path).expect("database should reopen");
