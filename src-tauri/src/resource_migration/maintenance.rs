@@ -68,20 +68,12 @@ pub fn move_resource_root(
             plan.resource_root,
         ));
     }
-    let required = plan.bytes_to_copy.saturating_add(MOVE_MARGIN_BYTES);
-    if let Some(available) = plan.free_space_bytes
-        && available < required
-    {
-        return Err(ResourceMigrationError::InsufficientSpace {
-            required_bytes: required,
-            available_bytes: available,
-        });
-    }
     let previous_root = PathBuf::from(&plan.previous_root);
     let selected_parent = PathBuf::from(&plan.selected_parent);
     let target_root = PathBuf::from(&plan.resource_root);
-    let staging = selected_parent.join(format!(".SiaoVPlay-moving-{}", Uuid::new_v4()));
-    let verified = copy_root_verified(
+    let recovery = move_staging::Staging::open(&previous_root, &target_root)?;
+    let staging = &recovery.path;
+    let verified = copy_root_verified_inner(
         &previous_root,
         &staging,
         MoveCopyOptions {
@@ -89,6 +81,7 @@ pub fn move_resource_root(
             cross_volume: plan.cross_volume,
             fault: MoveFault::None,
         },
+        true,
     )?;
     if let Err(error) = move_control::begin_commit() {
         let _ = fs::remove_dir_all(&staging);
@@ -98,16 +91,22 @@ pub fn move_resource_root(
         let _ = fs::remove_dir_all(&staging);
         return Err(error.into());
     }
-    let mut configuration = local_resources::configuration_snapshot()
+    let previous_configuration = local_resources::configuration_snapshot()
         .ok_or(LocalResourceError::ConfirmationRequired)?;
+    let mut configuration = previous_configuration.clone();
     configuration.selected_parent = path_string(&selected_parent);
     configuration.resource_root = path_string(&target_root);
     push_unique_string(&mut configuration.legacy_candidate_roots, &previous_root);
-    if let Err(error) = local_resources::replace_configuration(configuration) {
-        return Err(error.into());
-    }
-    resource_download::bind_configured_root()?;
-    crate::runtime::sync_managed_root()?;
+    move_commit::switch_configuration(&previous_configuration, &configuration,
+        |configuration| local_resources::replace_configuration(configuration.clone()).map(|_| ()).map_err(Into::into),
+        || {
+            let downloads = resource_download::bind_configured_root();
+            let runtime = crate::runtime::sync_managed_root();
+            downloads?;
+            runtime?;
+            Ok(())
+        })?;
+    recovery.finish();
     Ok(LocalResourceMoveResult {
         previous_root: path_string(&previous_root),
         current_root: path_string(&target_root),

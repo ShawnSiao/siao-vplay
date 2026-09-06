@@ -1,6 +1,8 @@
 mod maintenance;
 pub(crate) mod move_control;
 mod move_io;
+mod move_commit;
+mod move_staging;
 pub use maintenance::{adopt_local_resources, move_resource_root, reconnect_resource_root, cleanup_unused_resources};
 
 use std::{
@@ -281,12 +283,13 @@ pub fn plan_resource_root_move(
         return Err(LocalResourceError::RootUnavailable(path_string(&previous_root)).into());
     }
     let (selected_parent, resource_root) = local_resources::selected_location_paths(parent_path)?;
+    move_io::validate_destination(&previous_root, &selected_parent)?;
     if paths_equal(&previous_root, &resource_root) {
         return Err(ResourceMigrationError::InvalidSource(
             "新位置与当前资源目录相同".to_owned(),
         ));
     }
-    let manifest = resource_download::collect_file_manifest(&previous_root)?;
+    let manifest = move_io::manifest(&previous_root)?;
     let bytes_to_copy = manifest
         .iter()
         .fold(0_u64, |total, file| total.saturating_add(file.size));
@@ -782,12 +785,22 @@ struct VerifiedCopy {
     cross_volume: bool,
 }
 
+#[cfg(test)]
 fn copy_root_verified(
     source: &Path,
     staging: &Path,
     options: MoveCopyOptions,
 ) -> Result<VerifiedCopy, ResourceMigrationError> {
-    if staging.exists() {
+    copy_root_verified_inner(source, staging, options, false)
+}
+
+fn copy_root_verified_inner(
+    source: &Path,
+    staging: &Path,
+    options: MoveCopyOptions,
+    resume_owned_staging: bool,
+) -> Result<VerifiedCopy, ResourceMigrationError> {
+    if staging.exists() && !resume_owned_staging {
         return Err(ResourceMigrationError::DestinationExists(path_string(
             staging,
         )));
@@ -796,7 +809,8 @@ fn copy_root_verified(
     let bytes = source_manifest
         .iter()
         .fold(0_u64, |total, file| total.saturating_add(file.size));
-    let required = bytes.saturating_add(MOVE_MARGIN_BYTES);
+    let remaining = if resume_owned_staging { move_io::remaining_bytes(source, staging, &source_manifest)? } else { bytes };
+    let required = remaining.saturating_add(MOVE_MARGIN_BYTES);
     if let Some(available) = options.available_bytes
         && available < required
     {

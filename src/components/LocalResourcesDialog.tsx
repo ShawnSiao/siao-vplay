@@ -847,6 +847,7 @@ export function LocalResourcesDialog({
                   <p>{movePlan.resourceRoot}</p>
                   <p>
                     复制并校验 {formatBytes(movePlan.bytesToCopy)}；切换成功后原目录仍保留。
+                    中断后选择同一位置可继续，空间按剩余复制量检查。
                   </p>
                   <button
                     className="button quiet"
@@ -854,9 +855,7 @@ export function LocalResourcesDialog({
                     disabled={
                       previewMode ||
                       busyAction !== null ||
-                      movePlan.destinationExists ||
-                      (movePlan.freeSpaceBytes !== null &&
-                        movePlan.freeSpaceBytes < movePlan.bytesToCopy)
+                      movePlan.destinationExists
                     }
                     onClick={() => void confirmMoveLocation()}
                   >

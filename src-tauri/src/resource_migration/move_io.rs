@@ -6,6 +6,23 @@ use std::{
     path::Path,
 };
 
+pub(super) fn validate_destination(
+    source: &Path,
+    parent: &Path,
+) -> Result<(), ResourceMigrationError> {
+    let source = dunce::canonicalize(source)?;
+    let parent = dunce::canonicalize(parent)?;
+    if parent
+        .ancestors()
+        .any(|path| super::paths_equal(path, &source))
+    {
+        return Err(ResourceMigrationError::InvalidSource(
+            "新保存位置不能位于当前资源目录内部，请选择其他目录".into(),
+        ));
+    }
+    Ok(())
+}
+
 pub(super) fn manifest(root: &Path) -> Result<Vec<ReceiptFile>, ResourceMigrationError> {
     let mut files = Vec::new();
     visit(root, root, &mut files)?;
@@ -61,6 +78,7 @@ fn visit(
 
 pub(super) fn copy_tree(source: &Path, target: &Path) -> Result<(), ResourceMigrationError> {
     move_control::check()?;
+    reject_symlink(target)?;
     fs::create_dir_all(target)?;
     for entry in fs::read_dir(source)? {
         move_control::check()?;
@@ -72,16 +90,80 @@ pub(super) fn copy_tree(source: &Path, target: &Path) -> Result<(), ResourceMigr
             ));
         }
         let output = target.join(entry.file_name());
+        reject_symlink(&output)?;
         if kind.is_dir() {
             copy_tree(&entry.path(), &output)?;
         } else if kind.is_file() {
+            if files_match(&entry.path(), &output)? {
+                continue;
+            }
             let mut source = fs::File::open(entry.path())?;
+            // Unlink a previous partial copy instead of truncating a possible
+            // hard link to another file.
+            if output.exists() {
+                fs::remove_file(&output)?;
+            }
             let mut target = fs::File::create(output)?;
             copy_bytes(&mut source, &mut target)?;
             target.sync_all()?;
         }
     }
     Ok(())
+}
+
+fn reject_symlink(path: &Path) -> Result<(), ResourceMigrationError> {
+    match fs::symlink_metadata(path) {
+        Ok(metadata) if metadata.file_type().is_symlink() => Err(
+            ResourceMigrationError::Integrity("复制恢复目录包含符号链接".into()),
+        ),
+        Ok(_) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error.into()),
+    }
+}
+
+fn files_match(source: &Path, target: &Path) -> Result<bool, ResourceMigrationError> {
+    move_control::check()?;
+    reject_symlink(target)?;
+    if !target.is_file() || fs::metadata(source)?.len() != fs::metadata(target)?.len() {
+        return Ok(false);
+    }
+    let mut source = fs::File::open(source)?;
+    let mut target = fs::File::open(target)?;
+    let mut left = [0_u8; 64 * 1024];
+    let mut right = [0_u8; 64 * 1024];
+    loop {
+        move_control::check()?;
+        let count = source.read(&mut left)?;
+        if count == 0 {
+            return Ok(true);
+        }
+        target.read_exact(&mut right[..count])?;
+        if left[..count] != right[..count] {
+            return Ok(false);
+        }
+    }
+}
+
+pub(super) fn remaining_bytes(
+    source: &Path,
+    target: &Path,
+    files: &[ReceiptFile],
+) -> Result<u64, ResourceMigrationError> {
+    // Check the entire existing tree before following any destination ancestor.
+    if target.exists() {
+        manifest(target)?;
+    }
+    let mut remaining = 0_u64;
+    for file in files {
+        if !files_match(
+            &source.join(&file.relative_path),
+            &target.join(&file.relative_path),
+        )? {
+            remaining = remaining.saturating_add(file.size);
+        }
+    }
+    Ok(remaining)
 }
 
 fn copy_bytes(
@@ -102,6 +184,58 @@ fn copy_bytes(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn resumed_copy_keeps_verified_files_and_replaces_incomplete_files() {
+        let fixture = tempfile::tempdir().unwrap();
+        let source = fixture.path().join("source");
+        let target = fixture.path().join("staging");
+        fs::create_dir_all(&source).unwrap();
+        fs::create_dir_all(&target).unwrap();
+        fs::write(source.join("complete"), b"verified").unwrap();
+        fs::write(target.join("complete"), b"verified").unwrap();
+        fs::write(source.join("partial"), b"complete contents").unwrap();
+        fs::write(target.join("partial"), b"incom").unwrap();
+        fs::File::options()
+            .write(true)
+            .open(target.join("complete"))
+            .unwrap()
+            .set_times(
+                fs::FileTimes::new()
+                    .set_modified(std::time::UNIX_EPOCH + std::time::Duration::from_secs(60)),
+            )
+            .unwrap();
+        let before = fs::metadata(target.join("complete"))
+            .unwrap()
+            .modified()
+            .unwrap();
+        copy_tree(&source, &target).unwrap();
+        assert_eq!(
+            fs::metadata(target.join("complete"))
+                .unwrap()
+                .modified()
+                .unwrap(),
+            before
+        );
+        assert_eq!(
+            fs::read(target.join("partial")).unwrap(),
+            b"complete contents"
+        );
+        assert_eq!(manifest(&source).unwrap(), manifest(&target).unwrap());
+    }
+
+    #[test]
+    fn nested_destination_is_rejected_before_copying() {
+        let fixture = tempfile::tempdir().unwrap();
+        let source = fixture.path().join("resources");
+        let nested = source.join("nested");
+        let sibling = fixture.path().join("resources-other");
+        fs::create_dir_all(&nested).unwrap();
+        fs::create_dir_all(&sibling).unwrap();
+        assert!(validate_destination(&source, &nested).is_err());
+        assert!(validate_destination(&source, &source).is_err());
+        assert!(validate_destination(&source, &sibling).is_ok());
+    }
 
     #[test]
     fn cancellation_stops_copy_before_reading_the_next_chunk() {
