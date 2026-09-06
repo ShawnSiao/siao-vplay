@@ -743,7 +743,7 @@ where
     if !media_path.is_file() {
         return Err(LearningError::MediaChanged);
     }
-    let current_versions = subtitles::list_subtitle_versions(store, &project.id)?;
+    let current_versions = subtitles::list_current_subtitle_versions(store, &project.id)?;
     let source_is_current = current_versions.iter().any(|version| {
         version.role == "original" && version.is_current && version.id == entry.source_version_id
     });
@@ -1626,7 +1626,7 @@ fn load_task_baseline(
         .source_sha256
         .clone()
         .ok_or(LearningError::MediaChanged)?;
-    let versions = subtitles::list_subtitle_versions(store, project_id)?;
+    let versions = subtitles::list_current_subtitle_versions(store, project_id)?;
     let source = versions
         .iter()
         .find(|version| version.role == "original" && version.is_current)

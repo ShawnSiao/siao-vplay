@@ -1,5 +1,5 @@
 mod read;
-pub use read::{get_subtitle_version, list_subtitle_versions};
+pub use read::{get_subtitle_version, list_current_subtitle_versions, list_subtitle_versions};
 
 use std::{
     collections::{HashMap, HashSet},
@@ -1987,6 +1987,9 @@ mod tests {
         )
         .expect("restore reads only selected versions");
         assert_eq!(restored.segments[0].start_ms, 100);
+        let current_versions = list_current_subtitle_versions(&store, &restored.project_id).unwrap();
+        assert_eq!(current_versions.len(), 1);
+        assert_eq!(current_versions[0].id, restored.id);
         assert!(matches!(
             get_subtitle_version(&store, &restored.project_id, "missing"),
             Err(SubtitleError::VersionNotFound(_))

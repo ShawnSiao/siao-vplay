@@ -350,7 +350,7 @@ pub fn prepare_translation_task(
             .cloned()
             .collect(),
     };
-    let current_translation = subtitles::list_subtitle_versions(store, &project.id)?
+    let current_translation = subtitles::list_current_subtitle_versions(store, &project.id)?
         .into_iter()
         .find(|version| {
             version.role == "translation"
@@ -909,10 +909,11 @@ fn persist_translation_result(
     let result_sha256 = hash_bytes(raw.as_bytes());
     let base_translation = if let Some(version_id) = &task.base_translation_version_id {
         Some(
-            subtitles::list_subtitle_versions(store, &task.project_id)?
-                .into_iter()
-                .find(|version| version.id == *version_id)
-                .ok_or(TranslationError::ProjectChanged)?,
+            subtitles::get_subtitle_version(store, &task.project_id, version_id)
+                .map_err(|error| match error {
+                    SubtitleError::VersionNotFound(_) => TranslationError::ProjectChanged,
+                    other => other.into(),
+                })?,
         )
     } else {
         None
@@ -1196,12 +1197,7 @@ fn persist_translation_result(
         return Err(error);
     }
 
-    let subtitle_version = subtitles::list_subtitle_versions(store, &task.project_id)?
-        .into_iter()
-        .find(|version| version.id == version_id)
-        .ok_or_else(|| {
-            StoreError::Validation("目标语言字幕版本已写入，但无法重新读取".to_owned())
-        })?;
+    let subtitle_version = subtitles::get_subtitle_version(store, &task.project_id, &version_id)?;
     Ok(TranslationApplication {
         task: get_translation_task(store, &task.id)?,
         subtitle_version,

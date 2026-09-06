@@ -5,7 +5,7 @@ pub fn list_subtitle_versions(
     store: &ProjectStore,
     project_id: &str,
 ) -> Result<Vec<SubtitleVersion>, SubtitleError> {
-    read_versions(store, project_id, None)
+    read_versions(store, project_id, Selection::All)
 }
 
 pub fn get_subtitle_version(
@@ -13,16 +13,29 @@ pub fn get_subtitle_version(
     project_id: &str,
     version_id: &str,
 ) -> Result<SubtitleVersion, SubtitleError> {
-    read_versions(store, project_id, Some(version_id))?
+    read_versions(store, project_id, Selection::Version(version_id))?
         .into_iter()
         .next()
         .ok_or_else(|| SubtitleError::VersionNotFound(version_id.to_owned()))
 }
 
+pub fn list_current_subtitle_versions(
+    store: &ProjectStore,
+    project_id: &str,
+) -> Result<Vec<SubtitleVersion>, SubtitleError> {
+    read_versions(store, project_id, Selection::Current)
+}
+
+enum Selection<'a> {
+    All,
+    Current,
+    Version(&'a str),
+}
+
 fn read_versions(
     store: &ProjectStore,
     project_id: &str,
-    version_id: Option<&str>,
+    selection: Selection<'_>,
 ) -> Result<Vec<SubtitleVersion>, SubtitleError> {
     let project = store.get_project(project_id)?;
     let connection = store.connect()?;
@@ -37,15 +50,15 @@ fn read_versions(
          JOIN subtitle_tracks t ON t.id = v.track_id
          WHERE v.project_id = ?1 {}
          ORDER BY v.created_at_ms DESC, v.version_number DESC, v.id DESC",
-        if version_id.is_some() {
-            "AND v.id = ?2"
-        } else {
-            ""
+        match selection {
+            Selection::All => "",
+            Selection::Current => "AND t.current_version_id = v.id",
+            Selection::Version(_) => "AND v.id = ?2",
         },
     );
     let mut statement = connection.prepare(&query)?;
     let mut arguments = vec![project.id.as_str()];
-    if let Some(id) = version_id {
+    if let Selection::Version(id) = selection {
         arguments.push(id);
     }
     let rows = statement
