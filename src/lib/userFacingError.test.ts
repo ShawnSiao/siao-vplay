@@ -15,7 +15,7 @@ describe("userFacingCommandError", () => {
         { code: "media_runtime_unavailable", message: "ffmpeg missing" },
         "playback",
       ),
-    ).toContain("环境配置");
+    ).toContain("设置");
   });
 
   it("never exposes unknown paths or commands", () => {
@@ -44,7 +44,7 @@ describe("userFacingCommandError", () => {
       "library",
     );
 
-    expect(updateMessage).toContain("环境配置");
+    expect(updateMessage).toContain("设置");
     expect(updateMessage).toContain("更新");
     expect(downloadMessage).toContain("更新公开视频组件");
     expect(downloadMessage).not.toMatch(/ERROR|403|yt-dlp|C:\\/i);

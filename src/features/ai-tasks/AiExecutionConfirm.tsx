@@ -49,7 +49,7 @@ export function AiExecutionConfirm({
               onClick={() => controller.setKind(kind)}
             >
               <strong>{title}</strong>
-              <small>{disabled ? "先到环境配置添加" : subtitle}</small>
+              <small>{disabled ? "先到设置添加" : subtitle}</small>
             </button>
           );
         })}
@@ -72,7 +72,7 @@ export function AiExecutionConfirm({
       ) : null}
 
       {!apiAvailable ? (
-        <button className="button quiet ai-configure-service" type="button" onClick={() => openEnvironmentSettings("ai")}>进入环境配置添加 AI 服务</button>
+        <button className="button quiet ai-configure-service" type="button" onClick={() => openEnvironmentSettings("ai")}>进入设置添加 AI 服务</button>
       ) : null}
       {controller.kind === "codex" && runtime && !runtimeReady ? (
         <div className="ai-execution-warning">

@@ -56,5 +56,5 @@ test("sending explanations fit the actual narrow learning drawer", async ({ page
   await page.getByRole("button", { name: "准备查询材料" }).focus();
   await expect(page.getByRole("button", { name: "准备查询材料" })).toBeFocused();
   await page.keyboard.press("Shift+Tab");
-  await expect(page.getByRole("button", { name: "进入环境配置添加 AI 服务" })).toBeFocused();
+  await expect(page.getByRole("button", { name: "进入设置添加 AI 服务" })).toBeFocused();
 });

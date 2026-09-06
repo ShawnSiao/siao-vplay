@@ -77,15 +77,15 @@ export function EnvironmentSettingsDialog({
         <header className="environment-settings-header">
           <div className="environment-title-group">
             <span>按需管理</span>
-            <h1 id={titleId}>环境配置</h1>
+            <h1 id={titleId}>设置</h1>
             <p>管理本地功能、AI 服务、存储位置和隐私范围</p>
           </div>
-          <nav className="environment-settings-tabs" {...tabs.listProps} aria-label="环境配置分类">
+          <nav className="environment-settings-tabs" {...tabs.listProps} aria-label="设置分类">
             <button className={tab === "local" ? "active" : ""} {...tabs.tabProps("local")}>本地功能</button>
             <button className={tab === "ai" ? "active" : ""} {...tabs.tabProps("ai")}>AI 服务</button>
             <button className={tab === "storage" ? "active" : ""} {...tabs.tabProps("storage")}>存储</button>
           </nav>
-          <button className="environment-settings-close" type="button" aria-label="关闭环境配置" onClick={requestClose}>×</button>
+          <button className="environment-settings-close" type="button" aria-label="关闭设置" onClick={requestClose}>×</button>
         </header>
 
         <div className="environment-settings-content" {...tabs.panelProps}>

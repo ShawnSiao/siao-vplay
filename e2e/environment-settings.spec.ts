@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test";
 test("provider drafts survive navigation and dismissal requires an explicit discard", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("button", { name: "设置" }).click();
-  const settings = page.getByRole("dialog", { name: "环境配置" });
+  const settings = page.getByRole("dialog", { name: "设置" });
   await settings.getByRole("tab", { name: "AI 服务" }).click();
   await settings.getByRole("button", { name: "OpenAI 未配置" }).click();
   const key = settings.getByPlaceholder("粘贴服务商提供的 API Key");
@@ -17,7 +17,7 @@ test("provider drafts survive navigation and dismissal requires an explicit disc
   await expect(settings).toBeVisible();
   await expect(key).toHaveValue("synthetic-draft-only");
   page.once("dialog", (dialog) => dialog.accept());
-  await settings.getByRole("button", { name: "关闭环境配置" }).click();
+  await settings.getByRole("button", { name: "关闭设置" }).click();
   await expect(settings).toHaveCount(0);
 });
 
@@ -40,7 +40,7 @@ test("environment settings follows the approved compact provider layout", async 
   expect(navigationBox!.y + navigationBox!.height - (groupBox!.y + groupBox!.height)).toBeLessThanOrEqual(10);
   await trigger.click();
 
-  const dialog = page.getByRole("dialog", { name: "环境配置" });
+  const dialog = page.getByRole("dialog", { name: "设置" });
   await expect(dialog).toBeVisible();
   await dialog.getByRole("tab", { name: "AI 服务" }).click();
   await expect(dialog.locator(".environment-provider-list .environment-provider-row")).toHaveCount(7);
@@ -68,7 +68,7 @@ test("environment settings keeps its header and footer fixed at 960 by 640", asy
   await page.setViewportSize({ width: 960, height: 640 });
   await page.goto("/");
   await page.getByRole("button", { name: "设置" }).click();
-  const dialog = page.getByRole("dialog", { name: "环境配置" });
+  const dialog = page.getByRole("dialog", { name: "设置" });
   await dialog.getByRole("tab", { name: "AI 服务" }).click();
   await dialog.getByRole("button", { name: "OpenAI 未配置" }).click();
 
@@ -93,7 +93,7 @@ test("environment settings keeps the complete local-resource workflow", async ({
   await page.setViewportSize({ width: 1200, height: 850 });
   await page.goto("/e2e/runtime.html?environment=1");
 
-  const dialog = page.getByRole("dialog", { name: "环境配置" });
+  const dialog = page.getByRole("dialog", { name: "设置" });
   const capabilities = dialog.getByRole("region", { name: "需要的功能" });
   await expect(dialog).toContainText("共享内容只下载一次");
   await expect(capabilities.getByText("基础视频支持")).toBeVisible();
@@ -134,7 +134,7 @@ for (const viewport of [
     });
     await page.setViewportSize(viewport);
     await page.goto("/e2e/runtime.html?environment=1&storage=1");
-    const dialog = page.getByRole("dialog", { name: "环境配置" });
+    const dialog = page.getByRole("dialog", { name: "设置" });
     await dialog.getByRole("tab", { name: "存储" }).click();
     await expect(dialog.getByRole("region", { name: "存储位置" })).toBeVisible();
     await expect(dialog.getByText("应用数据与数据库")).toBeVisible();

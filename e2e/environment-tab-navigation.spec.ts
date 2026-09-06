@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 
 test("environment tabs use manual keyboard activation and linked panels", async ({ page }) => {
   await page.goto("/e2e/runtime.html?environment&storage");
-  const dialog = page.getByRole("dialog", { name: "环境配置" });
+  const dialog = page.getByRole("dialog", { name: "设置" });
   const local = dialog.getByRole("tab", { name: "本地功能", exact: true });
   await expect(local).toHaveAttribute("aria-selected", "true");
   await local.focus();

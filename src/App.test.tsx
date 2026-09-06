@@ -1,3 +1,4 @@
+import { verifyDismissedResourceAction, verifySelectedResourceResume } from "./appResourcePreparationTest";
 import { subtitleMetadata } from "./features/subtitle-revision/subtitleMetadata";
 import { createTranslationTask, translationDispatchFixture } from "./test-fixtures/translation";
 import { taskDispatchFixture } from "./test-fixtures/taskDispatch";
@@ -1160,10 +1161,10 @@ describe("App", () => {
     expect(settingsButton).toBeEnabled();
     fireEvent.click(settingsButton);
     expect(
-      await screen.findByRole("dialog", { name: "环境配置" }),
+      await screen.findByRole("dialog", { name: "设置" }),
     ).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "关闭" }));
-    expect(screen.queryByRole("dialog", { name: "环境配置" })).toBeNull();
+    expect(screen.queryByRole("dialog", { name: "设置" })).toBeNull();
     fireEvent.click(
       screen.getByRole("button", { name: "折叠媒体库导航" }),
     );
@@ -2294,7 +2295,7 @@ describe("App", () => {
     render(<App />);
     await screen.findAllByText("雨站台");
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 30)); });
-    expect(screen.queryByRole("dialog", { name: "环境配置" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "设置" })).not.toBeInTheDocument();
     expect(await getAddMediaCommand(/打开本地视频/)).toBeEnabled();
     expect(desktopMocks.prepareLocalCapability).not.toHaveBeenCalled();
   });
@@ -2325,68 +2326,18 @@ describe("App", () => {
     ).toBeInTheDocument();
     expect(screen.getByLabelText("视频 URL")).toBeVisible();
     expect(
-      screen.queryByRole("dialog", { name: "环境配置" }),
+      screen.queryByRole("dialog", { name: "设置" }),
     ).not.toBeInTheDocument();
     expect(desktopMocks.prepareLocalCapability).not.toHaveBeenCalled();
   });
 
-  it("resumes the selected local video after basic media support is ready", async () => {
-    const basicNotReady: LocalResourceStatus = {
-      ...readyLocalResourceStatus,
-      capabilities: readyLocalResourceStatus.capabilities.map((capability) => ({
-        ...capability,
-        state: "not_ready",
-        missingResourceIds: ["ffmpeg-cpu"],
-      })),
-    };
-    let currentResourceStatus = basicNotReady;
-    desktopMocks.getLocalResourceStatus.mockImplementation(
-      async () => currentResourceStatus,
-    );
-    desktopMocks.chooseLocalVideo.mockResolvedValue(project.mediaSource.locator);
-    desktopMocks.prepareLocalCapability.mockImplementation(
-      async (capabilityId, pendingActionId) => {
-        currentResourceStatus = readyLocalResourceStatus;
-        return {
-          capabilityId,
-          pendingActionId,
-          state: "preparing",
-          resourceIds: ["ffmpeg-cpu"],
-          readyResourceIds: [],
-          taskIds: ["00000000-0000-4000-8000-000000000021"],
-        };
-      },
-    );
+  it("resumes the selected local video after basic media support is ready", () =>
+    verifySelectedResourceResume({ desktopMocks, readyLocalResourceStatus, project, getAddMediaCommand }),
+  );
 
-    render(<App />);
-    await screen.findByText("本地功能按需准备");
-    fireEvent.click(await getAddMediaCommand(/打开本地视频/));
-
-    const resources = await screen.findByRole("dialog", {
-      name: "环境配置",
-    });
-    expect(resources).toHaveTextContent("继续打开本地视频");
-    expect(desktopMocks.openLocalProject).not.toHaveBeenCalled();
-    fireEvent.click(
-      within(resources).getByRole("button", { name: "开始准备所选功能" }),
-    );
-
-    await waitFor(() =>
-      expect(desktopMocks.prepareLocalCapability).toHaveBeenCalledWith(
-        "basic_media",
-        expect.any(String),
-      ),
-    );
-    await waitFor(() => expect(desktopMocks.openLocalProject).toHaveBeenCalledWith(project.mediaSource.locator));
-    expect(desktopMocks.chooseLocalVideo).toHaveBeenCalledTimes(1);
-    expect(desktopMocks.openLocalProject).toHaveBeenCalledTimes(1);
-    await waitFor(() =>
-      expect(desktopMocks.prepareProjectMedia).toHaveBeenCalledWith(
-        project.id,
-        false, expect.any(String),
-      ),
-    );
-  });
+  it("does not resume a dismissed media action when resources finish later", () =>
+    verifyDismissedResourceAction({ desktopMocks, readyLocalResourceStatus, project, getAddMediaCommand }),
+  );
 
   it("preflights and imports a public HTTPS media URL", async () => {
     render(<App />);

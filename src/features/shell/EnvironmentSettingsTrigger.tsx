@@ -14,12 +14,12 @@ export function EnvironmentSettingsTrigger({
       aria-label="设置"
       className="environment-navigation-trigger"
       type="button"
-      title={`环境配置 · ${status}`}
+      title={`设置 · ${status}`}
       onClick={onOpen}
     >
       <span aria-hidden="true">⚙</span>
       <span>
-        <strong>环境配置</strong>
+        <strong>设置</strong>
         <small>本地功能与 AI 服务</small>
       </span>
     </button>
