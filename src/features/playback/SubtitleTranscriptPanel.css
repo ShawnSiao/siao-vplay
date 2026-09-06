@@ -251,3 +251,9 @@
     transform: translate(-50%, -100%);
   }
 }
+
+@media (min-width: 1280px) {
+  .player-workspace.with-drawer:has(.player-drawer[data-active-tab="transcript"]) {
+    grid-template-columns: minmax(0, 1fr) 416px;
+  }
+}
