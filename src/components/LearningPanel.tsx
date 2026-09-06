@@ -65,6 +65,7 @@ const activeStatuses = new Set([
 
 function statusCopy(task: LearningTask): string {
   if (task.stage === "cancelling") return "正在取消请求…";
+  if (task.status === "completed") return "结果已生成，可以重新读取";
   if (task.status === "queued") {
     return "材料已准备好，请查看发送清单";
   }
@@ -101,6 +102,7 @@ export function LearningPanel({
   onPausePlayback,
 }: LearningPanelProps) {
   const handledCompletionRef = useRef<string | null>(null);
+  const [resultReadAttempt, setResultReadAttempt] = useState(0);
   const selectableParts = useMemo(
     () =>
       splitForSelection(
@@ -153,9 +155,8 @@ export function LearningPanel({
         setRuntime(nextRuntime);
         setEntries(nextEntries);
         setCards(nextCards);
-        const activeTask = tasks.find((item) =>
-          activeStatuses.has(item.status),
-        );
+        const activeTask = tasks.find((item) => activeStatuses.has(item.status))
+          ?? (tasks[0] && ["failed", "interrupted"].includes(tasks[0].status) ? tasks[0] : null);
         if (activeTask) {
           setTask(activeTask);
           setSelectedText(activeTask.selectedText);
@@ -249,9 +250,12 @@ export function LearningPanel({
     ) {
       return;
     }
-    handledCompletionRef.current = task.id;
+    let active = true;
     void getDictionaryEntry(task.outputDictionaryEntryId)
       .then((value) => {
+        if (!active) return;
+        handledCompletionRef.current = task.id;
+        setError(null);
         setEntry(value);
         setEntries((current) => [
           value,
@@ -259,11 +263,14 @@ export function LearningPanel({
         ]);
       })
       .catch((cause: unknown) => {
+        if (!active) return;
         setError(commandError(cause).message);
       });
-  }, [task]);
+    return () => { active = false; };
+  }, [task, resultReadAttempt]);
 
   const selectText = (value: string) => {
+    if (operation || (task && activeStatuses.has(task.status))) return;
     setSelectedText(value);
     setTask(null);
     setDispatch(null);
@@ -564,6 +571,7 @@ export function LearningPanel({
         ) : (
           <>
             <LearningSelectionSection
+              disabled={busy || Boolean(task && activeStatuses.has(task.status))}
               playbackPositionMs={playbackPositionMs}
               sourceVersion={sourceVersion}
               sourceSegment={sourceSegment}
@@ -728,6 +736,9 @@ export function LearningPanel({
               <section className="learning-recovery">
                 <strong>{statusCopy(task)}</strong>
                 {task.errorMessage ? <p>{task.errorMessage}</p> : null}
+            {task.status === "completed" ? <button className="button primary" type="button" onClick={() => setResultReadAttempt((value) => value + 1)}>
+              重新读取结果
+            </button> : null}
                 {canResume ? (
                   <button
                     className="button primary learning-primary"

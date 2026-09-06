@@ -58,6 +58,7 @@ function fileName(path: string): string {
 
 function statusCopy(task: ExplanationTask): string {
   if (task.stage === "cancelling") return "正在取消请求…";
+  if (task.status === "completed") return "结果已生成，可以重新读取";
   if (task.status === "queued") {
     return "材料已准备好，请查看发送清单";
   }
@@ -86,6 +87,7 @@ export function CurrentScenePanel({
   embedded = false,
 }: CurrentScenePanelProps) {
   const handledCompletionRef = useRef<string | null>(null);
+  const [resultReadAttempt, setResultReadAttempt] = useState(0);
   const initialCutoffRef = useRef(playbackCutoffMs);
   const executionChoice = useAiExecutionChoice(true);
   const [runtime, setRuntime] = useState<CodexRuntimeStatus | null>(null);
@@ -123,9 +125,8 @@ export function CurrentScenePanel({
         }
         setRuntime(nextRuntime);
         setHistory(explanations);
-        const activeTask = tasks.find((item) =>
-          activeStatuses.has(item.status),
-        );
+        const activeTask = tasks.find((item) => activeStatuses.has(item.status))
+          ?? (tasks[0] && ["failed", "interrupted"].includes(tasks[0].status) ? tasks[0] : null);
         if (activeTask) {
           setTask(activeTask);
         }
@@ -221,9 +222,12 @@ export function CurrentScenePanel({
     ) {
       return;
     }
-    handledCompletionRef.current = task.id;
+    let active = true;
     void getExplanation(task.outputExplanationId)
       .then((value) => {
+        if (!active) return;
+        handledCompletionRef.current = task.id;
+        setError(null);
         setFactsExpanded(false);
         setInterpretationExpanded(false);
         setExplanation(value);
@@ -233,9 +237,11 @@ export function CurrentScenePanel({
         ]);
       })
       .catch((cause: unknown) => {
+        if (!active) return;
         setError(commandError(cause).message);
       });
-  }, [task]);
+    return () => { active = false; };
+  }, [task, resultReadAttempt]);
 
   const resetForCurrentScene = () => {
     handledCompletionRef.current = null;
@@ -656,6 +662,9 @@ export function CurrentScenePanel({
           <div className="understanding-recovery">
             <strong>{statusCopy(task)}</strong>
             {task.errorMessage ? <p>{task.errorMessage}</p> : null}
+            {task.status === "completed" ? <button className="button primary" type="button" onClick={() => setResultReadAttempt((value) => value + 1)}>
+              重新读取结果
+            </button> : null}
             {canResume ? (
               <button
                 className="button primary understanding-primary"
