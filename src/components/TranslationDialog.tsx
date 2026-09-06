@@ -3,7 +3,8 @@ import { TranslationDispatchConfirm } from "../features/ai-tasks/TranslationDisp
 import { AiExecutionConfirm } from "../features/ai-tasks/AiExecutionConfirm";
 import { useAiExecutionChoice } from "../features/ai-tasks/useAiExecutionChoice";
 import { prepareApiTranslation, startApiTranslation } from "../features/ai-tasks/apiTranslation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useTranslationResultRead } from "../features/ai-tasks/useTranslationResultRead";
 
 import {
   cancelTranslationTask,
@@ -69,7 +70,6 @@ export function TranslationDialog({
   onPrepareOriginal,
   onTaskCompleted,
 }: TranslationDialogProps) {
-  const notifiedTaskRef = useRef<string | null>(null);
   const requestedKey = [...(requestedSegmentIds ?? [])].sort().join("|");
   const requestedSet = useMemo(
     () => new Set(requestedSegmentIds ?? []),
@@ -97,6 +97,7 @@ export function TranslationDialog({
   const [copyNotice, setCopyNotice] = useState<string | null>(null);
   const [resultPath, setResultPath] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const resultRead = useTranslationResultRead(task, translationVersions, onTaskCompleted);
 
   const currentTranslation = useMemo(
     () =>
@@ -242,22 +243,6 @@ export function TranslationDialog({
     };
   }, [task]);
 
-  useEffect(() => {
-    if (
-      !task ||
-      task.status !== "completed" ||
-      notifiedTaskRef.current === task.id
-    ) {
-      return;
-    }
-    if (translationVersions.some((version) => version.id === task.outputVersionId)) {
-      notifiedTaskRef.current = task.id;
-      return;
-    }
-    notifiedTaskRef.current = task.id;
-    void onTaskCompleted(task);
-  }, [onTaskCompleted, task, translationVersions]);
-
   const prepare = async () => {
     if (!sourceVersion) {
       return;
@@ -388,9 +373,7 @@ export function TranslationDialog({
     setError(null);
     try {
       const application = await importTranslationResult(task.id, resultPath);
-      notifiedTaskRef.current = application.task.id;
       setTask(application.task);
-      await onTaskCompleted(application.task, application.subtitleVersion);
     } catch (cause) {
       setError(commandError(cause).message);
     } finally {
@@ -660,6 +643,11 @@ export function TranslationDialog({
                 );
                 })}
             </div>
+          ) : resultRead.failed ? (
+            <div className="notice warning" role="alert">
+              <p>翻译已完成，但字幕暂时无法读取。请重试读取。</p>
+              <button className="button" type="button" onClick={resultRead.retry}>重新读取字幕</button>
+            </div>
           ) : (
             <div className="translation-loading" role="status">
               <span className="spinner"></span>
@@ -826,7 +814,7 @@ export function TranslationDialog({
               `原文字幕和已有${targetLanguageLabel}字幕没有改变。`}
           </p>
           <p className="translation-recovery-note">
-            重新开始会从受控任务包的第一批字幕开始，不复用未确认的中间结果。
+            {task.handoffKind === "api" ? "重试会保留已校验的批次，只发送未完成的字幕批次。" : "重新开始会从受控任务包的第一批字幕开始，不复用未确认的中间结果。"}
           </p>
         </div>
       )}
