@@ -1012,9 +1012,11 @@ pub async fn get_codex_runtime_status() -> Result<CodexRuntimeStatus, CommandErr
 pub async fn start_codex_translation_task(
     store: State<'_, ProjectStore>,
     input: StartCodexTranslationInput,
+    confirmation_sha256: String,
 ) -> Result<TranslationTask, CommandError> {
     let store = store.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
+        crate::translation_dispatch::verify(&store, &input.task_id, &confirmation_sha256)?;
         codex_runner::start_codex_translation_task(&store, input).map_err(CommandError::from)
     })
     .await
@@ -1033,9 +1035,11 @@ pub fn cancel_translation_task(
 pub async fn resume_codex_translation_task(
     store: State<'_, ProjectStore>,
     input: StartCodexTranslationInput,
+    confirmation_sha256: String,
 ) -> Result<TranslationTask, CommandError> {
     let store = store.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
+        crate::translation_dispatch::verify(&store, &input.task_id, &confirmation_sha256)?;
         codex_runner::resume_codex_translation_task(&store, input).map_err(CommandError::from)
     })
     .await

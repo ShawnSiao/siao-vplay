@@ -46,3 +46,13 @@ export function translationValidationCopy(
     ? `结构检查通过，另有 ${validation.warningCount} 项一致性提示。`
     : `已检查 ${validation.translationCount} 条字幕的任务、版本、范围和完整性。`;
 }
+
+export async function copyTranslationPrompt(prompt: string): Promise<string> {
+  if (!navigator.clipboard?.writeText) return "系统未授权自动复制，可以在下方选择完整提示词。";
+  try {
+    await navigator.clipboard.writeText(prompt);
+    return "完整任务提示词已复制。";
+  } catch {
+    return "自动复制没有完成，可以在下方选择完整提示词。";
+  }
+}

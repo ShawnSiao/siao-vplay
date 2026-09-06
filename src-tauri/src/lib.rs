@@ -40,6 +40,7 @@ mod subtitles;
 mod summary;
 mod transcription;
 mod translation;
+mod translation_dispatch;
 mod translation_language;
 #[cfg(test)]
 mod translation_test_support;
@@ -321,6 +322,7 @@ pub fn run() {
             commands::cancel_transcription_job,
             commands::resume_transcription_job,
             commands::prepare_translation_task,
+            translation_dispatch::preview_translation_dispatch,
             commands::get_translation_task,
             commands::list_translation_tasks,
             commands::read_translation_prompt,

@@ -1,3 +1,5 @@
+import { previewTranslationDispatch, type TranslationDispatchPreview } from "../features/ai-tasks/translationDispatch";
+import { TranslationDispatchConfirm } from "../features/ai-tasks/TranslationDispatchConfirm";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
@@ -26,6 +28,7 @@ import {
 import { TranslationDialogFrame } from "./TranslationDialogFrame";
 import { TranslationLanguageSelectors } from "./TranslationLanguageSelectors";
 import {
+  copyTranslationPrompt,
   translationResultFileName,
   translationStatusTone,
   translationTaskStage,
@@ -83,6 +86,7 @@ export function TranslationDialog({
     defaultTargetLanguage(sourceVersion?.languageCode ?? "en"),
   );
   const [runtime, setRuntime] = useState<CodexRuntimeStatus | null>(null);
+  const [dispatch, setDispatch] = useState<TranslationDispatchPreview | null>(null);
   const [task, setTask] = useState<TranslationTask | null>(null);
   const [loading, setLoading] = useState(true);
   const [operation, setOperation] = useState<string | null>(null);
@@ -274,14 +278,7 @@ export function TranslationDialog({
             targetLanguageCode,
           );
       setTask(prepared);
-      if (handoff === "codex") {
-        const started = await startCodexTranslationTask(prepared.id);
-        setTask(started);
-      } else {
-        const value = await readTranslationPrompt(prepared.id);
-        setPrompt(value);
-        setPromptExpanded(true);
-      }
+      setDispatch(await previewTranslationDispatch(prepared.id));
     } catch (cause) {
       setError(commandError(cause).message);
       const tasks = await listTranslationTasks(projectId).catch(() => []);
@@ -294,16 +291,37 @@ export function TranslationDialog({
     }
   };
 
-  const startQueued = async () => {
+  const reviewDispatch = async () => {
     if (!task) {
       return;
     }
     setOperation("start");
     setError(null);
     try {
-      setTask(await startCodexTranslationTask(task.id));
+      setDispatch(await previewTranslationDispatch(task.id));
     } catch (cause) {
       setError(commandError(cause).message);
+    } finally {
+      setOperation(null);
+    }
+  };
+
+  const confirmDispatch = async () => {
+    if (!task || !dispatch || task.id !== dispatch.taskId) return;
+    setOperation("dispatch");
+    setError(null);
+    try {
+      if (dispatch.handoffKind === "manual") {
+        setPrompt(await readTranslationPrompt(task.id));
+        setPromptExpanded(true);
+      } else {
+        const run = task.status === "queued" ? startCodexTranslationTask : resumeCodexTranslationTask;
+        setTask(await run(task.id, undefined, dispatch.confirmationSha256));
+      }
+      setDispatch(null);
+    } catch (cause) {
+      setError(commandError(cause).message);
+      setDispatch(null);
     } finally {
       setOperation(null);
     }
@@ -324,38 +342,11 @@ export function TranslationDialog({
     }
   };
 
-  const resume = async () => {
-    if (!task) {
-      return;
-    }
-    setOperation("resume");
-    setError(null);
-    try {
-      setTask(await resumeCodexTranslationTask(task.id));
-    } catch (cause) {
-      setError(commandError(cause).message);
-    } finally {
-      setOperation(null);
-    }
-  };
-
   const copyPrompt = async () => {
-    if (!prompt) {
-      return;
-    }
-    setCopyNotice(null);
-    if (!navigator.clipboard?.writeText) {
-      setPromptExpanded(true);
-      setCopyNotice("系统未授权自动复制，可以在下方选择完整提示词。");
-      return;
-    }
-    try {
-      await navigator.clipboard.writeText(prompt);
-      setCopyNotice("完整任务提示词已复制。");
-    } catch {
-      setPromptExpanded(true);
-      setCopyNotice("自动复制没有完成，可以在下方选择完整提示词。");
-    }
+    if (!prompt) return;
+    const notice = await copyTranslationPrompt(prompt);
+    setPromptExpanded(true);
+    setCopyNotice(notice);
   };
 
   const chooseResult = async () => {
@@ -403,6 +394,7 @@ export function TranslationDialog({
 
   const resetToSetup = () => {
     setTask(null);
+    setDispatch(null);
     setPrompt(null);
     setPromptExpanded(false);
     setResultPath(null);
@@ -441,7 +433,7 @@ export function TranslationDialog({
           {operation === "prepare"
             ? "正在准备…"
             : handoff === "codex"
-              ? "确认范围并开始翻译"
+              ? "准备翻译材料"
               : "生成完整任务提示词"}
         </button>
       </>
@@ -461,9 +453,9 @@ export function TranslationDialog({
           className="button primary"
           type="button"
           disabled={busy || !runtime?.available}
-          onClick={() => void startQueued()}
+          onClick={() => void reviewDispatch()}
         >
-          {operation === "start" ? "正在启动…" : "开始本机翻译"}
+          {operation === "start" ? "正在启动…" : "查看发送清单"}
         </button>
       </>
     );
@@ -540,7 +532,7 @@ export function TranslationDialog({
             className="button primary"
             type="button"
             disabled={busy || !runtime?.available}
-            onClick={() => void resume()}
+            onClick={() => void reviewDispatch()}
           >
             {operation === "resume" ? "正在重新开始…" : "重新开始本机翻译"}
           </button>
@@ -596,7 +588,7 @@ export function TranslationDialog({
               >
                 <span>
                   <strong>在本机 Codex 中处理</strong>
-                  <small>任务完成后自动检查结果并生成草稿。</small>
+                  <small>需要联网，完成后自动检查结果并生成草稿。</small>
                 </span>
                 <em
                   className={`status-pill ${
@@ -629,7 +621,7 @@ export function TranslationDialog({
           <section className="translation-section">
             <div className="translation-section-heading">
               <h3>
-                {handoff === "codex" ? "将发送给本机 Codex" : "提示词包含"}
+                {handoff === "codex" ? "准备发送给 OpenAI（通过 Codex）" : "提示词包含"}
               </h3>
               <span>点击底部操作前不会处理</span>
             </div>
@@ -896,9 +888,12 @@ export function TranslationDialog({
       running={Boolean(running)}
       busy={busy}
       onClose={onClose}
-      actions={actions}
+      actions={dispatch ? null : actions}
     >
-      {content}
+      {dispatch ? <>
+        <TranslationDispatchConfirm preview={dispatch} busy={busy} onConfirm={() => void confirmDispatch()} onBack={() => setDispatch(null)} />
+        {error ? <div className="notice warning" role="alert">{error}</div> : null}
+      </> : content}
     </TranslationDialogFrame>
   );
 }

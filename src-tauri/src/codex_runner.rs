@@ -1227,9 +1227,9 @@ fn load_runner_materials(
     let directory = translation::task_directory(store, task_id)?;
     translation::verify_task_package(store, task_id, &directory)?;
     let segments =
-        read_package_json::<Vec<RunnerSegment>>(&directory.join("input").join("segments.json"))?;
-    let context = read_package_json::<Value>(&directory.join("input").join("context.json"))?;
-    let glossary = read_package_json::<Value>(&directory.join("input").join("glossary.json"))?;
+        crate::translation_dispatch::read_json::<Vec<RunnerSegment>>(store, task_id, "input/segments.json")?;
+    let context = crate::translation_dispatch::read_json::<Value>(store, task_id, "input/context.json")?;
+    let glossary = crate::translation_dispatch::read_json::<Value>(store, task_id, "input/glossary.json")?;
     if segments.len() != task.segment_count {
         return Err(CodexRunnerError::InvalidOutput(
             "任务包字幕段数量与任务记录不一致".to_owned(),
@@ -1304,16 +1304,6 @@ fn load_runner_materials(
         glossary,
         batches,
     })
-}
-
-fn read_package_json<T: for<'de> Deserialize<'de>>(path: &Path) -> Result<T, CodexRunnerError> {
-    let metadata = fs::metadata(path)?;
-    if metadata.len() > MAX_RESULT_BYTES {
-        return Err(CodexRunnerError::InvalidOutput(
-            "任务材料超过大小上限".to_owned(),
-        ));
-    }
-    Ok(serde_json::from_slice(&fs::read(path)?)?)
 }
 
 fn segments_for_batch(

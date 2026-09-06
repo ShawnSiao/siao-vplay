@@ -1,3 +1,4 @@
+import { createTranslationTask, translationDispatchFixture } from "./test-fixtures/translation";
 import { taskDispatchFixture } from "./test-fixtures/taskDispatch";
 import { youtubePreview, directVideoFixture } from "./test-fixtures/publicVideo";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
@@ -167,7 +168,8 @@ vi.mock("./features/library/libraryGateway", async (importOriginal) => ({
 }));
 
 vi.mock("./features/analysis/gateway", () => analysisGatewayMocks);
-const dispatchMocks = vi.hoisted(() => ({ previewTaskDispatch: vi.fn() }));
+const dispatchMocks = vi.hoisted(() => ({ previewTaskDispatch: vi.fn(), previewTranslationDispatch: vi.fn() }));
+vi.mock("./features/ai-tasks/translationDispatch", () => ({ previewTranslationDispatch: dispatchMocks.previewTranslationDispatch }));
 vi.mock("./features/ai-tasks/taskDispatch", async (original) => ({ ...await original<object>(), ...dispatchMocks }));
 
 import App from "./App";
@@ -570,38 +572,7 @@ const transcriptionJob: TranscriptionJob = {
   completedAtMs: null,
 };
 
-const translationTask: TranslationTask = {
-  id: "f92041a1-5d07-4db0-b63d-565c12ceab36",
-  projectId: project.id,
-  taskType: "subtitle_translation",
-  handoffKind: "codex",
-  protocolVersion: "siaovplay-agent-v1",
-  status: "queued",
-  stage: "queued",
-  progress: 0,
-  receiverLabel: "本机 Codex",
-  materialScope: [
-    "原文字幕文本",
-    "字幕时间码",
-    "任务与字幕版本标识",
-    "人物与术语上下文（当前为空）",
-  ],
-  sourceVersionId: subtitleVersion.id,
-  sourceLanguageCode: "ja",
-  targetLanguageCode: "zh-cn",
-  authorizedSegmentIds: [subtitleVersion.segments[0].id],
-  segmentCount: 1,
-  expectedProjectRevision: 2,
-  baseTranslationVersionId: null,
-  outputVersionId: null,
-  validation: null,
-  errorCode: null,
-  errorMessage: null,
-  createdAtMs: 1_785_354_300_000,
-  updatedAtMs: 1_785_354_300_000,
-  startedAtMs: null,
-  completedAtMs: null,
-};
+const translationTask = createTranslationTask(project.id, subtitleVersion);
 
 const translatedVersion: SubtitleVersion = {
   ...subtitleVersion,
@@ -966,6 +937,7 @@ beforeEach(() => {
   });
   desktopMocks.listTranslationTasks.mockResolvedValue([]);
   desktopMocks.prepareTranslationTask.mockResolvedValue(translationTask);
+  dispatchMocks.previewTranslationDispatch.mockImplementation(async () => translationDispatchFixture(await (desktopMocks.prepareTranslationTask.mock.results.at(-1)?.value ?? translationTask), subtitleVersion));
   desktopMocks.startCodexTranslationTask.mockResolvedValue({
     ...translationTask,
     status: "running",
@@ -2590,7 +2562,7 @@ describe("App", () => {
       target: { value: "de" },
     });
     fireEvent.click(
-      screen.getByRole("button", { name: "确认范围并开始翻译" }),
+      screen.getByRole("button", { name: "准备翻译材料" }),
     );
 
     await waitFor(() =>
@@ -2781,14 +2753,14 @@ describe("App", () => {
     fireEvent.click(await screen.findByRole("button", { name: /继续播放/ }));
     fireEvent.click(await getOverflowCommand(/中文字幕/));
 
-    expect(await screen.findByText("将发送给本机 Codex")).toBeInTheDocument();
+    expect(await screen.findByText("准备发送给 OpenAI（通过 Codex）")).toBeInTheDocument();
     expect(
       screen.getByText(
         "不包含视频、音频、本机媒体路径、项目数据库、凭证或账号信息。",
       ),
     ).toBeInTheDocument();
     expect(screen.getByText("本机已就绪")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "确认范围并开始翻译" }));
+    fireEvent.click(screen.getByRole("button", { name: "准备翻译材料" }));
 
     await waitFor(() =>
       expect(desktopMocks.prepareTranslationTask).toHaveBeenCalledWith(
@@ -2798,9 +2770,11 @@ describe("App", () => {
         "zh-cn",
       ),
     );
+    expect(desktopMocks.startCodexTranslationTask).not.toHaveBeenCalled();
+    fireEvent.click(await screen.findByRole("button", { name: "确认发送并翻译" }));
     await waitFor(() =>
       expect(desktopMocks.startCodexTranslationTask).toHaveBeenCalledWith(
-        translationTask.id,
+        translationTask.id, undefined, "c".repeat(64),
       ),
     );
     expect(await screen.findByText("正在启动本机 Codex")).toBeInTheDocument();
@@ -2831,6 +2805,7 @@ describe("App", () => {
       await screen.findByRole("button", { name: /复制任务提示词/ }),
     );
     fireEvent.click(screen.getByRole("button", { name: "生成完整任务提示词" }));
+    fireEvent.click(await screen.findByRole("button", { name: "确认准备交接" }));
 
     expect(
       await screen.findByText("完整任务提示词已经生成"),
@@ -2915,9 +2890,11 @@ describe("App", () => {
       ),
     ).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "重新开始本机翻译" }));
+    expect(desktopMocks.resumeCodexTranslationTask).not.toHaveBeenCalled();
+    fireEvent.click(await screen.findByRole("button", { name: "确认发送并翻译" }));
     await waitFor(() =>
       expect(desktopMocks.resumeCodexTranslationTask).toHaveBeenCalledWith(
-        translationTask.id,
+        translationTask.id, undefined, "c".repeat(64),
       ),
     );
   });
@@ -3100,7 +3077,7 @@ describe("App", () => {
       await screen.findByRole("heading", { name: "重新翻译选中字幕" }),
     ).toBeInTheDocument();
     expect(screen.getByText("只处理选中的 1 条原文字幕")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "确认范围并开始翻译" }));
+    fireEvent.click(screen.getByRole("button", { name: "准备翻译材料" }));
     await waitFor(() =>
       expect(desktopMocks.prepareTranslationTask).toHaveBeenCalledWith(
         project.id,

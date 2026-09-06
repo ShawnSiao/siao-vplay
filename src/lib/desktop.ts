@@ -943,10 +943,12 @@ export async function getCodexRuntimeStatus(): Promise<CodexRuntimeStatus> {
 
 export async function startCodexTranslationTask(
   taskId: string,
-  timeoutSeconds?: number,
+  timeoutSeconds: number | undefined,
+  confirmationSha256: string,
 ): Promise<TranslationTask> {
   return invoke<TranslationTask>("start_codex_translation_task", {
     input: { taskId, timeoutSeconds },
+    confirmationSha256,
   });
 }
 
@@ -960,10 +962,12 @@ export async function cancelTranslationTask(
 
 export async function resumeCodexTranslationTask(
   taskId: string,
-  timeoutSeconds?: number,
+  timeoutSeconds: number | undefined,
+  confirmationSha256: string,
 ): Promise<TranslationTask> {
   return invoke<TranslationTask>("resume_codex_translation_task", {
     input: { taskId, timeoutSeconds },
+    confirmationSha256,
   });
 }
 
