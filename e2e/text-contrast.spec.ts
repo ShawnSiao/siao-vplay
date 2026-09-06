@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { expect, test } from "@playwright/test";
 
 // SC 1.4.3: https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html
-// Solid computed colors only. Images, group opacity and pseudo-element backgrounds need visual review.
+// Solid colors and simple opaque monotonic linear gradients. Images, group opacity and pseudo-element backgrounds need visual review.
 for (const route of ["library.html", "runtime.html", "player.html?summary=result&drawer", "dialog.html"]) {
   test(`solid-background text contrast: ${route}`, async ({ page }, testInfo) => {
     await page.setViewportSize({ width: 960, height: 640 });
@@ -26,7 +26,7 @@ for (const route of ["library.html", "runtime.html", "player.html?summary=result
         .map((v) => v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4)
         .reduce((sum, value, index) => sum + value * [0.2126, 0.7152, 0.0722][index], 0);
       const measured: { text: string; selector: string; ratio: number; required: number }[] = [];
-      const unverified: { text: string; reason: string }[] = [];
+      const unverified: { text: string; reason: string; color: string; backgrounds: string[] }[] = [];
       for (const element of document.querySelectorAll("p,span,small,label,strong,em,button,a,h1,h2,h3,summary,li,dt,dd")) {
         const text = [...element.childNodes].filter((node) => node.nodeType === Node.TEXT_NODE).map((node) => node.textContent).join("").trim();
         if (!/[\p{L}\p{N}]/u.test(text) || !element.getClientRects().length || element.closest(":disabled,[aria-disabled='true'],[hidden],[inert],[aria-hidden='true']")) continue;
@@ -43,7 +43,21 @@ for (const route of ["library.html", "runtime.html", "player.html?summary=result
           })) { reason = "pseudo-element background"; break; }
           if (Number(current.opacity) !== 1) { reason = "group opacity"; break; }
           if (background[3] < 1) {
-            if (current.backgroundImage !== "none") { reason = "background image"; break; }
+            if (current.backgroundImage !== "none") {
+              const colors = [...current.backgroundImage.matchAll(/rgba?\([^)]+\)/g)].map((match) => parse(match[0])!);
+              const foreground = parse(style.color);
+              const simple = current.backgroundImage.startsWith("linear-gradient(") &&
+                current.backgroundImage.split("gradient").length === 2 && colors.length === 2 && colors.every((color) => color[3] === 1);
+              if (!simple || !foreground || foreground[3] !== 1) { reason = "background image"; break; }
+              const candidates = colors.map((color) => over(background, color));
+              const monotonic = [1, -1].some((direction) => [0, 1, 2].every((i) => direction * (candidates[0][i] - candidates[1][i]) >= 0));
+              const light = luminance(foreground);
+              const limits = candidates.map(luminance).sort((a, b) => a - b);
+              if (!monotonic || (light > limits[0] && light < limits[1])) { reason = "non-monotonic gradient contrast"; break; }
+              const ratio = (color: Color) => (Math.max(light, luminance(color)) + 0.05) / (Math.min(light, luminance(color)) + 0.05);
+              background = candidates.sort((a, b) => ratio(a) - ratio(b))[0];
+              continue;
+            }
             const color = parse(current.backgroundColor);
             if (!color) { reason = "unsupported background color"; break; }
             if (color[3] > 0) background = over(background, color);
@@ -51,7 +65,12 @@ for (const route of ["library.html", "runtime.html", "player.html?summary=result
         }
         const foreground = parse(style.color);
         if (reason || !foreground || background[3] < 1) {
-          unverified.push({ text, reason: reason || "unknown color" }); continue;
+          const backgrounds: string[] = [];
+          for (let node: Element | null = element; node; node = node.parentElement) {
+            const computed = getComputedStyle(node);
+            backgrounds.push(`${node.tagName}.${node.className}: ${computed.backgroundColor}; ${computed.backgroundImage}`);
+          }
+          unverified.push({ text, reason: reason || "unknown color", color: style.color, backgrounds }); continue;
         }
         const values = [luminance(over(foreground, background)), luminance(background)].sort((a, b) => b - a);
         const size = parseFloat(style.fontSize);

@@ -45,3 +45,55 @@ test("drawer puts content after one context row and tabs, with reading settings 
   expect((await drawer.locator(".spoiler-boundary").boundingBox())!.height).toBeLessThanOrEqual(76);
   if (process.env.SIAOVPLAY_DESIGN_CAPTURE_DIR) await page.screenshot({ path: join(process.env.SIAOVPLAY_DESIGN_CAPTURE_DIR, "compact-player-actual-960.png") });
 });
+
+
+for (const empty of [false, true]) {
+  test(`library reflows at 200% equivalent layout, empty=${empty}`, async ({ page }) => {
+    await page.setViewportSize({ width: 480, height: 320 });
+    await page.goto(`/e2e/library.html${empty ? "?empty=1" : ""}`);
+    const search = page.getByRole("searchbox", { name: "搜索媒体库" });
+    await expect(search).toBeVisible();
+    const bounds = await search.boundingBox();
+    expect(bounds!.x).toBeGreaterThanOrEqual(0);
+    expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(480);
+    expect(await page.locator(".library-scroll").evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
+    for (const name of ["打开本地视频", "添加剧集文件夹", "从公开链接导入"]) {
+      const button = page.getByRole("button", { name, exact: true });
+      await button.focus();
+      await expect(button).toBeFocused();
+      const box = await button.boundingBox();
+      expect(box!.x).toBeGreaterThanOrEqual(0);
+      expect(box!.x + box!.width).toBeLessThanOrEqual(480);
+    }
+    if (process.env.SIAOVPLAY_DESIGN_CAPTURE_DIR) await page.screenshot({ path: join(process.env.SIAOVPLAY_DESIGN_CAPTURE_DIR, `library-200-${empty}.png`) });
+  });
+}
+
+
+test("player menu and drawer remain inside a 200% equivalent layout", async ({ page }) => {
+  await page.setViewportSize({ width: 480, height: 320 });
+  await page.goto("/e2e/player.html");
+  const more = page.getByRole("button", { name: "更多", exact: true });
+  await more.focus();
+  await expect(more).toBeFocused();
+  await page.keyboard.press("Enter");
+  const menu = page.getByRole("menu");
+  await expect(menu).toBeVisible();
+  const menuBox = await menu.boundingBox();
+  expect(menuBox!.x).toBeGreaterThanOrEqual(0);
+  expect(menuBox!.y).toBeGreaterThanOrEqual(0);
+  expect(menuBox!.x + menuBox!.width).toBeLessThanOrEqual(480);
+  expect(menuBox!.y + menuBox!.height).toBeLessThanOrEqual(320);
+  await page.getByRole("menuitem", { name: /^剧集/ }).click();
+  const drawer = page.getByRole("complementary", { name: "当前内容抽屉" });
+  const box = await drawer.boundingBox();
+  expect(box!.x).toBeGreaterThanOrEqual(0);
+  expect(box!.x + box!.width).toBeLessThanOrEqual(480);
+  expect(box!.y + box!.height).toBeLessThanOrEqual(320);
+  expect((await drawer.locator(".player-drawer-content").boundingBox())!.height).toBeGreaterThanOrEqual(64);
+  await drawer.getByRole("tab", { name: "逐字稿" }).click();
+  expect(await drawer.locator(".player-drawer-content").evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
+  if (process.env.SIAOVPLAY_DESIGN_CAPTURE_DIR) await page.screenshot({ path: join(process.env.SIAOVPLAY_DESIGN_CAPTURE_DIR, "player-200.png") });
+  await page.keyboard.press("Escape");
+  await expect(drawer).toHaveCount(0);
+});
