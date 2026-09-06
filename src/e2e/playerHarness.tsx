@@ -284,8 +284,8 @@ export function PlayerHarness() {
     return <UnderstandingResultPreview />;
   }
   const summaryPreview = new URLSearchParams(window.location.search).get("summary");
-  if (summaryPreview === "progress" || summaryPreview === "result") {
-    return <SummaryPreview state={summaryPreview} />;
+  if (summaryPreview === "progress" || summaryPreview === "result" || summaryPreview === "confirm") {
+    return <SummaryPreview state={summaryPreview} sourceVersion={originalSubtitle} />;
   }
   if (new URLSearchParams(window.location.search).get("learning") === "speech") {
     return <LearningSpeechPreview />;

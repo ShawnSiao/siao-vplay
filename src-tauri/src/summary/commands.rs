@@ -1,6 +1,7 @@
 use serde::Serialize;
 use tauri::State;
 
+use super::dispatch::{self, ConfirmedSummaryInput, SummaryDispatchPreview};
 use super::{
     AnalysisPromptTemplate, DeleteAnalysisPromptTemplateInput, ExportVideoSummaryInput,
     ListAnalysisPromptTemplatesInput, ListSummaryTasksInput, ListVideoSummariesInput,
@@ -62,11 +63,12 @@ pub fn delete_analysis_prompt_templates(
 }
 
 #[tauri::command]
-pub fn prepare_summary_task(
+pub async fn prepare_summary_task(
     store: State<'_, ProjectStore>,
     input: PrepareSummaryTaskInput,
 ) -> Result<SummaryTask, SummaryCommandError> {
-    materials::prepare(store.inner(), input).map_err(Into::into)
+    let store = store.inner().clone();
+    run_blocking(move || materials::prepare(&store, input)).await
 }
 
 #[tauri::command]
@@ -78,19 +80,29 @@ pub fn open_summary_materials(
 }
 
 #[tauri::command]
-pub fn start_summary_task(
+pub async fn start_summary_task(
     store: State<'_, ProjectStore>,
-    input: SummaryTaskIdInput,
+    input: ConfirmedSummaryInput,
 ) -> Result<SummaryTask, SummaryCommandError> {
-    executor::start_or_resume(store.inner(), &input.task_id).map_err(Into::into)
+    let store = store.inner().clone();
+    run_blocking(move || {
+        dispatch::verify(&store, &input)?;
+        executor::start_or_resume(&store, &input.task_id)
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn resume_summary_task(
+pub async fn resume_summary_task(
     store: State<'_, ProjectStore>,
-    input: SummaryTaskIdInput,
+    input: ConfirmedSummaryInput,
 ) -> Result<SummaryTask, SummaryCommandError> {
-    executor::start_or_resume(store.inner(), &input.task_id).map_err(Into::into)
+    let store = store.inner().clone();
+    run_blocking(move || {
+        dispatch::verify(&store, &input)?;
+        executor::start_or_resume(&store, &input.task_id)
+    })
+    .await
 }
 
 #[tauri::command]
@@ -171,4 +183,25 @@ pub async fn list_summary_activity(
             message: "暂时无法读取处理动态".to_owned(),
         })?
         .map_err(Into::into)
+}
+
+async fn run_blocking<T: Send + 'static>(
+    operation: impl FnOnce() -> Result<T, StoreError> + Send + 'static,
+) -> Result<T, SummaryCommandError> {
+    tauri::async_runtime::spawn_blocking(operation)
+        .await
+        .map_err(|_| SummaryCommandError {
+            code: "summary_background_failed",
+            message: "总结后台操作意外中断，可以重新尝试".to_owned(),
+        })?
+        .map_err(Into::into)
+}
+
+#[tauri::command]
+pub async fn preview_summary_dispatch(
+    store: State<'_, ProjectStore>,
+    input: SummaryTaskIdInput,
+) -> Result<SummaryDispatchPreview, SummaryCommandError> {
+    let store = store.inner().clone();
+    run_blocking(move || dispatch::preview(&store, &input.task_id)).await
 }

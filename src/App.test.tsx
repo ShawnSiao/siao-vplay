@@ -1845,7 +1845,7 @@ describe("App", () => {
     expect(
       screen.getByText("不包含完整视频、音频、本机媒体路径、数据库或凭证。"),
     ).toBeInTheDocument();
-    expect(screen.getAllByText("本机 Codex")).toHaveLength(2);
+    expect(screen.getByText("OpenAI（经本机 Codex）")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("checkbox", { name: /允许发送.*关键帧/ }));
     fireEvent.click(
       screen.getByRole("button", { name: "确认范围并理解当前场景" }),

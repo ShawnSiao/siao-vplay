@@ -1911,6 +1911,8 @@ fn invocation_spec_with_images(
         "-c".to_owned(),
         "approval_policy=\"never\"".to_owned(),
         "-c".to_owned(),
+        "model_provider=\"openai\"".to_owned(),
+        "-c".to_owned(),
         "web_search=\"disabled\"".to_owned(),
         "-c".to_owned(),
         "features.shell_tool=false".to_owned(),
@@ -2819,6 +2821,7 @@ process.stdin.on("end", () => {{
 
         for required in [
             "approval_policy=\"never\"",
+            "model_provider=\"openai\"",
             "web_search=\"disabled\"",
             "features.shell_tool=false",
             "features.unified_exec=false",

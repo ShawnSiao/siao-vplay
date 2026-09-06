@@ -5,6 +5,7 @@ mod backup;
 mod chunker;
 mod citations;
 mod codex_executor;
+mod dispatch;
 mod execution_prompts;
 mod executor;
 mod keyframes;
@@ -22,6 +23,9 @@ mod result_repository;
 mod result_validation;
 mod schema;
 mod task_repository;
+mod verified_materials;
+#[cfg(test)]
+pub(crate) mod test_support;
 
 pub use model::{
     AnalysisPromptTemplate, AnalysisTaskType, DeleteAnalysisPromptTemplateInput,

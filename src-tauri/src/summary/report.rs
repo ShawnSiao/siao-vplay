@@ -138,6 +138,7 @@ fn extract_frames(
     if timestamps.is_empty() {
         return Ok(BTreeMap::new());
     }
+    let _lease = crate::resource_leases::configured(&["ffmpeg"])?;
     let ffmpeg = media::ffmpeg_path().map_err(|error| StoreError::Validation(error.to_string()))?;
     let mut assets = BTreeMap::new();
     for (index, timestamp) in timestamps.iter().enumerate() {

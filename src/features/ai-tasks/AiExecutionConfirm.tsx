@@ -9,11 +9,12 @@ type AiExecutionConfirmProps = {
   allowFrames: boolean;
   translationAvailable: boolean;
   taskLabel: string;
+  summaryScope?: "current_progress" | "full_video";
 };
 
 const choiceLabels: Array<[AiExecutionChoiceKind, string, string]> = [
   ["api", "AI 服务", "使用保存的 API"],
-  ["codex", "本机 Codex", "调用其配置的模型服务"],
+  ["codex", "本机 Codex", "通过 OpenAI 服务处理"],
   ["manual", "复制提示词", "自行选择其他工具"],
 ];
 
@@ -23,12 +24,13 @@ export function AiExecutionConfirm({
   allowFrames,
   translationAvailable,
   taskLabel,
+  summaryScope,
 }: AiExecutionConfirmProps) {
   const runtimeReady = Boolean(runtime?.available && runtime.authenticated && runtime.supported);
   const apiAvailable = controller.services.length > 0;
   const receiver = controller.kind === "api"
     ? controller.service?.displayName ?? "尚未配置"
-    : controller.kind === "codex" ? "本机 Codex" : "自行选择的工具";
+    : controller.kind === "codex" ? "OpenAI（经本机 Codex）" : "自行选择的工具";
   const visionAvailable = controller.kind !== "api" || Boolean(controller.service?.capabilities.vision);
 
   return (
@@ -78,12 +80,12 @@ export function AiExecutionConfirm({
 
       <div className="ai-execution-scope">
         <div><span>接收方</span><strong>{receiver}</strong></div>
-        {controller.kind === "codex" ? <p>Codex 可能向其配置的模型服务发送下列材料。本机安装不代表离线推理，请先核对 Codex 的接收服务。</p> : null}
+        {controller.kind === "codex" ? <p>通过 Codex 的 OpenAI 登录与默认模型发送下列材料，不读取用户的模型服务配置。本机安装不代表离线推理。</p> : null}
         {controller.kind === "api" ? <div><span>模型</span><strong>{controller.modelId || "尚未选择"}</strong></div> : null}
         <ul>
-          <li>当前播放点之前的原文字幕</li>
-          {translationAvailable ? <li>已有的简体中文字幕</li> : null}
-          <li>当前问题或用户选择的词句</li>
+          <li>{summaryScope === "full_video" ? "完整视频的当前字幕版本（包含未观看内容）" : "当前播放点之前的原文字幕"}</li>
+          {!summaryScope && translationAvailable ? <li>已有的简体中文字幕</li> : null}
+          <li>{summaryScope ? "选定的分析提示词与补充要求" : "当前问题或用户选择的词句"}</li>
         </ul>
         {allowFrames ? (
           <label className={!visionAvailable ? "disabled" : ""}>
@@ -93,7 +95,7 @@ export function AiExecutionConfirm({
               disabled={!visionAvailable}
               onChange={(event) => controller.setFrames(event.target.checked)}
             />
-            允许发送当前播放点之前的受控关键帧
+            {summaryScope === "full_video" ? "允许发送完整视频范围内的受控关键帧" : "允许发送当前播放点之前的受控关键帧"}
           </label>
         ) : null}
         <p>不包含完整视频、音频、本机媒体路径、数据库或凭证。</p>

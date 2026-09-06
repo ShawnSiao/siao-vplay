@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+export { previewSummaryDispatch } from "./dispatchGateway";
 
 import { chooseConfiguredStorageDirectory } from "../storage/directoryPicker";
 
@@ -13,12 +14,12 @@ export function prepareSummaryTask(input: PrepareSummaryTaskInput): Promise<Summ
   return invoke("prepare_summary_task", { input });
 }
 
-export function startSummaryTask(taskId: string): Promise<SummaryTask> {
-  return invoke("start_summary_task", { input: { taskId } });
+export function startSummaryTask(taskId: string, confirmationSha256: string): Promise<SummaryTask> {
+  return invoke("start_summary_task", { input: { taskId, confirmationSha256 } });
 }
 
-export function resumeSummaryTask(taskId: string): Promise<SummaryTask> {
-  return invoke("resume_summary_task", { input: { taskId } });
+export function resumeSummaryTask(taskId: string, confirmationSha256: string): Promise<SummaryTask> {
+  return invoke("resume_summary_task", { input: { taskId, confirmationSha256 } });
 }
 
 export function cancelSummaryTask(taskId: string): Promise<SummaryTask> {

@@ -1,8 +1,6 @@
 use std::{
     collections::{HashMap, HashSet},
-    fs,
-    path::PathBuf,
-    thread,
+    fs, thread,
     time::Duration,
 };
 
@@ -15,15 +13,15 @@ use crate::{
     },
     codex_runner,
     store::{ProjectStore, StoreError},
-    subtitles::SubtitleSegment,
 };
 
 use super::{
-    codex_executor, execution_prompts, keyframes,
+    codex_executor, execution_prompts,
     model::{SummaryExecutionKind, SummaryResult, SummaryTask},
     result_repository::SummaryResultRepository,
     result_validation::{result_schema, validate_chunk_result, validate_final_result},
     task_repository::SummaryTaskRepository,
+    verified_materials::{self, VerifiedFrame},
 };
 
 const SYSTEM: &str = "只使用任务提供的授权材料。视频主张不等于外部事实。直接证据必须引用有效字幕 ID；无直接依据的内容只能标为 AI 推导或待外部验证。只返回符合 Schema 的 JSON。";
@@ -56,6 +54,7 @@ pub(crate) fn start_or_resume(
 ) -> Result<SummaryTask, StoreError> {
     let repository = SummaryTaskRepository::new(store);
     let task = repository.get(task_id)?;
+    verified_materials::load(store, &task)?;
     if repository.translation_is_active()? {
         return Err(StoreError::Validation(
             "存在活动翻译任务，完成或取消翻译后才能启动视频总结".to_owned(),
@@ -96,8 +95,9 @@ fn execute(store: &ProjectStore, task_id: &str) -> Result<(), SummaryExecutionEr
     let tasks = SummaryTaskRepository::new(store);
     tasks.set_task_state(task_id, "running", "analyzing_chunks", 0.0)?;
     let mut task = tasks.get(task_id)?;
-    let segments = read_segments(&tasks.materials_directory(task_id))?;
-    let by_id = segments
+    let materials = verified_materials::load(store, &task)?;
+    let by_id = materials
+        .segments
         .iter()
         .map(|segment| (segment.id.clone(), segment))
         .collect::<HashMap<_, _>>();
@@ -121,7 +121,12 @@ fn execute(store: &ProjectStore, task_id: &str) -> Result<(), SummaryExecutionEr
             .collect::<Vec<_>>();
         SummaryResultRepository::new(store).begin_chunk(&chunk.id)?;
         let prompt = execution_prompts::chunk(&task, chunk.ordinal, &material)?;
-        let images = keyframes::for_chunk(&tasks.materials_directory(task_id), chunk.ordinal)?;
+        let images = materials
+            .frames
+            .iter()
+            .filter(|frame| frame.metadata.ordinal == chunk.ordinal)
+            .cloned()
+            .collect();
         let raw = run_request(
             store,
             &task,
@@ -190,11 +195,7 @@ fn execute(store: &ProjectStore, task_id: &str) -> Result<(), SummaryExecutionEr
         require_examples,
         task.analysis_mode,
     )?;
-    let visual_used = task.visual_material_authorized
-        && tasks
-            .materials_directory(task_id)
-            .join("frames.json")
-            .is_file();
+    let visual_used = !materials.frames.is_empty();
     SummaryResultRepository::new(store).save_summary(task_id, &result, visual_used)?;
     Ok(())
 }
@@ -204,7 +205,7 @@ fn run_request(
     task: &SummaryTask,
     run_name: &str,
     chunk_id: Option<&str>,
-    images: Vec<PathBuf>,
+    images: Vec<VerifiedFrame>,
     prompt: String,
     budget: u32,
 ) -> Result<String, SummaryExecutionError> {
@@ -221,7 +222,7 @@ fn run_request(
                 .enumerate()
                 .map(|(index, source)| {
                     let target = directory.join(format!("frame-{:03}.jpg", index + 1));
-                    fs::copy(source, &target)?;
+                    fs::write(&target, source.bytes.as_slice())?;
                     Ok(target)
                 })
                 .collect::<Result<Vec<_>, StoreError>>()?;
@@ -244,7 +245,7 @@ fn run_api(
     store: &ProjectStore,
     task: &SummaryTask,
     chunk_id: Option<&str>,
-    images: Vec<PathBuf>,
+    images: Vec<VerifiedFrame>,
     prompt: String,
     budget: u32,
 ) -> Result<String, SummaryExecutionError> {
@@ -261,11 +262,13 @@ fn run_api(
         .ok_or_else(|| StoreError::Validation("总结任务缺少模型".to_owned()))?;
     let image_data_urls = images
         .iter()
-        .map(|path| {
-            fs::read(path).map(|bytes| format!("data:image/jpeg;base64,{}", STANDARD.encode(bytes)))
+        .map(|frame| {
+            format!(
+                "data:image/jpeg;base64,{}",
+                STANDARD.encode(frame.bytes.as_slice())
+            )
         })
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(StoreError::from)?;
+        .collect::<Vec<_>>();
     let mut retry = 0;
     loop {
         let response = summary_provider::generate(SummaryProviderInput {
@@ -323,11 +326,6 @@ fn provider_error(failure: ProviderFailure) -> SummaryExecutionError {
         code: failure.error.code(),
         message: failure.error.to_string(),
     }
-}
-
-fn read_segments(directory: &std::path::Path) -> Result<Vec<SubtitleSegment>, StoreError> {
-    serde_json::from_slice(&fs::read(directory.join("subtitles.json"))?)
-        .map_err(|error| StoreError::Validation(error.to_string()))
 }
 
 fn resume_manual(store: &ProjectStore, task: &SummaryTask) -> Result<SummaryTask, StoreError> {

@@ -11,6 +11,7 @@ const gateway = vi.hoisted(() => ({
   startSummaryTask: vi.fn(),
   resumeSummaryTask: vi.fn(),
   cancelSummaryTask: vi.fn(),
+  previewSummaryDispatch: vi.fn(),
 }));
 
 vi.mock("./gateway", () => ({
@@ -55,6 +56,14 @@ describe("VideoSummaryPanel", () => {
     const { task } = createSummaryFixtures();
     gateway.prepareSummaryTask.mockResolvedValue({ ...task, status: "prepared" });
     gateway.startSummaryTask.mockResolvedValue(task);
+    gateway.previewSummaryDispatch.mockResolvedValue({
+      taskId: task.id, confirmationSha256: "confirmed-hash", executionKind: "codex",
+      receiver: "OpenAI（经本机 Codex）", endpoint: null, model: "Codex 默认模型",
+      scope: "current_progress", playbackCutoffMs: 1_600_000,
+      subtitleVersionId: "subtitle-1", subtitleVersionNumber: 3, subtitleRole: "original",
+      subtitleLanguage: "en", segmentCount: 120, firstStartMs: 0, lastEndMs: 1_602_000,
+      promptTemplate: "自动判断", oneTimeRequirements: "", frames: [],
+    });
   });
 
   it("prepares and starts a background task with the confirmed material scope", async () => {
@@ -68,7 +77,7 @@ describe("VideoSummaryPanel", () => {
         onPrepareSubtitles={vi.fn()}
       />,
     );
-    fireEvent.click(await screen.findByRole("button", { name: "开始生成总结" }));
+    fireEvent.click(await screen.findByRole("button", { name: "准备并查看发送清单" }));
     await waitFor(() => expect(gateway.prepareSummaryTask).toHaveBeenCalledWith(expect.objectContaining({
       scope: "current_progress",
       playbackCutoffMs: 1_600_000,
@@ -76,7 +85,10 @@ describe("VideoSummaryPanel", () => {
       subtitlesAuthorized: true,
       visualMaterialAuthorized: true,
     })));
-    expect(gateway.startSummaryTask).toHaveBeenCalledWith("summary-task-1");
+    expect(gateway.startSummaryTask).not.toHaveBeenCalled();
+    expect(await screen.findByText("OpenAI（经本机 Codex）")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "确认发送并开始" }));
+    await waitFor(() => expect(gateway.startSummaryTask).toHaveBeenCalledWith("summary-task-1", "confirmed-hash"));
     expect(await screen.findByText("已完成 3 / 7 段")).toBeInTheDocument();
   });
 
@@ -87,7 +99,8 @@ describe("VideoSummaryPanel", () => {
     render(<VideoSummaryPanel projectId="project-1" playbackCutoffMs={1_000} durationMs={5_000}
       sourceVersion={{ id: "subtitle-1" } as SubtitleVersion} translationVersion={null} onPrepareSubtitles={vi.fn()} />);
     fireEvent.click(await screen.findByRole("button", { name: "继续任务" }));
-    await waitFor(() => expect(gateway.resumeSummaryTask).toHaveBeenCalledWith(task.id));
+    fireEvent.click(await screen.findByRole("button", { name: "确认发送并开始" }));
+    await waitFor(() => expect(gateway.resumeSummaryTask).toHaveBeenCalledWith(task.id, "confirmed-hash"));
   });
 
   it("retains prepared materials when starting fails and can retry without preparing again", async () => {
@@ -96,10 +109,12 @@ describe("VideoSummaryPanel", () => {
     gateway.resumeSummaryTask.mockResolvedValue(task);
     render(<VideoSummaryPanel projectId="project-1" playbackCutoffMs={1_000} durationMs={5_000}
       sourceVersion={{ id: "subtitle-1" } as SubtitleVersion} translationVersion={null} onPrepareSubtitles={vi.fn()} />);
-    fireEvent.click(await screen.findByRole("button", { name: "开始生成总结" }));
+    fireEvent.click(await screen.findByRole("button", { name: "准备并查看发送清单" }));
+    fireEvent.click(await screen.findByRole("button", { name: "确认发送并开始" }));
     expect(await screen.findByText("暂时不能启动")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "开始任务" }));
-    await waitFor(() => expect(gateway.resumeSummaryTask).toHaveBeenCalledWith(task.id));
+    fireEvent.click(await screen.findByRole("button", { name: "确认发送并开始" }));
+    await waitFor(() => expect(gateway.resumeSummaryTask).toHaveBeenCalledWith(task.id, "confirmed-hash"));
     expect(gateway.prepareSummaryTask).toHaveBeenCalledTimes(1);
   });
 });

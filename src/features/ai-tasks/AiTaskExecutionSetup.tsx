@@ -8,6 +8,7 @@ type AiTaskExecutionSetupProps = {
   allowFrames: boolean;
   translationAvailable: boolean;
   taskLabel: string;
+  summaryScope?: "current_progress" | "full_video";
   actionLabel: string;
   operationLabel: string;
   buttonClassName: string;
@@ -22,6 +23,7 @@ export function AiTaskExecutionSetup({
   allowFrames,
   translationAvailable,
   taskLabel,
+  summaryScope,
   actionLabel,
   operationLabel,
   buttonClassName,
@@ -39,6 +41,7 @@ export function AiTaskExecutionSetup({
         allowFrames={allowFrames}
         translationAvailable={translationAvailable}
         taskLabel={taskLabel}
+        summaryScope={summaryScope}
       />
       <button
         className={`button primary ${buttonClassName}`}

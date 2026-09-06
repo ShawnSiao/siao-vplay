@@ -1,8 +1,10 @@
 import { SummaryProgress } from "../features/summary/SummaryProgress";
 import { SummaryResultView } from "../features/summary/SummaryResultView";
 import { createSummaryFixtures } from "../test-fixtures/summary";
+import { VideoSummaryPanel } from "../features/summary/VideoSummaryPanel";
+import type { SubtitleVersion } from "../types";
 
-export function SummaryPreview({ state }: { state: "progress" | "result" }) {
+export function SummaryPreview({ state, sourceVersion }: { state: "progress" | "result" | "confirm"; sourceVersion: SubtitleVersion }) {
   const { task, summary } = createSummaryFixtures();
   return (
     <main className="understanding-preview">
@@ -13,7 +15,9 @@ export function SummaryPreview({ state }: { state: "progress" | "result" }) {
         </div>
         <div className="understanding-tab-content">
           <div className="video-summary-panel">
-            {state === "progress" ? (
+            {state === "confirm" ? <VideoSummaryPanel projectId="project-1" playbackCutoffMs={15_000}
+              durationMs={120_000} sourceVersion={sourceVersion} translationVersion={null}
+              onPrepareSubtitles={() => undefined} /> : state === "progress" ? (
               <SummaryProgress
                 task={task}
                 busy={false}

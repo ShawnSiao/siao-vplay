@@ -1,7 +1,7 @@
 use std::{
     collections::BTreeMap,
     fs,
-    path::{Path, PathBuf},
+    path::Path,
     process::{Command, Stdio},
 };
 
@@ -24,7 +24,10 @@ pub(crate) struct SummaryFrame {
     pub sha256: String,
 }
 
-pub(crate) fn planned_timestamps(chunks: &[PlannedChunk]) -> Vec<(usize, i64)> {
+pub(crate) fn planned_timestamps(
+    chunks: &[PlannedChunk],
+    cutoff: Option<i64>,
+) -> Vec<(usize, i64)> {
     if chunks.is_empty() {
         return Vec::new();
     }
@@ -39,7 +42,8 @@ pub(crate) fn planned_timestamps(chunks: &[PlannedChunk]) -> Vec<(usize, i64)> {
             let chunk = &chunks[index];
             (
                 chunk.ordinal,
-                chunk.start_ms + (chunk.end_ms - chunk.start_ms) / 2,
+                (chunk.start_ms + (chunk.end_ms - chunk.start_ms) / 2)
+                    .min(cutoff.unwrap_or(i64::MAX)),
             )
         })
         .collect()
@@ -55,6 +59,7 @@ pub(crate) fn extract(
     if timestamps.is_empty() {
         return Ok(Vec::new());
     }
+    let _lease = crate::resource_leases::configured(&["ffmpeg"])?;
     let ffmpeg = media::ffmpeg_path().map_err(|error| StoreError::Validation(error.to_string()))?;
     let frames_directory = task_directory.join("frames");
     fs::create_dir_all(&frames_directory)?;
@@ -119,26 +124,6 @@ pub(crate) fn extract(
     Ok(frames)
 }
 
-pub(crate) fn for_chunk(directory: &Path, ordinal: usize) -> Result<Vec<PathBuf>, StoreError> {
-    let path = directory.join("frames.json");
-    if !path.is_file() {
-        return Ok(Vec::new());
-    }
-    let frames: Vec<SummaryFrame> = serde_json::from_slice(&fs::read(path)?)
-        .map_err(|error| StoreError::Validation(error.to_string()))?;
-    frames
-        .into_iter()
-        .filter(|frame| frame.ordinal == ordinal)
-        .map(|frame| {
-            let path = directory.join(frame.relative_path);
-            if !path.is_file() {
-                return Err(StoreError::Validation("总结关键帧文件缺失".to_owned()));
-            }
-            Ok(path)
-        })
-        .collect()
-}
-
 fn hidden_command(program: &Path) -> Command {
     let mut command = Command::new(program);
     #[cfg(windows)]
@@ -154,6 +139,54 @@ mod tests {
     use super::*;
 
     #[test]
+    fn rejects_a_frame_manifest_that_points_outside_the_task_directory() {
+        let directory = tempfile::tempdir().unwrap();
+        let task = directory.path().join("task");
+        fs::create_dir_all(&task).unwrap();
+        fs::write(directory.path().join("outside.jpg"), b"isolated fixture").unwrap();
+        let frames = vec![SummaryFrame {
+            id: "frame-001".to_owned(),
+            ordinal: 0,
+            timestamp_ms: 100,
+            relative_path: "../outside.jpg".to_owned(),
+            sha256: format!("{:x}", Sha256::digest(b"isolated fixture")),
+        }];
+        fs::write(
+            task.join("frames.json"),
+            serde_json::to_vec(&frames).unwrap(),
+        )
+        .unwrap();
+        assert!(super::super::verified_materials::verify_frame(&task, frames[0].clone()).is_err());
+    }
+
+    #[test]
+    fn rejects_frame_bytes_changed_after_preparation() {
+        let directory = tempfile::tempdir().unwrap();
+        fs::create_dir_all(directory.path().join("frames")).unwrap();
+        fs::write(
+            directory.path().join("frames/frame-001.jpg"),
+            b"changed bytes",
+        )
+        .unwrap();
+        let frames = vec![SummaryFrame {
+            id: "frame-001".to_owned(),
+            ordinal: 0,
+            timestamp_ms: 100,
+            relative_path: "frames/frame-001.jpg".to_owned(),
+            sha256: format!("{:x}", Sha256::digest(b"original bytes")),
+        }];
+        fs::write(
+            directory.path().join("frames.json"),
+            serde_json::to_vec(&frames).unwrap(),
+        )
+        .unwrap();
+        assert!(
+            super::super::verified_materials::verify_frame(directory.path(), frames[0].clone())
+                .is_err()
+        );
+    }
+
+    #[test]
     fn selects_no_more_than_twelve_representative_chunks() {
         let chunks = (0..30)
             .map(|ordinal| PlannedChunk {
@@ -164,9 +197,21 @@ mod tests {
                 context_segment_ids: vec![],
             })
             .collect::<Vec<_>>();
-        let selected = planned_timestamps(&chunks);
+        let selected = planned_timestamps(&chunks, None);
         assert_eq!(selected.len(), 12);
         assert_eq!(selected.first().unwrap().0, 0);
         assert_eq!(selected.last().unwrap().0, 29);
+    }
+
+    #[test]
+    fn frame_in_current_caption_never_exceeds_playback_cutoff() {
+        let chunk = PlannedChunk {
+            ordinal: 0,
+            start_ms: 900,
+            end_ms: 3_000,
+            segment_ids: vec![],
+            context_segment_ids: vec![],
+        };
+        assert_eq!(planned_timestamps(&[chunk], Some(1_000)), vec![(0, 1_000)]);
     }
 }

@@ -14,12 +14,15 @@ import {
   listVideoSummaries,
   openSummaryMaterials,
   prepareSummaryTask,
+  previewSummaryDispatch,
   resumeSummaryTask,
   startSummaryTask,
 } from "./gateway";
 import { SummaryProgress } from "./SummaryProgress";
 import { SummaryResultView } from "./SummaryResultView";
 import { SummarySetup } from "./SummarySetup";
+import { SummaryDispatchConfirm } from "./SummaryDispatchConfirm";
+import type { SummaryDispatchPreview } from "./dispatchGateway";
 import type {
   SummaryAnalysisMode,
   SummaryScope,
@@ -77,6 +80,7 @@ export function VideoSummaryPanel({
   const [operation, setOperation] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [exportNotice, setExportNotice] = useState<string | null>(null);
+  const [confirmation, setConfirmation] = useState<{ preview: SummaryDispatchPreview; resume: boolean } | null>(null);
 
   const showError = useCallback((cause: unknown) => {
     setError(commandError(cause).message);
@@ -155,7 +159,7 @@ export function VideoSummaryPanel({
       completionRef.current = null;
       setSummary(null);
       setTask(prepared);
-      setTask(await startSummaryTask(prepared.id));
+      setConfirmation({ preview: await previewSummaryDispatch(prepared.id), resume: false });
     } catch (cause) {
       showError(cause);
     } finally {
@@ -181,10 +185,25 @@ export function VideoSummaryPanel({
     setOperation("resume");
     setError(null);
     try {
-      setTask(await resumeSummaryTask(task.id));
+      setConfirmation({ preview: await previewSummaryDispatch(task.id), resume: true });
     } catch (cause) {
       showError(cause);
     } finally {
+      setOperation(null);
+    }
+  };
+
+  const confirmDispatch = async () => {
+    if (!confirmation) return;
+    setOperation("confirm");
+    setError(null);
+    try {
+      const run = confirmation.resume ? resumeSummaryTask : startSummaryTask;
+      setTask(await run(confirmation.preview.taskId, confirmation.preview.confirmationSha256));
+    } catch (cause) {
+      showError(cause);
+    } finally {
+      setConfirmation(null);
       setOperation(null);
     }
   };
@@ -207,6 +226,7 @@ export function VideoSummaryPanel({
   };
 
   const newSummary = () => {
+    setConfirmation(null);
     completionRef.current = null;
     setTask(null);
     setSummary(null);
@@ -239,7 +259,8 @@ export function VideoSummaryPanel({
         </label>
       ) : null}
       {error ? <div className="understanding-error" role="alert">{error}</div> : null}
-      {summary ? (
+      {confirmation ? <SummaryDispatchConfirm preview={confirmation.preview} busy={operation !== null}
+        onConfirm={() => void confirmDispatch()} onBack={() => setConfirmation(null)} /> : summary ? (
         <SummaryResultView summary={summary} exporting={operation === "export"} exportNotice={exportNotice} onExport={() => void exportReport()} onNewSummary={newSummary} onJump={onJump} onPausePlayback={onPausePlayback} />
       ) : task ? (
         <SummaryProgress task={task} busy={operation !== null} onCancel={() => void cancel()} onResume={() => void resume()} onOpenMaterials={() => void openSummaryMaterials(task.id).catch(showError)} />

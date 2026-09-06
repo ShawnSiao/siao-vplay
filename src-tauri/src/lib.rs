@@ -276,6 +276,7 @@ pub fn run() {
             summary::commands::prepare_summary_task,
             summary::commands::open_summary_materials,
             summary::commands::start_summary_task,
+            summary::commands::preview_summary_dispatch,
             summary::commands::resume_summary_task,
             summary::commands::cancel_summary_task,
             summary::commands::get_summary_task,

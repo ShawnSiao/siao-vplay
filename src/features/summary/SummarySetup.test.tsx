@@ -70,7 +70,7 @@ function Harness() {
 describe("SummarySetup", () => {
   it("requires an explicit spoiler confirmation for full-video analysis", async () => {
     render(<Harness />);
-    const start = screen.getByRole("button", { name: "开始生成总结" });
+    const start = screen.getByRole("button", { name: "准备并查看发送清单" });
     expect(start).toBeEnabled();
     fireEvent.click(screen.getByText("完整视频"));
     expect(start).toBeDisabled();

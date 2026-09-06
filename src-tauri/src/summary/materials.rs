@@ -63,7 +63,14 @@ pub(crate) fn prepare(
     }
     let plans = plan_chunks(&segments);
     let planned_frames = if input.visual_material_authorized {
-        keyframes::planned_timestamps(&plans)
+        keyframes::planned_timestamps(
+            &plans,
+            if input.scope == AnalysisScope::CurrentProgress {
+                input.playback_cutoff_ms
+            } else {
+                None
+            },
+        )
     } else {
         Vec::new()
     };
@@ -258,11 +265,6 @@ fn digest(bytes: &[u8]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        domain::CreateLocalProjectInput,
-        summary::model::{AnalysisMode, PromptSelection, SummaryExecutionKind},
-    };
-    use rusqlite::params;
 
     #[test]
     fn current_progress_never_authorizes_future_start_times() {
@@ -294,63 +296,7 @@ mod tests {
 
     #[test]
     fn prepares_a_recoverable_manual_task_without_future_subtitles() {
-        let directory = tempfile::tempdir().unwrap();
-        let media_path = directory.path().join("fixture.mp4");
-        fs::write(&media_path, b"fixture").unwrap();
-        let store =
-            ProjectStore::open(directory.path().join("data/projects/siaovplay.db")).unwrap();
-        let project = store
-            .create_local_project(CreateLocalProjectInput {
-                media_path: media_path.to_string_lossy().into_owned(),
-                title: Some("测试视频".to_owned()),
-            })
-            .unwrap();
-        let connection = store.connect().unwrap();
-        connection.execute(
-            "INSERT INTO subtitle_tracks (id, project_id, role, language_code, created_at_ms, updated_at_ms)
-             VALUES ('track', ?1, 'original', 'en', 1, 1)", params![project.id],
-        ).unwrap();
-        connection.execute(
-            "INSERT INTO subtitle_versions (id, track_id, project_id, version_number, status,
-                source_kind, source_label, source_sha256, media_sha256, language_code,
-                project_revision, preflight_json, created_at_ms)
-             VALUES ('version', 'track', ?1, 1, 'ready', 'imported_file', 'fixture', ?2, ?2,
-                'en', 1, ?3, 1)",
-            params![project.id, "0".repeat(64), r#"{"status":"ready","segmentCount":2,"errorCount":0,"warningCount":0,"firstStartMs":0,"lastEndMs":2100,"mediaDurationMs":null,"coverageRatio":null,"issues":[]}"#],
-        ).unwrap();
-        connection
-            .execute(
-                "UPDATE subtitle_tracks SET current_version_id = 'version' WHERE id = 'track'",
-                [],
-            )
-            .unwrap();
-        for (id, ordinal, start) in [("past", 0, 0), ("future", 1, 2_000)] {
-            connection.execute(
-                "INSERT INTO subtitle_segments (id, version_id, lineage_id, ordinal, start_ms, end_ms, text)
-                 VALUES (?1, 'version', ?1, ?2, ?3, ?4, ?1)",
-                params![id, ordinal, start, start + 100],
-            ).unwrap();
-        }
-        drop(connection);
-        let task = prepare(
-            &store,
-            PrepareSummaryTaskInput {
-                project_id: project.id,
-                scope: AnalysisScope::CurrentProgress,
-                playback_cutoff_ms: Some(1_000),
-                analysis_mode: AnalysisMode::Automatic,
-                execution_kind: SummaryExecutionKind::Manual,
-                prompt_selection: PromptSelection::summary_default(),
-                visual_material_authorized: false,
-                subtitles_authorized: true,
-                spoiler_confirmed: false,
-                service_config_id: None,
-                service_revision: None,
-                provider_id: None,
-                model_id: None,
-            },
-        )
-        .unwrap();
+        let (_directory, store, task) = super::super::test_support::prepared_summary();
         assert_eq!(task.chunks.len(), 1);
         assert_eq!(task.chunks[0].segment_ids, vec!["past"]);
         assert!(

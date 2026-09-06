@@ -113,11 +113,12 @@ export function SummarySetup({
         allowFrames
         translationAvailable={translationAvailable}
         taskLabel="视频总结"
-        actionLabel="开始生成总结"
+        summaryScope={scope}
+        actionLabel="准备并查看发送清单"
         operationLabel="正在准备总结…"
         buttonClassName="summary-primary"
         busy={busy}
-        blocked={playbackCutoffMs <= 0 || (fullVideo && !spoilerConfirmed)}
+        blocked={(!fullVideo && playbackCutoffMs <= 0) || (fullVideo && !spoilerConfirmed)}
         onStart={onStart}
       />
       <p className="summary-scope-note">

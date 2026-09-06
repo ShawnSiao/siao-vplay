@@ -349,3 +349,18 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+.summary-receiver-address {
+  overflow-wrap: anywhere;
+}
+
+.summary-dispatch-confirm .ai-execution-scope > div strong {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+
+.summary-dispatch-confirm .ai-execution-scope :is(p, li, span, strong) {
+  font-size: 12px;
+  line-height: 1.6;
+}

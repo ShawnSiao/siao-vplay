@@ -21,6 +21,12 @@ pub(crate) struct SummaryProviderInput<'a> {
     pub image_data_urls: Vec<String>,
 }
 
+pub(crate) fn receiver(id: &str, revision: u64) -> Result<super::types::AiServiceConfig, super::AiError> {
+    let service = super::config::store()?.configured_service(id)?;
+    if service.revision != revision { return Err(super::AiError::RevisionConflict); }
+    Ok(service)
+}
+
 pub(crate) fn generate(input: SummaryProviderInput<'_>) -> Result<ProviderOutput, ProviderFailure> {
     let execution = AiExecutionTarget::Api {
         service_config_id: input.service_config_id.to_owned(),
