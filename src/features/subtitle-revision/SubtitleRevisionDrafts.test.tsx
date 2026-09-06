@@ -18,6 +18,21 @@ function setup() {
 }
 describe("subtitle edit drafts", () => {
   beforeEach(() => { revise.mockReset(); restore.mockReset(); });
+  it("navigates revision modes without activating them or losing the draft", () => {
+    setup();
+    fireEvent.change(screen.getByRole("textbox", { name: "简体中文字幕" }), { target: { value: "保留输入" } });
+    const segments = screen.getByRole("tab", { name: "逐句修正" });
+    segments.focus();
+    fireEvent.keyDown(segments, { key: "End" });
+    const history = screen.getByRole("tab", { name: "历史版本" });
+    expect(history).toHaveFocus();
+    expect(segments).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("textbox", { name: "简体中文字幕" })).toHaveValue("保留输入");
+    fireEvent.click(history);
+    expect(screen.getByRole("tabpanel", { name: "历史版本" })).toBeInTheDocument();
+    fireEvent.click(segments);
+    expect(screen.getByRole("textbox", { name: "简体中文字幕" })).toHaveValue("保留输入");
+  });
   it("preserves edits when switching sentences and tracks", () => {
     setup();
     fireEvent.change(screen.getByRole("textbox", { name: "简体中文字幕" }), { target: { value: "我的修正" } });
@@ -70,12 +85,12 @@ it("restores a metadata-only historical version and retains prior versions as me
   restore.mockResolvedValue(restored);
   render(<SubtitleRevisionDialog project={{ id: "p", revision: 2, playbackState: { positionMs: 0 } } as Project}
     versions={[current]} historyVersions={[historical]} onClose={vi.fn()} onVersionCreated={vi.fn().mockResolvedValue(undefined)} onRetranslate={vi.fn()} />);
-  fireEvent.click(screen.getByRole("button", { name: "历史版本" }));
+  fireEvent.click(screen.getByRole("tab", { name: "历史版本" }));
   fireEvent.click(screen.getByRole("button", { name: "恢复为新版本" }));
   await waitFor(() => expect(restore).toHaveBeenCalledWith("p", current.id, "historical", 2));
   await waitFor(() => expect(screen.getByRole("tab", { name: /简体中文/ })).toHaveTextContent("版本 3"));
   expect(screen.getByText("版本 2")).toBeInTheDocument();
   expect(screen.getByText("版本 1")).toBeInTheDocument();
-  fireEvent.click(screen.getByRole("button", { name: "逐句修正" }));
+  fireEvent.click(screen.getByRole("tab", { name: "逐句修正" }));
   expect(screen.getByRole("textbox", { name: "简体中文字幕" })).toHaveValue("历史内容");
 });

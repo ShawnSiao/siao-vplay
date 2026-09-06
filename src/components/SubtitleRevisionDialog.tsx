@@ -41,6 +41,11 @@ export function SubtitleRevisionDialog(props: SubtitleRevisionDialogProps) {
   const { onRetranslate } = props;
   const { requestClose, dirty, role, mode, activeSegmentId, selectedIds, search, text, issueKind, findText, replaceText, offsetSeconds, busy, notice, error, currentOriginal, currentTranslation, currentVersion, filteredSegments, history, activeSegment, changeRole, setMode, setSearch, setNotice, setError, toggleSelected, selectSegment, saveSegment, replaceAcrossTrack, shiftTrack, restoreHistory, setText, setIssueKind, setFindText, setReplaceText, setOffsetSeconds } = useSubtitleRevisionController(props);
   const tabs = useTabNavigation(role, changeRole);
+  const modeTabs = useTabNavigation(mode, (value) => {
+    setMode(value);
+    setNotice(null);
+    setError(null);
+  });
   return (
     <Dialog
       title="轻量字幕修正"
@@ -81,7 +86,7 @@ export function SubtitleRevisionDialog(props: SubtitleRevisionDialogProps) {
         </div>
 
         <div {...tabs.panelProps} style={{ display: "grid", gap: "inherit" }}>
-        <nav className="revision-mode-tabs" aria-label="修正方式">
+        <div className="revision-mode-tabs" {...modeTabs.listProps} aria-label="修正方式">
           {(
             [
               ["segments", "逐句修正"],
@@ -92,19 +97,15 @@ export function SubtitleRevisionDialog(props: SubtitleRevisionDialogProps) {
           ).map(([value, label]) => (
             <button
               className={mode === value ? "active" : ""}
-              type="button"
               key={value}
-              onClick={() => {
-                setMode(value);
-                setNotice(null);
-                setError(null);
-              }}
+              {...modeTabs.tabProps(value)}
             >
               {label}
             </button>
           ))}
-        </nav>
+        </div>
 
+        <div {...modeTabs.panelProps} style={{ display: "grid", gap: "inherit" }}>
         {!currentVersion ? (
           <div className="translation-empty">
             <span className="translation-empty-mark">字</span>
@@ -339,6 +340,7 @@ export function SubtitleRevisionDialog(props: SubtitleRevisionDialogProps) {
           </section>
         )}
 
+        </div>
         {notice ? (
           <p className="translation-inline-notice" role="status">
             {notice}

@@ -21,7 +21,13 @@ test("history read failure can be retried and the loaded revision dialog closes 
   await page.evaluate(() => { (window as unknown as { historyFail: boolean }).historyFail = false; });
   await page.getByRole("button", { name: "重新读取", exact: true }).click();
   await expect(page.getByRole("dialog", { name: "轻量字幕修正" })).toBeVisible();
-  await page.getByRole("button", { name: "历史版本", exact: true }).click();
+  const segments = page.getByRole("tab", { name: "逐句修正", exact: true });
+  await segments.focus();
+  await page.keyboard.press("End");
+  await expect(page.getByRole("tab", { name: "历史版本", exact: true })).toBeFocused();
+  await expect(segments).toHaveAttribute("aria-selected", "true");
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("tabpanel", { name: "历史版本", exact: true })).toBeVisible();
   await expect(page.getByText("当前使用", { exact: true })).toBeVisible();
   await expect(page.getByText(/75 条/)).toBeVisible();
   await page.keyboard.press("Escape");
