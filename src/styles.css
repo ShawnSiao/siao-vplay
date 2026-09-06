@@ -6848,10 +6848,6 @@ h3 {
     max-width: calc(100vw - 96px);
   }
 
-  .dialog:has(.local-resources-dialog) {
-    width: calc(100vw - 24px);
-  }
-
   .local-resources-choice-grid,
   .local-resources-space-summary,
   .local-resource-diagnostic-list dl {
