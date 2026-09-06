@@ -93,6 +93,14 @@ test("player menu and drawer remain inside a 200% equivalent layout", async ({ p
   expect((await drawer.locator(".player-drawer-content").boundingBox())!.height).toBeGreaterThanOrEqual(64);
   await drawer.getByRole("tab", { name: "逐字稿" }).click();
   expect(await drawer.locator(".player-drawer-content").evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
+  const list = drawer.getByRole("region", { name: "字幕列表" });
+  expect((await list.boundingBox())!.height).toBeGreaterThanOrEqual(160);
+  await drawer.getByRole("searchbox", { name: "搜索逐字稿" }).focus();
+  await expect(drawer.getByRole("searchbox", { name: "搜索逐字稿" })).toBeInViewport();
+  await list.focus();
+  await expect(list).toBeInViewport();
+  await list.press("PageDown");
+  await expect(drawer.getByText("已暂停自动跟随", { exact: true })).toBeAttached();
   if (process.env.SIAOVPLAY_DESIGN_CAPTURE_DIR) await page.screenshot({ path: join(process.env.SIAOVPLAY_DESIGN_CAPTURE_DIR, "player-200.png") });
   await page.keyboard.press("Escape");
   await expect(drawer).toHaveCount(0);
