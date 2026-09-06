@@ -35,6 +35,7 @@ export function usePlaybackShortcuts({
 }: PlaybackShortcutOptions) {
   useEffect(() => {
     const handleKeyboard = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) return;
       if (event.key === "Escape") {
         event.preventDefault();
         if (contextMenuOpen) onCloseContextMenu();

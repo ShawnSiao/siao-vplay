@@ -30,11 +30,8 @@ function createCue(
 ): TranscriptCue {
   return {
     key: `original:${original?.id ?? "none"}|translation:${translation?.id ?? "none"}`,
-    startMs: Math.min(
-      original?.startMs ?? Number.POSITIVE_INFINITY,
-      translation?.startMs ?? Number.POSITIVE_INFINITY,
-    ),
-    endMs: Math.max(original?.endMs ?? 0, translation?.endMs ?? 0),
+    startMs: original?.startMs ?? translation!.startMs,
+    endMs: original?.endMs ?? translation!.endMs,
     originalText: original?.text.trim() ?? "",
     translatedText: translation?.text.trim() || undefined,
     originalSegmentId: original?.id,
@@ -47,9 +44,31 @@ export function buildTranscriptCues(
   translatedVersion: SubtitleVersion | null,
   startMatchThresholdMs = transcriptStartMatchThresholdMs,
 ): TranscriptCue[] {
-  const originals = orderedSegments(originalVersion);
-  const translations = orderedSegments(translatedVersion);
+  const allOriginals = orderedSegments(originalVersion);
+  const allTranslations = orderedSegments(translatedVersion);
   const cues: TranscriptCue[] = [];
+  const originalById = new Map(allOriginals.map((segment) => [segment.id, segment]));
+  const originalByLineage = new Map<string, SubtitleSegment | null>();
+  for (const segment of allOriginals) {
+    originalByLineage.set(segment.lineageId,
+      originalByLineage.has(segment.lineageId) ? null : segment);
+  }
+  const matchedOriginals = new Set<string>();
+  // Explicit references must never fall back to timestamp guesses, even when
+  // the referenced original was removed or a duplicate translation exists.
+  for (const translation of allTranslations) {
+    if (!translation.sourceSegmentId) continue;
+    const original = originalById.get(translation.sourceSegmentId)
+      ?? originalByLineage.get(translation.sourceSegmentId);
+    if (original && !matchedOriginals.has(original.id)) {
+      matchedOriginals.add(original.id);
+      cues.push(createCue(original, translation));
+    } else {
+      cues.push(createCue(undefined, translation));
+    }
+  }
+  const originals = allOriginals.filter((segment) => !matchedOriginals.has(segment.id));
+  const translations = allTranslations.filter((segment) => !segment.sourceSegmentId);
   let originalIndex = 0;
   let translationIndex = 0;
 
@@ -74,6 +93,19 @@ export function buildTranscriptCues(
       rangesOverlap(original, translation) ||
       Math.abs(original.startMs - translation.startMs) <= startMatchThresholdMs
     ) {
+      const distance = Math.abs(original.startMs - translation.startMs);
+      const nextOriginal = originals[originalIndex + 1];
+      const nextTranslation = translations[translationIndex + 1];
+      if (nextOriginal && Math.abs(nextOriginal.startMs - translation.startMs) < distance) {
+        cues.push(createCue(original, undefined));
+        originalIndex += 1;
+        continue;
+      }
+      if (nextTranslation && Math.abs(original.startMs - nextTranslation.startMs) < distance) {
+        cues.push(createCue(undefined, translation));
+        translationIndex += 1;
+        continue;
+      }
       cues.push(createCue(original, translation));
       originalIndex += 1;
       translationIndex += 1;
@@ -145,10 +177,10 @@ export function transcriptCuesNearCurrent(
   currentIndex: number,
   radius = transcriptNearbyRadius,
 ) {
-  if (cues.length === 0) return [];
-  const center = currentIndex >= 0 ? currentIndex : 0;
+  if (cues.length === 0 || currentIndex < 0) return [];
+  const center = Math.min(currentIndex, cues.length - 1);
   return cues.slice(
     Math.max(0, center - radius),
-    Math.min(cues.length, center + radius + 1),
+    center + 1,
   );
 }

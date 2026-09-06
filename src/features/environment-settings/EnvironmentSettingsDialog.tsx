@@ -53,6 +53,7 @@ export function EnvironmentSettingsDialog({
       if (event.key === "Escape") {
         if (dialogRef.current?.querySelector(".storage-migration-dialog")) return;
         event.preventDefault();
+        event.stopPropagation();
         onClose();
       } else if (event.key === "Tab") {
         const items = focusable();

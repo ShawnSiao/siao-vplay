@@ -56,6 +56,44 @@ function version(
 }
 
 describe("subtitle transcript model", () => {
+  it("honors source identity before overlapping timestamps", () => {
+    const translated = { ...segment("t", 900, 2_500, "第二句"), sourceSegmentId: "o-2" };
+    const cues = buildTranscriptCues(version("original", [
+      segment("o-1", 0, 2_000, "first"),
+      segment("o-2", 1_000, 3_000, "second"),
+    ]), version("translation", [translated]));
+    expect(cues.map((cue) => cue.translatedText)).toEqual([undefined, "第二句"]);
+    expect(cues[1].startMs).toBe(1_000);
+  });
+
+  it("keeps orphaned source references separate instead of guessing by time", () => {
+    const cues = buildTranscriptCues(version("original", [segment("o", 0, 2_000, "new")]),
+      version("translation", [{ ...segment("t", 0, 2_000, "旧译文"), sourceSegmentId: "deleted" }]));
+    expect(cues).toHaveLength(2);
+    expect(cues.find((cue) => cue.originalSegmentId === "o")?.translatedText).toBeUndefined();
+  });
+
+  it("resolves a preserved original lineage after revision", () => {
+    const cues = buildTranscriptCues(version("original", [
+      { ...segment("revised", 1_000, 2_000, "edited"), lineageId: "old-original" },
+    ]), version("translation", [
+      { ...segment("t", 0, 1_000, "译文"), sourceSegmentId: "old-original" },
+    ]));
+    expect(cues).toHaveLength(1);
+    expect(cues[0].originalSegmentId).toBe("revised");
+  });
+
+  it("does not attach an imported translation to an earlier overlapping cue", () => {
+    const cues = buildTranscriptCues(version("original", [
+      segment("o-1", 0, 2_000, "first"), segment("o-2", 1_000, 3_000, "second"),
+    ]), version("translation", [segment("t", 1_000, 3_000, "第二句")]));
+    expect(cues.map((cue) => cue.translatedText)).toEqual([undefined, "第二句"]);
+  });
+
+  it("shows no future text before the first cue", () => {
+    const cues = buildTranscriptCues(version("original", [segment("o", 1_000, 2_000, "future")]), null);
+    expect(transcriptCuesNearCurrent(cues, -1)).toEqual([]);
+  });
   it("matches tracks by time instead of array index", () => {
     const cues = buildTranscriptCues(
       version("original", [
@@ -127,6 +165,7 @@ describe("subtitle transcript model", () => {
     const cues = buildTranscriptCues(version("original", originals), null);
     const current = findCurrentTranscriptCueIndex(cues, 5_000_100);
     expect(current).toBe(2_500);
-    expect(transcriptCuesNearCurrent(cues, current)).toHaveLength(25);
+    expect(transcriptCuesNearCurrent(cues, current)).toHaveLength(13);
+    expect(transcriptCuesNearCurrent(cues, current).at(-1)).toBe(cues[current]);
   });
 });

@@ -57,6 +57,8 @@ describe("SubtitleTranscriptPanel", () => {
       "aria-current",
       "true",
     );
+    expect(screen.queryByRole("button", { name: /original 2/ })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "全部字幕（含后续剧情）" }));
     fireEvent.click(screen.getByRole("button", { name: /original 2/ }));
     expect(calls).toEqual(["pause", "seek:4000"]);
   });
@@ -72,7 +74,8 @@ describe("SubtitleTranscriptPanel", () => {
       />,
     );
     const search = screen.getByRole("searchbox", { name: "搜索逐字稿" });
-    expect(screen.getAllByText("暂无译文")).toHaveLength(3);
+    expect(screen.getAllByText("暂无译文")).toHaveLength(2);
+    fireEvent.click(screen.getByRole("button", { name: "全部字幕（含后续剧情）" }));
     fireEvent.change(search, { target: { value: "original 2" } });
     act(() => vi.advanceTimersByTime(200));
     expect(screen.getAllByRole("button", { name: /original/ })).toHaveLength(1);
@@ -101,7 +104,7 @@ describe("SubtitleTranscriptPanel", () => {
         onSeekTo={() => undefined}
       />,
     );
-    fireEvent.click(screen.getByRole("button", { name: "全部字幕" }));
+    fireEvent.click(screen.getByRole("button", { name: "全部字幕（含后续剧情）" }));
     expect(container.querySelector(".transcript-list-inner.virtualized")).not.toBeNull();
     expect(container.querySelectorAll(".transcript-cue").length).toBeLessThan(501);
   });

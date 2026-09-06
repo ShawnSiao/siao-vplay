@@ -82,7 +82,7 @@ describe("useSubtitleTranscript", () => {
     );
     expect(result.current.currentIndex).toBe(0);
     rerender({ source: second });
-    expect(result.current.visibleCues[0]?.originalText).toBe("second line");
+    expect(result.current.visibleCues).toEqual([]);
     expect(result.current.currentIndex).toBe(-1);
   });
 });
