@@ -358,30 +358,28 @@ export function PlayerScreen({
           />
         </main>
 
-        {drawerTab ? (
-          <PlayerAuxiliaryDrawer
-            activeTab={drawerTab}
-            projectId={project.id}
-            mediaTitle={project.title}
-            contextLabel={drawerContextLabel}
-            contextStatus={drawerContextStatus}
-            episodeSummary={drawerEpisodeSummary}
-            originalVersion={currentSubtitle}
-            translatedVersion={currentTranslation}
-            activeOriginal={activeOriginal}
-            activeTranslation={activeTranslation}
-            episodeNavigation={episodeNavigation}
-            switchingEpisode={switchingEpisode}
-            positionMs={positionMs}
-            durationMs={durationMs}
-            onSelectTab={onSelectDrawer}
-            onClose={closeDrawer}
-            onSwitchEpisode={(episode) => void switchEpisode(episode)}
-            onManageSubtitles={onManageSubtitles}
-            onSeekTo={seekTo}
-            onPausePlayback={pausePlayback}
-          />
-        ) : null}
+        <PlayerAuxiliaryDrawer
+          activeTab={drawerTab}
+          projectId={project.id}
+          mediaTitle={project.title}
+          contextLabel={drawerContextLabel}
+          contextStatus={drawerContextStatus}
+          episodeSummary={drawerEpisodeSummary}
+          originalVersion={currentSubtitle}
+          translatedVersion={currentTranslation}
+          activeOriginal={activeOriginal}
+          activeTranslation={activeTranslation}
+          episodeNavigation={episodeNavigation}
+          switchingEpisode={switchingEpisode}
+          positionMs={positionMs}
+          durationMs={durationMs}
+          onSelectTab={onSelectDrawer}
+          onClose={closeDrawer}
+          onSwitchEpisode={(episode) => void switchEpisode(episode)}
+          onManageSubtitles={onManageSubtitles}
+          onSeekTo={seekTo}
+          onPausePlayback={pausePlayback}
+        />
       </div>
 
       {contextMenu ? (

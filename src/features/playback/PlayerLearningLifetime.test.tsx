@@ -4,9 +4,9 @@ import { expect, it, vi } from "vitest";
 import { PlayerAuxiliaryDrawer } from "./PlayerAuxiliaryDrawer";
 
 vi.mock("../../components/LearningPanel", () => ({
-  LearningPanel: function LearningFixture() {
+  LearningPanel: function LearningFixture({ visible = true }: { visible?: boolean }) {
     const [text, setText] = useState("");
-    return <input aria-label="学习输入夹具" value={text} onChange={(event) => setText(event.target.value)} />;
+    return <input hidden={!visible} aria-label="学习输入夹具" value={text} onChange={(event) => setText(event.target.value)} />;
   },
 }));
 
@@ -19,6 +19,14 @@ it("preserves the mounted learning session across subtitle ticks and isolates pr
   const { rerender } = render(<PlayerAuxiliaryDrawer {...props} />);
   fireEvent.change(screen.getByRole("textbox"), { target: { value: "unfinished draft" } });
   rerender(<PlayerAuxiliaryDrawer {...props} activeOriginal={{ ...props.activeOriginal!, id: "line-2" }} positionMs={5000} />);
+  expect(screen.getByRole("textbox")).toHaveValue("unfinished draft");
+  rerender(<PlayerAuxiliaryDrawer {...props} activeTab="transcript" />);
+  expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+  rerender(<PlayerAuxiliaryDrawer {...props} />);
+  expect(screen.getByRole("textbox")).toHaveValue("unfinished draft");
+  rerender(<PlayerAuxiliaryDrawer {...props} activeTab={null} />);
+  expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+  rerender(<PlayerAuxiliaryDrawer {...props} />);
   expect(screen.getByRole("textbox")).toHaveValue("unfinished draft");
   rerender(<PlayerAuxiliaryDrawer {...props} projectId="two" />);
   expect(screen.getByRole("textbox")).toHaveValue("");

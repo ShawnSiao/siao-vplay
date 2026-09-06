@@ -5,6 +5,7 @@ import type { ShellDrawerTab } from "../shell/useShellController";
 import { useTabNavigation } from "../../components/useTabNavigation";
 
 type PlayerDrawerProps = {
+  hidden?: boolean;
   activeTab: ShellDrawerTab;
   mediaTitle: string;
   contextLabel?: string;
@@ -41,6 +42,7 @@ function readDensity(): DrawerDensity {
 }
 
 export function PlayerDrawer({
+  hidden = false,
   activeTab,
   mediaTitle,
   contextLabel = "当前视频",
@@ -63,6 +65,9 @@ export function PlayerDrawer({
 
   return (
     <aside
+      hidden={hidden}
+      inert={hidden}
+      style={hidden ? { display: "none" } : undefined}
       className="player-drawer"
       data-active-tab={activeTab}
       data-density={density}

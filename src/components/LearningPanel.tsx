@@ -45,6 +45,7 @@ import { useLocalSpeech } from "../features/learning/useLocalSpeech";
 import { useLearningContext } from "../features/learning/learningContext";
 
 type LearningPanelProps = {
+  visible?: boolean;
   projectId: string;
   playbackPositionMs: number;
   sourceVersion: SubtitleVersion | null;
@@ -95,6 +96,7 @@ export function LearningPanel(props: LearningPanelProps) {
 }
 
 function LearningPanelSession({
+  visible = true,
   projectId,
   playbackPositionMs: livePositionMs,
   sourceVersion: liveSourceVersion,
@@ -140,6 +142,10 @@ function LearningPanelSession({
     language: sourceVersion?.languageCode ?? "und",
     onBeforeSpeak: onPausePlayback,
   });
+  const stopSpeech = speech.stop;
+  useEffect(() => {
+    if (!visible) stopSpeech();
+  }, [visible, stopSpeech]);
 
   const kind = selectionKind(
     selectedText,
@@ -528,6 +534,9 @@ function LearningPanelSession({
 
   return (
     <PanelElement
+      hidden={!visible}
+      inert={!visible}
+      style={!visible ? { display: "none" } : undefined}
       className={`learning-panel ${embedded ? "embedded" : ""}`}
       aria-label="语言学习"
     >

@@ -1532,7 +1532,8 @@ describe("App", () => {
     fireEvent.click(await screen.findByRole("button", { name: /继续播放/ }));
 
     const video = await screen.findByLabelText("视频画面，单击播放或暂停");
-    expect(screen.queryByLabelText("当前内容抽屉")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("当前内容抽屉")).not.toBeVisible();
+    expect(screen.getByLabelText("当前内容抽屉")).toHaveAttribute("inert");
 
     fireEvent.click(await getOverflowCommand(/^剧集当前合集$/));
     expect(screen.getByLabelText("当前内容抽屉")).toBeInTheDocument();
@@ -1543,7 +1544,8 @@ describe("App", () => {
     expect(screen.getByLabelText("视频画面，单击播放或暂停")).toBe(video);
 
     fireEvent.keyDown(window, { key: "Escape" });
-    expect(screen.queryByLabelText("当前内容抽屉")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("当前内容抽屉")).not.toBeVisible();
+    expect(screen.getByLabelText("当前内容抽屉")).toHaveAttribute("inert");
     expect(screen.getByLabelText("视频画面，单击播放或暂停")).toBe(video);
   });
 
