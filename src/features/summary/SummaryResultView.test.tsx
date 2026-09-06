@@ -53,7 +53,8 @@ describe("SummaryResultView", () => {
     expect(screen.getByText(/03:14–03:18/)).toBeInTheDocument();
     expect(screen.queryByText(/private-uuid/)).not.toBeInTheDocument();
     expect(screen.getByText("尚未进行外部事实检索。")).toBeInTheDocument();
-    expect(screen.getByText("flowchart LR A-->B")).toBeInTheDocument();
+    expect(screen.getByText("A → B")).toBeInTheDocument();
+    expect(screen.queryByText(/flowchart/)).not.toBeInTheDocument();
     fireEvent.click(screen.getByText(/03:14–03:18/));
     expect(onPausePlayback).toHaveBeenCalledOnce();
     expect(onJump).toHaveBeenCalledWith(194_000);

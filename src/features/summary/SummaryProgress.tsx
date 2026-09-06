@@ -1,4 +1,5 @@
 import type { SummaryTask } from "./types";
+import { summaryChunkLabel, summaryStageLabel } from "./summaryStatus";
 
 type SummaryProgressProps = {
   task: SummaryTask;
@@ -30,21 +31,21 @@ export function SummaryProgress({
       <section className="summary-progress-card" aria-label="总结分块进度">
         <div><span>分块分析</span><strong>已完成 {completed} / {task.chunks.length} 段</strong></div>
         <progress max={1} value={task.progress} />
-        <small>{Math.round(task.progress * 100)}% · {task.stage}</small>
+        <small>{Math.round(task.progress * 100)}% · {summaryStageLabel(task.stage)}</small>
       </section>
       <ol className="summary-chunk-list">
         {task.chunks.map((chunk) => (
           <li key={chunk.id} className={chunk.status}>
             <span>第 {chunk.ordinal + 1} 段</span>
             <strong>{chunk.segmentIds.length} 条字幕</strong>
-            <em>{chunk.status === "completed" ? "已校验" : chunk.status}</em>
+            <em>{summaryChunkLabel(chunk.status)}</em>
           </li>
         ))}
       </ol>
       {task.errorMessage ? <div className="understanding-error" role="alert">{task.errorMessage}</div> : null}
       {task.executionKind === "manual" && task.status === "awaiting_external_result" ? (
         <div className="summary-manual-guide">
-          <p>任务目录包含完整提示词、字幕材料、关键帧和唯一结果 Schema。</p>
+          <p>交接目录包含提示词、已确认的字幕与画面材料，以及结果格式要求。</p>
           <button className="button primary" type="button" disabled={busy} onClick={onOpenMaterials}>
             打开任务目录
           </button>
@@ -58,7 +59,7 @@ export function SummaryProgress({
         {resumable ? <button className="button primary" type="button" disabled={busy} onClick={onResume}>{task.status === "prepared" ? "开始任务" : "继续任务"}</button> : null}
         {running || ["prepared", "paused", "interrupted", "awaiting_external_result"].includes(task.status) ? (
           <button className="button quiet" type="button" disabled={busy || task.cancelRequested} onClick={onCancel}>
-            {task.cancelRequested ? "将在当前请求后取消" : "取消总结"}
+            {task.cancelRequested ? "正在停止总结" : "取消总结"}
           </button>
         ) : null}
       </div>

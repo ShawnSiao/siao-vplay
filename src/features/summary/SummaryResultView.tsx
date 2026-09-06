@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { SummaryRelationships } from "./SummaryRelationships";
 
 import { formatDuration } from "../../lib/format";
 import type {
@@ -187,7 +188,7 @@ export function SummaryResultView({
       {groups.map(([id, title, sections]) => (
         <SectionGroup id={id} key={id} title={title} sections={sections} onJump={onJump} onPausePlayback={onPausePlayback} />
       ))}
-      {result.mermaid ? <section className="summary-mermaid"><h3>架构关系</h3><pre>{result.mermaid}</pre></section> : null}
+      {result.mermaid ? <SummaryRelationships source={result.mermaid} /> : null}
       {result.limitations.length > 0 ? <section className="summary-limitations"><h3>局限与待验证</h3><ul>{result.limitations.map((item) => <li key={item}>{item}</li>)}</ul></section> : null}
       {result.glossary.length > 0 ? <section className="summary-glossary"><h3>术语表</h3><dl>{result.glossary.map((item) => <div key={item.term}><dt>{item.term}</dt><dd>{item.explanation}</dd></div>)}</dl></section> : null}
       <div className="summary-result-actions">
