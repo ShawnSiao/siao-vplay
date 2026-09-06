@@ -13,6 +13,7 @@ use crate::store::ProjectStore;
 pub enum AiTaskKind {
     Explanation,
     Learning,
+    Translation,
 }
 
 use super::active_execution::ApiExecutionLease;
@@ -22,6 +23,7 @@ impl AiTaskKind {
         match self {
             Self::Explanation => "explanation_tasks",
             Self::Learning => "learning_tasks",
+            Self::Translation => "agent_tasks",
         }
     }
 }
@@ -205,7 +207,7 @@ pub fn fail(
     });
 }
 
-fn now_ms() -> Result<i64, crate::store::StoreError> {
+pub(super) fn now_ms() -> Result<i64, crate::store::StoreError> {
     let duration = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_err(|_| crate::store::StoreError::Validation("系统时间无效".to_owned()))?;

@@ -24,11 +24,11 @@ export function TranslationDispatchConfirm({ preview, busy, onConfirm, onBack }:
         <p>人名：{contextText(preview.glossary.people)}；地点：{contextText(preview.glossary.places)}；术语：{contextText(preview.glossary.terms)}</p>
       </details>
       <p>不发送图片、视频、音频或本机媒体路径。结果保存为独立译文草稿，原文保持不变。</p>
-      {preview.handoffKind === "codex" ? <p>通过 Codex 的 OpenAI 登录联网处理，不读取用户的模型服务配置。</p> : <p>仅准备本地交接材料。复制后由所选工具发送，提示词含受控的任务返回路径。</p>}
+      {preview.handoffKind === "api" ? <p>通过所选 API 服务联网翻译，可能产生服务费用。失败后可重试未完成批次。</p> : preview.handoffKind === "codex" ? <p>通过 Codex 的 OpenAI 登录联网处理，不读取用户的模型服务配置。</p> : <p>仅准备本地交接材料。复制后由所选工具发送，提示词含受控的任务返回路径。</p>}
     </div>
     <div className="task-dispatch-actions">
       <button className="button quiet" type="button" disabled={busy} onClick={onBack}>返回任务</button>
-      <button className="button primary" type="button" disabled={busy} onClick={onConfirm}>{busy ? "正在启动…" : preview.handoffKind === "codex" ? "确认发送并翻译" : "确认准备交接"}</button>
+      <button className="button primary" type="button" disabled={busy} onClick={onConfirm}>{busy ? "正在启动…" : preview.handoffKind !== "manual" ? "确认发送并翻译" : "确认准备交接"}</button>
     </div>
   </section>;
 }

@@ -14,6 +14,7 @@ test("translation prepares without sending and confirms the actual range before 
     state.__TAURI_INTERNALS__ = { invoke: async (command: string, args: unknown) => {
       switch (command) {
         case "get_codex_runtime_status": return { available: true, authenticated: true, supported: true };
+        case "get_ai_service_settings": return { services: [], defaultServiceId: null };
         case "list_translation_tasks": return [];
         case "prepare_translation_task": return task;
         case "preview_translation_dispatch": return preview;

@@ -56,6 +56,8 @@ pub enum AiTaskError {
     #[error(transparent)]
     Learning(#[from] LearningError),
     #[error(transparent)]
+    Translation(#[from] crate::translation::TranslationError),
+    #[error(transparent)]
     Codex(#[from] CodexRunnerError),
     #[error("AI 服务请求失败")]
     Provider(ProviderFailure),
@@ -78,6 +80,7 @@ impl AiTaskError {
             Self::Learning(error) => {
                 AiCommandError::task(error.code(), error.to_string(), false, None)
             }
+            Self::Translation(error) => AiCommandError::task(error.code(), error.to_string(), false, None),
             Self::Codex(error) => AiCommandError::task(
                 error.code(),
                 error.to_string(),

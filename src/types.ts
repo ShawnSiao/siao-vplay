@@ -912,7 +912,7 @@ export type TranslationTask = {
   id: string;
   projectId: string;
   taskType: "subtitle_translation";
-  handoffKind: "manual" | "codex";
+  handoffKind: "manual" | "codex" | "api";
   protocolVersion: string;
   status:
     | "awaiting_external_result"

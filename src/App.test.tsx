@@ -168,6 +168,7 @@ vi.mock("./features/library/libraryGateway", async (importOriginal) => ({
 }));
 
 vi.mock("./features/analysis/gateway", () => analysisGatewayMocks);
+vi.mock("./features/environment-settings/gateway", async (original) => ({ ...await original<object>(), getAiServiceSettings: async () => ({ services: [], defaultServiceId: null }) }));
 const dispatchMocks = vi.hoisted(() => ({ previewTaskDispatch: vi.fn(), previewTranslationDispatch: vi.fn() }));
 vi.mock("./features/ai-tasks/translationDispatch", () => ({ previewTranslationDispatch: dispatchMocks.previewTranslationDispatch }));
 vi.mock("./features/ai-tasks/taskDispatch", async (original) => ({ ...await original<object>(), ...dispatchMocks }));
@@ -2768,7 +2769,7 @@ describe("App", () => {
         "不包含视频、音频、本机媒体路径、项目数据库、凭证或账号信息。",
       ),
     ).toBeInTheDocument();
-    expect(screen.getByText("本机已就绪")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /本机 Codex.*通过 OpenAI/ })).toHaveClass("selected");
     fireEvent.click(screen.getByRole("button", { name: "准备翻译材料" }));
 
     await waitFor(() =>
@@ -2811,7 +2812,7 @@ describe("App", () => {
     fireEvent.click(await screen.findByRole("button", { name: /继续播放/ }));
     fireEvent.click(await getOverflowCommand(/中文字幕/));
     fireEvent.click(
-      await screen.findByRole("button", { name: /复制任务提示词/ }),
+      await screen.findByRole("button", { name: /复制提示词.*自行选择其他工具/ }),
     );
     fireEvent.click(screen.getByRole("button", { name: "生成完整任务提示词" }));
     fireEvent.click(await screen.findByRole("button", { name: "确认准备交接" }));

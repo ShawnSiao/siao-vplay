@@ -649,7 +649,7 @@ pub fn recover_translation_tasks(store: &ProjectStore) -> Result<usize, CodexRun
              error_code = 'app_interrupted',
              error_message = '结果导入被应用退出中断，请重新选择结果文件',
              completed_at_ms = NULL, updated_at_ms = ?1
-         WHERE handoff_kind = 'manual' AND status = 'validating'",
+         WHERE execution_kind = 'manual' AND status = 'validating'",
         params![timestamp],
     )?;
     transaction.commit()?;

@@ -1,5 +1,8 @@
 import { previewTranslationDispatch, type TranslationDispatchPreview } from "../features/ai-tasks/translationDispatch";
 import { TranslationDispatchConfirm } from "../features/ai-tasks/TranslationDispatchConfirm";
+import { AiExecutionConfirm } from "../features/ai-tasks/AiExecutionConfirm";
+import { useAiExecutionChoice } from "../features/ai-tasks/useAiExecutionChoice";
+import { prepareApiTranslation, startApiTranslation } from "../features/ai-tasks/apiTranslation";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
@@ -49,8 +52,6 @@ type TranslationDialogProps = {
   ) => Promise<void>;
 };
 
-type HandoffKind = "codex" | "manual";
-
 const activeStatuses = new Set([
   "awaiting_external_result",
   "queued",
@@ -78,7 +79,8 @@ export function TranslationDialog({
   const isSelectedRetranslation =
     requestedSet.size > 0 &&
     requestedSet.size < (sourceVersion?.segments.length ?? 0);
-  const [handoff, setHandoff] = useState<HandoffKind>("codex");
+  const choice = useAiExecutionChoice(false);
+  const { kind: handoff, setKind: setHandoff } = choice;
   const [sourceLanguageCode, setSourceLanguageCode] = useState(
     sourceVersion?.languageCode.toLowerCase() ?? "en",
   );
@@ -176,6 +178,7 @@ export function TranslationDialog({
     };
   }, [
     projectId,
+    setHandoff,
     requestedKey,
     sourceLanguageCode,
     sourceVersion?.id,
@@ -263,7 +266,8 @@ export function TranslationDialog({
     setError(null);
     setCopyNotice(null);
     try {
-      const prepared = requestedSegmentIds?.length
+      const prepared = handoff === "api" ? await prepareApiTranslation(projectId, sourceLanguageCode, targetLanguageCode,
+        requestedSegmentIds, choice.execution, choice.authorization.serviceRevision ?? null) : requestedSegmentIds?.length
         ? await prepareTranslationTask(
             projectId,
             handoff,
@@ -314,6 +318,8 @@ export function TranslationDialog({
       if (dispatch.handoffKind === "manual") {
         setPrompt(await readTranslationPrompt(task.id));
         setPromptExpanded(true);
+      } else if (dispatch.handoffKind === "api") {
+        setTask(await startApiTranslation(task.id, dispatch.confirmationSha256));
       } else {
         const run = task.status === "queued" ? startCodexTranslationTask : resumeCodexTranslationTask;
         setTask(await run(task.id, undefined, dispatch.confirmationSha256));
@@ -406,7 +412,7 @@ export function TranslationDialog({
   const setup = !task;
   const running = task && ["running", "validating"].includes(task.status);
   const canResume =
-    task?.handoffKind === "codex" &&
+    task?.handoffKind !== "manual" && task &&
     ["failed", "cancelled", "interrupted"].includes(task.status);
 
   let actions: React.ReactNode = (
@@ -424,7 +430,7 @@ export function TranslationDialog({
           className="button primary"
           type="button"
           disabled={
-            busy ||
+            busy || choice.loading || (handoff === "api" && !choice.execution) ||
             sourceLanguageCode === targetLanguageCode ||
             (handoff === "codex" && !runtime?.available)
           }
@@ -432,7 +438,7 @@ export function TranslationDialog({
         >
           {operation === "prepare"
             ? "正在准备…"
-            : handoff === "codex"
+            : handoff !== "manual"
               ? "准备翻译材料"
               : "生成完整任务提示词"}
         </button>
@@ -452,7 +458,7 @@ export function TranslationDialog({
         <button
           className="button primary"
           type="button"
-          disabled={busy || !runtime?.available}
+          disabled={busy || (task.handoffKind === "codex" && !runtime?.available)}
           onClick={() => void reviewDispatch()}
         >
           {operation === "start" ? "正在启动…" : "查看发送清单"}
@@ -531,10 +537,10 @@ export function TranslationDialog({
           <button
             className="button primary"
             type="button"
-            disabled={busy || !runtime?.available}
+            disabled={busy || (task.handoffKind === "codex" && !runtime?.available)}
             onClick={() => void reviewDispatch()}
           >
-            {operation === "resume" ? "正在重新开始…" : "重新开始本机翻译"}
+            {operation === "resume" ? "正在重新开始…" : task.handoffKind === "api" ? "重试未完成批次" : "重新开始本机翻译"}
           </button>
         ) : null}
       </>
@@ -578,50 +584,12 @@ export function TranslationDialog({
             onTargetLanguageChange={setTargetLanguageCode}
           />
 
-          <section className="translation-section">
-            <h3>选择处理方式</h3>
-            <div className="translation-handoff-options">
-              <button
-                className={handoff === "codex" ? "selected" : ""}
-                type="button"
-                onClick={() => setHandoff("codex")}
-              >
-                <span>
-                  <strong>在本机 Codex 中处理</strong>
-                  <small>需要联网，完成后自动检查结果并生成草稿。</small>
-                </span>
-                <em
-                  className={`status-pill ${
-                    runtime?.available ? "ready" : "warning"
-                  }`}
-                >
-                  {runtime?.available ? "本机已就绪" : "当前不可使用"}
-                </em>
-              </button>
-              <button
-                className={handoff === "manual" ? "selected" : ""}
-                type="button"
-                onClick={() => setHandoff("manual")}
-              >
-                <span>
-                  <strong>复制任务提示词</strong>
-                  <small>交给自行选择的 Agent，再导入 result.json。</small>
-                </span>
-                <em className="status-pill">不会自动发送</em>
-              </button>
-            </div>
-            {handoff === "codex" && runtime && !runtime.available ? (
-              <div className="notice warning translation-runtime-notice">
-                <strong>本机 Codex 还不能开始</strong>
-                <p>{runtime.errorMessage}</p>
-              </div>
-            ) : null}
-          </section>
+          <AiExecutionConfirm controller={choice} runtime={runtime} allowFrames={false} translationAvailable={false} taskLabel="翻译" translationScope />
 
           <section className="translation-section">
             <div className="translation-section-heading">
               <h3>
-                {handoff === "codex" ? "准备发送给 OpenAI（通过 Codex）" : "提示词包含"}
+                {handoff === "api" ? "准备翻译的内容" : handoff === "codex" ? "准备发送给 OpenAI（通过 Codex）" : "提示词包含"}
               </h3>
               <span>点击底部操作前不会处理</span>
             </div>
@@ -804,7 +772,7 @@ export function TranslationDialog({
                   ? "等待开始"
                   : task.handoffKind === "manual"
                     ? "正在检查"
-                    : "本机处理中"}
+                    : "翻译中"}
               </span>
               <h3>{translationTaskStage(task)}</h3>
               <p>

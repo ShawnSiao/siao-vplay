@@ -10,6 +10,7 @@ type AiExecutionConfirmProps = {
   translationAvailable: boolean;
   taskLabel: string;
   summaryScope?: "current_progress" | "full_video";
+  translationScope?: boolean;
 };
 
 const choiceLabels: Array<[AiExecutionChoiceKind, string, string]> = [
@@ -25,6 +26,7 @@ export function AiExecutionConfirm({
   translationAvailable,
   taskLabel,
   summaryScope,
+  translationScope = false,
 }: AiExecutionConfirmProps) {
   const runtimeReady = Boolean(runtime?.available && runtime.authenticated && runtime.supported);
   const apiAvailable = controller.services.length > 0;
@@ -68,7 +70,7 @@ export function AiExecutionConfirm({
         </div>
       ) : null}
 
-      {controller.kind === "api" && !apiAvailable ? (
+      {!apiAvailable ? (
         <button className="button quiet ai-configure-service" type="button" onClick={() => openEnvironmentSettings("ai")}>进入环境配置添加 AI 服务</button>
       ) : null}
       {controller.kind === "codex" && runtime && !runtimeReady ? (
@@ -83,9 +85,9 @@ export function AiExecutionConfirm({
         {controller.kind === "codex" ? <p>通过 Codex 的 OpenAI 登录与默认模型发送下列材料，不读取用户的模型服务配置。本机安装不代表离线推理。</p> : null}
         {controller.kind === "api" ? <div><span>模型</span><strong>{controller.modelId || "尚未选择"}</strong></div> : null}
         <ul>
-          <li>{summaryScope === "full_video" ? "完整视频的当前字幕版本（包含未观看内容）" : "当前播放点之前的原文字幕"}</li>
+          <li>{translationScope ? "下方列出的完整或选中原文字幕（不按播放点截断）" : summaryScope === "full_video" ? "完整视频的当前字幕版本（包含未观看内容）" : "当前播放点之前的原文字幕"}</li>
           {!summaryScope && translationAvailable ? <li>已有的简体中文字幕</li> : null}
-          <li>{summaryScope ? "选定的分析提示词与补充要求" : "当前问题或用户选择的词句"}</li>
+          <li>{translationScope ? "翻译规则与术语上下文" : summaryScope ? "选定的分析提示词与补充要求" : "当前问题或用户选择的词句"}</li>
         </ul>
         {allowFrames ? (
           <label className={!visionAvailable ? "disabled" : ""}>

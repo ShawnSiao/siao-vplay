@@ -369,5 +369,12 @@ pub fn store() -> Result<&'static AiServiceStore, AiError> {
 }
 
 #[cfg(test)]
+pub(crate) fn initialize_with_memory_credentials(data_directory: &Path) {
+    let store = AiServiceStore::new(data_directory.join(SETTINGS_FILE_NAME),
+        Arc::new(super::credentials::tests_support::MemoryCredentialStore::default()));
+    assert!(STORE.set(store).is_ok(), "test service store must be isolated");
+}
+
+#[cfg(test)]
 #[path = "config_tests.rs"]
 mod tests;

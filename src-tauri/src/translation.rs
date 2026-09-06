@@ -260,6 +260,7 @@ pub fn prepare_translation_task(
             "手动选择的外部 Agent",
         ),
         "codex" => ("queued", "queued", "本机 Codex"),
+        "api" => ("queued", "awaiting_confirmation", "已选择的 AI 服务"),
         value => return Err(TranslationError::InvalidHandoff(value.to_owned())),
     };
     let project = store.get_project(&project_id)?;
@@ -474,7 +475,7 @@ pub fn prepare_translation_task(
                 material_manifest_sha256, base_translation_version_id,
                 created_at_ms, updated_at_ms
              ) VALUES (
-                ?1, ?2, 'subtitle_translation', ?3, ?3, ?4,
+                ?1, ?2, 'subtitle_translation', CASE WHEN ?3 = 'api' THEN 'manual' ELSE ?3 END, ?3, ?4,
                 ?5, ?6, 0.0, ?7, ?8,
                 ?9, ?10, ?11, ?12, ?13,
                 ?14, ?15, ?16, ?17, ?18, ?18
@@ -538,7 +539,7 @@ pub fn get_translation_task(
     connection
         .query_row(
             "SELECT
-                id, project_id, task_type, handoff_kind, protocol_version,
+                id, project_id, task_type, execution_kind, protocol_version,
                 status, stage, progress, receiver_label, material_scope_json,
                 source_version_id, source_language_code, target_language_code,
                 segment_count, output_version_id, error_code, error_message,
@@ -733,6 +734,14 @@ pub(crate) fn apply_codex_result(
 ) -> Result<TranslationApplication, TranslationError> {
     set_task_validating(store, task_id, "running")?;
     validate_and_apply_result(store, task_id, raw, "codex")
+}
+
+pub(crate) fn apply_api_result(store: &ProjectStore, task_id: &str, raw: &str) -> Result<TranslationApplication, TranslationError> {
+    if get_translation_task(store, task_id)?.handoff_kind != "api" {
+        return Err(TranslationError::InvalidHandoff("api".into()));
+    }
+    set_task_validating(store, task_id, "running")?;
+    validate_and_apply_result(store, task_id, raw, "api")
 }
 
 fn validate_result(
@@ -1072,6 +1081,8 @@ fn persist_translation_result(
             |row| row.get::<_, i64>(0),
         )?;
         let source_label = match (delivery_kind, partial_selection) {
+            ("api", true) => "AI 服务选段重译",
+            ("api", false) => "AI 服务翻译",
             ("codex", true) => "Codex 选段重译",
             ("codex", false) => "Codex 翻译",
             (_, true) => "手动 Agent 选段重译",
@@ -1151,7 +1162,7 @@ fn persist_translation_result(
                  result_sha256 = ?2, result_validation_json = ?3,
                  output_version_id = ?4, error_code = NULL, error_message = NULL,
                  completed_at_ms = ?5, updated_at_ms = ?5
-             WHERE id = ?1 AND status = 'validating'",
+             WHERE id = ?1 AND status = 'validating' AND cancel_requested_at_ms IS NULL",
             params![
                 task.id,
                 result_sha256,
@@ -1224,7 +1235,7 @@ pub(crate) fn set_task_validating(
         "UPDATE agent_tasks
          SET status = 'validating', stage = 'validating', progress = 0.9,
              error_code = NULL, error_message = NULL, updated_at_ms = ?3
-         WHERE id = ?1 AND status = ?2",
+         WHERE id = ?1 AND status = ?2 AND cancel_requested_at_ms IS NULL",
         params![task_id, expected_status, timestamp],
     )?;
     if changed != 1 {

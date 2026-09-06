@@ -176,6 +176,7 @@ pub fn run() {
             store.recover_running_media_artifacts()?;
             transcription::recover_transcription_jobs(&store)?;
             codex_runner::recover_translation_tasks(&store)?;
+            ai::translation_api::recover(&store)?;
             understanding::recover_explanation_tasks(&store)?;
             learning::recover_learning_tasks(&store)?;
             summary::recover_summary_tasks(&store)?;
@@ -189,6 +190,8 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             get_app_status,
+            ai::translation_api::prepare_api_translation,
+            ai::translation_api::start_api_translation,
             set_main_window_media_title,
             commands::create_local_project,
             commands::inspect_remote_media_url,

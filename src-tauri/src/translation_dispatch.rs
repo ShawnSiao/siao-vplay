@@ -61,6 +61,10 @@ pub(crate) fn preview(
     task_id: &str,
 ) -> Result<TranslationDispatchPreview, TranslationError> {
     let task = translation::get_translation_task(store, task_id)?;
+    let consistent: bool = store.connect()?.query_row(
+        "SELECT execution_kind = handoff_kind OR (execution_kind = 'api' AND handoff_kind = 'manual') FROM agent_tasks WHERE id = ?1",
+        [task_id], |row| row.get(0))?;
+    if !consistent { return Err(TranslationError::TaskIntegrity("执行方式与交接记录不一致，请重新准备翻译".into())); }
     translation::verify_task_package(
         store,
         task_id,
@@ -93,9 +97,13 @@ pub(crate) fn preview(
         rusqlite::params![task.source_version_id, task.project_id],
         |row| Ok((row.get(0)?, row.get(1)?)),
     )?;
+    let api = if task.handoff_kind == "api" {
+        Some(crate::ai::translation_api::receiver(store, task_id).map_err(|error| TranslationError::TaskIntegrity(error.to_string()))?)
+    } else { None };
     let receiver = match task.handoff_kind.as_str() {
         "codex" => "OpenAI（通过本机 Codex 登录，需要联网）",
         "manual" => "自行选择的外部工具（本应用不自动发送）",
+        "api" => &api.as_ref().expect("API receiver was resolved").base_url,
         _ => return Err(TranslationError::InvalidHandoff(task.handoff_kind.clone())),
     };
     let prompt = read(store, task_id, "prompt.md")?;
@@ -105,7 +113,7 @@ pub(crate) fn preview(
         confirmation_sha256: String::new(),
         handoff_kind: task.handoff_kind.clone(),
         receiver: receiver.into(),
-        model: if task.handoff_kind == "codex" {
+        model: if let Some(api) = &api { api.model_id.as_str() } else if task.handoff_kind == "codex" {
             "Codex 默认模型"
         } else {
             "由所选工具决定"
@@ -128,6 +136,8 @@ pub(crate) fn preview(
     value.confirmation_sha256 = hash_bytes(&serde_json::to_vec(&serde_json::json!({
         "protocol": "siaovplay-translation-dispatch-v1", "preview": &value, "task": task,
         "promptSha256": hash_bytes(&prompt), "schemaSha256": hash_bytes(&schema),
+        "apiReceiver": api,
+        "apiPolicy": if task.handoff_kind == "api" { crate::ai::translation_api::confirmation_policy().map_err(|error| TranslationError::TaskIntegrity(error.to_string()))? } else { Value::Null },
     }))?);
     Ok(value)
 }
@@ -137,8 +147,16 @@ pub(crate) fn verify(
     task_id: &str,
     hash: &str,
 ) -> Result<(), TranslationError> {
+    verify_kind(store, task_id, hash, "codex")
+}
+
+pub(crate) fn verify_api(store: &ProjectStore, task_id: &str, hash: &str) -> Result<(), TranslationError> {
+    verify_kind(store, task_id, hash, "api")
+}
+
+fn verify_kind(store: &ProjectStore, task_id: &str, hash: &str, kind: &str) -> Result<(), TranslationError> {
     let value = preview(store, task_id)?;
-    if value.handoff_kind != "codex" || hash.len() != 64 || value.confirmation_sha256 != hash {
+    if value.handoff_kind != kind || hash.len() != 64 || value.confirmation_sha256 != hash {
         return Err(TranslationError::TaskIntegrity(
             "接收方或材料已改变，请重新确认翻译清单".into(),
         ));

@@ -3,7 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 export type TranslationDispatchPreview = {
   taskId: string;
   confirmationSha256: string;
-  handoffKind: "codex" | "manual";
+  handoffKind: "codex" | "manual" | "api";
   receiver: string;
   model: string;
   sourceVersionId: string;
@@ -21,7 +21,7 @@ const record = (value: unknown) => value !== null && typeof value === "object" &
 export async function previewTranslationDispatch(taskId: string) {
   const value = await invoke<TranslationDispatchPreview>("preview_translation_dispatch", { input: { taskId } });
   if (!value || value.taskId !== taskId || !/^[0-9a-f]{64}$/.test(value.confirmationSha256) ||
-      !["codex", "manual"].includes(value.handoffKind) || !text(value.receiver) || !text(value.model) ||
+      !["codex", "manual", "api"].includes(value.handoffKind) || !text(value.receiver) || !text(value.model) ||
       !text(value.sourceVersionId) || !Number.isSafeInteger(value.sourceVersionNumber) || value.sourceVersionNumber < 1 ||
       !text(value.sourceLanguageCode) || !text(value.targetLanguageCode) ||
       !["full_subtitles", "selected_subtitles"].includes(value.scope) ||

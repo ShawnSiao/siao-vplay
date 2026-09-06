@@ -19,6 +19,7 @@ mod task_execution;
 mod active_execution;
 mod task_persistence;
 mod task_types;
+pub(crate) mod translation_api;
 pub(crate) mod types;
 
 use std::path::Path;
