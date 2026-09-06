@@ -29,6 +29,7 @@ function CollectionPreview({
   return (
     <button
       className="library-series-card"
+      data-has-poster={Boolean(collection.posterPath)}
       type="button"
       aria-label={`打开合集 ${collection.title}`}
       onClick={onOpen}
@@ -122,7 +123,7 @@ export function LibraryHomeView({
       {hero ? (
         <section className="library-continue-section" aria-labelledby="continue-heading">
           <h2 className="sr-only" id="continue-heading">最近观看</h2>
-          <article className="library-continue-hero">
+          <article className="library-continue-hero" data-has-poster={Boolean(hero.posterPath)}>
             <button
               className="library-continue-visual"
               type="button"
@@ -138,8 +139,7 @@ export function LibraryHomeView({
             </button>
             <div className="library-continue-copy">
               <span className="library-resume-label">最近观看</span>
-              <h2>{hero.projectTitle}</h2>
-              <p title={hero.displayName}>{hero.displayName}</p>
+              <h2 title={hero.displayName}>{hero.projectTitle}</h2>
               <div className="library-continue-time">
                 <span>{formatDuration(hero.positionMs)}</span>
                 <span>{hero.durationMs ? formatDuration(hero.durationMs) : "时长未知"}</span>
@@ -158,7 +158,7 @@ export function LibraryHomeView({
             <div className="library-continue-strip" aria-label="其他观看中内容">
               {secondary.map((media) => (
                 <button type="button" key={media.projectId} onClick={() => onOpen(media)}>
-                  <span className="library-continue-strip-poster">
+                  <span className="library-continue-strip-poster" data-has-poster={Boolean(media.posterPath)}>
                     {media.posterPath ? (
                       <img src={playbackUrl(media.posterPath)} alt="" />
                     ) : (
@@ -238,6 +238,7 @@ export function LibraryHomeView({
                 type="button"
                 key={media.projectId}
                 aria-label={`打开最近加入的 ${media.projectTitle}`}
+                data-has-poster={Boolean(media.posterPath)}
                 onClick={() => onOpen(media)}
               >
                 <span>

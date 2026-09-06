@@ -13,12 +13,12 @@
 .library-screen .library-continue-hero {
   display: grid;
   overflow: hidden;
-  min-height: 280px;
-  grid-template-columns: minmax(320px, 1.45fr) minmax(280px, 0.85fr);
+  min-height: 140px;
+  grid-template-columns: 160px minmax(0, 1fr);
   border: 1px solid #303840;
-  border-radius: 16px;
+  border-radius: 7px;
   background: #151a20;
-  box-shadow: 0 22px 50px rgb(0 0 0 / 22%);
+  box-shadow: none;
 }
 
 .library-screen .library-continue-visual {
@@ -51,20 +51,20 @@
   min-width: 0;
   flex-direction: column;
   justify-content: center;
-  padding: 34px;
+  padding: 14px 18px;
 }
 
 .library-screen .library-continue-copy h2 {
   overflow: hidden;
-  margin: 8px 0 6px;
-  font-size: clamp(24px, 2.1vw, 34px);
+  margin: 4px 0;
+  font-size: 18px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .library-screen .library-continue-copy > p {
   overflow: hidden;
-  margin: 0 0 24px;
+  margin: 0 0 8px;
   color: #9da7b0;
   font-size: 14px;
   text-overflow: ellipsis;
@@ -100,7 +100,7 @@
 
 .library-screen .library-continue-footer {
   align-items: center;
-  margin-top: 17px;
+  margin-top: 6px;
 }
 
 .library-screen .library-continue-strip {

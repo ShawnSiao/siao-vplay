@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
+import "./PlayerDrawer.css";
 
 import type { ShellDrawerTab } from "../shell/useShellController";
 import { useTabNavigation } from "../../components/useTabNavigation";
@@ -67,26 +68,11 @@ export function PlayerDrawer({
       data-density={density}
       aria-label="当前内容抽屉"
     >
-      <header className="player-drawer-header">
-        <div>
-          <span>当前内容</span>
-          <strong title={activeTab === "transcript" ? "逐字稿" : mediaTitle}>
-            {activeTab === "transcript" ? "逐字稿" : mediaTitle}
-          </strong>
-        </div>
-        <button aria-label="关闭右侧抽屉" type="button" onClick={onClose}>
-          ×
-        </button>
+      <header className="player-drawer-header" aria-label="当前观看上下文">
+        <strong title={`${mediaTitle} · ${contextLabel}`}>{mediaTitle}</strong>
+        <span className="player-drawer-context-status" title={contextStatus}>{contextStatus}</span>
+        <button aria-label="关闭右侧抽屉" type="button" onClick={onClose}>×</button>
       </header>
-
-      <div className="player-drawer-meta" aria-label="当前观看上下文">
-        <div>
-          <span className="player-drawer-status-dot" aria-hidden="true" />
-          <span>正在观看</span>
-          <strong>{contextLabel}</strong>
-        </div>
-        <span>{contextStatus}</span>
-      </div>
 
       <div
         className="player-drawer-tabs"
@@ -98,38 +84,16 @@ export function PlayerDrawer({
             {...tabs.tabProps(tab.id)}
             aria-controls={`player-drawer-panel-${tab.id}`}
             aria-label={tab.label}
+            title={tab.id === "episodes" ? episodeSummary : tab.description}
             className={`${tab.id} ${activeTab === tab.id ? "active" : ""}`}
             id={`player-drawer-tab-${tab.id}`}
             key={tab.id}
           >
             <span>{tab.label}</span>
-            <small>{tab.id === "episodes" ? episodeSummary : tab.description}</small>
+
           </button>
         ))}
       </div>
-
-      {activeTab !== "transcript" ? <div className="player-drawer-toolbar">
-        <div>
-          <span>阅读密度</span>
-          <strong>{density === "compact" ? "紧凑" : "舒适"}</strong>
-        </div>
-        <div className="player-drawer-density" role="group" aria-label="切换阅读密度">
-          <button
-            aria-pressed={density === "comfortable"}
-            type="button"
-            onClick={() => setDensity("comfortable")}
-          >
-            舒适
-          </button>
-          <button
-            aria-pressed={density === "compact"}
-            type="button"
-            onClick={() => setDensity("compact")}
-          >
-            紧凑
-          </button>
-        </div>
-      </div> : null}
 
       <div
         className="player-drawer-content"
@@ -140,6 +104,18 @@ export function PlayerDrawer({
       >
         {children}
       </div>
+      {activeTab !== "transcript" ? (
+        <details className="player-drawer-reading">
+          <summary>阅读设置</summary>
+          <div className="player-drawer-density" role="group" aria-label="切换阅读密度">
+            {(["comfortable", "compact"] as const).map((value) => (
+              <button key={value} aria-pressed={density === value} type="button" onClick={() => setDensity(value)}>
+                {value === "comfortable" ? "舒适" : "紧凑"}
+              </button>
+            ))}
+          </div>
+        </details>
+      ) : null}
     </aside>
   );
 }

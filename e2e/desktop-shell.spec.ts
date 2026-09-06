@@ -287,19 +287,16 @@ test("reading-first drawer exposes readable hierarchy and density controls", asy
   await page.getByRole("button", { name: "更多", exact: true }).click();
   await page.getByRole("menuitem", { name: /^剧集/ }).click();
 
-  await expect(drawer).toHaveCSS("width", "416px");
-  await expect(drawer.locator(".player-drawer-meta")).toContainText("正在观看");
-  await expect(drawer.locator(".player-drawer-toolbar")).toBeVisible();
-  await expect(drawer.locator(".player-drawer-toolbar")).toHaveCSS(
-    "height",
-    "54px",
-  );
+  await expect(drawer).toHaveCSS("width", "340px");
+  await expect(drawer.getByLabel("当前观看上下文")).toBeVisible();
+  await expect(drawer.getByRole("button", { name: "舒适", exact: true })).toBeHidden();
+  await drawer.getByText("阅读设置", { exact: true }).click();
   await expect(
     drawer.getByRole("button", { name: "舒适", exact: true }),
   ).toHaveAttribute("aria-pressed", "true");
   await expect(drawer.locator(".player-drawer-content")).toHaveCSS(
     "font-size",
-    "15px",
+    "14px",
   );
 
   await drawer.getByRole("button", { name: "紧凑", exact: true }).click();

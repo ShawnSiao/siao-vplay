@@ -42,8 +42,10 @@ describe("PlayerDrawer reading-first shell", () => {
       name: "当前内容抽屉",
     });
     expect(drawer).toHaveAttribute("data-density", "comfortable");
-    expect(screen.getByText("正在观看")).toBeInTheDocument();
-    expect(screen.getByText("当前场景")).toBeInTheDocument();
+    expect(screen.getByLabelText("当前观看上下文")).toHaveTextContent("Hugging Face Journal Club: Kimi K3");
+    expect(screen.getByRole("tab", { name: "理解" })).toHaveAttribute("title", "当前场景");
+    expect(screen.getByText("阅读设置").parentElement).not.toHaveAttribute("open");
+    fireEvent.click(screen.getByText("阅读设置"));
     expect(
       screen.getByRole("button", { name: "舒适" }),
     ).toHaveAttribute("aria-pressed", "true");

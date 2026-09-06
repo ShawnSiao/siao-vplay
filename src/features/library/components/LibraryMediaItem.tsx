@@ -79,7 +79,7 @@ export function LibraryMediaItem({
   const code = episodeCode(media);
 
   return (
-    <article className="library-media-item">
+    <article className="library-media-item" data-has-poster={Boolean(media.posterPath)}>
       <button
         className="library-media-poster"
         type="button"
