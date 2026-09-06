@@ -1,3 +1,6 @@
+mod read;
+pub use read::{get_subtitle_version, list_subtitle_versions};
+
 use std::{
     collections::{HashMap, HashSet},
     fs,
@@ -597,75 +600,6 @@ pub(crate) fn persist_transcription(
     )
 }
 
-pub fn list_subtitle_versions(
-    store: &ProjectStore,
-    project_id: &str,
-) -> Result<Vec<SubtitleVersion>, SubtitleError> {
-    let project = store.get_project(project_id)?;
-    let connection = store.connect()?;
-    let mut statement = connection.prepare(
-        "SELECT
-            v.id, v.track_id, v.project_id, t.role, v.version_number, v.status,
-            v.source_kind, v.source_label, v.source_sha256, v.media_sha256,
-            v.language_code, v.project_revision, v.preflight_json,
-            v.parent_version_id, v.source_task_id, v.created_at_ms,
-            CASE WHEN t.current_version_id = v.id THEN 1 ELSE 0 END
-         FROM subtitle_versions v
-         JOIN subtitle_tracks t ON t.id = v.track_id
-         WHERE v.project_id = ?1
-         ORDER BY v.created_at_ms DESC, v.version_number DESC, v.id DESC",
-    )?;
-    let rows = statement
-        .query_map(params![project.id], |row| {
-            Ok((
-                row.get::<_, String>(0)?,
-                row.get::<_, String>(1)?,
-                row.get::<_, String>(2)?,
-                row.get::<_, String>(3)?,
-                row.get::<_, i64>(4)?,
-                row.get::<_, String>(5)?,
-                row.get::<_, String>(6)?,
-                row.get::<_, String>(7)?,
-                row.get::<_, String>(8)?,
-                row.get::<_, String>(9)?,
-                row.get::<_, String>(10)?,
-                row.get::<_, i64>(11)?,
-                row.get::<_, String>(12)?,
-                row.get::<_, Option<String>>(13)?,
-                row.get::<_, Option<String>>(14)?,
-                row.get::<_, i64>(15)?,
-                row.get::<_, bool>(16)?,
-            ))
-        })?
-        .collect::<Result<Vec<_>, _>>()?;
-
-    rows.into_iter()
-        .map(|row| {
-            let preflight = serde_json::from_str(&row.12)?;
-            let segments = load_segments(&connection, &row.0)?;
-            Ok(SubtitleVersion {
-                id: row.0,
-                track_id: row.1,
-                project_id: row.2,
-                role: row.3,
-                version_number: row.4,
-                status: row.5,
-                source_kind: row.6,
-                source_label: row.7,
-                source_sha256: row.8,
-                media_sha256: row.9,
-                language_code: row.10,
-                project_revision: row.11,
-                parent_version_id: row.13,
-                source_task_id: row.14,
-                preflight,
-                created_at_ms: row.15,
-                is_current: row.16,
-                segments,
-            })
-        })
-        .collect()
-}
 
 pub fn revise_subtitle_version(
     store: &ProjectStore,
@@ -687,11 +621,7 @@ pub fn revise_subtitle_version(
         ));
     }
 
-    let versions = list_subtitle_versions(store, &input.project_id)?;
-    let base = versions
-        .into_iter()
-        .find(|version| version.id == input.base_version_id)
-        .ok_or_else(|| SubtitleError::VersionNotFound(input.base_version_id.clone()))?;
+    let base = get_subtitle_version(store, &input.project_id, &input.base_version_id)?;
     if !base.is_current {
         return Err(SubtitleError::VersionChanged);
     }
@@ -847,20 +777,11 @@ pub fn restore_subtitle_version(
             "当前版本不需要恢复".to_owned(),
         ));
     }
-    let versions = list_subtitle_versions(store, &input.project_id)?;
-    let current = versions
-        .iter()
-        .find(|version| version.id == input.current_version_id)
-        .cloned()
-        .ok_or_else(|| SubtitleError::VersionNotFound(input.current_version_id.clone()))?;
+    let current = get_subtitle_version(store, &input.project_id, &input.current_version_id)?;
     if !current.is_current {
         return Err(SubtitleError::VersionChanged);
     }
-    let restore = versions
-        .iter()
-        .find(|version| version.id == input.restore_version_id)
-        .cloned()
-        .ok_or_else(|| SubtitleError::VersionNotFound(input.restore_version_id.clone()))?;
+    let restore = get_subtitle_version(store, &input.project_id, &input.restore_version_id)?;
     if restore.track_id != current.track_id {
         return Err(SubtitleError::InvalidRevision(
             "只能恢复同一字幕轨的历史版本".to_owned(),
@@ -1135,10 +1056,7 @@ fn persist_revision_version(
         return Err(SubtitleError::ProjectChanged);
     }
     transaction.commit()?;
-    list_subtitle_versions(store, &current.project_id)?
-        .into_iter()
-        .find(|version| version.id == version_id)
-        .ok_or_else(|| StoreError::Validation("字幕修正已写入，但无法重新读取".to_owned()).into())
+    get_subtitle_version(store, &current.project_id, &version_id)
 }
 
 fn persist_import(
@@ -1307,10 +1225,7 @@ fn persist_import(
     }
     transaction.commit()?;
 
-    list_subtitle_versions(store, project_id)?
-        .into_iter()
-        .find(|version| version.id == version_id)
-        .ok_or_else(|| StoreError::Validation("字幕版本已写入，但无法重新读取".to_owned()).into())
+    get_subtitle_version(store, project_id, &version_id)
 }
 
 fn load_segments(
@@ -2031,6 +1946,64 @@ mod tests {
         assert_eq!(versions[0].segments[0].text, "Revised");
         assert_eq!(versions[1].segments[0].text, "First");
         assert!(!versions[1].is_current);
+    }
+
+    #[test]
+    fn revision_does_not_read_unselected_history() {
+        let (_temp, store, project_id, original) = create_store_with_subtitles();
+        let revise = |base: &SubtitleVersion| {
+            revise_subtitle_version(
+                &store,
+                ReviseSubtitleVersionInput {
+                    project_id: project_id.clone(),
+                    base_version_id: base.id.clone(),
+                    expected_project_revision: base.project_revision,
+                    segment_edits: vec![],
+                    global_replacement: None,
+                    offset_ms: 100,
+                },
+            )
+        };
+        let current = revise(&original).expect("first revision");
+        // A deliberately invalid historical payload detects any accidental history decoding.
+        store
+            .connect()
+            .unwrap()
+            .execute(
+                "UPDATE subtitle_versions SET preflight_json = 'invalid' WHERE id = ?1",
+                params![original.id],
+            )
+            .unwrap();
+        let next = revise(&current).expect("unselected history must not be read");
+        assert_eq!(next.segments[0].start_ms, 200);
+        let restored = restore_subtitle_version(
+            &store,
+            RestoreSubtitleVersionInput {
+                project_id,
+                current_version_id: next.id,
+                restore_version_id: current.id,
+                expected_project_revision: next.project_revision,
+            },
+        )
+        .expect("restore reads only selected versions");
+        assert_eq!(restored.segments[0].start_ms, 100);
+        assert!(matches!(
+            get_subtitle_version(&store, &restored.project_id, "missing"),
+            Err(SubtitleError::VersionNotFound(_))
+        ));
+        assert!(get_subtitle_version(&store, &restored.project_id, &original.id).is_err());
+        let other_path = _temp.path().join("other.mp4");
+        fs::write(&other_path, b"other media").unwrap();
+        let other = store
+            .create_local_project(CreateLocalProjectInput {
+                media_path: other_path.to_string_lossy().into_owned(),
+                title: None,
+            })
+            .unwrap();
+        assert!(matches!(
+            get_subtitle_version(&store, &other.id, &restored.id),
+            Err(SubtitleError::VersionNotFound(_))
+        ));
     }
 
     #[test]
