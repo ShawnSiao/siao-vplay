@@ -69,11 +69,12 @@ const mediaSummary: LibraryMediaSummary = {
   episodeTitle: null,
   itemAvailability: null,
 };
-const unclassifiedItems = Array.from({ length: 12 }, (_, index) => ({
+const longListMode = new URLSearchParams(location.search).has("long-list");
+const unclassifiedItems = Array.from({ length: longListMode ? 20 : 12 }, (_, index) => ({
   ...mediaSummary,
   projectId: `e2e-library-project-${index + 1}`,
-  projectTitle: `雨站台 ${index + 1}`,
-  displayName: `rain-platform-${index + 1}.mp4`,
+  projectTitle: longListMode ? `第 ${index + 1} 集 ${"很长的视频名称与跨语言学习内容".repeat(12)}` : `雨站台 ${index + 1}`,
+  displayName: longListMode ? `${"long_unbroken_filename_".repeat(14)}${index + 1}.mp4` : `rain-platform-${index + 1}.mp4`,
   mediaLocator: `W:\\Videos\\rain-platform-${index + 1}.mp4`,
 }));
 
@@ -169,7 +170,7 @@ const folderPreview: LibraryFolderImportState = {
 
 export function LibraryHarness() {
   const emptyMode = new URLSearchParams(window.location.search).has("empty");
-  const [folderImport, setFolderImport] = useState<LibraryFolderImportState | null>(null); const [section, setSection] = useState<LibrarySection>("home");
+  const [folderImport, setFolderImport] = useState<LibraryFolderImportState | null>(null); const [section, setSection] = useState<LibrarySection>(longListMode ? "unclassified" : "home");
   const [recovery, setRecovery] = useState<LibraryRecoveryState | null>(null);
   const [watchLaterItems, setWatchLaterItems] = useState([mediaSummary]);
   const [uncategorizedItems, setUncategorizedItems] = useState(unclassifiedItems);
