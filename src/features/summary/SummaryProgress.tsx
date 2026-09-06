@@ -19,7 +19,7 @@ export function SummaryProgress({
 }: SummaryProgressProps) {
   const completed = task.chunks.filter((chunk) => chunk.status === "completed").length;
   const running = runningStatuses.has(task.status);
-  const resumable = ["failed", "interrupted", "paused"].includes(task.status);
+  const resumable = ["prepared", "failed", "interrupted", "paused"].includes(task.status);
   return (
     <div className="summary-progress-view">
       <header className="summary-intro">
@@ -55,8 +55,8 @@ export function SummaryProgress({
         </div>
       ) : null}
       <div className="summary-task-actions">
-        {resumable ? <button className="button primary" type="button" disabled={busy} onClick={onResume}>继续任务</button> : null}
-        {running || task.status === "awaiting_external_result" ? (
+        {resumable ? <button className="button primary" type="button" disabled={busy} onClick={onResume}>{task.status === "prepared" ? "开始任务" : "继续任务"}</button> : null}
+        {running || ["prepared", "paused", "interrupted", "awaiting_external_result"].includes(task.status) ? (
           <button className="button quiet" type="button" disabled={busy || task.cancelRequested} onClick={onCancel}>
             {task.cancelRequested ? "将在当前请求后取消" : "取消总结"}
           </button>

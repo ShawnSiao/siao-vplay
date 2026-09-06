@@ -47,6 +47,7 @@ const restorableStatuses = new Set([
   "paused",
   "validating",
   "interrupted",
+  "failed",
 ]);
 
 export function VideoSummaryPanel({
@@ -153,6 +154,7 @@ export function VideoSummaryPanel({
       });
       completionRef.current = null;
       setSummary(null);
+      setTask(prepared);
       setTask(await startSummaryTask(prepared.id));
     } catch (cause) {
       showError(cause);

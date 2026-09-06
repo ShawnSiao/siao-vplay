@@ -9,17 +9,17 @@ const gateway = vi.hoisted(() => ({
   listVideoSummaries: vi.fn(),
   prepareSummaryTask: vi.fn(),
   startSummaryTask: vi.fn(),
+  resumeSummaryTask: vi.fn(),
+  cancelSummaryTask: vi.fn(),
 }));
 
 vi.mock("./gateway", () => ({
   ...gateway,
-  cancelSummaryTask: vi.fn(),
   chooseSummaryExportDirectory: vi.fn(),
   exportVideoSummary: vi.fn(),
   getSummaryTask: vi.fn(),
   getVideoSummary: vi.fn(),
   openSummaryMaterials: vi.fn(),
-  resumeSummaryTask: vi.fn(),
 }));
 vi.mock("../../lib/desktop", () => ({
   commandError: (cause: unknown) => ({ message: cause instanceof Error ? cause.message : String(cause) }),
@@ -78,5 +78,28 @@ describe("VideoSummaryPanel", () => {
     })));
     expect(gateway.startSummaryTask).toHaveBeenCalledWith("summary-task-1");
     expect(await screen.findByText("已完成 3 / 7 段")).toBeInTheDocument();
+  });
+
+  it("restores a failed task with an explicit retry action", async () => {
+    const { task } = createSummaryFixtures();
+    gateway.listSummaryTasks.mockResolvedValue([{ ...task, status: "failed", errorMessage: "连接中断" }]);
+    gateway.resumeSummaryTask.mockResolvedValue(task);
+    render(<VideoSummaryPanel projectId="project-1" playbackCutoffMs={1_000} durationMs={5_000}
+      sourceVersion={{ id: "subtitle-1" } as SubtitleVersion} translationVersion={null} onPrepareSubtitles={vi.fn()} />);
+    fireEvent.click(await screen.findByRole("button", { name: "继续任务" }));
+    await waitFor(() => expect(gateway.resumeSummaryTask).toHaveBeenCalledWith(task.id));
+  });
+
+  it("retains prepared materials when starting fails and can retry without preparing again", async () => {
+    gateway.startSummaryTask.mockRejectedValueOnce(new Error("暂时不能启动"));
+    const { task } = createSummaryFixtures();
+    gateway.resumeSummaryTask.mockResolvedValue(task);
+    render(<VideoSummaryPanel projectId="project-1" playbackCutoffMs={1_000} durationMs={5_000}
+      sourceVersion={{ id: "subtitle-1" } as SubtitleVersion} translationVersion={null} onPrepareSubtitles={vi.fn()} />);
+    fireEvent.click(await screen.findByRole("button", { name: "开始生成总结" }));
+    expect(await screen.findByText("暂时不能启动")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "开始任务" }));
+    await waitFor(() => expect(gateway.resumeSummaryTask).toHaveBeenCalledWith(task.id));
+    expect(gateway.prepareSummaryTask).toHaveBeenCalledTimes(1);
   });
 });
