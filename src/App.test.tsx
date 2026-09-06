@@ -1315,6 +1315,7 @@ describe("App", () => {
 
     expect(await screen.findByText("正在确认视频画面")).toBeInTheDocument();
     expect(desktopMocks.markProjectOpened).toHaveBeenCalledWith(project.id);
+    expect(desktopMocks.listSubtitleVersions).toHaveBeenCalledWith(project.id, false);
     expect(desktopMocks.prepareProjectMedia).toHaveBeenCalledWith(
       project.id,
       false, expect.any(String),
@@ -1679,7 +1680,7 @@ describe("App", () => {
     fireEvent.click(await getOverflowCommand(/导出字幕与视频/));
 
     expect(screen.getByRole("button", { name: "关闭" })).toHaveFocus();
-    fireEvent.click(screen.getByRole("button", { name: "双语" }));
+    fireEvent.click(await screen.findByRole("button", { name: "双语" }));
     fireEvent.change(screen.getByRole("combobox", { name: "字幕文件格式" }), {
       target: { value: "vtt" },
     });
@@ -1728,7 +1729,7 @@ describe("App", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: /继续播放/ }));
     fireEvent.click(await getOverflowCommand(/导出字幕与视频/));
-    fireEvent.click(screen.getByRole("button", { name: /烧录视频/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /烧录视频/ }));
     fireEvent.click(
       screen.getByRole("checkbox", {
         name: /确认使用以上字幕版本/,

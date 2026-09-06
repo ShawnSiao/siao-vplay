@@ -832,11 +832,22 @@ pub async fn import_subtitle_file(
 }
 
 #[tauri::command]
-pub fn list_subtitle_versions(
+pub async fn list_subtitle_versions(
     store: State<'_, ProjectStore>,
     project_id: String,
+    include_history: Option<bool>,
 ) -> Result<Vec<SubtitleVersion>, CommandError> {
-    subtitles::list_subtitle_versions(store.inner(), &project_id).map_err(Into::into)
+    let store = store.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        if include_history.unwrap_or(true) {
+            subtitles::list_subtitle_versions(&store, &project_id)
+        } else {
+            subtitles::list_current_subtitle_versions(&store, &project_id)
+        }
+        .map_err(CommandError::from)
+    })
+    .await
+    .map_err(CommandError::background_task_failed)?
 }
 
 #[tauri::command]

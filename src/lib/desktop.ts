@@ -746,8 +746,9 @@ export async function importSubtitleFile(
 
 export async function listSubtitleVersions(
   projectId: string,
+  includeHistory = true,
 ): Promise<SubtitleVersion[]> {
-  return invoke<SubtitleVersion[]>("list_subtitle_versions", { projectId });
+  return invoke<SubtitleVersion[]>("list_subtitle_versions", { projectId, includeHistory });
 }
 
 export async function reviseSubtitleVersion(

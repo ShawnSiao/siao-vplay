@@ -1,3 +1,4 @@
+import { SubtitleHistoryLoader } from "./features/subtitle-revision/SubtitleHistoryLoader";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useOpeningIntent, type IsCurrentOpening } from "./features/playback/useOpeningIntent";
@@ -347,7 +348,7 @@ export default function App() {
         setActiveProject(openedProject);
         setPreparation(result);
         setScreen("player");
-        void listSubtitleVersions(openedProject.id)
+        void listSubtitleVersions(openedProject.id, false)
           .then((versions) => {
             if (operationTokenRef.current === token) {
               setSubtitleVersions(versions);
@@ -781,7 +782,7 @@ export default function App() {
           activeProjectId
         ) {
           const [versions, updatedProject] = await Promise.all([
-            listSubtitleVersions(activeProjectId),
+            listSubtitleVersions(activeProjectId, false),
             getProject(activeProjectId),
           ]);
           if (active && isCurrentSession(activeProjectId)) {
@@ -1172,9 +1173,14 @@ export default function App() {
       ) : null}
 
       {revisionDialogOpen && activeProject ? (
+        <SubtitleHistoryLoader
+          key={`revision:${sessionId}`}
+          projectId={activeProject.id}
+          onClose={() => setRevisionDialogOpen(false)}
+        >{(historyVersions) => (
         <SubtitleRevisionDialog
           project={activeProject}
-          versions={subtitleVersions}
+          versions={historyVersions}
           onClose={() => setRevisionDialogOpen(false)}
           onVersionCreated={handleSubtitleVersionCreated}
           onRetranslate={(segmentIds) => {
@@ -1183,12 +1189,18 @@ export default function App() {
             setTranslationDialogOpen(true);
           }}
         />
+        )}</SubtitleHistoryLoader>
       ) : null}
 
       {deliveryDialogOpen && activeProject ? (
+        <SubtitleHistoryLoader
+          key={`delivery:${sessionId}`}
+          projectId={activeProject.id}
+          onClose={() => setDeliveryDialogOpen(false)}
+        >{(historyVersions) => (
         <SubtitleDeliveryDialog
           project={activeProject}
-          versions={subtitleVersions}
+          versions={historyVersions}
           currentSubtitle={
             subtitleVersions.find(
               (version) => version.role === "original" && version.isCurrent,
@@ -1202,6 +1214,7 @@ export default function App() {
           }
           onClose={() => setDeliveryDialogOpen(false)}
         />
+        )}</SubtitleHistoryLoader>
       ) : null}
 
       {remoteUrlDialogOpen ? (

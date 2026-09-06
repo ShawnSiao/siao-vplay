@@ -279,7 +279,7 @@ export function PlayerHarness() {
   const [drawerTab, setDrawerTab] = useState<ShellDrawerTab | null>(null);
   const [contextMenu, setContextMenu] = useState<ShellContextMenu | null>(null);
 
-  const featurePreview = renderFeaturePreview(new URLSearchParams(window.location.search), originalSubtitle);
+  const featurePreview = renderFeaturePreview(new URLSearchParams(window.location.search), originalSubtitle, project);
   if (featurePreview) return featurePreview;
 
   if (new URLSearchParams(window.location.search).get("understanding") === "result") {

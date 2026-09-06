@@ -1,0 +1,41 @@
+import { act, fireEvent, render, screen } from "@testing-library/react";
+import { beforeEach, expect, it, vi } from "vitest";
+import { SubtitleHistoryLoader } from "./SubtitleHistoryLoader";
+import type { SubtitleVersion } from "../../types";
+const read = vi.hoisted(() => vi.fn());
+vi.mock("../../lib/desktop", () => ({ listSubtitleVersions: read, commandError: (error: Error) => error }));
+beforeEach(() => read.mockReset());
+const rows = (id: string) => [{ id }] as SubtitleVersion[];
+const show = (versions: SubtitleVersion[]) => <p>{versions[0]?.id}</p>;
+it("clears the previous project while another history is loading", async () => {
+  let finish!: (versions: SubtitleVersion[]) => void;
+  read.mockResolvedValueOnce(rows("history-A")).mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+  const { rerender } = render(<SubtitleHistoryLoader projectId="A" onClose={vi.fn()}>{show}</SubtitleHistoryLoader>);
+  expect(await screen.findByText("history-A")).toBeInTheDocument();
+  rerender(<SubtitleHistoryLoader projectId="B" onClose={vi.fn()}>{show}</SubtitleHistoryLoader>);
+  expect(screen.queryByText("history-A")).not.toBeInTheDocument();
+  await act(async () => finish(rows("history-B")));
+  expect(await screen.findByText("history-B")).toBeInTheDocument();
+  expect(read).toHaveBeenLastCalledWith("B", true);
+});
+it("allows retry after a local read failure", async () => {
+  const close = vi.fn();
+  read.mockRejectedValueOnce(new Error("读取失败")).mockResolvedValueOnce(rows("restored-history"));
+  render(<SubtitleHistoryLoader projectId="A" onClose={close}>{show}</SubtitleHistoryLoader>);
+  expect(await screen.findByRole("alert")).toHaveTextContent("读取失败");
+  fireEvent.click(screen.getByRole("button", { name: "重新读取" }));
+  expect(await screen.findByText("restored-history")).toBeInTheDocument();
+  expect(read).toHaveBeenCalledTimes(2);
+});
+it("does not deliver a late response after dismissal", async () => {
+  let finish!: (versions: SubtitleVersion[]) => void;
+  const child = vi.fn(show);
+  const close = vi.fn();
+  read.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+  const { unmount } = render(<SubtitleHistoryLoader projectId="A" onClose={close}>{child}</SubtitleHistoryLoader>);
+  fireEvent.click(screen.getByRole("button", { name: "关闭" }));
+  expect(close).toHaveBeenCalledOnce();
+  unmount();
+  await act(async () => finish(rows("late")));
+  expect(child).not.toHaveBeenCalled();
+});
