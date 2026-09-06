@@ -143,3 +143,47 @@ fn benchmark_subtitle_history_reads() {
         );
     }
 }
+
+#[test]
+fn current_lookup_uses_current_pointer_not_history_index() {
+    let (_temp, store, project_id, _original) = create_store_with_subtitles();
+    let connection = store.connect().unwrap();
+    let query = super::super::read::version_query(super::super::read::Selection::Current);
+    let plan = connection
+        .prepare(&format!("EXPLAIN QUERY PLAN {query}"))
+        .unwrap()
+        .query_map(params![project_id], |row| row.get::<_, String>(3))
+        .unwrap()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+    assert!(
+        !plan
+            .iter()
+            .any(|item| item.contains("subtitle_versions_project_id")),
+        "{plan:?}"
+    );
+    assert!(
+        plan.iter()
+            .any(|item| item.contains("SEARCH v") && item.contains("(id=?)")),
+        "{plan:?}"
+    );
+    let other_path = _temp.path().join("other.mp4");
+    fs::write(&other_path, b"other").unwrap();
+    let other = store
+        .create_local_project(CreateLocalProjectInput {
+            media_path: other_path.to_string_lossy().into_owned(),
+            title: None,
+        })
+        .unwrap();
+    connection
+        .execute(
+            "UPDATE subtitle_versions SET project_id = ?1 WHERE id = ?2",
+            params![other.id, _original.id],
+        )
+        .unwrap();
+    assert!(
+        list_current_subtitle_versions(&store, &project_id)
+            .unwrap()
+            .is_empty()
+    );
+}

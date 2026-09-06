@@ -26,7 +26,8 @@ pub fn list_current_subtitle_versions(
     read_versions(store, project_id, Selection::Current)
 }
 
-enum Selection<'a> {
+#[derive(Clone, Copy)]
+pub(super) enum Selection<'a> {
     All,
     Current,
     Version(&'a str),
@@ -39,23 +40,7 @@ fn read_versions(
 ) -> Result<Vec<SubtitleVersion>, SubtitleError> {
     let project = store.get_project(project_id)?;
     let connection = store.connect()?;
-    let query = format!(
-        "SELECT
-            v.id, v.track_id, v.project_id, t.role, v.version_number, v.status,
-            v.source_kind, v.source_label, v.source_sha256, v.media_sha256,
-            v.language_code, v.project_revision, v.preflight_json,
-            v.parent_version_id, v.source_task_id, v.created_at_ms,
-            CASE WHEN t.current_version_id = v.id THEN 1 ELSE 0 END
-         FROM subtitle_versions v
-         JOIN subtitle_tracks t ON t.id = v.track_id
-         WHERE v.project_id = ?1 {}
-         ORDER BY v.created_at_ms DESC, v.version_number DESC, v.id DESC",
-        match selection {
-            Selection::All => "",
-            Selection::Current => "AND t.current_version_id = v.id",
-            Selection::Version(_) => "AND v.id = ?2",
-        },
-    );
+    let query = version_query(selection);
     let mut statement = connection.prepare(&query)?;
     let mut arguments = vec![project.id.as_str()];
     if let Selection::Version(id) = selection {
@@ -111,4 +96,33 @@ fn read_versions(
             })
         })
         .collect()
+}
+
+pub(super) fn version_query(selection: Selection<'_>) -> String {
+    // Current-track reads start from the small track set, independently of history size.
+    let source = match selection {
+        Selection::Current => {
+            "FROM subtitle_tracks t CROSS JOIN subtitle_versions v
+            WHERE t.project_id = ?1 AND v.id = t.current_version_id
+              AND v.track_id = t.id AND v.project_id = t.project_id"
+        }
+        Selection::All => {
+            "FROM subtitle_versions v JOIN subtitle_tracks t ON t.id = v.track_id
+            WHERE v.project_id = ?1"
+        }
+        Selection::Version(_) => {
+            "FROM subtitle_versions v JOIN subtitle_tracks t ON t.id = v.track_id
+            WHERE v.project_id = ?1 AND v.id = ?2"
+        }
+    };
+    format!(
+        "SELECT
+            v.id, v.track_id, v.project_id, t.role, v.version_number, v.status,
+            v.source_kind, v.source_label, v.source_sha256, v.media_sha256,
+            v.language_code, v.project_revision, v.preflight_json,
+            v.parent_version_id, v.source_task_id, v.created_at_ms,
+            CASE WHEN t.current_version_id = v.id THEN 1 ELSE 0 END
+         {source}
+         ORDER BY v.created_at_ms DESC, v.version_number DESC, v.id DESC"
+    )
 }
