@@ -9,6 +9,7 @@ export type ErrorContext =
   | "background";
 
 const errorMessages: Record<string, string> = {
+  insufficient_storage: "存储空间不足。打开「存储设置」检查播放缓存和应用数据所在磁盘，释放空间或迁移位置后重新尝试。原视频保持不变。",
   project_not_found: "没有找到对应项目。返回媒体库后重新选择视频。",
   collection_not_found: "没有找到对应合集。刷新媒体库后重试。",
   membership_not_found: "这个视频已不在当前合集中。刷新媒体库后继续。",

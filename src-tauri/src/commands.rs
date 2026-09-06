@@ -78,6 +78,7 @@ pub struct CommandError {
 impl From<StoreError> for CommandError {
     fn from(error: StoreError) -> Self {
         let code = match &error {
+            _ if crate::storage_failure::store_is_full(&error) => "insufficient_storage",
             StoreError::ProjectNotFound(_) => "project_not_found",
             StoreError::Validation(_) => "validation_error",
             StoreError::UnsupportedSchema { .. } => "unsupported_schema",
@@ -137,6 +138,7 @@ impl From<LibraryError> for CommandError {
 impl From<MediaError> for CommandError {
     fn from(error: MediaError) -> Self {
         let code = match &error {
+            _ if crate::storage_failure::media_is_full(&error) => "insufficient_storage",
             MediaError::Store(StoreError::ProjectNotFound(_)) => "project_not_found",
             MediaError::Store(StoreError::Validation(_)) => "validation_error",
             MediaError::Store(StoreError::UnsupportedSchema { .. }) => "unsupported_schema",

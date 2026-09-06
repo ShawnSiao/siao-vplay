@@ -940,7 +940,9 @@ fn command_error_message(output: &Output) -> String {
     } else {
         stderr.trim()
     };
-    if message.is_empty() {
+    if let Some(message) = crate::storage_failure::process_message(message) {
+        message.to_owned()
+    } else if message.is_empty() {
         format!("进程退出码：{}", output.status)
     } else {
         truncate_message(message, 2_000)

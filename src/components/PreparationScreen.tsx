@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { openEnvironmentSettings } from "../features/environment-settings/events";
 
 import type { MediaPreparationProgress } from "../lib/mediaPreparationGateway";
 
@@ -102,6 +103,9 @@ export function PreparationScreen({
               <div>
                 <button className="button quiet" type="button" onClick={onBack}>
                   返回
+                </button>
+                <button className="button quiet" type="button" onClick={() => openEnvironmentSettings("storage")}>
+                  存储设置
                 </button>
                 <button className="button primary" type="button" onClick={onRetry}>
                   重新尝试

@@ -3,6 +3,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { Project } from "../types";
 import { PreparationScreen } from "./PreparationScreen";
+const settings = vi.hoisted(() => ({ openEnvironmentSettings: vi.fn() }));
+vi.mock("../features/environment-settings/events", () => settings);
 
 const project = {
   id: "10000000-0000-4000-8000-000000000001",
@@ -10,6 +12,14 @@ const project = {
 } as Project;
 
 describe("PreparationScreen", () => {
+  it("opens storage settings from a failed preparation and retains retry", () => {
+    const retry = vi.fn();
+    render(<PreparationScreen project={project} forceProxy error="空间不足" progress={null} cancelling={false} canCancel={false} onCancel={vi.fn()} onRetry={retry} onBack={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "存储设置" }));
+    expect(settings.openEnvironmentSettings).toHaveBeenCalledWith("storage");
+    fireEvent.click(screen.getByRole("button", { name: "重新尝试" }));
+    expect(retry).toHaveBeenCalledOnce();
+  });
   afterEach(() => vi.useRealTimers());
 
   it("keeps a visible cancel action and reports elapsed time", () => {

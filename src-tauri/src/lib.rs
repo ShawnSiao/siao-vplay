@@ -40,6 +40,7 @@ mod subtitles;
 mod summary;
 mod transcription;
 mod translation;
+mod storage_failure;
 mod translation_dispatch;
 mod translation_language;
 #[cfg(test)]

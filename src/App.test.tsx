@@ -1327,6 +1327,15 @@ describe("App", () => {
     );
   });
 
+  it("opens storage settings from preparation failure without losing the selected project", async () => {
+    desktopMocks.prepareProjectMedia.mockRejectedValueOnce(new Error("disk full"));
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "打开最近观看的 雨站台" }));
+    fireEvent.click(await screen.findByRole("button", { name: "存储设置" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "存储", exact: true })).toHaveClass("active"));
+    expect(desktopMocks.prepareProjectMedia).toHaveBeenCalledTimes(1);
+  });
+
   it("persists the current episode before preparing the next one", async () => {
     const collectionId = "60000000-0000-4000-8000-000000000001";
     const rootId = "60000000-0000-4000-8000-000000000002";

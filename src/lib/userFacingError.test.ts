@@ -3,6 +3,12 @@ import { describe, expect, it } from "vitest";
 import { userFacingCommandError } from "./userFacingError";
 
 describe("userFacingCommandError", () => {
+  it("keeps disk-full remediation visible without exposing raw process paths", () => {
+    const message = userFacingCommandError({ code: "insufficient_storage", message: "No space left at W:\\private\\movie.mp4" }, "playback");
+    expect(message).toContain("空间不足");
+    expect(message).toContain("存储设置");
+    expect(message).not.toContain("private");
+  });
   it("maps stable command codes to actionable Chinese", () => {
     expect(
       userFacingCommandError(
