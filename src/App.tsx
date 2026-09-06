@@ -43,6 +43,7 @@ import {
   getProject,
   isDesktopApp,
   listSubtitleVersions,
+  getSubtitleVersion,
   markProjectOpened,
   reconcileExternalAgentResults,
   relinkProjectMedia,
@@ -693,7 +694,7 @@ export default function App() {
       if (version) {
         mergeSubtitleVersion(version);
       } else {
-        const versions = await listSubtitleVersions(task.projectId);
+        const versions = await listSubtitleVersions(task.projectId, false);
         if (isCurrentSession(task.projectId)) setSubtitleVersions(versions);
       }
       setToast(
@@ -817,15 +818,9 @@ export default function App() {
           );
           return;
         }
-        const versions = await listSubtitleVersions(activeProjectId);
+        const version = await getSubtitleVersion(activeProjectId, job.subtitleVersionId);
         if (!active) {
           return;
-        }
-        const version = versions.find(
-          (item) => item.id === job.subtitleVersionId,
-        );
-        if (!version) {
-          throw new Error("生成的字幕版本暂时无法读取");
         }
         if (!subtitleVersions.some((item) => item.id === version.id)) {
           await handleSubtitleVersionCreated(

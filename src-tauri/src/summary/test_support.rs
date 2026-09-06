@@ -10,6 +10,10 @@ use rusqlite::params;
 use std::fs;
 
 pub(crate) fn prepared_summary() -> (tempfile::TempDir, ProjectStore, SummaryTask) {
+    prepared_summary_with_history(false)
+}
+
+pub(crate) fn prepared_summary_with_history(corrupt_history: bool) -> (tempfile::TempDir, ProjectStore, SummaryTask) {
     let directory = tempfile::tempdir().unwrap();
     let media_path = directory.path().join("fixture.mp4");
     fs::write(&media_path, b"fixture").unwrap();
@@ -45,6 +49,16 @@ pub(crate) fn prepared_summary() -> (tempfile::TempDir, ProjectStore, SummaryTas
                  VALUES (?1, 'version', ?1, ?2, ?3, ?4, ?1)",
                 params![id, ordinal, start, start + 100],
             ).unwrap();
+    }
+    if corrupt_history {
+        connection.execute(
+            "INSERT INTO subtitle_versions (id, track_id, project_id, version_number, status,
+                source_kind, source_label, source_sha256, media_sha256, language_code,
+                project_revision, preflight_json, created_at_ms)
+             SELECT 'unselected-history', track_id, project_id, 2, status, source_kind,
+                source_label, source_sha256, media_sha256, language_code, project_revision,
+                'invalid', created_at_ms FROM subtitle_versions WHERE id = 'version'", [],
+        ).unwrap();
     }
     drop(connection);
     let task = prepare(

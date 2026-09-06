@@ -8,7 +8,7 @@ const desktopMocks = vi.hoisted(() => ({
   cancelTranscriptionJob: vi.fn(),
   getTranscriptionJob: vi.fn(),
   getTranscriptionRuntimeStatus: vi.fn(),
-  listSubtitleVersions: vi.fn(),
+  getSubtitleVersion: vi.fn(),
   listTranscriptionJobs: vi.fn(),
   resumeTranscriptionJob: vi.fn(),
   startTranscription: vi.fn(),

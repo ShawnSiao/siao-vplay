@@ -13,7 +13,7 @@ use super::{
 };
 use crate::{
     store::{ProjectStore, StoreError},
-    subtitles::{SubtitleSegment, list_subtitle_versions},
+    subtitles::{SubtitleSegment, list_current_subtitle_versions},
 };
 
 #[derive(Serialize)]
@@ -39,7 +39,7 @@ pub(crate) fn prepare(
 ) -> Result<SummaryTask, StoreError> {
     validate_input(&input)?;
     let project = store.get_project(&input.project_id)?;
-    let versions = list_subtitle_versions(store, &input.project_id)
+    let versions = list_current_subtitle_versions(store, &input.project_id)
         .map_err(|error| StoreError::Validation(error.to_string()))?;
     let version = versions
         .iter()
@@ -292,6 +292,13 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec!["past"]
         );
+    }
+
+    #[test]
+    fn summary_does_not_decode_unselected_history() {
+        let (_directory, _store, task) = super::super::test_support::prepared_summary_with_history(true);
+        assert_eq!(task.subtitle_version_id, "version");
+        assert_eq!(task.chunks[0].segment_ids, vec!["past"]);
     }
 
     #[test]

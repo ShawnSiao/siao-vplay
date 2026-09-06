@@ -845,6 +845,20 @@ pub async fn import_subtitle_file(
 }
 
 #[tauri::command]
+pub async fn get_subtitle_version(
+    store: State<'_, ProjectStore>,
+    project_id: String,
+    version_id: String,
+) -> Result<SubtitleVersion, CommandError> {
+    let store = store.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        subtitles::get_subtitle_version(&store, &project_id, &version_id).map_err(CommandError::from)
+    })
+    .await
+    .map_err(CommandError::background_task_failed)?
+}
+
+#[tauri::command]
 pub async fn list_subtitle_versions(
     store: State<'_, ProjectStore>,
     project_id: String,

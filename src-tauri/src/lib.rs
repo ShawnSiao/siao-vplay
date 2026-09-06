@@ -321,6 +321,7 @@ pub fn run() {
             commands::inspect_subtitle_file,
             commands::import_subtitle_file,
             commands::list_subtitle_versions,
+            commands::get_subtitle_version,
             subtitles::metadata::list_subtitle_version_metadata,
             commands::revise_subtitle_version,
             commands::restore_subtitle_version,
@@ -383,18 +384,5 @@ pub fn run() {
 }
 
 #[cfg(test)]
-mod tests {
-    use std::path::Path;
-
-    use super::app_status;
-
-    #[test]
-    fn app_status_uses_the_siaovplay_identity() {
-        let status = app_status(Path::new("W:/SiaoVPlay/app-data"), None);
-
-        assert_eq!(status.app_name, "SiaoVPlay");
-        assert_eq!(status.platform, "windows-desktop");
-        assert_eq!(status.data_directory, "W:/SiaoVPlay/app-data");
-        assert_eq!(status.startup_media_path, None);
-    }
-}
+#[path = "app_identity_tests.rs"]
+mod tests;

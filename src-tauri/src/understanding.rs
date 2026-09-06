@@ -270,7 +270,7 @@ where
             baseline.duration_ms
         )));
     }
-    let versions = subtitles::list_subtitle_versions(store, &project.id)?;
+    let versions = subtitles::list_current_subtitle_versions(store, &project.id)?;
     let source = versions
         .iter()
         .find(|version| version.role == "original" && version.is_current)
@@ -1620,6 +1620,23 @@ mod tests {
         subtitles::{GeneratedSubtitleCue, PersistTranscriptionInput, SubtitleCue, persist_transcription},
         translation::{TranslationError, prepare_translation_task},
     };
+
+    #[test]
+    fn explanation_does_not_decode_unselected_history() {
+        let fixture = Fixture::new();
+        fixture.store.connect().unwrap().execute(
+            "INSERT INTO subtitle_versions (id, track_id, project_id, version_number, status,
+                source_kind, source_label, source_sha256, media_sha256, language_code,
+                project_revision, preflight_json, created_at_ms)
+             SELECT 'unselected-history', track_id, project_id, version_number + 1000, status,
+                source_kind, source_label, source_sha256, media_sha256, language_code,
+                project_revision, 'invalid', created_at_ms FROM subtitle_versions
+             WHERE project_id = ?1 LIMIT 1", [&fixture.project_id],
+        ).unwrap();
+        let task = fixture.prepare();
+        assert_ne!(task.source_version_id, "unselected-history");
+        assert_eq!(task.authorized_segment_ids.len(), 3);
+    }
 
     #[test]
     fn dispatch_confirmation_binds_receiver_versions_and_verified_materials() {

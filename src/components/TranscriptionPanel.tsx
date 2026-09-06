@@ -5,7 +5,7 @@ import {
   commandError,
   getTranscriptionJob,
   getTranscriptionRuntimeStatus,
-  listSubtitleVersions,
+  getSubtitleVersion,
   listTranscriptionJobs,
   resumeTranscriptionJob,
   startTranscription,
@@ -248,12 +248,8 @@ export function TranscriptionPanel({
       return;
     }
     reportedVersionRef.current = versionId;
-    void listSubtitleVersions(projectId)
-      .then((versions) => {
-        const version = versions.find((item) => item.id === versionId);
-        if (!version) {
-          throw new Error("生成的字幕版本暂时无法读取");
-        }
+    void getSubtitleVersion(projectId, versionId)
+      .then((version) => {
         onVersionReady(version);
       })
       .catch((cause: unknown) => {

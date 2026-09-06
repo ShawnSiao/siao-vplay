@@ -756,6 +756,10 @@ export async function listSubtitleVersions(
   return invoke<SubtitleVersion[]>("list_subtitle_versions", { projectId, includeHistory });
 }
 
+export async function getSubtitleVersion(projectId: string, versionId: string): Promise<SubtitleVersion> {
+  return invoke<SubtitleVersion>("get_subtitle_version", { projectId, versionId });
+}
+
 export async function listSubtitleVersionMetadata(projectId: string): Promise<SubtitleVersionMetadata[]> {
   return parseSubtitleMetadata(await invoke<unknown>("list_subtitle_version_metadata", { projectId }));
 }

@@ -70,6 +70,7 @@ const desktopMocks = vi.hoisted(() => ({
   inspectEmbeddedSubtitle: vi.fn(),
   importEmbeddedSubtitle: vi.fn(),
   listSubtitleVersions: vi.fn(),
+  getSubtitleVersion: vi.fn(),
   listSubtitleVersionMetadata: vi.fn(),
   reviseSubtitleVersion: vi.fn(),
   restoreSubtitleVersion: vi.fn(),
@@ -890,6 +891,12 @@ beforeEach(() => {
     sourceLabel: embeddedSubtitlePreview.sourceLabel,
   });
   desktopMocks.listSubtitleVersions.mockResolvedValue([]);
+  desktopMocks.getSubtitleVersion.mockImplementation(async (projectId: string, versionId: string) => {
+    const versions = await desktopMocks.listSubtitleVersions(projectId, false);
+    const version = versions.find((item: SubtitleVersion) => item.id === versionId);
+    if (!version) throw new Error("生成的字幕版本暂时无法读取");
+    return version;
+  });
   desktopMocks.listSubtitleVersionMetadata.mockImplementation(async (projectId: string) => (await desktopMocks.listSubtitleVersions(projectId, true)).map(subtitleMetadata));
   desktopMocks.reviseSubtitleVersion.mockResolvedValue(subtitleVersion);
   desktopMocks.restoreSubtitleVersion.mockResolvedValue(subtitleVersion);
@@ -2608,6 +2615,7 @@ describe("App", () => {
     expect(
       await screen.findByText("已生成 1 条原文字幕草稿，可以开始抽查。"),
     ).toBeInTheDocument();
+    expect(desktopMocks.getSubtitleVersion).toHaveBeenCalledWith(project.id, subtitleVersion.id);
     expect(
       screen.getByRole("button", { name: "原文字幕 · 1" }),
     ).toBeInTheDocument();
@@ -2958,7 +2966,7 @@ describe("App", () => {
     render(<App />);
     fireEvent.click(await screen.findByRole("button", { name: /继续播放/ }));
     fireEvent.click(await getOverflowCommand(/修正字幕/));
-    fireEvent.click(await screen.findByRole("button", { name: "全局替换" }));
+    fireEvent.click(await screen.findByRole("tab", { name: "全局替换" }));
     fireEvent.change(screen.getByRole("textbox", { name: "查找" }), {
       target: { value: "駅前" },
     });
@@ -3004,7 +3012,7 @@ describe("App", () => {
     render(<App />);
     fireEvent.click(await screen.findByRole("button", { name: /继续播放/ }));
     fireEvent.click(await getOverflowCommand(/修正字幕/));
-    fireEvent.click(await screen.findByRole("button", { name: "历史版本" }));
+    fireEvent.click(await screen.findByRole("tab", { name: "历史版本" }));
     fireEvent.click(
       await screen.findByRole("button", { name: "恢复为新版本" }),
     );
