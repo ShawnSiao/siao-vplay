@@ -2734,7 +2734,7 @@ h3 {
 
 .local-resource-profiles small {
   margin-top: 3px;
-  color: var(--text-muted);
+  color: var(--text-secondary);
   font-size: 10px;
   line-height: 1.5;
 }
@@ -2791,7 +2791,7 @@ h3 {
 }
 
 .local-capability-copy small {
-  color: var(--text-muted);
+  color: var(--text-secondary);
   font-size: 11px;
 }
 
@@ -2914,6 +2914,12 @@ h3 {
 .local-resource-task-actions {
   justify-content: flex-end;
   gap: 8px;
+}
+
+.text-button {
+  border: 0;
+  color: var(--text-secondary);
+  background: transparent;
 }
 
 .text-button.danger {

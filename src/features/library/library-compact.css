@@ -8,6 +8,7 @@
   min-height: 0;
   border-radius: 5px;
   background: var(--bg-control);
+  color: var(--text-secondary);
   font-size: 14px;
 }
 .library-screen .library-continue-hero[data-has-poster="false"] .library-continue-shade { display: none; }

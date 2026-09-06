@@ -41,7 +41,7 @@
 
 .summary-result-hero > span,
 .summary-result-hero small {
-  color: var(--text-muted);
+  color: var(--text-secondary);
   font-size: var(--summary-caption-size);
 }
 
