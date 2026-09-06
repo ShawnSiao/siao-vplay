@@ -1,3 +1,4 @@
+import { NavigationIcon } from "../../components/NavigationIcon";
 import { useEffect, useRef, type ReactNode } from "react";
 
 import { MenuPopover } from "../../components/MenuPopover";
@@ -261,7 +262,7 @@ export function DesktopShell({
         {!playerActive ? <div className="desktop-commandbar-secondary">
           <div className="shell-search-wrap">
             <label className="shell-search">
-              <span aria-hidden="true">⌕</span>
+              <span aria-hidden="true"><NavigationIcon name="search" /></span>
               <input
                 ref={searchInputRef}
                 aria-label="搜索媒体库"
@@ -311,7 +312,7 @@ export function DesktopShell({
               title="继续观看"
               onClick={() => onSelectLibrarySection("home")}
             >
-              <span aria-hidden="true">▶</span>
+              <span aria-hidden="true"><NavigationIcon name="play" /></span>
               <span className="desktop-navigation-label">继续观看</span>
               <span className="desktop-navigation-count">
                 {libraryCounts.continueWatching}
@@ -324,7 +325,7 @@ export function DesktopShell({
               className={activeView === "library" && librarySection === "series" ? "active" : ""}
               onClick={() => onSelectLibrarySection("series")}
             >
-              <span aria-hidden="true">▦</span>
+              <span aria-hidden="true"><NavigationIcon name="collection" /></span>
               <span className="desktop-navigation-label">剧集</span>
               {libraryCounts.series === null ? null : (
                 <span className="desktop-navigation-count">{libraryCounts.series}</span>
@@ -337,7 +338,7 @@ export function DesktopShell({
               className={activeView === "library" && librarySection === "folders" ? "active" : ""}
               onClick={() => onSelectLibrarySection("folders")}
             >
-              <span aria-hidden="true">▰</span>
+              <span aria-hidden="true"><NavigationIcon name="folder" /></span>
               <span className="desktop-navigation-label">文件夹</span>
               {libraryCounts.folders === null ? null : (
                 <span className="desktop-navigation-count">{libraryCounts.folders}</span>
@@ -350,7 +351,7 @@ export function DesktopShell({
               className={activeView === "library" && librarySection === "watch_later" ? "active" : ""}
               onClick={() => onSelectLibrarySection("watch_later")}
             >
-              <span aria-hidden="true">◷</span>
+              <span aria-hidden="true"><NavigationIcon name="clock" /></span>
               <span className="desktop-navigation-label">稍后观看</span>
               {libraryCounts.watchLater === null ? null : (
                 <span className="desktop-navigation-count">
@@ -365,7 +366,7 @@ export function DesktopShell({
               className={activeView === "library" && librarySection === "unclassified" ? "active" : ""}
               onClick={() => onSelectLibrarySection("unclassified")}
             >
-              <span aria-hidden="true">▸</span>
+              <span aria-hidden="true"><NavigationIcon name="video" /></span>
               <span className="desktop-navigation-label">未分类</span>
               <span className="desktop-navigation-count">
                 {libraryCounts.unclassified}

@@ -1,3 +1,4 @@
+import { NavigationIcon } from "../../components/NavigationIcon";
 import "./LibraryAddMediaActions.css";
 
 type LibraryAddMediaActionsProps = {
@@ -19,7 +20,7 @@ export function LibraryAddMediaActions({
         type="button"
         onClick={onOpenFile}
       >
-        <span aria-hidden="true">▣</span>
+        <span aria-hidden="true"><NavigationIcon name="video" /></span>
         <span>打开本地视频</span>
       </button>
       <button
@@ -28,11 +29,11 @@ export function LibraryAddMediaActions({
         type="button"
         onClick={onOpenFolder}
       >
-        <span aria-hidden="true">▰</span>
+        <span aria-hidden="true"><NavigationIcon name="folder" /></span>
         <span>添加剧集文件夹</span>
       </button>
       <button className="shell-command" type="button" onClick={onOpenUrl}>
-        <span aria-hidden="true">↗</span>
+        <span aria-hidden="true"><NavigationIcon name="link" /></span>
         <span>从公开链接导入</span>
       </button>
     </div>
