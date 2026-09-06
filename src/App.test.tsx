@@ -1,3 +1,4 @@
+import { subtitleMetadata } from "./features/subtitle-revision/subtitleMetadata";
 import { createTranslationTask, translationDispatchFixture } from "./test-fixtures/translation";
 import { taskDispatchFixture } from "./test-fixtures/taskDispatch";
 import { youtubePreview, directVideoFixture } from "./test-fixtures/publicVideo";
@@ -69,6 +70,7 @@ const desktopMocks = vi.hoisted(() => ({
   inspectEmbeddedSubtitle: vi.fn(),
   importEmbeddedSubtitle: vi.fn(),
   listSubtitleVersions: vi.fn(),
+  listSubtitleVersionMetadata: vi.fn(),
   reviseSubtitleVersion: vi.fn(),
   restoreSubtitleVersion: vi.fn(),
   getTranscriptionRuntimeStatus: vi.fn(),
@@ -888,6 +890,7 @@ beforeEach(() => {
     sourceLabel: embeddedSubtitlePreview.sourceLabel,
   });
   desktopMocks.listSubtitleVersions.mockResolvedValue([]);
+  desktopMocks.listSubtitleVersionMetadata.mockImplementation(async (projectId: string) => (await desktopMocks.listSubtitleVersions(projectId, true)).map(subtitleMetadata));
   desktopMocks.reviseSubtitleVersion.mockResolvedValue(subtitleVersion);
   desktopMocks.restoreSubtitleVersion.mockResolvedValue(subtitleVersion);
   desktopMocks.reconcileExternalAgentResults.mockResolvedValue([]);
@@ -1316,6 +1319,7 @@ describe("App", () => {
     expect(await screen.findByText("正在确认视频画面")).toBeInTheDocument();
     expect(desktopMocks.markProjectOpened).toHaveBeenCalledWith(project.id);
     expect(desktopMocks.listSubtitleVersions).toHaveBeenCalledWith(project.id, false);
+    expect(desktopMocks.listSubtitleVersionMetadata).not.toHaveBeenCalled();
     expect(desktopMocks.prepareProjectMedia).toHaveBeenCalledWith(
       project.id,
       false, expect.any(String),

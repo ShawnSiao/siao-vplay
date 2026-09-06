@@ -1,3 +1,4 @@
+import { subtitleMetadata, type SubtitleVersionMetadata } from "./subtitleMetadata";
 import { useMemo, useState } from "react";
 import { commandError, restoreSubtitleVersion, reviseSubtitleVersion } from "../../lib/desktop";
 import type { Project, SubtitleSegment, SubtitleVersion } from "../../types";
@@ -8,6 +9,7 @@ type TrackRole = "original" | "translation";
 export type SubtitleRevisionDialogProps = {
   project: Project;
   versions: SubtitleVersion[];
+  historyVersions?: SubtitleVersionMetadata[];
   onClose: () => void;
   onVersionCreated: (
     version: SubtitleVersion,
@@ -33,8 +35,9 @@ function segmentNearPlayback(
   );
 }
 
-export function useSubtitleRevisionController({ project, versions, onClose, onVersionCreated }: SubtitleRevisionDialogProps) {
-  const [workingVersions, setWorkingVersions] = useState(versions);
+export function useSubtitleRevisionController({ project, versions, historyVersions = [], onClose, onVersionCreated }: SubtitleRevisionDialogProps) {
+  const [workingVersions, setWorkingVersions] = useState(versions.filter((item) => item.isCurrent));
+  const [historyRecords, setHistoryRecords] = useState(() => new Map([...historyVersions, ...versions.map(subtitleMetadata)].map((item) => [item.id, item])));
   const [expectedRevision, setExpectedRevision] = useState(project.revision);
   const currentOriginal =
     workingVersions.find((version) => version.role === "original" && version.isCurrent) ??
@@ -103,7 +106,7 @@ export function useSubtitleRevisionController({ project, versions, onClose, onVe
       : currentVersion.segments
     : [];
   const history = currentVersion
-    ? workingVersions
+    ? Array.from(historyRecords.values())
         .filter(
           (version) =>
             version.trackId === currentVersion.trackId &&
@@ -132,7 +135,8 @@ export function useSubtitleRevisionController({ project, versions, onClose, onVe
   };
 
   const acceptVersion = async (version: SubtitleVersion, message: string, clearKeys: string[]) => {
-    setWorkingVersions((current) => [version, ...current.map((item) => item.trackId === version.trackId ? { ...item, isCurrent: false } : item)]);
+    setHistoryRecords((current) => new Map([...current, [version.id, subtitleMetadata(version)]]));
+    setWorkingVersions((current) => [version, ...current.filter((item) => item.trackId !== version.trackId)]);
     setExpectedRevision(version.projectRevision);
     const selected = version.segments.find((item) => item.lineageId === activeSegment?.lineageId) ?? version.segments[0];
     setActiveSegmentId(selected?.id ?? null);
@@ -237,7 +241,7 @@ export function useSubtitleRevisionController({ project, versions, onClose, onVe
     );
   };
 
-  const restoreHistory = async (restoreVersion: SubtitleVersion) => {
+  const restoreHistory = async (restoreVersion: SubtitleVersionMetadata) => {
     if (!currentVersion || busy) {
       return;
     }

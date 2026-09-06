@@ -1,9 +1,11 @@
+import { subtitleMetadata } from "./subtitleMetadata";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { SubtitleRevisionDialog } from "../../components/SubtitleRevisionDialog";
 import type { Project, SubtitleVersion } from "../../types";
 const revise = vi.hoisted(() => vi.fn());
-vi.mock("../../lib/desktop", () => ({ reviseSubtitleVersion: revise, restoreSubtitleVersion: vi.fn(), commandError: (error: Error) => error }));
+const restore = vi.hoisted(() => vi.fn());
+vi.mock("../../lib/desktop", () => ({ reviseSubtitleVersion: revise, restoreSubtitleVersion: restore, commandError: (error: Error) => error }));
 function track(role: "original" | "translation"): SubtitleVersion {
   return { id: role, role, isCurrent: true, projectId: "p", trackId: role, versionNumber: 1,
     segments: [1, 2].map((n) => ({ id: `${role}-${n}`, lineageId: `${role}-${n}`, text: `${role} ${n}`, ordinal: n, startMs: n * 1_000, endMs: n * 1_000 + 500, issueKind: null })) } as SubtitleVersion;
@@ -15,7 +17,7 @@ function setup() {
   return { onClose, onVersionCreated };
 }
 describe("subtitle edit drafts", () => {
-  beforeEach(() => { revise.mockReset(); });
+  beforeEach(() => { revise.mockReset(); restore.mockReset(); });
   it("preserves edits when switching sentences and tracks", () => {
     setup();
     fireEvent.change(screen.getByRole("textbox", { name: "简体中文字幕" }), { target: { value: "我的修正" } });
@@ -58,4 +60,22 @@ describe("subtitle edit drafts", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: "返回观看" })).toBeEnabled());
     confirm.mockRestore();
   });
+});
+
+it("restores a metadata-only historical version and retains prior versions as metadata", async () => {
+  const current = { ...track("translation"), versionNumber: 2, projectRevision: 2 };
+  const historical = subtitleMetadata({ ...current, id: "historical", versionNumber: 1, isCurrent: false });
+  const restored = { ...current, id: "restored", versionNumber: 3, projectRevision: 3,
+    segments: current.segments.map((item) => ({ ...item, text: "历史内容" })) };
+  restore.mockResolvedValue(restored);
+  render(<SubtitleRevisionDialog project={{ id: "p", revision: 2, playbackState: { positionMs: 0 } } as Project}
+    versions={[current]} historyVersions={[historical]} onClose={vi.fn()} onVersionCreated={vi.fn().mockResolvedValue(undefined)} onRetranslate={vi.fn()} />);
+  fireEvent.click(screen.getByRole("button", { name: "历史版本" }));
+  fireEvent.click(screen.getByRole("button", { name: "恢复为新版本" }));
+  await waitFor(() => expect(restore).toHaveBeenCalledWith("p", current.id, "historical", 2));
+  await waitFor(() => expect(screen.getByRole("tab", { name: /简体中文/ })).toHaveTextContent("版本 3"));
+  expect(screen.getByText("版本 2")).toBeInTheDocument();
+  expect(screen.getByText("版本 1")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "逐句修正" }));
+  expect(screen.getByRole("textbox", { name: "简体中文字幕" })).toHaveValue("历史内容");
 });

@@ -1,3 +1,4 @@
+import { parseSubtitleMetadata, type SubtitleVersionMetadata } from "../features/subtitle-revision/subtitleMetadata";
 export { inspectYouTubeUrl, importYouTubeUrl, cancelYouTubeImport, getPublicResolverDisclosure } from "./publicVideoGateway";
 export { getMediaPreparation, cancelMediaPreparation } from "./mediaPreparationGateway";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
@@ -749,6 +750,10 @@ export async function listSubtitleVersions(
   includeHistory = true,
 ): Promise<SubtitleVersion[]> {
   return invoke<SubtitleVersion[]>("list_subtitle_versions", { projectId, includeHistory });
+}
+
+export async function listSubtitleVersionMetadata(projectId: string): Promise<SubtitleVersionMetadata[]> {
+  return parseSubtitleMetadata(await invoke<unknown>("list_subtitle_version_metadata", { projectId }));
 }
 
 export async function reviseSubtitleVersion(

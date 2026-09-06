@@ -1,12 +1,14 @@
+import { subtitleMetadata } from "./subtitleMetadata";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
 import { SubtitleHistoryLoader } from "./SubtitleHistoryLoader";
 import type { SubtitleVersion } from "../../types";
 const read = vi.hoisted(() => vi.fn());
-vi.mock("../../lib/desktop", () => ({ listSubtitleVersions: read, commandError: (error: Error) => error }));
-beforeEach(() => read.mockReset());
-const rows = (id: string) => [{ id }] as SubtitleVersion[];
-const show = (versions: SubtitleVersion[]) => <p>{versions[0]?.id}</p>;
+const metadata = vi.hoisted(() => vi.fn());
+vi.mock("../../lib/desktop", () => ({ listSubtitleVersions: read, listSubtitleVersionMetadata: metadata, commandError: (error: Error) => error }));
+beforeEach(() => { read.mockReset(); metadata.mockReset().mockImplementation(async () => (await read.mock.results.at(-1)!.value).map(subtitleMetadata)); });
+const rows = (id: string) => [{ id, isCurrent: true, segments: [] }] as unknown as SubtitleVersion[];
+const show = ({ currentVersions }: { currentVersions: SubtitleVersion[] }) => <p>{currentVersions[0]?.id}</p>;
 it("clears the previous project while another history is loading", async () => {
   let finish!: (versions: SubtitleVersion[]) => void;
   read.mockResolvedValueOnce(rows("history-A")).mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
@@ -16,7 +18,7 @@ it("clears the previous project while another history is loading", async () => {
   expect(screen.queryByText("history-A")).not.toBeInTheDocument();
   await act(async () => finish(rows("history-B")));
   expect(await screen.findByText("history-B")).toBeInTheDocument();
-  expect(read).toHaveBeenLastCalledWith("B", true);
+  expect(read).toHaveBeenLastCalledWith("B", false);
 });
 it("allows retry after a local read failure", async () => {
   const close = vi.fn();
@@ -38,4 +40,20 @@ it("does not deliver a late response after dismissal", async () => {
   unmount();
   await act(async () => finish(rows("late")));
   expect(child).not.toHaveBeenCalled();
+});
+
+it("does not present a partial catalog when metadata fails", async () => {
+  read.mockResolvedValue(rows("current-track"));
+  metadata.mockRejectedValueOnce(new Error("版本列表读取失败"));
+  render(<SubtitleHistoryLoader projectId="A" onClose={vi.fn()}>{show}</SubtitleHistoryLoader>);
+  expect(await screen.findByRole("alert")).toHaveTextContent("版本列表读取失败");
+  expect(screen.queryByText("current-track")).not.toBeInTheDocument();
+});
+
+it("rejects a catalog changed between metadata and content reads", async () => {
+  read.mockResolvedValue(rows("new-current"));
+  metadata.mockResolvedValue([{ id: "old-current", isCurrent: true, segmentCount: 0 }]);
+  render(<SubtitleHistoryLoader projectId="A" onClose={vi.fn()}>{show}</SubtitleHistoryLoader>);
+  expect(await screen.findByRole("alert")).toHaveTextContent("字幕版本已变化，请重新读取");
+  expect(screen.queryByText("new-current")).not.toBeInTheDocument();
 });

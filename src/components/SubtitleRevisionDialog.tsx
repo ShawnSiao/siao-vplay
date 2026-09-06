@@ -318,7 +318,7 @@ export function SubtitleRevisionDialog(props: SubtitleRevisionDialogProps) {
                       <span>版本 {version.versionNumber}</span>
                       <strong>{version.sourceLabel}</strong>
                       <small>
-                        {version.segments.length} 条 ·{" "}
+                        {version.segmentCount} 条 ·{" "}
                         {new Date(version.createdAtMs).toLocaleString("zh-CN")}
                       </small>
                     </div>

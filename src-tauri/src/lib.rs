@@ -320,6 +320,7 @@ pub fn run() {
             commands::inspect_subtitle_file,
             commands::import_subtitle_file,
             commands::list_subtitle_versions,
+            subtitles::metadata::list_subtitle_version_metadata,
             commands::revise_subtitle_version,
             commands::restore_subtitle_version,
             commands::inspect_embedded_subtitle,

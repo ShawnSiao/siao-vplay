@@ -1,12 +1,15 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Dialog } from "../../components/Dialog";
-import { commandError, listSubtitleVersions } from "../../lib/desktop";
+import { commandError, listSubtitleVersions, listSubtitleVersionMetadata } from "../../lib/desktop";
+import type { SubtitleVersionMetadata } from "./subtitleMetadata";
 import type { SubtitleVersion } from "../../types";
+
+type Catalog = { currentVersions: SubtitleVersion[]; history: SubtitleVersionMetadata[] };
 
 type Props = {
   projectId: string;
   onClose: () => void;
-  children: (versions: SubtitleVersion[]) => ReactNode;
+  children: (catalog: Catalog) => ReactNode;
 };
 
 export function SubtitleHistoryLoader(props: Props) {
@@ -14,13 +17,18 @@ export function SubtitleHistoryLoader(props: Props) {
 }
 
 function HistoryRequest({ projectId, onClose, children }: Props) {
-  const [versions, setVersions] = useState<SubtitleVersion[] | null>(null);
+  const [versions, setVersions] = useState<Catalog | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     let active = true;
-    void listSubtitleVersions(projectId, true).then((result) => {
-      if (active) setVersions(result);
+    void Promise.all([listSubtitleVersions(projectId, false), listSubtitleVersionMetadata(projectId)]).then(([currentVersions, history]) => {
+      const current = currentVersions.filter((version) => version.isCurrent);
+      const selected = history.filter((version) => version.isCurrent);
+      if (selected.length !== current.length || current.some((version) => !selected.some((item) => item.id === version.id && item.segmentCount === version.segments.length))) {
+        throw new Error("字幕版本已变化，请重新读取");
+      }
+      if (active) setVersions({ currentVersions: current, history });
     }).catch((cause: unknown) => {
       if (active) setError(commandError(cause).message);
     });

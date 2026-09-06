@@ -1177,10 +1177,11 @@ export default function App() {
           key={`revision:${sessionId}`}
           projectId={activeProject.id}
           onClose={() => setRevisionDialogOpen(false)}
-        >{(historyVersions) => (
+        >{({ currentVersions, history }) => (
         <SubtitleRevisionDialog
           project={activeProject}
-          versions={historyVersions}
+          versions={currentVersions}
+          historyVersions={history}
           onClose={() => setRevisionDialogOpen(false)}
           onVersionCreated={handleSubtitleVersionCreated}
           onRetranslate={(segmentIds) => {
@@ -1197,17 +1198,17 @@ export default function App() {
           key={`delivery:${sessionId}`}
           projectId={activeProject.id}
           onClose={() => setDeliveryDialogOpen(false)}
-        >{(historyVersions) => (
+        >{({ currentVersions, history }) => (
         <SubtitleDeliveryDialog
           project={activeProject}
-          versions={historyVersions}
+          versions={history}
           currentSubtitle={
-            subtitleVersions.find(
+            currentVersions.find(
               (version) => version.role === "original" && version.isCurrent,
             ) ?? null
           }
           currentTranslation={
-            subtitleVersions.find(
+            currentVersions.find(
               (version) =>
                 version.role === "translation" && version.isCurrent,
             ) ?? null
