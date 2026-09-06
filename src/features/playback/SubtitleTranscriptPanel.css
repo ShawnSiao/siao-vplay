@@ -262,10 +262,6 @@
 }
 
 @media (max-height: 480px) {
-  .player-workspace > .player-drawer[data-active-tab="transcript"] {
-    bottom: 0;
-  }
-
   .player-drawer[data-active-tab="transcript"] .player-drawer-content {
     overflow-y: auto;
     overscroll-behavior: contain;

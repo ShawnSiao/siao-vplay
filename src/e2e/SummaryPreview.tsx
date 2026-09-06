@@ -5,7 +5,7 @@ import { createSummaryFixtures } from "../test-fixtures/summary";
 import { VideoSummaryPanel } from "../features/summary/VideoSummaryPanel";
 import type { SubtitleVersion } from "../types";
 
-export function SummaryPreview({ state, sourceVersion, drawer = false }: { drawer?: boolean; state: "progress" | "result" | "confirm"; sourceVersion: SubtitleVersion }) {
+export function SummaryPreview({ state, sourceVersion, drawer = false }: { drawer?: boolean; state: "progress" | "result" | "confirm" | "empty"; sourceVersion: SubtitleVersion }) {
   const { task, summary } = createSummaryFixtures();
   const content = (
       <section className="understanding-shell embedded" aria-label="视频总结预览">
@@ -15,8 +15,8 @@ export function SummaryPreview({ state, sourceVersion, drawer = false }: { drawe
         </div>
         <div className="understanding-tab-content">
           <div className="video-summary-panel">
-            {state === "confirm" ? <VideoSummaryPanel projectId="project-1" playbackCutoffMs={15_000}
-              durationMs={120_000} sourceVersion={sourceVersion} translationVersion={null}
+            {state === "confirm" || state === "empty" ? <VideoSummaryPanel projectId="project-1" playbackCutoffMs={15_000}
+              durationMs={120_000} sourceVersion={state === "empty" ? null : sourceVersion} translationVersion={null}
               onPrepareSubtitles={() => undefined} /> : state === "progress" ? (
               <SummaryProgress
                 task={task}

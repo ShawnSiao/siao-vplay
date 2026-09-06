@@ -11,7 +11,7 @@ export function renderFeaturePreview(query: URLSearchParams, sourceVersion: Subt
   const dispatchKind = query.get("ai-confirm");
   if (dispatchKind) return <AiDispatchPreview kind={dispatchKind} sourceVersion={sourceVersion} />;
   const summary = query.get("summary");
-  if (summary === "progress" || summary === "result" || summary === "confirm") {
+  if (summary === "progress" || summary === "result" || summary === "confirm" || summary === "empty") {
     return <SummaryPreview state={summary} sourceVersion={sourceVersion} drawer={query.has("drawer")} />;
   }
   if (query.get("learning") === "speech") return <LearningSpeechPreview />;

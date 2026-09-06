@@ -113,6 +113,7 @@
 
 @media (max-height: 480px) {
   .player-workspace .player-drawer {
+    bottom: 0;
     grid-template-rows: 38px 36px minmax(0, 1fr) auto;
   }
 }
