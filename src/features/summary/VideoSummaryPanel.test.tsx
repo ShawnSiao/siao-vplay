@@ -98,7 +98,7 @@ describe("VideoSummaryPanel", () => {
     gateway.resumeSummaryTask.mockResolvedValue(task);
     render(<VideoSummaryPanel projectId="project-1" playbackCutoffMs={1_000} durationMs={5_000}
       sourceVersion={{ id: "subtitle-1" } as SubtitleVersion} translationVersion={null} onPrepareSubtitles={vi.fn()} />);
-    fireEvent.click(await screen.findByRole("button", { name: "继续任务" }));
+    fireEvent.click(await screen.findByRole("button", { name: "继续总结" }));
     fireEvent.click(await screen.findByRole("button", { name: "确认发送并开始" }));
     await waitFor(() => expect(gateway.resumeSummaryTask).toHaveBeenCalledWith(task.id, "confirmed-hash"));
   });
@@ -112,7 +112,7 @@ describe("VideoSummaryPanel", () => {
     fireEvent.click(await screen.findByRole("button", { name: "准备并查看发送清单" }));
     fireEvent.click(await screen.findByRole("button", { name: "确认发送并开始" }));
     expect(await screen.findByText("暂时不能启动")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "开始任务" }));
+    fireEvent.click(screen.getByRole("button", { name: "开始总结" }));
     fireEvent.click(await screen.findByRole("button", { name: "确认发送并开始" }));
     await waitFor(() => expect(gateway.resumeSummaryTask).toHaveBeenCalledWith(task.id, "confirmed-hash"));
     expect(gateway.prepareSummaryTask).toHaveBeenCalledTimes(1);

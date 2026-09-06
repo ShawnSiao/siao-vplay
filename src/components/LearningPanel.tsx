@@ -700,7 +700,7 @@ function LearningPanelSession({
             ) : task.status === "awaiting_external_result" ? (
               <section className="learning-manual">
                 <div className="learning-task-heading">
-                  <span>等待其他 Agent 返回</span>
+                  <span>等待其他 AI 工具返回</span>
                   <strong>复制提示词后，可自动检测 result.json</strong>
                   <p>SiaoVPlay 不会自动发送材料，只检查受控返回目录。</p>
                 </div>

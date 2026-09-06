@@ -49,7 +49,7 @@ export function SummarySetup({
       <header className="summary-intro">
         <span>视频总结</span>
         <h2>生成可保存的深度分析</h2>
-        <p>总结仅在主动启动后运行；关闭抽屉不会中断后台任务。</p>
+        <p>总结仅在主动启动后运行；关闭侧栏不会中断视频总结。</p>
       </header>
 
       <fieldset className="summary-choice-group">

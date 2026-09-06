@@ -2176,7 +2176,7 @@ describe("App", () => {
     fireEvent.click(await screen.findByRole("button", { name: /继续播放/ }));
     fireEvent.click(await screen.findByRole("button", { name: "学习" }));
 
-    expect(await screen.findByText("等待其他 Agent 返回")).toBeInTheDocument();
+    expect(await screen.findByText("等待其他 AI 工具返回")).toBeInTheDocument();
     expect(
       await screen.findByText("正在检查查询范围和结果", {}, { timeout: 3_000 }),
     ).toBeInTheDocument();

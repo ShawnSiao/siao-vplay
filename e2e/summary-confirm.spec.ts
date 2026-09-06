@@ -36,7 +36,7 @@ test("summary sends only after the actual material snapshot is confirmed", async
   if (process.env.SIAOVPLAY_DESIGN_CAPTURE_DIR) await page.screenshot({ path: join(process.env.SIAOVPLAY_DESIGN_CAPTURE_DIR, "summary-confirm-960.png"), fullPage: true });
   await confirmation.getByRole("button", { name: "返回任务" }).click();
   expect(await page.evaluate(() => (window as unknown as { summarySends: unknown[] }).summarySends)).toEqual([]);
-  await page.getByRole("button", { name: "开始任务" }).click();
+  await page.getByRole("button", { name: "开始总结" }).click();
   const send = page.getByRole("button", { name: "确认发送并开始" });
   await send.focus();
   await page.keyboard.press("Enter");
