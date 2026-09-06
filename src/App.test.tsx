@@ -2256,32 +2256,14 @@ describe("App", () => {
     );
   });
 
-  it("offers an optional save location without downloading on first setup", async () => {
-    desktopMocks.getLocalResourceStatus.mockResolvedValue(
-      setupRequiredLocalResourceStatus,
-    );
-
+  it("starts in the media library without requiring resource configuration", async () => {
+    desktopMocks.getLocalResourceStatus.mockResolvedValue(setupRequiredLocalResourceStatus);
     render(<App />);
-
-    const dialog = await screen.findByRole("dialog", {
-      name: "环境配置",
-    });
-    expect(within(dialog).getByRole("button", { name: "选择保存位置" })).toBeEnabled();
-    expect(within(dialog).getByText(/选择位置不会开始下载/)).toBeVisible();
+    await screen.findAllByText("雨站台");
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 30)); });
+    expect(screen.queryByRole("dialog", { name: "环境配置" })).not.toBeInTheDocument();
+    expect(await getAddMediaCommand(/打开本地视频/)).toBeEnabled();
     expect(desktopMocks.prepareLocalCapability).not.toHaveBeenCalled();
-    fireEvent.click(
-      within(dialog).getByRole("button", { name: /稍后配置/ }),
-    );
-
-    expect(
-      screen.queryByRole("dialog", { name: "环境配置" }),
-    ).toBeNull();
-    expect(
-      window.localStorage.getItem(
-        "siaovplay.local-resources.first-run-dismissed.v1",
-      ),
-    ).toBe("1");
-    expect(await screen.findAllByText("雨站台")).not.toHaveLength(0);
   });
 
   it("opens URL import directly even when optional import resources are not ready", async () => {

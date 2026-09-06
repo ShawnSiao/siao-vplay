@@ -63,7 +63,6 @@ const activeTranscriptionStatuses = new Set<TranscriptionJob["status"]>(
   ["queued", "extracting", "transcribing", "validating"],
 );
 
-const firstRunResourceDismissedKey = "siaovplay.local-resources.first-run-dismissed.v1";
 type PendingResourceResume = PendingResourceAction & { resume: () => Promise<void> | void };
 
 export default function App() {
@@ -72,7 +71,6 @@ export default function App() {
   const startMediaPreparation = mediaPreparation.start;
   const resetMediaPreparation = mediaPreparation.reset;
   const localResources = useLocalResources();
-  const localResourceLoading = localResources.loading;
   const localResourceStatus = localResources.status;
   const refreshLocalResources = localResources.refresh;
   const {
@@ -148,7 +146,6 @@ export default function App() {
   const [busyMessage, setBusyMessage] = useState<string | null>(null);
   const [toast, setToast] = useState<ToastNotice | null>(null);
   const [localResourcesOpen, setLocalResourcesOpen] = useState(false);
-  const [firstRunResourceSetup, setFirstRunResourceSetup] = useState(false);
   const [pendingResourceAction, setPendingResourceAction] =
     useState<PendingResourceAction | null>(null);
   const episodeNavigation = useEpisodeNavigation(
@@ -167,7 +164,6 @@ export default function App() {
   const openLocalResources = useCallback(() => {
     pendingResourceResumeRef.current = null;
     setPendingResourceAction(null);
-    setFirstRunResourceSetup(false);
     setLocalResourcesOpen(true);
     void refreshLocalResources().catch(() => undefined);
   }, [refreshLocalResources]);
@@ -213,30 +209,6 @@ export default function App() {
     };
   }, []);
 
-  useEffect(() => {
-    if (
-      !isDesktopApp ||
-      localResourceLoading ||
-      !localResourceStatus ||
-      localResourceStatus.configured ||
-      localResourcesOpen ||
-      window.localStorage.getItem(firstRunResourceDismissedKey) === "1"
-    ) {
-      return;
-    }
-    const timer = window.setTimeout(() => {
-      setFirstRunResourceSetup(true);
-      setLocalResourcesOpen(true);
-    }, 0);
-    return () => window.clearTimeout(timer);
-  }, [localResourceLoading, localResourceStatus, localResourcesOpen]);
-
-  useEffect(() => {
-    if (localResourceStatus?.configured) {
-      window.localStorage.removeItem(firstRunResourceDismissedKey);
-    }
-  }, [localResourceStatus?.configured]);
-
   const requestCapability = useCallback(
     async (
       capabilityId: string,
@@ -273,28 +245,17 @@ export default function App() {
         label: pending.label,
         profileId: pending.profileId,
       });
-      setFirstRunResourceSetup(false);
       setLocalResourcesOpen(true);
     },
     [refreshLocalResources],
   );
 
   const closeLocalResources = useCallback(() => {
-    if (firstRunResourceSetup) {
-      window.localStorage.setItem(firstRunResourceDismissedKey, "1");
-    }
     if (pendingResourceResumeRef.current) {
       setToast("此次操作已取消；已开始的功能准备任务不会被删除。");
     }
     pendingResourceResumeRef.current = null;
     setPendingResourceAction(null);
-    setFirstRunResourceSetup(false);
-    setLocalResourcesOpen(false);
-  }, [firstRunResourceSetup]);
-
-  const dismissFirstRunResources = useCallback(() => {
-    window.localStorage.setItem(firstRunResourceDismissedKey, "1");
-    setFirstRunResourceSetup(false);
     setLocalResourcesOpen(false);
   }, []);
 
@@ -1110,11 +1071,11 @@ export default function App() {
       {localResourcesOpen ? (
         <EnvironmentSettingsDialog
           localResources={localResources}
-          firstRun={firstRunResourceSetup}
+          firstRun={false}
           pendingAction={pendingResourceAction}
           previewMode={!isDesktopApp}
           onClose={closeLocalResources}
-          onDismissFirstRun={dismissFirstRunResources}
+          onDismissFirstRun={closeLocalResources}
           onNotice={setToast}
         />
       ) : null}

@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from "react";
+import { ResourcePreparationAction } from "../features/resources/ResourcePreparationAction";
 
 import type { LocalResourcesController } from "../features/resources/useLocalResources";
 import { updateCapabilityResources } from "../features/environment-settings/updateCapabilityResources";
@@ -70,7 +71,7 @@ export function LocalResourcesDialog({
   const [diagnostics, setDiagnostics] = useState<LocalResourceDiagnostics | null>(null);
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
   const [maintenanceOpen, setMaintenanceOpen] = useState(
-    Boolean(pendingAction) || !controller.status?.configured,
+    !controller.status?.configured,
   );
   const diagnosticsRef = useRef<HTMLDetailsElement>(null);
   const [thirdPartyNotices, setThirdPartyNotices] = useState<string | null>(null);
@@ -579,7 +580,9 @@ export function LocalResourcesDialog({
                   <p>只下载所选功能缺少的内容，共享内容不会重复下载。</p>
                 </div>
               </div>
-              {catalog?.profiles.length ? (
+              {catalog?.profiles.length && (!pendingAction || selectedCapabilities.some(capability =>
+                catalog.capabilities.find(item => item.id === capability.id)?.profileIds.length,
+              )) ? (
                 <fieldset className="local-resource-profiles">
                   <legend>字幕识别方式</legend>
                   <p>方式只影响字幕识别。下载量按可信资源清单计算，并直接展示真实大小。</p>
@@ -616,7 +619,7 @@ export function LocalResourcesDialog({
                 </fieldset>
               ) : null}
               <div className="local-capability-list">
-                {capabilityStatuses.map((capability) => {
+                {capabilityStatuses.filter(capability => !pendingAction || capability.id === pendingAction.capabilityId).map((capability) => {
                   const installable = capabilityInstallable(capability);
                   const selected = selectedCapabilityIds.has(capability.id);
                   const ready =
@@ -691,10 +694,18 @@ export function LocalResourcesDialog({
               </div>
             </section>
 
+            <ResourcePreparationAction
+              downloadBytes={selectedDownloadBytes} installedBytes={selectedInstalledBytes}
+              path={status.resourceRoot ?? locationPlan?.resourceRoot ?? null}
+              busy={busyAction === "prepare"} configured={status.configured}
+              canPrepare={selectionCanPrepare} preparing={selectionPreparing} unavailable={selectionUnavailable}
+              disabled={previewMode || busyAction !== null || !selectionCanPrepare || (!status.configured && !locationPlan)}
+              onPrepare={() => void confirmAndPrepare()}
+            />
+
             <details
               className="local-resources-maintenance"
               open={
-                Boolean(pendingAction) ||
                 !status.configured ||
                 status.rootState !== "ready" ||
                 maintenanceOpen
@@ -863,29 +874,7 @@ export function LocalResourcesDialog({
                   </button>
                 </div>
               ) : null}
-              <button
-                className="button primary local-resources-primary-action"
-                type="button"
-                disabled={
-                  previewMode ||
-                  busyAction !== null ||
-                  !selectionCanPrepare ||
-                  (!status.configured && !locationPlan)
-                }
-                onClick={() => void confirmAndPrepare()}
-              >
-                {busyAction === "prepare"
-                  ? "正在建立准备任务…"
-                  : !status.configured
-                    ? "确认位置并开始准备"
-                    : selectionCanPrepare
-                      ? "开始准备所选功能"
-                      : selectionPreparing
-                        ? "正在准备所选功能"
-                        : selectionUnavailable
-                          ? "当前不能开始准备"
-                          : "所选功能已准备"}
-              </button>
+
             </section>
             </details>
           </>

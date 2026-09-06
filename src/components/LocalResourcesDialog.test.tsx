@@ -1,207 +1,30 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-import type { LocalResourcesController } from "../features/resources/useLocalResources";
 import type {
   LocalResourceCatalog,
   LocalResourceStatus,
   ResourceDownloadTask,
 } from "../types";
 import { LocalResourcesDialog } from "./LocalResourcesDialog";
-const catalog: LocalResourceCatalog = {
-  schemaVersion: 1,
-  productId: "siaovplay",
-  updatedAt: "2026-08-20",
-  packageProfile: "app-only",
-  bundlePolicy: {
-    maximumExceptionBytes: 20_000_000,
-    allowlistedResourceIds: [],
-  },
-  capabilities: [
-    {
-      id: "basic_media",
-      title: "基础视频支持",
-      resourceIds: ["ffmpeg-cpu"],
-      profileIds: [],
-      requiresCapabilityIds: [],
-    },
-    {
-      id: "url_import",
-      title: "在线视频导入",
-      resourceIds: ["ffmpeg-cpu", "yt-dlp"],
-      profileIds: [],
-      requiresCapabilityIds: [],
-    },
-  ],
-  profiles: [],
-  resources: [
-    {
-      id: "ffmpeg-cpu",
-      version: "8.1.2-34-g9b6c8969e0",
-      platform: "windows-x86_64",
-      kind: "archive",
-      bundled: false,
-      installedSize: 175_929_962,
-      license: "LGPL-2.1-or-later",
-      sourcePage: "https://example.com/ffmpeg",
-      artifact: {
-        url: "https://example.com/ffmpeg.zip",
-        size: 70_508_781,
-        sha256: "a".repeat(64),
-        format: "zip",
-      },
-      entrypoints: {},
-      healthCheck: "ffmpeg-version",
-    },
-    {
-      id: "yt-dlp",
-      version: "2026.08.19",
-      platform: "windows-x86_64",
-      kind: "file",
-      bundled: false,
-      installedSize: 17_840_399,
-      license: "GPL-3.0-or-later",
-      sourcePage: "https://example.com/yt-dlp",
-      artifact: {
-        url: "https://example.com/yt-dlp.exe",
-        size: 17_840_399,
-        sha256: "b".repeat(64),
-        format: "file",
-      },
-      entrypoints: {},
-      healthCheck: "yt-dlp-version",
-    },
-  ],
-};
-
-const setupStatus: LocalResourceStatus = {
-  configured: false,
-  selectedParent: null,
-  resourceRoot: null,
-  rootState: "setup_required",
-  freeSpaceBytes: null,
-  preferredProfile: "standard",
-  capabilities: [
-    {
-      id: "basic_media",
-      title: "基础视频支持",
-      state: "setup_required",
-      requiredResourceIds: ["ffmpeg-cpu"],
-      missingResourceIds: ["ffmpeg-cpu"],
-    },
-    {
-      id: "url_import",
-      title: "在线视频导入",
-      state: "setup_required",
-      requiredResourceIds: ["ffmpeg-cpu", "yt-dlp"],
-      missingResourceIds: ["ffmpeg-cpu", "yt-dlp"],
-    },
-  ],
-};
-
-function makeController(
-  overrides: Partial<LocalResourcesController> = {},
-): LocalResourcesController {
-  return {
-    catalog,
-    status: setupStatus,
-    tasks: [],
-    taskMetrics: {},
-    networkStatus: {
-      mode: "proxy",
-      proxySource: "windows_system",
-      proxyAddress: "http://127.0.0.1:7897",
-    },
-    loading: false,
-    error: null,
-    refresh: vi.fn().mockResolvedValue(setupStatus),
-    clearError: vi.fn(),
-    chooseLocation: vi.fn().mockResolvedValue({
-      selectedParent: "W:\\SiaoVPlay",
-      resourceRoot: "W:\\SiaoVPlay\\SiaoVPlay",
-      parentExists: true,
-      resourceRootExists: false,
-      freeSpaceBytes: 500_000_000_000,
-      confirmationRequired: true,
-    }),
-    confirmLocation: vi.fn().mockResolvedValue({
-      ...setupStatus,
-      configured: true,
-      resourceRoot: "W:\\SiaoVPlay\\SiaoVPlay",
-      rootState: "ready",
-    }),
-    chooseExistingResources: vi.fn().mockResolvedValue(null),
-    adoptResources: vi.fn().mockResolvedValue({
-      adoptedResourceIds: [],
-      alreadyActiveResourceIds: [],
-      rejectedResourceIds: [],
-      reusableBytes: 0,
-    }),
-    chooseMoveLocation: vi.fn().mockResolvedValue(null),
-    moveLocation: vi.fn(),
-    repairRoot: vi.fn(),
-    reconnectRoot: vi.fn().mockResolvedValue(null),
-    planCleanup: vi.fn().mockResolvedValue({
-      resourceIds: [],
-      reclaimableBytes: 0,
-      confirmationRequired: true,
-    }),
-    cleanupUnused: vi.fn().mockResolvedValue({
-      removedResourceIds: [],
-      reclaimedBytes: 0,
-    }),
-    loadDiagnostics: vi.fn().mockResolvedValue({
-      diagnostics: {
-        generatedAtMs: 1,
-        catalogSource: "embedded",
-        remoteCatalogEnabled: false,
-        remoteSignaturePolicy: "ed25519-detached-v1-required-before-enable",
-        rootState: "ready",
-        resourceRoot: "W:\\SiaoVPlay\\SiaoVPlay",
-        preferredProfile: "standard",
-        resources: [],
-        tasks: [],
-      },
-      thirdPartyNotices: "# 第三方许可说明",
-    }),
-    diagnosticSummary: vi.fn().mockResolvedValue("脱敏诊断摘要"),
-    updateResource: vi.fn(),
-    rollbackResource: vi.fn(),
-    planOldVersionCleanup: vi.fn().mockResolvedValue({
-      candidates: [],
-      protectedVersions: [],
-      reclaimableBytes: 0,
-      confirmationRequired: true,
-    }),
-    cleanupOldVersions: vi.fn().mockResolvedValue({
-      removedVersions: [],
-      reclaimedBytes: 0,
-    }),
-    selectProfile: vi.fn().mockResolvedValue(setupStatus),
-    setProxy: vi.fn().mockResolvedValue({
-      mode: "proxy",
-      proxySource: "custom",
-      proxyAddress: "http://127.0.0.1:7897",
-    }),
-    prepareCapability: vi.fn().mockResolvedValue({
-      capabilityId: "basic_media",
-      pendingActionId: null,
-      state: "preparing",
-      resourceIds: ["ffmpeg-cpu"],
-      readyResourceIds: [],
-      taskIds: ["00000000-0000-4000-8000-000000000001"],
-    }),
-    pauseTask: vi.fn(),
-    resumeTask: vi.fn(),
-    cancelTask: vi.fn(),
-    retryTask: vi.fn(),
-    repairResource: vi.fn(),
-    removeResource: vi.fn(),
-    ...overrides,
-  };
-}
+import { catalog, setupStatus, makeController } from "../test-fixtures/localResources";
 
 describe("LocalResourcesDialog", () => {
+  it("prepares only the requested capability and hides unrelated model choices and maintenance", async () => {
+    const controller = makeController({
+      catalog: { ...catalog, profiles: [{ id: "standard", title: "标准", resourceIds: [], recommended: true }] },
+      status: { ...setupStatus, configured: true, rootState: "ready", resourceRoot: "W:\\SiaoVPlay", capabilities: setupStatus.capabilities.map(capability => ({ ...capability, state: "not_ready" })) },
+    });
+    render(<LocalResourcesDialog controller={controller} firstRun={false}
+      pendingAction={{ id: "pending-basic", capabilityId: "basic_media", label: "继续打开视频" }}
+      previewMode={false} onClose={vi.fn()} onDismissFirstRun={vi.fn()} onNotice={vi.fn()} />);
+    expect(screen.queryByRole("checkbox", { name: "选择准备在线视频导入" })).not.toBeInTheDocument();
+    expect(screen.queryByText("字幕识别方式")).not.toBeInTheDocument();
+    expect(screen.getByText("高级维护：存储位置、迁移、修复和清理").parentElement).not.toHaveAttribute("open");
+    fireEvent.click(screen.getByRole("button", { name: "开始准备所选功能" }));
+    await waitFor(() => expect(controller.prepareCapability).toHaveBeenCalledWith("basic_media", "pending-basic"));
+    expect(controller.prepareCapability).toHaveBeenCalledTimes(1);
+  });
   it("keeps first run limited to an optional save location", () => {
     const onDismissFirstRun = vi.fn();
     render(

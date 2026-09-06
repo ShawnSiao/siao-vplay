@@ -1,0 +1,13 @@
+.local-resources-preparation-action {
+  display: grid;
+  gap: 6px;
+  padding-block: 12px;
+  border-top: 1px solid var(--border-subtle);
+}
+.local-resources-preparation-action p { margin: 0; font-size: 13px; }
+.local-resources-preparation-action small {
+  color: var(--text-secondary);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.local-resources-preparation-action button { justify-self: start; margin-top: 4px; }
