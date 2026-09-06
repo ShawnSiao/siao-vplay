@@ -85,3 +85,61 @@ fn revision_does_not_read_unselected_history() {
             .all(|item| !item.is_current)
     );
 }
+
+#[test]
+#[ignore = "synthetic 1000/10000 subtitle history benchmark; run explicitly with --ignored --nocapture"]
+fn benchmark_subtitle_history_reads() {
+    use std::time::Instant;
+    let (_temp, store, project_id, original) = create_store_with_subtitles();
+    let body = "Synthetic subtitle history content. ".repeat(160);
+    let baseline_bytes =
+        serde_json::to_vec(&list_current_subtitle_versions(&store, &project_id).unwrap())
+            .unwrap()
+            .len();
+    let mut inserted = 0;
+    for count in [1_000, 10_000] {
+        let mut connection = store.connect().unwrap();
+        let transaction = connection.transaction().unwrap();
+        for index in inserted..count {
+            let id = format!("history-benchmark-{index}");
+            transaction.execute(
+                "INSERT INTO subtitle_versions (id, track_id, project_id, version_number, status, source_kind,
+                 source_label, source_sha256, media_sha256, language_code, project_revision, preflight_json, created_at_ms)
+                 SELECT ?1, track_id, project_id, ?2, status, source_kind, source_label, source_sha256,
+                 media_sha256, language_code, project_revision, preflight_json, created_at_ms FROM subtitle_versions WHERE id = ?3",
+                params![id, i64::try_from(index + 2).unwrap(), original.id],
+            ).unwrap();
+            transaction.execute(
+                "INSERT INTO subtitle_segments (id, version_id, ordinal, start_ms, end_ms, text)
+                 SELECT ?1 || '-' || ordinal, ?1, ordinal, start_ms, end_ms, ?2 FROM subtitle_segments WHERE version_id = ?3",
+                params![id, body, original.id],
+            ).unwrap();
+        }
+        transaction.commit().unwrap();
+        inserted = count;
+        let started = Instant::now();
+        let current = list_current_subtitle_versions(&store, &project_id).unwrap();
+        let current_bytes = serde_json::to_vec(&current).unwrap().len();
+        let current_ms = started.elapsed().as_secs_f64() * 1_000.0;
+        let started = Instant::now();
+        let metadata = metadata::list_metadata(&store, &project_id).unwrap();
+        let metadata_bytes = serde_json::to_vec(&metadata).unwrap().len();
+        let metadata_ms = started.elapsed().as_secs_f64() * 1_000.0;
+        let started = Instant::now();
+        let all = list_subtitle_versions(&store, &project_id).unwrap();
+        let all_bytes = serde_json::to_vec(&all).unwrap().len();
+        let all_ms = started.elapsed().as_secs_f64() * 1_000.0;
+        assert_eq!(current.len(), 1);
+        assert_eq!(current_bytes, baseline_bytes);
+        assert_eq!(metadata.len(), count + 1);
+        assert_eq!(all.len(), count + 1);
+        assert!(metadata_bytes * 10 < all_bytes);
+        println!(
+            "{}",
+            serde_json::json!({"scenario": "synthetic_warm_subtitle_history", "historyVersions": count,
+            "current": {"readAndSerializeMs": current_ms, "bytes": current_bytes},
+            "metadata": {"readAndSerializeMs": metadata_ms, "bytes": metadata_bytes},
+            "all": {"readAndSerializeMs": all_ms, "bytes": all_bytes}})
+        );
+    }
+}

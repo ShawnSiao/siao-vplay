@@ -30,6 +30,16 @@ cargo test --locked --manifest-path src-tauri/Cargo.toml
 
 针对行为修复先增加回归用例。媒体和网络测试使用隔离夹具，不操作个人媒体库。真实媒体、字幕、数据库、凭据、个人日志不得提交。
 
+### 字幕历史查询基准
+
+以下基准默认不运行，使用隔离的合成数据库，对比 1,000 / 10,000 个历史版本下当前轨、元数据和全量版本的读取及 JSON 序列化。运行时可通过 `TEMP` / `TMP` 指定空间充足的临时目录；数据随测试结束清理。
+
+```powershell
+cargo test --locked --release --lib --manifest-path src-tauri/Cargo.toml benchmark_subtitle_history_reads -- --ignored --nocapture
+```
+
+结果为本机预热缓存下的单次测量。字节数用于验证读取范围，耗时用于比较同一机器的改动前后结果；不能替代应用首屏、内存、真实媒体或安装包验收。
+
 ## 安装包
 
 ```powershell
