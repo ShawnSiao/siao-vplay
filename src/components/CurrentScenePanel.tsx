@@ -30,6 +30,7 @@ import { AiTaskExecutionSetup } from "../features/ai-tasks/AiTaskExecutionSetup"
 import { prepareAiExplanationTask } from "../features/ai-tasks/gateway";
 import { UnderstandingPromptSelector } from "../features/analysis/UnderstandingPromptSelector";
 import { UnderstandingResultView } from "../features/analysis/UnderstandingResultView";
+import { useExplanationEvidence } from "../features/analysis/useExplanationEvidence";
 import type { PromptSelection } from "../features/analysis/types";
 import {
   useAiExecutionChoice,
@@ -42,6 +43,8 @@ export type CurrentScenePanelProps = {
   translationVersion: SubtitleVersion | null;
   onPrepareSubtitles: () => void;
   onClose: () => void;
+  onJump?: (positionMs: number) => void;
+  onPausePlayback?: () => void;
   embedded?: boolean;
 };
 
@@ -84,6 +87,7 @@ export function CurrentScenePanel({
   translationVersion,
   onPrepareSubtitles,
   onClose,
+  onJump, onPausePlayback,
   embedded = false,
 }: CurrentScenePanelProps) {
   const handledCompletionRef = useRef<string | null>(null);
@@ -135,6 +139,7 @@ export function CurrentScenePanel({
             (item) => item.playbackCutoffMs <= initialCutoffRef.current,
           ) ?? null;
         if (!activeTask && latestVisible) {
+          handledCompletionRef.current = latestVisible.taskId;
           setFactsExpanded(false);
           setInterpretationExpanded(false);
           setExplanation(latestVisible);
@@ -421,6 +426,7 @@ export function CurrentScenePanel({
   const visibleHistory = history.filter(
     (item) => item.playbackCutoffMs <= playbackCutoffMs,
   );
+  const evidence = useExplanationEvidence(visibleExplanation);
 
   const PanelElement = embedded ? "section" : "aside";
 
@@ -478,6 +484,8 @@ export function CurrentScenePanel({
         ) : visibleExplanation ? (
           <UnderstandingResultView
             explanation={visibleExplanation}
+            evidence={evidence.data} evidenceFailed={evidence.failed} onRetryEvidence={evidence.retry}
+            onJump={onJump ? (time) => { onPausePlayback?.(); onJump(time); } : undefined}
             factsExpanded={factsExpanded}
             interpretationsExpanded={interpretationExpanded}
             onFactsExpandedChange={setFactsExpanded}

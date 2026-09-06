@@ -54,7 +54,7 @@ export function UnderstandingPanel({
       </div>
       <div className="understanding-tab-content">
         {tab === "scene" ? (
-          <CurrentScenePanel {...sceneProps} embedded onClose={onClose} />
+          <CurrentScenePanel {...sceneProps} embedded onClose={onClose} onJump={onJump} onPausePlayback={onPausePlayback} />
         ) : (
           <VideoSummaryPanel
             projectId={sceneProps.projectId}

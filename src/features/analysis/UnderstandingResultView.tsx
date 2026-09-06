@@ -1,5 +1,7 @@
 import { formatDuration } from "../../lib/format";
 import type { Explanation, ExplanationEntry } from "../../types";
+import type { ExplanationEvidence } from "./explanationEvidence";
+import { UnderstandingEvidence } from "./UnderstandingEvidence";
 
 const DEFAULT_VISIBLE_ITEMS = 5;
 
@@ -10,35 +12,19 @@ type UnderstandingResultViewProps = {
   onFactsExpandedChange: (expanded: boolean) => void;
   onInterpretationsExpandedChange: (expanded: boolean) => void;
   onAnalyzeAgain: () => void;
+  evidence?: ExplanationEvidence | null;
+  evidenceFailed?: boolean;
+  onRetryEvidence?: () => void;
+  onJump?: (time: number) => void;
 };
 
-function shortId(value: string): string {
-  return value.length > 10 ? `${value.slice(0, 8)}…` : value;
-}
-
-function Evidence({ entry }: { entry: ExplanationEntry }) {
-  if (entry.subtitleSegmentIds.length === 0 && entry.frameIds.length === 0) {
-    return <small className="understanding-evidence legacy">旧版结果未保存依据引用</small>;
-  }
-  const subtitleIds = entry.subtitleSegmentIds.map(shortId).join("、");
-  const frameIds = entry.frameIds.map(shortId).join("、");
-  return (
-    <small className="understanding-evidence">
-      依据：
-      {subtitleIds ? `字幕 ${subtitleIds}` : ""}
-      {subtitleIds && frameIds ? " · " : ""}
-      {frameIds ? `画面 ${frameIds}` : ""}
-    </small>
-  );
-}
-
-function EntryList({ entries }: { entries: ExplanationEntry[] }) {
+function EntryList({ entries, evidence, onJump }: { entries: ExplanationEntry[]; evidence?: ExplanationEvidence | null; onJump?: (time: number) => void }) {
   return (
     <ul>
       {entries.map((entry, index) => (
         <li key={`${entry.text}-${index}`}>
           <span>{entry.text}</span>
-          <Evidence entry={entry} />
+          <UnderstandingEvidence entry={entry} evidence={evidence} onJump={onJump} />
         </li>
       ))}
     </ul>
@@ -52,6 +38,7 @@ export function UnderstandingResultView({
   onFactsExpandedChange,
   onInterpretationsExpandedChange,
   onAnalyzeAgain,
+  evidence, evidenceFailed, onRetryEvidence, onJump,
 }: UnderstandingResultViewProps) {
   const facts = explanation.confirmedFacts.slice(
     0,
@@ -92,7 +79,7 @@ export function UnderstandingResultView({
             </button>
           ) : null}
         </div>
-        <EntryList entries={facts} />
+        <EntryList entries={facts} evidence={evidence} onJump={onJump} />
       </section>
       <section className="understanding-result-section interpretation">
         <div className="understanding-section-heading">
@@ -108,11 +95,15 @@ export function UnderstandingResultView({
             </button>
           ) : null}
         </div>
-        <EntryList entries={interpretations} />
+        <EntryList entries={interpretations} evidence={evidence} onJump={onJump} />
         <p className="understanding-interpretation-note">
           可能解读不是影片后续已经确认的结论。
         </p>
       </section>
+      {evidenceFailed ? <div className="notice warning" role="alert">
+        <p>原任务证据暂时无法读取，分析正文仍保留。</p>
+        {onRetryEvidence ? <button className="button quiet" type="button" onClick={onRetryEvidence}>重新读取证据</button> : null}
+      </div> : null}
       {explanation.withheldReason ? (
         <p className="understanding-withheld">{explanation.withheldReason}</p>
       ) : null}

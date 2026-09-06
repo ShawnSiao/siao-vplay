@@ -46,6 +46,7 @@ mod translation_language;
 #[cfg(test)]
 mod translation_test_support;
 mod understanding;
+mod understanding_evidence;
 mod understanding_v2;
 mod x_public_video;
 mod x_resolver_policy;
@@ -342,6 +343,7 @@ pub fn run() {
             commands::read_explanation_prompt,
             commands::open_explanation_materials,
             commands::get_explanation,
+            understanding_evidence::get_explanation_evidence,
             commands::list_explanations,
             commands::import_explanation_result,
             commands::start_codex_explanation_task,
