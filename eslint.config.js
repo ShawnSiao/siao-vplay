@@ -28,5 +28,16 @@ export default tseslint.config(
         }
       ]
     }
+  },
+  {
+    files: ["src/lib/*Gateway.ts", "src/lib/subtitleMetadata.ts"],
+    rules: {
+      "no-restricted-imports": ["error", {
+        patterns: [{
+          group: ["**/features/**", "**/components/**", "**/desktop", "**/desktop.ts", "react", "react-dom", "react-dom/**"],
+          message: "IPC gateways depend on wire contracts and transport, not UI or the desktop facade."
+        }]
+      }]
+    }
   }
 );
