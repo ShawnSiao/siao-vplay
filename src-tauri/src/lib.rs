@@ -386,3 +386,6 @@ pub fn run() {
 #[cfg(test)]
 #[path = "app_identity_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+mod ipc_contracts;

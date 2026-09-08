@@ -24,7 +24,9 @@
     "test:e2e": "playwright test",
     "test:watch": "vitest",
     "desktop:build": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/build-app-only.ps1",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "contracts:generate": "node tools/generate-contracts.mjs --write",
+    "contracts:check": "node tools/generate-contracts.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "2.11.1",
@@ -42,11 +44,13 @@
     "@types/react": "19.2.17",
     "@types/react-dom": "19.2.3",
     "@vitejs/plugin-react": "6.0.4",
+    "ajv": "8.20.0",
     "eslint": "10.8.0",
     "eslint-plugin-react-hooks": "7.1.1",
     "eslint-plugin-react-refresh": "0.5.3",
     "globals": "17.8.0",
     "jsdom": "30.0.1",
+    "json-schema-to-typescript": "16.0.0",
     "typescript": "6.0.3",
     "typescript-eslint": "8.65.0",
     "vite": "8.1.5",

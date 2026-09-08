@@ -52,4 +52,5 @@ windows = { version = "0.62.2", features = [
 ] }
 
 [dev-dependencies]
+schemars = "1.2.2"
 tempfile = "3.27.0"

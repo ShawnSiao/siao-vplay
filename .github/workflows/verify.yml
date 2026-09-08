@@ -25,6 +25,7 @@ jobs:
       - run: npm ci
       - run: npm run check:release
       - run: npm run test:tools
+      - run: npm run contracts:check
       - run: npm run typecheck
       - run: npm run lint
       - run: npm run lint:size

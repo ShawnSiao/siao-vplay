@@ -19,6 +19,7 @@ npm run tauri -- dev
 ## 验证
 
 ```powershell
+npm run contracts:check
 npm run typecheck
 npm run lint
 npm run lint:size
@@ -29,6 +30,12 @@ cargo test --locked --manifest-path src-tauri/Cargo.toml
 ```
 
 针对行为修复先增加回归用例。媒体和网络测试使用隔离夹具，不操作个人媒体库。真实媒体、字幕、数据库、凭据、个人日志不得提交。
+
+### IPC 契约生成
+
+已迁移的 IPC 类型从 Rust 类型及其 Serde 命名生成 JSON Schema，再生成前端类型和静态校验器。修改这些类型后运行 `npm run contracts:generate`，一并提交生成差异。该命令会运行 Rust release 测试；可用 `CARGO_TARGET_DIR` 指定构建缓存位置。
+
+`npm run contracts:check` 只读检查前端生成文件；Rust 测试检查 Schema 与当前源码一致。生成的校验器在构建时编译，应用运行时不需要动态编译 Schema。尚未迁移的接口继续保留现有校验，不能以此命令通过宣称全部 IPC 已覆盖。
 
 ### 字幕历史查询基准
 

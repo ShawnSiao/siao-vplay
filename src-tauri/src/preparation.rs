@@ -8,6 +8,8 @@ use std::{
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
+#[cfg_attr(test, schemars(rename = "MediaPreparationStage"))]
 pub(crate) enum Stage {
     Queued,
     Runtime,
@@ -20,6 +22,8 @@ pub(crate) enum Stage {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
+#[cfg_attr(test, schemars(rename = "MediaPreparationStatus"))]
 pub(crate) enum Status {
     Running,
     Cancelling,
@@ -30,6 +34,8 @@ pub(crate) enum Status {
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
+#[cfg_attr(test, schemars(rename = "MediaPreparationProgress"))]
 pub(crate) struct Snapshot {
     pub request_id: String,
     pub project_id: String,

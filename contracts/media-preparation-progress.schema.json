@@ -1,0 +1,261 @@
+{
+  "$defs": {
+    "MediaPreparationStage": {
+      "enum": [
+        "queued",
+        "runtime",
+        "fingerprint",
+        "inspect",
+        "transcode",
+        "validate",
+        "finalize"
+      ],
+      "type": "string"
+    },
+    "MediaPreparationStatus": {
+      "enum": [
+        "running",
+        "cancelling",
+        "completed",
+        "cancelled",
+        "failed"
+      ],
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "examples": [
+    {
+      "projectId": "project-1",
+      "requestId": "request-1",
+      "stage": "queued",
+      "status": "running"
+    },
+    {
+      "projectId": "project-1",
+      "requestId": "request-1",
+      "stage": "queued",
+      "status": "cancelling"
+    },
+    {
+      "projectId": "project-1",
+      "requestId": "request-1",
+      "stage": "queued",
+      "status": "completed"
+    },
+    {
+      "projectId": "project-1",
+      "requestId": "request-1",
+      "stage": "queued",
+      "status": "cancelled"
+    },
+    {
+      "projectId": "project-1",
+      "requestId": "request-1",
+      "stage": "queued",
+      "status": "failed"
+    },
+    {
+      "projectId": "project-1",
+      "requestId": "request-1",
+      "stage": "runtime",
+      "status": "running"
+    },
+    {
+      "projectId": "project-1",
+      "requestId": "request-1",
+      "stage": "runtime",
+      "status": "cancelling"
+    },
+    {
+      "projectId": "project-1",
+      "requestId": "request-1",
+      "stage": "runtime",
+      "status": "completed"
+    },
+    {
+      "projectId": "project-1",
+      "requestId": "request-1",
+      "stage": "runtime",
+      "status": "cancelled"
+    },
+    {
+      "projectId": "project-1",
+      "requestId": "request-1",
+      "stage": "runtime",
+      "status": "failed"
+    },
+    {
+      "projectId": "project-1",
+      "requestId": "request-1",
+      "stage": "fingerprint",
+      "status": "running"
+    },
+    {
+      "projectId": "project-1",
+      "requestId": "request-1",
+      "stage": "fingerprint",
+      "status": "cancelling"
+    },
+    {
+      "projectId": "project-1",
+      "requestId": "request-1",
+      "stage": "fingerprint",
+      "status": "completed"
+    },
+    {
+      "projectId": "project-1",
+      "requestId": "request-1",
+      "stage": "fingerprint",
+      "status": "cancelled"
+    },
+    {
+      "projectId": "project-1",
+      "requestId": "request-1",
+      "stage": "fingerprint",
+      "status": "failed"
+    },
+    {
+      "projectId": "project-1",
+      "requestId": "request-1",
+      "stage": "inspect",
+      "status": "running"
+    },
+    {
+      "projectId": "project-1",
+      "requestId": "request-1",
+      "stage": "inspect",
+      "status": "cancelling"
+    },
+    {
+      "projectId": "project-1",
+      "requestId": "request-1",
+      "stage": "inspect",
+      "status": "completed"
+    },
+    {
+      "projectId": "project-1",
+      "requestId": "request-1",
+      "stage": "inspect",
+      "status": "cancelled"
+    },
+    {
+      "projectId": "project-1",
+      "requestId": "request-1",
+      "stage": "inspect",
+      "status": "failed"
+    },
+    {
+      "projectId": "project-1",
+      "requestId": "request-1",
+      "stage": "transcode",
+      "status": "running"
+    },
+    {
+      "projectId": "project-1",
+      "requestId": "request-1",
+      "stage": "transcode",
+      "status": "cancelling"
+    },
+    {
+      "projectId": "project-1",
+      "requestId": "request-1",
+      "stage": "transcode",
+      "status": "completed"
+    },
+    {
+      "projectId": "project-1",
+      "requestId": "request-1",
+      "stage": "transcode",
+      "status": "cancelled"
+    },
+    {
+      "projectId": "project-1",
+      "requestId": "request-1",
+      "stage": "transcode",
+      "status": "failed"
+    },
+    {
+      "projectId": "project-1",
+      "requestId": "request-1",
+      "stage": "validate",
+      "status": "running"
+    },
+    {
+      "projectId": "project-1",
+      "requestId": "request-1",
+      "stage": "validate",
+      "status": "cancelling"
+    },
+    {
+      "projectId": "project-1",
+      "requestId": "request-1",
+      "stage": "validate",
+      "status": "completed"
+    },
+    {
+      "projectId": "project-1",
+      "requestId": "request-1",
+      "stage": "validate",
+      "status": "cancelled"
+    },
+    {
+      "projectId": "project-1",
+      "requestId": "request-1",
+      "stage": "validate",
+      "status": "failed"
+    },
+    {
+      "projectId": "project-1",
+      "requestId": "request-1",
+      "stage": "finalize",
+      "status": "running"
+    },
+    {
+      "projectId": "project-1",
+      "requestId": "request-1",
+      "stage": "finalize",
+      "status": "cancelling"
+    },
+    {
+      "projectId": "project-1",
+      "requestId": "request-1",
+      "stage": "finalize",
+      "status": "completed"
+    },
+    {
+      "projectId": "project-1",
+      "requestId": "request-1",
+      "stage": "finalize",
+      "status": "cancelled"
+    },
+    {
+      "projectId": "project-1",
+      "requestId": "request-1",
+      "stage": "finalize",
+      "status": "failed"
+    }
+  ],
+  "properties": {
+    "projectId": {
+      "type": "string"
+    },
+    "requestId": {
+      "type": "string"
+    },
+    "stage": {
+      "$ref": "#/$defs/MediaPreparationStage"
+    },
+    "status": {
+      "$ref": "#/$defs/MediaPreparationStatus"
+    }
+  },
+  "required": [
+    "requestId",
+    "projectId",
+    "stage",
+    "status"
+  ],
+  "title": "MediaPreparationProgress",
+  "type": "object"
+}

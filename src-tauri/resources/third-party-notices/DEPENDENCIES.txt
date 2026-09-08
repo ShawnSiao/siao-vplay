@@ -180,6 +180,7 @@ Rust / rustls 0.23.43 / Apache-2.0 OR ISC OR MIT / notices 12, 76, 77
 Rust / ryu 1.0.23 / Apache-2.0 OR BSL-1.0 / notices 11, 134
 Rust / same-file 1.0.6 / Unlicense/MIT / notices 8, 135
 Rust / schemars_derive 0.8.22 / MIT / notices 136
+Rust / schemars_derive 1.2.2 / MIT / notices 136
 Rust / schemars 0.8.22 / MIT / notices 136
 Rust / schemars 0.9.0 / MIT / notices 136
 Rust / schemars 1.2.2 / MIT / notices 136
@@ -188,6 +189,7 @@ Rust / selectors 0.36.1 / MPL-2.0 / notices 109 / https://www.mozilla.org/media/
 Rust / semver 1.0.28 / MIT OR Apache-2.0 / notices 11, 7
 Rust / serde_core 1.0.229 / MIT OR Apache-2.0 / notices 11, 7
 Rust / serde_derive_internals 0.29.1 / MIT OR Apache-2.0 / notices 11, 7
+Rust / serde_derive_internals 0.30.0 / MIT OR Apache-2.0 / notices 11, 7
 Rust / serde_derive 1.0.229 / MIT OR Apache-2.0 / notices 11, 7
 Rust / serde_json 1.0.151 / MIT OR Apache-2.0 / notices 11, 7
 Rust / serde_repr 0.1.21 / MIT OR Apache-2.0 / notices 11, 7
