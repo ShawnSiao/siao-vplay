@@ -167,6 +167,7 @@ fn run_api_explanation(
     resume: bool,
 ) -> Result<ExplanationTask, AiTaskError> {
     let revision = authorization.service_revision.unwrap_or_default();
+    let policy = super::interactive_policy::load()?.explanation;
     let execution = task_persistence::claim_api(
         store,
         AiTaskKind::Explanation,
@@ -216,8 +217,8 @@ fn run_api_explanation(
                     schema_name: "scene_explanation".to_owned(),
                     schema,
                     image_data_urls: images,
-                    max_output_tokens: 2_048,
-                    timeout: std::time::Duration::from_secs(90),
+                    max_output_tokens: policy.max_output_tokens,
+                    timeout: policy.timeout(),
                     cancellation: None,
                 },
             )?;
@@ -247,6 +248,7 @@ fn run_api_learning(
     authorization: AiMaterialAuthorization,
     resume: bool,
 ) -> Result<LearningTask, AiTaskError> {
+    let policy = super::interactive_policy::load()?.learning;
     let execution = task_persistence::claim_api(
         store,
         AiTaskKind::Learning,
@@ -274,8 +276,8 @@ fn run_api_learning(
                     schema_name: "contextual_learning".to_owned(),
                     schema: learning::read_learning_schema(store, task_id)?,
                     image_data_urls: Vec::new(),
-                    max_output_tokens: 2_048,
-                    timeout: std::time::Duration::from_secs(90),
+                    max_output_tokens: policy.max_output_tokens,
+                    timeout: policy.timeout(),
                     cancellation: None,
                 },
             )?;

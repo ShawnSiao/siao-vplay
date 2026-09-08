@@ -9,6 +9,7 @@ pub(crate) mod connection;
 mod credentials;
 mod error;
 mod material_scope;
+mod interactive_policy;
 mod probe;
 pub(crate) mod providers;
 mod storage;
