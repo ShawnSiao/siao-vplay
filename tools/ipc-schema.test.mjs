@@ -1,0 +1,20 @@
+import { strict as assert } from "node:assert";
+import { test } from "node:test";
+import { prepareRuntimeSchema } from "./ipc-schema.mjs";
+
+test("keeps integer bounds and original schema while removing build-only examples", () => {
+  const schema = { examples: [{ value: 1 }], properties: { value: { type: "integer", format: "int64", minimum: 1, maximum: Number.MAX_SAFE_INTEGER } } };
+  const output = prepareRuntimeSchema(schema);
+  assert.deepEqual(output, { properties: { value: { type: "integer", minimum: 1, maximum: Number.MAX_SAFE_INTEGER } } });
+  assert.equal(schema.properties.value.format, "int64");
+  assert.equal(schema.examples.length, 1);
+});
+for (const field of [
+  { type: "integer", format: "int64" },
+  { type: "integer", format: "int64", minimum: 0, maximum: Number.MAX_SAFE_INTEGER + 1 },
+  { type: "number", format: "int64", minimum: 0, maximum: 10 },
+]) {
+  test(`rejects imprecise integer schema ${JSON.stringify(field)}`, () => {
+    assert.throws(() => prepareRuntimeSchema({ properties: { value: field } }), /safe integer bounds/);
+  });
+}

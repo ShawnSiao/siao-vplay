@@ -1,3 +1,4 @@
+import { prepareRuntimeSchema } from "./ipc-schema.mjs";
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -15,10 +16,11 @@ if (write) {
   if (result.error) throw result.error;
   if (result.status !== 0) process.exit(result.status ?? 1);
 }
-const names = ["media-preparation-progress"];
+const names = ["media-preparation-progress", "subtitle-version-metadata"];
 for (const name of names) {
   const schema = JSON.parse(await readFile(resolve(root, `contracts/${name}.schema.json`), "utf8"));
-  const { examples = [], ...runtimeSchema } = schema;
+  const examples = schema.examples ?? [];
+  const runtimeSchema = prepareRuntimeSchema(schema);
   const title = schema.title;
   if (!/^[A-Z][A-Za-z0-9]*$/.test(title)) throw new Error(`Invalid contract title: ${title}`);
   const types = await compile(runtimeSchema, title, { bannerComment: "/* Generated from Rust IPC schema. Run npm run contracts:generate. */", style: { singleQuote: false } });

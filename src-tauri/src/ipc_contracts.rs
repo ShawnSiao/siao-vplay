@@ -16,7 +16,19 @@ fn committed_schemas_match_rust() {
         }
     }
     schema["examples"] = examples.into();
-    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../contracts/media-preparation-progress.schema.json");
+    check_schema("media-preparation-progress", &schema);
+    use crate::subtitles::metadata::{SubtitleVersionMetadata, SubtitleTrackRole, SubtitleRevisionStatus};
+    let mut metadata = serde_json::to_value(schemars::schema_for!(SubtitleVersionMetadata)).unwrap();
+    metadata["examples"] = serde_json::json!([SubtitleVersionMetadata {
+        id: "v".into(), track_id: "t".into(), project_id: "p".into(), role: SubtitleTrackRole::Original,
+        version_number: 1, status: SubtitleRevisionStatus::Ready, source_label: "字幕".into(),
+        language_code: "en".into(), created_at_ms: 1, is_current: true, segment_count: 75,
+    }]);
+    check_schema("subtitle-version-metadata", &metadata);
+}
+
+fn check_schema(name: &str, schema: &serde_json::Value) {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join(format!("../contracts/{name}.schema.json"));
     let expected = format!("{}\n", serde_json::to_string_pretty(&schema).unwrap());
     if std::env::var("SIAOVPLAY_UPDATE_CONTRACTS").as_deref() == Ok("1") {
         fs::create_dir_all(path.parent().unwrap()).unwrap();

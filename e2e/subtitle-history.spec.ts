@@ -10,7 +10,7 @@ test("history read failure can be retried and the loaded revision dialog closes 
       if (state.historyFail) throw new Error("历史读取暂时失败");
       if (command === "list_subtitle_versions" && input.includeHistory === false) return [state.historyFixture];
       if (command === "list_subtitle_version_metadata") {
-        const metadata = Object.fromEntries(Object.entries(state.historyFixture).filter(([key]) => !["segments", "preflight"].includes(key)));
+        const metadata = Object.fromEntries(Object.entries(state.historyFixture).filter(([key]) => ["id", "trackId", "projectId", "role", "versionNumber", "status", "sourceLabel", "languageCode", "createdAtMs", "isCurrent"].includes(key)));
         return [{ ...metadata, segmentCount: (state.historyFixture.segments as unknown[]).length }, { ...metadata, id: "historical-version", isCurrent: false, segmentCount: 75 }];
       }
       throw new Error("Unexpected history request");

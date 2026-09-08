@@ -1,23 +1,43 @@
 use super::SubtitleError;
 use crate::{commands::CommandError, store::ProjectStore};
 use rusqlite::params;
-use serde::Serialize;
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use tauri::State;
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
+pub enum SubtitleTrackRole { Original, Translation }
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
+pub enum SubtitleRevisionStatus { Draft, Ready, Rejected }
+
 #[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct SubtitleVersionMetadata {
     pub id: String,
     pub track_id: String,
     pub project_id: String,
-    pub role: String,
+    pub role: SubtitleTrackRole,
+    #[cfg_attr(test, schemars(range(min = 1, max = 9007199254740991_i64)))]
     pub version_number: i64,
-    pub status: String,
+    pub status: SubtitleRevisionStatus,
     pub source_label: String,
     pub language_code: String,
+    #[cfg_attr(test, schemars(range(min = -9007199254740991_i64, max = 9007199254740991_i64)))]
     pub created_at_ms: i64,
     pub is_current: bool,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_i64)))]
     pub segment_count: i64,
+}
+
+fn read_enum<T: DeserializeOwned>(row: &rusqlite::Row<'_>, index: usize) -> rusqlite::Result<T> {
+    let value: String = row.get(index)?;
+    serde_json::from_value(serde_json::Value::String(value)).map_err(|error|
+        rusqlite::Error::FromSqlConversionFailure(index, rusqlite::types::Type::Text, Box::new(error)))
 }
 
 pub fn list_metadata(
@@ -39,9 +59,9 @@ pub fn list_metadata(
                 id: row.get(0)?,
                 track_id: row.get(1)?,
                 project_id: row.get(2)?,
-                role: row.get(3)?,
+                role: read_enum(row, 3)?,
                 version_number: row.get(4)?,
-                status: row.get(5)?,
+                status: read_enum(row, 5)?,
                 source_label: row.get(6)?,
                 language_code: row.get(7)?,
                 created_at_ms: row.get(8)?,
@@ -64,4 +84,24 @@ pub async fn list_subtitle_version_metadata(
     })
     .await
     .map_err(CommandError::background_task_failed)?
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn role_and_status_are_checked_at_database_boundary() {
+        let connection = rusqlite::Connection::open_in_memory().unwrap();
+        for value in ["original", "translation"] {
+            let role = connection.query_row("SELECT ?1", [value], |row| read_enum::<SubtitleTrackRole>(row, 0)).unwrap();
+            assert_eq!(serde_json::to_value(role).unwrap(), value);
+        }
+        for value in ["draft", "ready", "rejected"] {
+            let status = connection.query_row("SELECT ?1", [value], |row| read_enum::<SubtitleRevisionStatus>(row, 0)).unwrap();
+            assert_eq!(serde_json::to_value(status).unwrap(), value);
+        }
+        assert!(connection.query_row("SELECT 'unknown'", [], |row| read_enum::<SubtitleTrackRole>(row, 0)).is_err());
+        assert!(connection.query_row("SELECT 'unknown'", [], |row| read_enum::<SubtitleRevisionStatus>(row, 0)).is_err());
+    }
 }

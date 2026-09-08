@@ -9,3 +9,7 @@ it.each([{ segmentCount: -1 }, { versionNumber: 0 }, { segmentCount: 1.5 }, { ro
   { status: "unknown" }, { role: ["original"] }, { status: ["ready"] }, { segments: [] }, { preflight: {} }, { sourceLabel: null }, { isCurrent: 1 }])("rejects invalid metadata %j", (change) => {
   expect(() => parseSubtitleMetadata([{ ...metadata, ...change }])).toThrow("字幕版本列表格式无效");
 });
+
+it.each(["versionNumber", "createdAtMs", "segmentCount"])("rejects unsafe integer precision for %s", (field) => {
+  expect(() => parseSubtitleMetadata([{ ...metadata, [field]: Number.MAX_SAFE_INTEGER + 1 }])).toThrow("字幕版本列表格式无效");
+});
