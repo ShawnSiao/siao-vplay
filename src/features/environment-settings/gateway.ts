@@ -1,3 +1,4 @@
+import validateModelList from "../../generated/ai-model-list.validator.mjs";
 import { invoke } from "@tauri-apps/api/core";
 
 import type {
@@ -50,10 +51,12 @@ export function setDefaultAiService(
   });
 }
 
-export function listAiServiceModels(
+export async function listAiServiceModels(
   input: AiServiceProbeInput,
 ): Promise<AiModelList> {
-  return invoke("list_ai_service_models", { input });
+  const result = await invoke<unknown>("list_ai_service_models", { input });
+  if (!validateModelList(result)) throw new Error("模型列表格式无效");
+  return result;
 }
 
 export function testAiService(

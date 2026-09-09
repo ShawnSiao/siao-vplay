@@ -25,6 +25,16 @@ fn committed_schemas_match_rust() {
         language_code: "en".into(), created_at_ms: 1, is_current: true, segment_count: 75,
     }]);
     check_schema("subtitle-version-metadata", &metadata);
+    use crate::ai::types::{AiModelInfo, AiModelList};
+    let mut models = serde_json::to_value(schemars::schema_for!(AiModelList)).unwrap();
+    models["examples"] = serde_json::json!([
+        AiModelList { models: Vec::new(), manual_entry_allowed: true },
+        AiModelList { models: vec![AiModelInfo {
+            id: "model".into(), display_name: "Model".into(), vision: false,
+            capability_source: "unknown".into(),
+        }], manual_entry_allowed: true },
+    ]);
+    check_schema("ai-model-list", &models);
 }
 
 fn check_schema(name: &str, schema: &serde_json::Value) {

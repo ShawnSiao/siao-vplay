@@ -1,3 +1,5 @@
+import type { AiModelInfo } from "../../generated/ai-model-list";
+export type { AiModelInfo, AiModelList } from "../../generated/ai-model-list";
 export type AiProviderId =
   | "openai"
   | "anthropic"
@@ -53,18 +55,6 @@ export type AiServiceSettings = {
   };
   services: AiServiceSummary[];
   defaultServiceId: string | null;
-};
-
-export type AiModelInfo = {
-  id: string;
-  displayName: string;
-  vision: boolean;
-  capabilitySource: string;
-};
-
-export type AiModelList = {
-  models: AiModelInfo[];
-  manualEntryAllowed: boolean;
 };
 
 export type AiServiceTestResult = {

@@ -193,6 +193,7 @@ pub(crate) struct ResolvedAiService {
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct AiModelInfo {
     pub id: String,
     pub display_name: String,
@@ -202,6 +203,7 @@ pub struct AiModelInfo {
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct AiModelList {
     pub models: Vec<AiModelInfo>,
     pub manual_entry_allowed: bool,
