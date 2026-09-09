@@ -136,8 +136,16 @@ export function StoragePane({ controller }: StoragePaneProps) {
   const [confirmCacheClear, setConfirmCacheClear] = useState(false);
   const settings = controller.settings;
 
+  if (!settings && controller.error && controller.operation !== "loading") {
+    return <section className="storage-settings-pane" aria-label="存储位置">
+      <div className="storage-settings-loading storage-settings-recovery">
+        <p className="storage-error" role="alert">{controller.error}</p>
+        <button className="button secondary" type="button" disabled={controller.operation !== null} onClick={() => void controller.reload()}>重新读取存储设置</button>
+      </div>
+    </section>;
+  }
   if (!settings || controller.operation === "loading") {
-    return <section className="storage-settings-pane"><div className="storage-settings-loading">正在读取存储位置…</div></section>;
+    return <section className="storage-settings-pane"><div className="storage-settings-loading" role="status">正在读取存储位置…</div></section>;
   }
 
   const open = (kind: StorageLocationKind) => void controller.openLocation(kind);

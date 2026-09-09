@@ -126,3 +126,13 @@ it("does not open the saved location under a different draft directory", () => {
   fireEvent.click(button);
   expect(value.openLocation).not.toHaveBeenCalled();
 });
+
+
+it("shows the initial read failure and an explicit retry instead of indefinite loading", () => {
+  const value = controller({ settings: null, error: "存储配置暂时不可读", operation: null });
+  render(<StoragePane controller={value} />);
+  expect(screen.getByRole("alert")).toHaveTextContent("存储配置暂时不可读");
+  expect(screen.queryByText("正在读取存储位置…")).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "重新读取存储设置" }));
+  expect(value.reload).toHaveBeenCalledTimes(1);
+});
