@@ -230,3 +230,6 @@ mod area_reference_tests;
 
 #[path = "migration_configuration_tests.rs"]
 mod configuration_tests;
+
+#[path = "migration_material_tests.rs"]
+mod material_tests;
