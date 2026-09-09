@@ -11,13 +11,22 @@ impl LibraryService {
         &self,
         input: ListLibrarySectionInput,
     ) -> Result<LibrarySectionPage, LibraryError> {
+        self.list_section_with_checkpoint(input, || {})
+    }
+
+    pub(super) fn list_section_with_checkpoint(
+        &self,
+        input: ListLibrarySectionInput,
+        after_count: impl FnOnce(),
+    ) -> Result<LibrarySectionPage, LibraryError> {
         if input.offset < 0 {
             return Err(LibraryError::Validation(
                 "媒体库分页位置不能小于 0".to_owned(),
             ));
         }
-        let connection = self.store.connect()?;
-        let repository = LibraryRepository::new(&connection);
+        let mut connection = self.store.connect()?;
+        let transaction = connection.transaction()?;
+        let repository = LibraryRepository::new(&transaction);
         let (items, total_count) = match input.section {
             LibraryMediaSection::ContinueWatching => (
                 repository.list_continue_watching_page(LIBRARY_SECTION_PAGE_LIMIT, input.offset)?,
@@ -42,6 +51,7 @@ impl LibraryService {
             }
             LibraryMediaSection::Unclassified => {
                 let (_, _, total_count) = repository.counts()?;
+                after_count();
                 (
                     repository.list_unclassified_page(LIBRARY_SECTION_PAGE_LIMIT, input.offset)?,
                     total_count,
@@ -49,6 +59,7 @@ impl LibraryService {
             }
         };
         let loaded = input.offset + items.len() as i64;
+        transaction.commit()?;
         Ok(LibrarySectionPage {
             items,
             total_count,

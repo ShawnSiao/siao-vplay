@@ -1,6 +1,23 @@
 use crate::library::{LibraryMediaSection, ListLibrarySectionInput};
 
 #[test]
+fn section_items_and_count_share_a_snapshot_during_deletion() {
+    let fixture = Fixture::new();
+    let project = fixture.project("snapshot.mp4");
+    let page = fixture.service.list_section_with_checkpoint(
+        ListLibrarySectionInput { section: LibraryMediaSection::Unclassified, offset: 0 },
+        || { assert!(fixture.service.store.delete_project(&project.id).unwrap().deleted); },
+    ).unwrap();
+    assert_eq!(page.total_count, 1);
+    assert_eq!(page.items.len(), 1, "count and rows must describe the same snapshot");
+    assert_eq!(page.items[0].project_id, project.id);
+    assert_eq!(page.next_offset, None);
+    let current = fixture.service.list_section(ListLibrarySectionInput { section: LibraryMediaSection::Unclassified, offset: 0 }).unwrap();
+    assert_eq!(current.total_count, 0);
+    assert!(current.items.is_empty());
+}
+
+#[test]
 fn library_sections_page_without_truncating_totals() {
     let fixture = Fixture::new();
     let projects = (0..26)
