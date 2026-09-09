@@ -217,7 +217,7 @@ impl StorageManager {
                     &destination,
                 )?;
                 self.update_progress(task.bytes_to_copy, task.file_count)?;
-                self.apply_destination(task.area, &destination)?;
+                self.commit_app_data_destination(task)?;
                 Ok(StorageMigrationStatus::RestartRequired)
             }
             StorageArea::RemoteMedia | StorageArea::MediaCache => {
@@ -241,15 +241,18 @@ impl StorageManager {
         }
     }
 
-    fn apply_destination(&self, area: StorageArea, destination: &Path) -> Result<(), StorageError> {
+    fn commit_app_data_destination(&self, task: &StorageMigrationTask) -> Result<(), StorageError> {
+        let runtime = self.migration.lock().map_err(|_| StorageError::StatePoisoned)?;
+        if runtime.task.as_ref().is_none_or(|current| current.id != task.id
+            || current.area != StorageArea::AppData || current.status != StorageMigrationStatus::Running
+            || current.source_root != task.source_root || current.destination_root != task.destination_root) {
+            return Err(StorageError::MigrationNotFound);
+        }
+        // Keep cancellation and final settings publication under the same task lock.
+        if runtime.cancelled.load(Ordering::Relaxed) { return Err(StorageError::MigrationCancelled); }
         let mut state = self.write_state()?;
         let mut next = state.settings.clone();
-        let value = Some(path_string(destination));
-        match area {
-            StorageArea::AppData => next.pending_app_data_root = value,
-            StorageArea::RemoteMedia => next.remote_media_root = value,
-            StorageArea::MediaCache => next.media_cache_root = value,
-        }
+        next.pending_app_data_root = Some(task.destination_root.clone());
         next.revision = next.revision.saturating_add(1);
         persist_settings(&state.settings_path, &next)?;
         state.settings = next;
@@ -336,3 +339,7 @@ fn ensure_empty_directory(path: &Path) -> Result<(), StorageError> {
 fn path_string(path: &Path) -> String {
     path.to_string_lossy().into_owned()
 }
+
+#[cfg(test)]
+#[path = "migration_cancel_tests.rs"]
+mod cancel_tests;
