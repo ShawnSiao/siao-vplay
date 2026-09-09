@@ -1,3 +1,7 @@
+mod binding;
+pub use binding::bind_configured_root;
+#[cfg(test)]
+mod binding_tests;
 mod contract;
 mod ordering;
 pub use contract::{ResourceNetworkStatus, ResourceDownloadSnapshot, ResourceDownloadTask, ResourceDownloadTaskState, CapabilityPreparation};
@@ -52,6 +56,8 @@ const MAX_ARCHIVE_EXPANSION_FACTOR: u64 = 20;
 
 #[derive(Debug, Error)]
 pub enum ResourceDownloadError {
+    #[error("资源任务状态尚未恢复，已暂停任务操作：{0}")]
+    BindingUnavailable(String),
     #[error(transparent)]
     LocalResource(#[from] LocalResourceError),
     #[error("资源任务文件操作失败：{0}")]
@@ -94,6 +100,7 @@ pub enum ResourceDownloadError {
 impl ResourceDownloadError {
     pub fn code(&self) -> &'static str {
         match self {
+            Self::BindingUnavailable(_) => "local_resource_binding_unavailable",
             Self::LocalResource(LocalResourceError::RootUnavailable(_)) => "root_unavailable",
             Self::LocalResource(LocalResourceError::UnknownCapability(_)) => {
                 "local_resource_capability_invalid"
@@ -164,6 +171,7 @@ struct DownloadTaskStore {
 }
 
 struct DownloadManager {
+    binding_error: Option<String>,
     generation: u64,
     root: Option<PathBuf>,
     tasks: BTreeMap<String, ResourceDownloadTask>,
@@ -187,16 +195,6 @@ static ACTIVE_CONTROLS: OnceLock<Mutex<HashMap<String, Arc<DownloadControl>>>> =
 
 pub fn initialize() -> Result<(), ResourceDownloadError> {
     bind_configured_root()
-}
-
-pub fn bind_configured_root() -> Result<(), ResourceDownloadError> {
-    let manager = DownloadManager::load(local_resources::configured_root())?;
-    let state = DOWNLOAD_MANAGER.get_or_init(|| RwLock::new(manager));
-    let mut state = state
-        .write()
-        .map_err(|_| io::Error::other("资源下载任务锁不可用"))?;
-    *state = DownloadManager::load(local_resources::configured_root())?;
-    Ok(())
 }
 
 pub fn list_tasks() -> Result<Vec<ResourceDownloadTask>, ResourceDownloadError> {
@@ -225,7 +223,7 @@ pub(crate) fn resource_is_preparing(resource_id: &str) -> bool {
         .get()
         .and_then(|manager| manager.read().ok())
         .is_some_and(|manager| {
-            manager
+            manager.binding_error.is_none() && manager
                 .tasks
                 .values()
                 .any(|task| task.resource_id == resource_id && task.state.is_worker_active())
@@ -477,6 +475,7 @@ fn with_manager_read<T>(
     let state = state
         .read()
         .map_err(|_| io::Error::other("资源下载任务锁不可用"))?;
+    state.ensure_bound()?;
     operation(&state)
 }
 
@@ -491,12 +490,14 @@ fn with_manager_write<T>(
     let mut state = state
         .write()
         .map_err(|_| io::Error::other("资源下载任务锁不可用"))?;
+    state.ensure_bound()?;
     operation(&mut state)
 }
 
 impl DownloadManager {
     fn load(root: Option<PathBuf>) -> Result<Self, ResourceDownloadError> {
         let mut manager = Self {
+            binding_error: None,
             generation: ordering::next_generation()?,
             root,
             tasks: BTreeMap::new(),
@@ -555,6 +556,7 @@ impl DownloadManager {
     }
 
     fn ensure_root_available(&self) -> Result<&Path, ResourceDownloadError> {
+        self.ensure_bound()?;
         let root = self
             .root
             .as_deref()
@@ -2162,6 +2164,7 @@ mod tests {
         let resource = local_resources::resource_definition("ffmpeg-cpu")
             .expect("catalog resource should exist");
         let mut manager = DownloadManager {
+            binding_error: None,
             generation: 1,
             root: Some(root.path().to_path_buf()),
             tasks: BTreeMap::new(),
