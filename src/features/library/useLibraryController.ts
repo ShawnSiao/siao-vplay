@@ -1,3 +1,4 @@
+import { useLibraryFolderImport } from "./useLibraryFolderImport";
 import { useLibraryFolderScan } from "./useLibraryFolderScan";
 import { useLibrarySearch, type LibrarySearchAction } from "./useLibrarySearch";
 import { useLibraryCollectionPaging, type CollectionReadAction } from "./useLibraryCollectionPaging";
@@ -9,7 +10,6 @@ import { commandError } from "../../lib/desktop";
 import type {
   CollectionDetail,
   CollectionSortMode,
-  ConfirmLibraryImportInput,
   LibraryCollection,
   LibraryHome,
   LibraryImportResult,
@@ -30,7 +30,6 @@ import {
   applyLibraryRescan,
   applyLibraryRootRebuild,
   applyLibraryRootRelocation,
-  confirmLibraryImport,
   createCollection,
   deleteCollection,
   emptyLibraryHome,
@@ -870,43 +869,17 @@ export function useLibraryController() {
     dispatch({ type: "scan_duplicates_changed", confirmed });
   }, []);
 
-  const importScannedFolder = useCallback(async () => {
-    const snapshot = state.folderImport;
-    if (!snapshot.preview || snapshot.stage !== "preview") {
-      return null;
-    }
-    const input: ConfirmLibraryImportInput = {
-      previewToken: snapshot.preview.previewToken,
-      collectionTitle: snapshot.collectionTitle,
-      items: snapshot.items.map((item) => ({
-        candidateId: item.candidateId,
-        displayTitle: item.displayTitle,
-        seasonNumber: item.seasonNumber,
-        episodeNumber: item.episodeNumber,
-        absoluteOrder: item.absoluteOrder,
-        confirmed: item.confirmed,
-      })),
-      confirmFingerprintDuplicates: snapshot.confirmFingerprintDuplicates,
-    };
-    dispatch({ type: "scan_import_started" });
-    try {
-      const result = await confirmLibraryImport(input);
-      dispatch({
-        type: "scan_import_succeeded",
-        result,
-        episodes: [],
-        importedRootPath: snapshot.preview.rootPath,
-        importedRootName: snapshot.preview.rootDisplayName,
-      });
+  const importScannedFolder = useLibraryFolderImport(state.folderImport, {
+    started: () => dispatch({ type: "scan_import_started" }),
+    committed: async (result, source) => {
+      dispatch({ type: "scan_import_succeeded", result, episodes: [],
+        importedRootPath: source.rootPath, importedRootName: source.rootDisplayName });
       await loadCollection(result.collection.summary.id, null, result.collection);
       void refresh();
-      return result;
-    } catch (error) {
-      dispatch({ type: "scan_failed", message: commandError(error).message });
-      return null;
-    }
-  }, [loadCollection, refresh, state.folderImport]);
-
+    },
+    failed: message => dispatch({ type: "scan_failed", message }),
+    refreshFailed: message => dispatch({ type: "failed", message }),
+  });
   const inspectRootRescan = useCallback(async (rootId: string) => {
     const sequence = recoveryRequestSequence.current + 1;
     recoveryRequestSequence.current = sequence;

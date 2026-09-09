@@ -7,7 +7,7 @@ import tseslint from "typescript-eslint";
 
 export default tseslint.config(
   {
-    files: ["src/features/library/useLibrarySearch.ts", "src/features/library/useLibraryFolderScan.ts"],
+    files: ["src/features/library/useLibrarySearch.ts", "src/features/library/useLibraryFolderScan.ts", "src/features/library/useLibraryFolderImport.ts"],
     rules: {
       "no-restricted-imports": ["error", {
         patterns: [{
