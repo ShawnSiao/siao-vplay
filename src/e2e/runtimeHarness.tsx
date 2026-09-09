@@ -2,7 +2,7 @@ import { StrictMode, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 
 import type { LocalResourcesController } from "../features/resources/useLocalResources";
-import { RuntimeView } from "./RuntimeView";
+import { RuntimeView, LiveRuntimeView } from "./RuntimeView";
 import type {
   LocalResourceCatalog,
   LocalResourceStatus,
@@ -387,6 +387,6 @@ if (!root) {
 
 createRoot(root).render(
   <StrictMode>
-    <RuntimeHarness />
+    {new URLSearchParams(window.location.search).has("live") ? <LiveRuntimeView /> : <RuntimeHarness />}
   </StrictMode>,
 );

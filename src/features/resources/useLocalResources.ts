@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useResourceMove } from "./useResourceMove";
+import { useResourcePolling } from "./useResourcePolling";
 
 import {
   adoptLocalResources,
@@ -280,23 +281,14 @@ export function useLocalResources(): LocalResourcesController {
     };
   }, [captureError, mergeTask]);
 
-  useEffect(() => {
-    if (!tasks.some((task) => activeTaskStates.has(task.state))) {
-      return undefined;
-    }
-    const timer = window.setInterval(() => {
-      void Promise.all([
-        listResourceDownloadTasks(),
-        getLocalResourceStatus(),
-      ])
-        .then(([nextTasks, nextStatus]) => {
-          replaceTasks(nextTasks);
-          setStatus(nextStatus);
-        })
-        .catch(captureError);
-    }, 1_000);
-    return () => window.clearInterval(timer);
-  }, [captureError, replaceTasks, tasks]);
+  useResourcePolling({
+    enabled: tasks.some((task) => activeTaskStates.has(task.state)),
+    onSnapshot: (nextTasks, nextStatus) => {
+      replaceTasks(nextTasks);
+      setStatus(nextStatus);
+    },
+    onError: captureError,
+  });
 
   const updateTask = useCallback(
     async (

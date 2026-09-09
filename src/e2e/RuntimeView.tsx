@@ -1,6 +1,6 @@
 import { LocalResourcesDialog } from "../components/LocalResourcesDialog";
 import { EnvironmentSettingsDialog } from "../features/environment-settings/EnvironmentSettingsDialog";
-import type { LocalResourcesController } from "../features/resources/useLocalResources";
+import { useLocalResources, type LocalResourcesController } from "../features/resources/useLocalResources";
 
 export function RuntimeView({ controller }: { controller: LocalResourcesController }) {
   const capabilityId = new URLSearchParams(window.location.search).get("pending");
@@ -31,4 +31,9 @@ export function RuntimeView({ controller }: { controller: LocalResourcesControll
       onNotice={() => undefined}
     />
   );
+}
+
+export function LiveRuntimeView() {
+  const controller = useLocalResources();
+  return <RuntimeView controller={controller} />;
 }
