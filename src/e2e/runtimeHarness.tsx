@@ -88,6 +88,7 @@ export function RuntimeHarness() {
       confirmLocation: async () => status,
       chooseExistingResources: async () => null,
       adoptResources: async () => ({
+        resourceRoot: status.resourceRoot ?? "", planFingerprint: "a".repeat(64), requestId: "preview-request",
         adoptedResourceIds: [],
         alreadyActiveResourceIds: [],
         rejectedResourceIds: [],

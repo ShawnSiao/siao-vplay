@@ -2,6 +2,7 @@ use super::*;
 
 pub fn adopt_local_resources(
     input: AdoptLocalResourcesInput,
+    request_id: &str,
 ) -> Result<ResourceAdoptionResult, ResourceMigrationError> {
     let _maintenance = crate::resource_leases::maintain_all()?;
     if !input.confirmed {
@@ -10,16 +11,19 @@ pub fn adopt_local_resources(
     if resource_download::has_active_tasks()? {
         return Err(ResourceMigrationError::Busy);
     }
-    local_resources::repair_configured_root(true)?;
-    let root =
-        local_resources::configured_root().ok_or(LocalResourceError::ConfirmationRequired)?;
-    let sources = candidate_sources(input.source_path.as_deref(), input.source_kind.as_deref())?;
-    let (verified, rejected) = inspect_sources(&sources)?;
+    let (preview, verified) = adoption_confirmation::inspect(InspectResourceMigrationInput { source_path: input.source_path, source_kind: input.source_kind })?;
+    adoption_confirmation::verify(&input.plan_fingerprint, &preview.plan_fingerprint)?;
+    if preview.resource_root.as_deref() != Some(input.resource_root.as_str()) { return Err(ResourceMigrationError::AdoptionPlanChanged); }
+    let root = local_resources::configured_root().ok_or(LocalResourceError::ConfirmationRequired)?;
+    if !root.is_dir() || local_resources::resource_subdirectories().iter().any(|relative| !root.join(relative).is_dir()) {
+        return Err(LocalResourceError::RootUnavailable(path_string(&root)).into());
+    }
+    let rejected = preview.candidates.iter().filter(|candidate| candidate.state == "rejected");
     let mut adopted = Vec::new();
     let mut already_active = Vec::new();
     let mut rejected_ids = rejected
         .into_iter()
-        .map(|candidate| candidate.resource_id)
+        .map(|candidate| candidate.resource_id.clone())
         .collect::<Vec<_>>();
     let mut reusable_bytes = 0_u64;
     let mut handled = BTreeSet::new();
@@ -45,6 +49,9 @@ pub fn adopt_local_resources(
     rejected_ids.sort();
     rejected_ids.dedup();
     Ok(ResourceAdoptionResult {
+        resource_root: path_string(&root),
+        plan_fingerprint: preview.plan_fingerprint,
+        request_id: request_id.to_owned(),
         adopted_resource_ids: adopted,
         already_active_resource_ids: already_active,
         rejected_resource_ids: rejected_ids,

@@ -2,7 +2,9 @@
 
 export interface ResourceMigrationPreview {
   candidates: ResourceMigrationCandidate[];
+  planFingerprint: string;
   rejectedCount: number;
+  resourceRoot: string | null;
   reusableBytes: number;
   sources: ResourceMigrationSource[];
   verifiedResourceIds: string[];

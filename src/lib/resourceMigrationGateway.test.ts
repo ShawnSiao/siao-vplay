@@ -11,13 +11,13 @@ const moved = { planFingerprint: "a".repeat(64), requestId: "request-1", previou
   crossVolume: false, previousRootRetained: true };
 const candidate = { sourceKind: "selected_directory", sourceRoot: "W:/source", resourceId: "tool", resourcePath: "W:/source/tool",
   state: "verified", reusableBytes: 10, message: null };
-const preview = { sources: [{ kind: "selected_directory", path: "W:/source" }], candidates: [candidate],
+const preview = { planFingerprint: "a".repeat(64), resourceRoot: "W:/target", sources: [{ kind: "selected_directory", path: "W:/source" }], candidates: [candidate],
   verifiedResourceIds: ["tool"], reusableBytes: 10, rejectedCount: 0 };
-const adopted = { adoptedResourceIds: ["tool"], alreadyActiveResourceIds: [], rejectedResourceIds: [], reusableBytes: 10 };
+const adopted = { planFingerprint: "a".repeat(64), resourceRoot: "W:/target", requestId: "request-1", adoptedResourceIds: ["tool"], alreadyActiveResourceIds: [], rejectedResourceIds: [], reusableBytes: 10 };
 const operations = {
   location: () => planLocalResourceLocation("W:/new"), plan: () => planLocalResourceMove("W:/new"),
   move: () => moveLocalResourceRoot(movePlan, "request-1"), inspect: () => inspectLocalResourceMigration("W:/source"),
-  adopt: () => adoptLocalResources("W:/source"),
+  adopt: () => adoptLocalResources(preview, "request-1"),
 };
 it.each([
   ["location", null], ["location", { ...location, freeSpaceBytes: undefined }], ["location", { ...location, freeSpaceBytes: -1 }],
@@ -54,16 +54,16 @@ it("preserves exact caller arguments and the move request identity", async () =>
   expect(mocks.invoke).toHaveBeenLastCalledWith("move_local_resource_root", { input: { parentPath: "W:/new", confirmed: true, planFingerprint: "a".repeat(64) }, requestId: "request-1" });
   mocks.invoke.mockResolvedValue(preview); await operations.inspect();
   expect(mocks.invoke).toHaveBeenLastCalledWith("inspect_local_resource_migration", { input: { sourcePath: "W:/source", sourceKind: "selected_directory" } });
-  mocks.invoke.mockResolvedValue({ adoptedResourceIds: [], alreadyActiveResourceIds: [], rejectedResourceIds: [], reusableBytes: 0 });
-  await adoptLocalResources();
-  expect(mocks.invoke).toHaveBeenLastCalledWith("adopt_local_resources", { input: { sourcePath: null, sourceKind: null, confirmed: true } });
+  mocks.invoke.mockResolvedValue({ planFingerprint: "a".repeat(64), resourceRoot: "W:/target", requestId: "request-1", adoptedResourceIds: [], alreadyActiveResourceIds: [], rejectedResourceIds: [], reusableBytes: 0 });
+  await adoptLocalResources({ ...preview, sources: [], candidates: [], verifiedResourceIds: [], reusableBytes: 0, rejectedCount: 0 }, "request-1");
+  expect(mocks.invoke).toHaveBeenLastCalledWith("adopt_local_resources", { input: { resourceRoot: "W:/target", sourcePath: null, sourceKind: null, confirmed: true, planFingerprint: "a".repeat(64) }, requestId: "request-1" });
 });
 
 it("rejects unsolicited migration sources when no directory was selected", async () => {
   mocks.invoke.mockResolvedValue(preview); await expect(inspectLocalResourceMigration()).rejects.toThrow();
 });
 it("accepts an empty explicit-scope scan and a canonicalized selected directory", async () => {
-  mocks.invoke.mockResolvedValue({ sources: [], candidates: [], verifiedResourceIds: [], reusableBytes: 0, rejectedCount: 0 });
+  mocks.invoke.mockResolvedValue({ planFingerprint: "a".repeat(64), resourceRoot: "W:/target", sources: [], candidates: [], verifiedResourceIds: [], reusableBytes: 0, rejectedCount: 0 });
   await expect(inspectLocalResourceMigration()).resolves.toHaveProperty("sources", []);
   mocks.invoke.mockResolvedValue(preview);
   await expect(inspectLocalResourceMigration("W:/alias-to-source")).resolves.toEqual(preview);

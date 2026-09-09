@@ -85,7 +85,7 @@ export type LocalResourcesController = {
     sourcePath: string;
     preview: ResourceMigrationPreview;
   } | null>;
-  adoptResources: (sourcePath?: string) => Promise<ResourceAdoptionResult>;
+  adoptResources: (preview: ResourceMigrationPreview) => Promise<ResourceAdoptionResult>;
   chooseMoveLocation: () => Promise<LocalResourceMovePlan | null>;
   moveLocation: (plan: LocalResourceMovePlan) => Promise<LocalResourceMoveResult>;
   moving?: boolean;
@@ -318,16 +318,15 @@ export function useLocalResources(): LocalResourcesController {
         throw cause;
       }
     },
-    adoptResources: async (sourcePath) => {
-      try {
-        const result = await adoptLocalResources(sourcePath);
-        setStatus(await getLocalResourceStatus());
-        setError(null);
-        return result;
-      } catch (cause) {
-        captureError(cause);
-        throw cause;
-      }
+    adoptResources: async (preview) => {
+      let result: ResourceAdoptionResult;
+      try { result = await adoptLocalResources(preview, crypto.randomUUID()); }
+      catch (cause) { captureError(cause); throw cause; }
+      setError(null);
+      const finishRead = beginRead("refresh");
+      try { setStatus(await getLocalResourceStatus()); finishRead(); }
+      catch (cause) { finishRead(new Error(`接管结果已保留，资源状态刷新失败：${commandError(cause).message}`)); }
+      return result;
     },
     chooseMoveLocation: async () => {
       try {

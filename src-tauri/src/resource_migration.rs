@@ -1,4 +1,6 @@
 #[cfg(test)]
+mod adoption_confirmation_tests;
+#[cfg(test)]
 mod move_confirmation_tests;
 mod contracts;
 pub use contracts::{
@@ -11,6 +13,7 @@ mod move_io;
 mod move_commit;
 mod move_staging;
 mod move_confirmation;
+mod adoption_confirmation;
 pub use maintenance::{adopt_local_resources, move_resource_root, reconnect_resource_root, cleanup_unused_resources};
 
 use std::{
@@ -54,6 +57,8 @@ pub enum ResourceMigrationError {
     ConfirmationRequired,
     #[error("资源移动计划已变化，请重新检查保存位置并确认")]
     PlanChanged,
+    #[error("资源接管计划已变化，请重新检查现有资源并确认")]
+    AdoptionPlanChanged,
     #[error("候选资源目录无效：{0}")]
     InvalidSource(String),
     #[error("目标资源目录已存在，请选择空的新位置或使用重新连接：{0}")]
@@ -80,6 +85,7 @@ impl ResourceMigrationError {
             Self::Runtime(_) => "runtime_storage_root_invalid",
             Self::FileSystem(_) => "local_resource_filesystem_error",
             Self::Serialization(_) => "local_resource_serialization_error",
+            Self::AdoptionPlanChanged => "local_resource_adoption_plan_changed",
             Self::PlanChanged => "local_resource_move_plan_changed",
             Self::ConfirmationRequired => "local_resource_confirmation_required",
             Self::InvalidSource(_) => "local_resource_candidate_invalid",
@@ -104,6 +110,8 @@ pub struct InspectResourceMigrationInput {
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AdoptLocalResourcesInput {
+    pub resource_root: String,
+    pub plan_fingerprint: String,
     #[serde(default)]
     pub source_path: Option<String>,
     #[serde(default)]
@@ -173,6 +181,8 @@ enum CandidatePayload {
 
 #[derive(Clone, Debug)]
 struct VerifiedCandidate {
+    definition: crate::local_resources::ResourceDefinition,
+    files: Vec<ReceiptFile>,
     public: ResourceMigrationCandidate,
     payload: CandidatePayload,
 }
@@ -188,47 +198,9 @@ struct ScannedSource {
     files: Vec<PathBuf>,
 }
 
-pub fn inspect_resource_migration(
-    input: InspectResourceMigrationInput,
-) -> Result<ResourceMigrationPreview, ResourceMigrationError> {
-    let sources = candidate_sources(input.source_path.as_deref(), input.source_kind.as_deref())?;
-    let (verified, rejected) = inspect_sources(&sources)?;
-    let mut verified_resource_ids = verified
-        .iter()
-        .map(|candidate| candidate.public.resource_id.clone())
-        .collect::<Vec<_>>();
-    verified_resource_ids.sort();
-    verified_resource_ids.dedup();
-    let reusable_bytes = verified
-        .iter()
-        .map(|candidate| candidate.public.reusable_bytes)
-        .sum();
-    let mut candidates = verified
-        .iter()
-        .map(|candidate| candidate.public.clone())
-        .chain(rejected.iter().cloned())
-        .collect::<Vec<_>>();
-    candidates.sort_by(|left, right| {
-        left.resource_id
-            .cmp(&right.resource_id)
-            .then(left.state.cmp(&right.state))
-            .then(left.resource_path.cmp(&right.resource_path))
-    });
-    Ok(ResourceMigrationPreview {
-        sources: sources
-            .into_iter()
-            .map(|source| ResourceMigrationSource {
-                kind: source.kind,
-                path: path_string(&source.root),
-            })
-            .collect(),
-        candidates,
-        verified_resource_ids,
-        reusable_bytes,
-        rejected_count: rejected.len(),
-    })
+pub fn inspect_resource_migration(input: InspectResourceMigrationInput) -> Result<ResourceMigrationPreview, ResourceMigrationError> {
+    adoption_confirmation::inspect(input).map(|(preview, _)| preview)
 }
-
 
 pub fn plan_resource_root_move(
     parent_path: &str,
@@ -371,8 +343,8 @@ fn inspect_resource_candidate(
     let mut verified = Vec::new();
     let mut rejected = Vec::new();
     match verified_receipt_candidate(&source.root, resource) {
-        Ok(Some(candidate)) => {
-            verified.push(public_candidate(source, resource, candidate));
+        Ok(Some((candidate, files))) => {
+            verified.push(public_candidate(source, resource, candidate, files));
             return Ok((verified, rejected));
         }
         Ok(None) => {}
@@ -421,7 +393,8 @@ fn inspect_resource_candidate(
     }
     for payload in payloads {
         match verify_candidate_payload(resource, &payload) {
-            Ok(bytes) => {
+            Ok(files) => {
+                let bytes = files.iter().map(|file| file.size).sum();
                 let public = ResourceMigrationCandidate {
                     source_kind: source.kind.clone(),
                     source_root: path_string(&source.root),
@@ -431,7 +404,7 @@ fn inspect_resource_candidate(
                     reusable_bytes: bytes,
                     message: None,
                 };
-                verified.push(VerifiedCandidate { public, payload });
+                verified.push(VerifiedCandidate { public, payload, files, definition: resource.clone() });
                 rejected.clear();
                 break;
             }
@@ -449,36 +422,18 @@ fn inspect_resource_candidate(
     Ok((verified, rejected))
 }
 
-fn public_candidate(
-    source: &CandidateSource,
-    resource: &crate::local_resources::ResourceDefinition,
-    candidate: CandidatePayload,
-) -> VerifiedCandidate {
-    let reusable_bytes = match &candidate {
-        CandidatePayload::Directory {
-            expected_manifest: Some(files),
-            ..
-        } => files.iter().map(|file| file.size).sum(),
-        _ => resource.installed_size.unwrap_or(0),
-    };
+fn public_candidate(source: &CandidateSource, resource: &crate::local_resources::ResourceDefinition, candidate: CandidatePayload, mut files: Vec<ReceiptFile>) -> VerifiedCandidate {
+    files.sort_by(|a, b| a.relative_path.cmp(&b.relative_path));
     VerifiedCandidate {
-        public: ResourceMigrationCandidate {
-            source_kind: source.kind.clone(),
-            source_root: path_string(&source.root),
-            resource_id: resource.id.clone(),
-            resource_path: path_string(candidate.path()),
-            state: "verified".to_owned(),
-            reusable_bytes,
-            message: None,
-        },
-        payload: candidate,
+        public: ResourceMigrationCandidate { source_kind: source.kind.clone(), source_root: path_string(&source.root), resource_id: resource.id.clone(), resource_path: path_string(candidate.path()), state: "verified".into(), reusable_bytes: files.iter().map(|file| file.size).sum(), message: None },
+        payload: candidate, files, definition: resource.clone(),
     }
 }
 
 fn verified_receipt_candidate(
     source_root: &Path,
     resource: &crate::local_resources::ResourceDefinition,
-) -> Result<Option<CandidatePayload>, ResourceMigrationError> {
+) -> Result<Option<(CandidatePayload, Vec<ReceiptFile>)>, ResourceMigrationError> {
     let receipt_path = source_root
         .join("receipts")
         .join(&resource.id)
@@ -492,12 +447,12 @@ fn verified_receipt_candidate(
     local_resources::validate_external_receipt(&receipt, resource)?;
     let payload =
         resource_download::join_safe_relative(source_root, &receipt.install_relative_path)?;
-    resource_download::verify_installed_payload(resource, &payload, Some(&receipt.files))?;
-    Ok(Some(CandidatePayload::Directory {
+    let files = resource_download::verify_installed_payload(resource, &payload, Some(&receipt.files))?;
+    Ok(Some((CandidatePayload::Directory {
         path: payload,
         expected_manifest: Some(receipt.files),
         included_files: None,
-    }))
+    }, files)))
 }
 
 impl CandidatePayload {
@@ -511,7 +466,7 @@ impl CandidatePayload {
 fn verify_candidate_payload(
     resource: &crate::local_resources::ResourceDefinition,
     payload: &CandidatePayload,
-) -> Result<u64, ResourceMigrationError> {
+) -> Result<Vec<ReceiptFile>, ResourceMigrationError> {
     match payload {
         CandidatePayload::File(path) => {
             let artifact = resource.artifact.as_ref().ok_or_else(|| {
@@ -524,7 +479,9 @@ fn verify_candidate_payload(
                     resource.id
                 )));
             }
-            Ok(size)
+            let entrypoints = resource_download::effective_entrypoints(resource)?;
+            let relative_path = entrypoints.values().next().ok_or_else(|| ResourceMigrationError::Integrity("候选资源没有文件入口".into()))?.clone();
+            Ok(vec![ReceiptFile { relative_path, size, sha256 }])
         }
         CandidatePayload::Directory {
             path,
@@ -533,25 +490,28 @@ fn verify_candidate_payload(
         } => {
             if let Some(included_files) = included_files {
                 resource_download::run_health_check(resource, path)?;
-                let mut bytes = 0_u64;
+                let mut files = Vec::new();
                 for relative in included_files {
                     let file = resource_download::join_safe_relative(path, relative)?;
-                    bytes = bytes.saturating_add(resource_download::file_digest(&file)?.0);
+                    let (size, sha256) = resource_download::file_digest(&file)?;
+                    files.push(ReceiptFile { relative_path: relative.clone(), size, sha256 });
                 }
+                let bytes: u64 = files.iter().map(|file| file.size).sum();
                 if bytes != resource.installed_size.unwrap_or(0) {
                     return Err(ResourceMigrationError::Integrity(format!(
                         "{} 的固定运行时文件大小不匹配",
                         resource.id
                     )));
                 }
-                return Ok(bytes);
+                files.sort_by(|a, b| a.relative_path.cmp(&b.relative_path));
+                return Ok(files);
             }
             let files = resource_download::verify_installed_payload(
                 resource,
                 path,
                 expected_manifest.as_deref(),
             )?;
-            Ok(files.iter().map(|file| file.size).sum())
+            Ok(files)
         }
     }
 }
@@ -560,7 +520,7 @@ fn adopt_candidate(
     root: &Path,
     candidate: &VerifiedCandidate,
 ) -> Result<(), ResourceMigrationError> {
-    let resource = local_resources::resource_definition(&candidate.public.resource_id)?;
+    let resource = &candidate.definition;
     let staging_root = root
         .join("staging")
         .join(format!("adopt-{}", Uuid::new_v4()));
@@ -590,14 +550,9 @@ fn adopt_candidate(
         let _ = fs::remove_dir_all(&staging_root);
         return Err(error.into());
     }
-    let expected_manifest = match &candidate.payload {
-        CandidatePayload::Directory {
-            expected_manifest, ..
-        } => expected_manifest.as_deref(),
-        CandidatePayload::File(_) => None,
-    };
-    let files = match resource_download::verify_installed_payload(
-        &resource,
+    let expected_manifest = Some(candidate.files.as_slice());
+    let mut files = match resource_download::verify_installed_payload(
+        resource,
         &staged_payload,
         expected_manifest,
     ) {
@@ -607,6 +562,11 @@ fn adopt_candidate(
             return Err(error.into());
         }
     };
+    files.sort_by(|a, b| a.relative_path.cmp(&b.relative_path));
+    if let Err(error) = adoption_confirmation::verify_files(&candidate.files, &files) {
+        let _ = fs::remove_dir_all(&staging_root);
+        return Err(error);
+    }
     if let Err(error) =
         resource_download::activate_staged_resource(root, &resource, &staged_payload, files)
     {
@@ -908,7 +868,7 @@ mod tests {
     use sha2::{Digest, Sha256};
     use tempfile::tempdir;
 
-    fn fixture_resource(
+    pub(super) fn fixture_resource(
         id: &str,
         file_name: &str,
         contents: &[u8],
@@ -954,7 +914,7 @@ mod tests {
         let resource = fixture_resource("fixture-model", "fixture.bin", b"verified-model");
         assert_eq!(
             verify_candidate_payload(&resource, &CandidatePayload::File(candidate))
-                .expect("candidate should verify"),
+                .expect("candidate should verify").iter().map(|file| file.size).sum::<u64>(),
             14
         );
     }

@@ -185,7 +185,7 @@ describe("LocalResourcesDialog", () => {
     const chooseExistingResources = vi.fn().mockResolvedValue({
       sourcePath: "W:\\LegacySiaoVPlay",
       preview: {
-        sources: [{ kind: "selected_directory", path: "W:\\LegacySiaoVPlay" }],
+        planFingerprint: "a".repeat(64), resourceRoot: "W:/target", sources: [{ kind: "selected_directory", path: "W:\\LegacySiaoVPlay" }],
         candidates: [
           {
             sourceKind: "selected_directory",
@@ -245,7 +245,7 @@ describe("LocalResourcesDialog", () => {
     expect(screen.getByText(/只检查了明确选择的目录/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "接管已验证资源" }));
     await waitFor(() =>
-      expect(adoptResources).toHaveBeenCalledWith("W:\\LegacySiaoVPlay"),
+      expect(adoptResources).toHaveBeenCalledWith(expect.objectContaining({ planFingerprint: "a".repeat(64), resourceRoot: "W:/target", sources: [{ kind: "selected_directory", path: "W:\\LegacySiaoVPlay" }] })),
     );
 
     fireEvent.click(screen.getByRole("button", { name: "移动保存位置" }));

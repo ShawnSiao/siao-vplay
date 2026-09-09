@@ -26,6 +26,9 @@ pub struct ResourceMigrationCandidate {
 #[serde(rename_all = "camelCase")]
 #[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct ResourceMigrationPreview {
+    pub resource_root: Option<String>,
+    #[cfg_attr(test, schemars(regex(pattern = "^[a-f0-9]{64}$")))]
+    pub plan_fingerprint: String,
     pub sources: Vec<ResourceMigrationSource>,
     pub candidates: Vec<ResourceMigrationCandidate>,
     pub verified_resource_ids: Vec<String>,
@@ -39,6 +42,10 @@ pub struct ResourceMigrationPreview {
 #[serde(rename_all = "camelCase")]
 #[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct ResourceAdoptionResult {
+    pub resource_root: String,
+    pub request_id: String,
+    #[cfg_attr(test, schemars(regex(pattern = "^[a-f0-9]{64}$")))]
+    pub plan_fingerprint: String,
     pub adopted_resource_ids: Vec<String>,
     pub already_active_resource_ids: Vec<String>,
     pub rejected_resource_ids: Vec<String>,

@@ -60,7 +60,6 @@ export function LocalResourcesDialog({
   );
   const [locationPlan, setLocationPlan] =
     useState<LocalResourceLocationPlan | null>(null);
-  const [migrationSourcePath, setMigrationSourcePath] = useState<string | undefined>();
   const [migrationPreview, setMigrationPreview] =
     useState<ResourceMigrationPreview | null>(null);
   const [movePlan, setMovePlan] = useState<LocalResourceMovePlan | null>(null);
@@ -234,17 +233,19 @@ export function LocalResourcesDialog({
     runAction("inspect-existing", async () => {
       const selection = await controller.chooseExistingResources();
       if (selection) {
-        setMigrationSourcePath(selection.sourcePath);
         setMigrationPreview(selection.preview);
       }
     });
 
   const adoptExistingResources = () =>
     runAction("adopt-existing", async () => {
-      const result = await controller.adoptResources(migrationSourcePath);
+      if (!migrationPreview) return;
+      const confirmedPreview = migrationPreview;
       setMigrationPreview(null);
+      const result = await controller.adoptResources(confirmedPreview);
+      if (result.rejectedResourceIds.length > 0) setLocalError(`有 ${result.rejectedResourceIds.length} 项资源未接管，请重新检查候选及资源状态。`);
       onNotice(
-        result.adoptedResourceIds.length > 0
+        result.rejectedResourceIds.length > 0 ? `已接管 ${result.adoptedResourceIds.length} 项资源，${result.rejectedResourceIds.length} 项未接管。` : result.adoptedResourceIds.length > 0
           ? `已接管 ${result.adoptedResourceIds.length} 项本地功能资源，无需重复下载。`
           : "没有需要接管的新资源。",
       );
@@ -847,7 +848,8 @@ export function LocalResourcesDialog({
                         )}。只检查了明确选择的目录，不会读取其他应用的数据。`
                       : "候选文件未通过当前版本、大小、哈希、文件清单或健康检查。"}
                   </p>
-                  {migrationPreview.verifiedResourceIds.length > 0 ? (
+                  <p>{migrationPreview.resourceRoot ? `接管到：${migrationPreview.resourceRoot}` : "请先选择资源保存位置。"}</p>
+                  {migrationPreview.verifiedResourceIds.length > 0 && migrationPreview.resourceRoot ? (
                     <button
                       className="button quiet"
                       type="button"

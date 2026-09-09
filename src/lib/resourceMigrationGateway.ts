@@ -1,4 +1,4 @@
-import type { LocalResourceMovePlan } from "../types";
+import type { LocalResourceMovePlan, ResourceMigrationPreview } from "../types";
 import { invoke } from "@tauri-apps/api/core";
 const nonblank = (value: string) => value.trim().length > 0;
 const unique = (values: string[]) => values.every(nonblank) && new Set(values).size === values.length;
@@ -32,8 +32,11 @@ export async function inspectLocalResourceMigration(sourcePath?: string) {
   const value = await invoke<unknown>("inspect_local_resource_migration", {
     input: { sourcePath: sourcePath ?? null, sourceKind: sourcePath ? "selected_directory" : null },
   });
+  return validateMigrationPreview(value, Boolean(sourcePath));
+}
+async function validateMigrationPreview(value: unknown, selected: boolean) {
   const { default: validate } = await import("../generated/resource-migration-preview.validator.mjs");
-  if (!validate(value) || value.sources.length !== (sourcePath ? 1 : 0) || !unique(value.verifiedResourceIds) ||
+  if (!validate(value) || value.sources.length !== (selected ? 1 : 0) || !unique(value.verifiedResourceIds) ||
       !unique(value.sources.map(source => source.path)) ||
       value.sources.some(source => source.kind !== "selected_directory")) invalid();
   const verifiedIds = new Set<string>(); let bytes = 0; let rejected = 0;
@@ -48,13 +51,23 @@ export async function inspectLocalResourceMigration(sourcePath?: string) {
       verifiedIds.size !== value.verifiedResourceIds.length || value.verifiedResourceIds.some(id => !verifiedIds.has(id))) invalid();
   return value;
 }
-export async function adoptLocalResources(sourcePath?: string) {
+export async function adoptLocalResources(confirmedPreview: ResourceMigrationPreview, requestId: string) {
+  const snapshot = structuredClone(confirmedPreview);
+  const preview = await validateMigrationPreview(snapshot, snapshot.sources.length > 0);
+  if (!nonblank(requestId) || !preview.resourceRoot || !nonblank(preview.resourceRoot)) invalid();
+  const source = preview.sources[0];
   const value = await invoke<unknown>("adopt_local_resources", {
-    input: { sourcePath: sourcePath ?? null, sourceKind: sourcePath ? "selected_directory" : null, confirmed: true },
+    input: { resourceRoot: preview.resourceRoot, sourcePath: source?.path ?? null, sourceKind: source?.kind ?? null, planFingerprint: preview.planFingerprint, confirmed: true }, requestId,
   });
   const { default: validate } = await import("../generated/resource-adoption-result.validator.mjs");
-  if (!validate(value) || !unique([...value.adoptedResourceIds, ...value.alreadyActiveResourceIds]) ||
-      !unique(value.rejectedResourceIds) || (value.adoptedResourceIds.length === 0 && value.reusableBytes !== 0)) invalid();
-  // A rejected candidate copy may have the same resource ID as a successfully adopted copy.
+  if (!validate(value) || value.requestId !== requestId || value.planFingerprint !== preview.planFingerprint || value.resourceRoot !== preview.resourceRoot ||
+      !unique([...value.adoptedResourceIds, ...value.alreadyActiveResourceIds]) || !unique(value.rejectedResourceIds)) invalid();
+  const known = new Set(preview.candidates.map(candidate => candidate.resourceId));
+  const verified = new Set(preview.verifiedResourceIds);
+  const completed = [...value.adoptedResourceIds, ...value.alreadyActiveResourceIds];
+  if (completed.some(id => !verified.has(id)) || value.rejectedResourceIds.some(id => !known.has(id)) ||
+      preview.verifiedResourceIds.some(id => !completed.includes(id) && !value.rejectedResourceIds.includes(id))) invalid();
+  const bytes = value.adoptedResourceIds.reduce((sum, id) => sum + (preview.candidates.find(candidate => candidate.resourceId === id && candidate.state === "verified")?.reusableBytes ?? 0), 0);
+  if (!Number.isSafeInteger(bytes) || value.reusableBytes !== bytes) invalid();
   return value;
 }

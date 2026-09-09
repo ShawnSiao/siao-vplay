@@ -65,11 +65,21 @@
       },
       "type": "array"
     },
+    "planFingerprint": {
+      "pattern": "^[a-f0-9]{64}$",
+      "type": "string"
+    },
     "rejectedCount": {
       "format": "uint",
       "maximum": 9007199254740991,
       "minimum": 0,
       "type": "integer"
+    },
+    "resourceRoot": {
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "reusableBytes": {
       "format": "uint64",
@@ -91,6 +101,8 @@
     }
   },
   "required": [
+    "resourceRoot",
+    "planFingerprint",
     "sources",
     "candidates",
     "verifiedResourceIds",

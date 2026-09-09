@@ -26,8 +26,9 @@ pub async fn inspect_local_resource_migration(
 #[tauri::command]
 pub async fn adopt_local_resources(
     input: AdoptLocalResourcesInput,
+    request_id: String,
 ) -> Result<ResourceAdoptionResult, CommandError> {
-    run(move || resource_migration::adopt_local_resources(input).map_err(Into::into)).await
+    run(move || resource_migration::adopt_local_resources(input, &request_id).map_err(Into::into)).await
 }
 
 #[tauri::command]

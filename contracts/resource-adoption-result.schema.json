@@ -13,11 +13,21 @@
       },
       "type": "array"
     },
+    "planFingerprint": {
+      "pattern": "^[a-f0-9]{64}$",
+      "type": "string"
+    },
     "rejectedResourceIds": {
       "items": {
         "type": "string"
       },
       "type": "array"
+    },
+    "requestId": {
+      "type": "string"
+    },
+    "resourceRoot": {
+      "type": "string"
     },
     "reusableBytes": {
       "format": "uint64",
@@ -27,6 +37,9 @@
     }
   },
   "required": [
+    "resourceRoot",
+    "requestId",
+    "planFingerprint",
     "adoptedResourceIds",
     "alreadyActiveResourceIds",
     "rejectedResourceIds",
