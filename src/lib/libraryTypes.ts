@@ -7,19 +7,8 @@ export type LibraryItemAvailability =
   | "root_offline"
   | "changed";
 
-export type LibraryCollection = {
-  id: string;
-  kind: CollectionKind;
-  title: string;
-  rootId: string | null;
-  systemKey: "watch_later" | null;
-  posterPath: string | null;
-  sortMode: CollectionSortMode;
-  autoPlayNext: boolean;
-  lastOpenedAtMs: number | null;
-  createdAtMs: number;
-  updatedAtMs: number;
-};
+import type { Collection as LibraryCollection } from "../generated/library-collection";
+export type { Collection as LibraryCollection } from "../generated/library-collection";
 
 export type CollectionSummary = LibraryCollection & {
   itemCount: number;

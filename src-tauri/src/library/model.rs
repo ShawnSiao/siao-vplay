@@ -169,9 +169,11 @@ impl LibraryRootStatus {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub(crate) struct LibraryCollectionDeletionResult {
     pub collection_id: String,
     pub root_id: Option<String>,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub preserved_project_count: i64,
     pub root_status: Option<LibraryRootStatus>,
 }

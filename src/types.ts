@@ -11,7 +11,6 @@ export type { SubtitleIssueSeverity, SubtitleIssueCode, SubtitlePreflightIssue, 
 import type {
   CollectionDetail,
   LibraryItemAvailability,
-  LibraryRootStatus,
   LibraryRootSummary,
 } from "./lib/libraryTypes";
 
@@ -228,12 +227,7 @@ export type LibraryRootRelocationResult = {
   updatedItemCount: number;
 };
 
-export type LibraryCollectionDeletionResult = {
-  collectionId: string;
-  rootId: string | null;
-  preservedProjectCount: number;
-  rootStatus: LibraryRootStatus | null;
-};
+export type { LibraryCollectionDeletionResult } from "./generated/collection-deletion-result";
 
 export type LibraryRootRebuildMatchKind =
   | "matched"

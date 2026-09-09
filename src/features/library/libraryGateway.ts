@@ -2,6 +2,7 @@ import { readLibrarySection } from "../../lib/libraryPageGateway";
 import { readLibraryHome } from "../../lib/libraryHomeGateway";
 import { readLibrarySearch } from "../../lib/librarySearchGateway";
 import { invokeCollectionDetail, invokeWatchLater } from "../../lib/collectionDetailGateway";
+import { invokeCollectionMutation, invokeCollectionDeletion } from "../../lib/collectionMutationGateway";
 import { invokeProject } from "../../lib/projectGateway";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
@@ -102,19 +103,19 @@ export async function searchLibrary(query: string): Promise<LibrarySearchResult[
 export async function createCollection(
   input: CreateCollectionInput,
 ): Promise<LibraryCollection> {
-  return invoke<LibraryCollection>("create_collection", { input });
+  return invokeCollectionMutation("create_collection", input);
 }
 
 export async function updateCollection(
   input: UpdateCollectionInput,
 ): Promise<LibraryCollection> {
-  return invoke<LibraryCollection>("update_collection", { input });
+  return invokeCollectionMutation("update_collection", input, input.collectionId);
 }
 
 export async function deleteCollection(
   collectionId: string,
 ): Promise<LibraryCollectionDeletionResult> {
-  return invoke<LibraryCollectionDeletionResult>("delete_collection", { collectionId });
+  return invokeCollectionDeletion(collectionId);
 }
 
 export async function getCollectionDetail(

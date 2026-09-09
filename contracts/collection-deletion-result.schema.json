@@ -1,0 +1,48 @@
+{
+  "$defs": {
+    "LibraryRootStatus": {
+      "enum": [
+        "linked",
+        "orphaned",
+        "ambiguous"
+      ],
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "collectionId": {
+      "type": "string"
+    },
+    "preservedProjectCount": {
+      "format": "int64",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "rootId": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "rootStatus": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/LibraryRootStatus"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "required": [
+    "collectionId",
+    "rootId",
+    "preservedProjectCount",
+    "rootStatus"
+  ],
+  "title": "LibraryCollectionDeletionResult",
+  "type": "object"
+}
