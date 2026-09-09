@@ -1,3 +1,4 @@
+import { useLibraryPagesPreview } from "./useLibraryPagesPreview";
 import { ActivityPreview } from "./ActivityPreview";
 import { ProjectCleanupNotice } from "../components/ProjectCleanupNotice";
 import { StrictMode, useState } from "react";
@@ -171,6 +172,7 @@ const folderPreview: LibraryFolderImportState = {
 };
 
 export function LibraryHarness() {
+  const collectionPreview = useLibraryPagesPreview();
   const emptyMode = new URLSearchParams(window.location.search).has("empty");
   const [folderImport, setFolderImport] = useState<LibraryFolderImportState | null>(null); const [section, setSection] = useState<LibrarySection>(longListMode ? "unclassified" : "home");
   const [recovery, setRecovery] = useState<LibraryRecoveryState | null>(null);
@@ -273,8 +275,7 @@ export function LibraryHarness() {
             error: null,
           },
         }}
-        currentCollection={null}
-        currentEpisodes={[]}
+        {...collectionPreview}
         selectedSeason={null}
         loading={false}
         collectionLoading={false}

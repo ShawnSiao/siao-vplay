@@ -1,3 +1,4 @@
+import { useLibraryCollectionPaging, type CollectionReadAction } from "./useLibraryCollectionPaging";
 import { useLibraryWatchActions, type WatchAction } from "./useLibraryWatchActions";
 import { applyWatchedProject } from "./applyWatchedProject";
 import { useCallback, useEffect, useReducer, useRef } from "react";
@@ -32,12 +33,10 @@ import {
   createCollection,
   deleteCollection,
   emptyLibraryHome,
-  getCollectionDetail,
   getLibraryHome,
   inspectLibraryRescan,
   inspectLibraryRootRebuild,
   inspectLibraryRootRelocation,
-  listCollectionEpisodes,
   listenLibraryScanProgress,
   removeProjectFromCollection,
   revokeLibraryRoot,
@@ -161,13 +160,7 @@ type LibraryAction =
   | { type: "failed"; message: string }
   | { type: "set_section"; section: LibrarySection }
   | LibrarySectionAction
-  | { type: "collection_started" }
-  | {
-      type: "collection_loaded";
-      detail: CollectionDetail;
-      episodes: LibraryMediaSummary[];
-      season: number | null;
-    }
+  | CollectionReadAction
   | { type: "close_collection" }
   | { type: "set_search_query"; query: string }
   | { type: "search_started" }
@@ -323,6 +316,9 @@ function libraryReducer(state: LibraryState, action: LibraryAction): LibraryStat
       };
     case "section_page_remove":
       return { ...state, sectionPages: reduceSectionPages(state.sectionPages, action) };
+    case "collection_appended":
+      return state.currentCollection?.summary.id === action.collectionId && state.selectedSeason === action.season
+        ? { ...state, currentEpisodes: [...state.currentEpisodes, ...action.episodes] } : state;
     case "collection_started":
       return { ...state, collectionLoading: true };
     case "collection_loaded":
@@ -794,32 +790,7 @@ export function useLibraryController() {
     return () => window.clearTimeout(timer);
   }, [state.searchQuery]);
 
-  const loadCollection = useCallback(
-    async (collectionId: string, seasonNumber: number | null = null) => {
-      const sequence = collectionRequestSequence.current + 1;
-      collectionRequestSequence.current = sequence;
-      dispatch({ type: "collection_started" });
-      try {
-        const [detail, episodes] = await Promise.all([
-          getCollectionDetail(collectionId),
-          listCollectionEpisodes(collectionId, seasonNumber),
-        ]);
-        if (collectionRequestSequence.current === sequence) {
-          dispatch({
-            type: "collection_loaded",
-            detail,
-            episodes,
-            season: seasonNumber,
-          });
-        }
-      } catch (error) {
-        if (collectionRequestSequence.current === sequence) {
-          dispatch({ type: "failed", message: commandError(error).message });
-        }
-      }
-    },
-    [],
-  );
+  const { loadCollection, collectionPagination } = useLibraryCollectionPaging(state, dispatch, collectionRequestSequence);
 
   const runMutation = useCallback(
     async <T,>(operation: () => Promise<T>, apply: (result: T) => void) => {
@@ -1016,31 +987,21 @@ export function useLibraryController() {
     dispatch({ type: "scan_import_started" });
     try {
       const result = await confirmLibraryImport(input);
-      let episodes: LibraryMediaSummary[] = [];
-      try {
-        episodes = await listCollectionEpisodes(
-          result.collection.summary.id,
-          null,
-        );
-      } catch {
-        // The import transaction already succeeded and consumed its preview
-        // token. A secondary read must not turn that success into a retryable
-        // import error; the background home refresh will reconcile the view.
-      }
       dispatch({
         type: "scan_import_succeeded",
         result,
-        episodes,
+        episodes: [],
         importedRootPath: snapshot.preview.rootPath,
         importedRootName: snapshot.preview.rootDisplayName,
       });
+      await loadCollection(result.collection.summary.id, null, result.collection);
       void refresh();
       return result;
     } catch (error) {
       dispatch({ type: "scan_failed", message: commandError(error).message });
       return null;
     }
-  }, [refresh, state.folderImport]);
+  }, [loadCollection, refresh, state.folderImport]);
 
   const inspectRootRescan = useCallback(async (rootId: string) => {
     const sequence = recoveryRequestSequence.current + 1;
@@ -1202,20 +1163,15 @@ export function useLibraryController() {
     dispatch({ type: "recovery_applying" });
     try {
       const result = await applyLibraryRootRebuild(input, snapshot.rebuildPreview);
-      let episodes: LibraryMediaSummary[] = [];
-      try {
-        episodes = await listCollectionEpisodes(result.collection.summary.id, null);
-      } catch {
-        // The rebuild transaction already succeeded; refresh below reconciles the home view.
-      }
-      dispatch({ type: "rebuild_succeeded", result, episodes });
+      dispatch({ type: "rebuild_succeeded", result, episodes: [] });
+      await loadCollection(result.collection.summary.id, null, result.collection);
       void refresh();
       return result;
     } catch (error) {
       dispatch({ type: "recovery_failed", message: commandError(error).message });
       return null;
     }
-  }, [refresh, state.recovery]);
+  }, [loadCollection, refresh, state.recovery]);
 
   const applyRootRelocation = useCallback(async () => {
     const snapshot = state.recovery;
@@ -1253,6 +1209,7 @@ export function useLibraryController() {
     loadMoreSection,
     setSearchQuery,
     openCollection: loadCollection,
+    collectionPagination,
     closeCollection,
     selectSeason,
     createManualCollection,

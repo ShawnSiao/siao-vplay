@@ -88,6 +88,7 @@ export default function App() {
     loadMoreSection,
     setSearchQuery,
     openCollection,
+    collectionPagination,
     closeCollection,
     selectSeason,
     createManualCollection,
@@ -760,6 +761,7 @@ export default function App() {
             selectedSeason={libraryState.selectedSeason}
             loading={libraryState.loading}
             collectionLoading={libraryState.collectionLoading}
+            collectionPagination={collectionPagination}
             mutationPending={libraryState.mutationPending}
             error={libraryError ?? libraryState.error}
             previewMode={!isDesktopApp}

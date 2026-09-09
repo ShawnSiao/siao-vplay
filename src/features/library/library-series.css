@@ -159,10 +159,17 @@
 
 .library-screen .library-episode-load-more {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
   padding: 14px 0 4px;
   color: #9ba6b0;
   font-size: 12px;
+}
+
+.library-screen .library-episode-load-more > span {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }

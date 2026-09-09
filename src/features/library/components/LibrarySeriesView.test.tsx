@@ -9,7 +9,7 @@ import {
 import { LibrarySeriesView } from "./LibrarySeriesView";
 
 describe("LibrarySeriesView", () => {
-  it("renders large collections in bounded batches", () => {
+  it("renders only received rows and requests the next backend page", () => {
     const episodes = Array.from({ length: 120 }, (_, index) => ({
       ...mediaSummary(`episode-${index + 1}`),
       episodeNumber: index + 1,
@@ -21,11 +21,13 @@ describe("LibrarySeriesView", () => {
         itemCount: episodes.length,
       },
     };
+    const loadMore = vi.fn().mockResolvedValue(undefined);
     const { container } = render(
       <LibrarySeriesView
         home={libraryHome(episodes.length)}
         currentCollection={detail}
-        currentEpisodes={episodes}
+        currentEpisodes={episodes.slice(0, 24)}
+        collectionPagination={{ totalCount: 120, nextOffset: 24, loadingMore: false, error: null, loadMore, reload: vi.fn() }}
         selectedSeason={null}
         collectionLoading={false}
         mutationPending={false}
@@ -47,11 +49,11 @@ describe("LibrarySeriesView", () => {
       />,
     );
 
-    expect(container.querySelectorAll(".library-media-item")).toHaveLength(50);
-    expect(screen.getByText("已显示 50 / 120 集")).toBeVisible();
+    expect(container.querySelectorAll(".library-media-item")).toHaveLength(24);
+    expect(screen.getByText("已显示 24 / 120 集")).toBeVisible();
 
-    fireEvent.click(screen.getByRole("button", { name: "再显示 50 集" }));
-    expect(container.querySelectorAll(".library-media-item")).toHaveLength(100);
-    expect(screen.getByText("已显示 100 / 120 集")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "加载更多剧集" }));
+    expect(loadMore).toHaveBeenCalledOnce();
+    expect(container.querySelectorAll(".library-media-item")).toHaveLength(24);
   });
 });

@@ -1,3 +1,4 @@
+import { setupLibraryQueryMocks } from "../../test/libraryQueryMocks";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -26,7 +27,7 @@ const gatewayMocks = vi.hoisted(() => ({
   updateCollection: vi.fn(),
   deleteCollection: vi.fn(),
   getCollectionDetail: vi.fn(),
-  listCollectionEpisodes: vi.fn(),
+  listCollectionEpisodes: vi.fn(), listCollectionEpisodePage: vi.fn(),
   addProjectToCollection: vi.fn(),
   removeProjectFromCollection: vi.fn(),
   getEpisodeNeighbors: vi.fn(),
@@ -65,6 +66,7 @@ function deferred<T>() {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  setupLibraryQueryMocks(gatewayMocks);
   window.localStorage.clear();
   gatewayMocks.searchLibrary.mockResolvedValue([]);
   gatewayMocks.listLibrarySection.mockResolvedValue({

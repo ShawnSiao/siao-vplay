@@ -1,12 +1,14 @@
+import { setupLibraryQueryMocks } from "../../test/libraryQueryMocks";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
 import { importedDetail, libraryHome, mediaSummary } from "./libraryControllerTestFixtures";
 import { useLibraryController } from "./useLibraryController";
-const mocks = vi.hoisted(() => ({ getLibraryHome: vi.fn(), getCollectionDetail: vi.fn(), listCollectionEpisodes: vi.fn(),
+const mocks = vi.hoisted(() => ({ getLibraryHome: vi.fn(), getCollectionDetail: vi.fn(), listCollectionEpisodes: vi.fn(), listCollectionEpisodePage: vi.fn(),
   listLibrarySection: vi.fn(), listenLibraryScanProgress: vi.fn() }));
 vi.mock("./libraryGateway", async original => ({ ...(await original<typeof import("./libraryGateway")>()), ...mocks }));
 beforeEach(() => {
   vi.clearAllMocks();
+  setupLibraryQueryMocks(mocks);
   window.localStorage.clear();
   mocks.getLibraryHome.mockResolvedValue(libraryHome(0));
   mocks.listCollectionEpisodes.mockResolvedValue([]);

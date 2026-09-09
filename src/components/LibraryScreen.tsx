@@ -1,3 +1,4 @@
+import type { LibraryCollectionPagination } from "../features/library/useLibraryCollectionPaging";
 import { useState } from "react";
 
 import { LibraryFoldersView } from "../features/library/components/LibraryFoldersView";
@@ -27,6 +28,7 @@ type LibraryScreenProps = {
   selectedSeason: number | null;
   loading: boolean;
   collectionLoading: boolean;
+  collectionPagination?: LibraryCollectionPagination;
   mutationPending: boolean;
   error: string | null;
   previewMode: boolean;
@@ -122,6 +124,7 @@ export function LibraryScreen(props: LibraryScreenProps) {
             currentEpisodes={props.currentEpisodes}
             selectedSeason={props.selectedSeason}
             collectionLoading={props.collectionLoading}
+            collectionPagination={props.collectionPagination}
             onOpenCollection={props.onOpenCollection}
             onCloseCollection={props.onCloseCollection}
             onSelectSeason={props.onSelectSeason}
