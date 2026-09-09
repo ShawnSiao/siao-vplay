@@ -11,6 +11,7 @@ import { importLibraryPreview } from "../../lib/libraryImportGateway";
 import { revokeRoot } from "../../lib/libraryRootRevokeGateway";
 import { inspectRelocation, applyRelocation } from "../../lib/libraryRelocationGateway";
 import { inspectRescan, applyRescan } from "../../lib/libraryRescanGateway";
+import { inspectRebuild, applyRebuild } from "../../lib/libraryRebuildGateway";
 import { invokeProject } from "../../lib/projectGateway";
 import { invoke } from "@tauri-apps/api/core";
 import type { UnlistenFn } from "@tauri-apps/api/event";
@@ -214,13 +215,14 @@ export async function applyLibraryRescan(
 export async function inspectLibraryRootRebuild(
   input: InspectLibraryRootRebuildInput,
 ): Promise<LibraryRootRebuildPreview> {
-  return invoke<LibraryRootRebuildPreview>("inspect_library_root_rebuild", { input });
+  return inspectRebuild(input);
 }
 
 export async function applyLibraryRootRebuild(
   input: ApplyLibraryRootRebuildInput,
+  preview: LibraryRootRebuildPreview,
 ): Promise<LibraryRootRebuildResult> {
-  return invoke<LibraryRootRebuildResult>("apply_library_root_rebuild", { input });
+  return applyRebuild(input, preview);
 }
 
 export async function revokeLibraryRoot(

@@ -180,6 +180,7 @@ pub(crate) struct LibraryCollectionDeletionResult {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub(crate) enum LibraryRootRebuildMatchKind {
     Matched,
     Missing,
@@ -189,13 +190,17 @@ pub(crate) enum LibraryRootRebuildMatchKind {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub(crate) struct LibraryRootRebuildItem {
     pub project_id: String,
     pub candidate_id: Option<String>,
     pub relative_path: String,
     pub display_title: String,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub season_number: Option<i64>,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub episode_number: Option<i64>,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub absolute_order: i64,
     pub previous_availability: ItemAvailability,
     pub match_kind: LibraryRootRebuildMatchKind,
@@ -204,6 +209,7 @@ pub(crate) struct LibraryRootRebuildItem {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub(crate) struct LibraryRootRebuildPreview {
     pub preview_token: String,
     pub root_id: String,
@@ -217,7 +223,9 @@ pub(crate) struct LibraryRootRebuildPreview {
     pub missing_items: Vec<LibraryRootRebuildItem>,
     pub changed_items: Vec<LibraryRootRebuildItem>,
     pub uncertain_items: Vec<LibraryRootRebuildItem>,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub ignored_count: u64,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub expires_at_ms: i64,
 }
 
@@ -246,14 +254,21 @@ pub(crate) struct ApplyLibraryRootRebuildInput {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub(crate) struct LibraryRootRebuildResult {
     pub root: LibraryRootSummary,
     pub collection: CollectionDetail,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub restored_item_count: u64,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub added_item_count: u64,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub created_project_count: u64,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub reused_project_count: u64,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub missing_item_count: u64,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub changed_item_count: u64,
 }
 

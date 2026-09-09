@@ -1197,7 +1197,7 @@ export function useLibraryController() {
     };
     dispatch({ type: "recovery_applying" });
     try {
-      const result = await applyLibraryRootRebuild(input);
+      const result = await applyLibraryRootRebuild(input, snapshot.rebuildPreview);
       let episodes: LibraryMediaSummary[] = [];
       try {
         episodes = await listCollectionEpisodes(result.collection.summary.id, null);

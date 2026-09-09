@@ -67,6 +67,8 @@ fn committed_schemas_match_rust() {
     check_schema("library-relocation-result", &serialized_schema::<crate::library::LibraryRootRelocationResult>());
     check_schema("library-rescan-preview", &serialized_schema::<crate::library::LibraryRescanPreview>());
     check_schema("library-rescan-result", &serialized_schema::<crate::library::LibraryRescanResult>());
+    check_schema("library-rebuild-preview", &serialized_schema::<crate::library::LibraryRootRebuildPreview>());
+    check_schema("library-rebuild-result", &serialized_schema::<crate::library::LibraryRootRebuildResult>());
     check_schema("library-home", &serialized_schema::<crate::library::LibraryHome>());
     check_schema("library-section-page", &serialized_schema::<crate::library::LibrarySectionPage>());
     check_schema("project", &serialized_schema::<crate::domain::Project>());

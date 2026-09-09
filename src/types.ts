@@ -9,9 +9,7 @@ export type { ExplanationApplication } from "./generated/explanation-application
 import type { SubtitlePreflightReport } from "./generated/subtitle-version";
 export type { SubtitleIssueSeverity, SubtitleIssueCode, SubtitlePreflightIssue, SubtitlePreflightReport, SubtitleWord, SubtitleSegment, SubtitleVersion } from "./generated/subtitle-version";
 import type {
-  CollectionDetail,
   LibraryItemAvailability,
-  LibraryRootSummary,
 } from "./lib/libraryTypes";
 
 export type {
@@ -182,22 +180,7 @@ export type LibraryRootRebuildItem = {
   reason: string | null;
 };
 
-export type LibraryRootRebuildPreview = {
-  previewToken: string;
-  rootId: string;
-  currentRootPath: string;
-  rootPath: string;
-  rootDisplayName: string;
-  suggestedCollectionTitle: string;
-  rootOffline: boolean;
-  newCandidates: LibraryScanCandidate[];
-  matchedItems: LibraryRootRebuildItem[];
-  missingItems: LibraryRootRebuildItem[];
-  changedItems: LibraryRootRebuildItem[];
-  uncertainItems: LibraryRootRebuildItem[];
-  ignoredCount: number;
-  expiresAtMs: number;
-};
+export type { LibraryRootRebuildPreview } from "./generated/library-rebuild-preview";
 
 export type InspectLibraryRootRebuildInput = {
   rootId: string;
@@ -214,16 +197,7 @@ export type ApplyLibraryRootRebuildInput = {
   confirmFingerprintDuplicates: boolean;
 };
 
-export type LibraryRootRebuildResult = {
-  root: LibraryRootSummary;
-  collection: CollectionDetail;
-  restoredItemCount: number;
-  addedItemCount: number;
-  createdProjectCount: number;
-  reusedProjectCount: number;
-  missingItemCount: number;
-  changedItemCount: number;
-};
+export type { LibraryRootRebuildResult } from "./generated/library-rebuild-result";
 
 export type { LibraryRootRevokeResult } from "./generated/library-root-revoke-result";
 

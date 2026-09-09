@@ -37,6 +37,8 @@ const gatewayMocks = vi.hoisted(() => ({
   confirmLibraryImport: vi.fn(),
   inspectLibraryRescan: vi.fn(),
   applyLibraryRescan: vi.fn(),
+  inspectLibraryRootRebuild: vi.fn(),
+  applyLibraryRootRebuild: vi.fn(),
   inspectLibraryRootRelocation: vi.fn(),
   applyLibraryRootRelocation: vi.fn(),
 }));
@@ -421,5 +423,15 @@ describe("useLibraryController", () => {
     await act(async () => { await result.current.inspectRootRelocation("root", "W:\\Moved"); });
     await act(async () => { await result.current.applyRootRelocation(); });
     expect(gatewayMocks.applyLibraryRootRelocation).toHaveBeenCalledWith(preview);
+  });
+  it("passes the confirmed rebuild preview when applying", async () => {
+    const preview = { previewToken: "token", rootId: "root", currentRootPath: "W:\\Old", rootPath: "W:\\Moved", rootDisplayName: "Moved", suggestedCollectionTitle: "Rain", rootOffline: false, newCandidates: [], matchedItems: [], missingItems: [], changedItems: [], uncertainItems: [], ignoredCount: 0, expiresAtMs: 1_900_000_000_000 };
+    gatewayMocks.inspectLibraryRootRebuild.mockResolvedValue(preview);
+    gatewayMocks.applyLibraryRootRebuild.mockRejectedValue(new Error("test failure"));
+    const { result } = renderHook(() => useLibraryController());
+    await waitFor(() => expect(result.current.state.loading).toBe(false));
+    await act(async () => { await result.current.inspectRootRebuild("root"); });
+    await act(async () => { await result.current.applyRebuild(); });
+    expect(gatewayMocks.applyLibraryRootRebuild).toHaveBeenCalledWith(expect.objectContaining({ previewToken: "token" }), preview);
   });
 });
