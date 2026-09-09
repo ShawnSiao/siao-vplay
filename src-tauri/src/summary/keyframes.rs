@@ -16,9 +16,12 @@ use crate::{
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub(crate) struct SummaryFrame {
     pub id: String,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub ordinal: usize,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub timestamp_ms: i64,
     pub relative_path: String,
     pub sha256: String,

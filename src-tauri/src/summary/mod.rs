@@ -26,6 +26,8 @@ mod task_repository;
 mod verified_materials;
 #[cfg(test)]
 pub(crate) mod test_support;
+#[cfg(test)]
+pub(crate) use dispatch::{SummaryDispatchPreview, dispatch_contract_example};
 
 pub use model::{
     AnalysisPromptTemplate, AnalysisTaskType, DeleteAnalysisPromptTemplateInput,

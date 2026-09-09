@@ -20,6 +20,7 @@ pub struct ConfirmedSummaryInput {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct SummaryDispatchPreview {
     pub task_id: String,
     pub confirmation_sha256: String,
@@ -28,17 +29,36 @@ pub struct SummaryDispatchPreview {
     pub endpoint: Option<String>,
     pub model: String,
     pub scope: AnalysisScope,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub playback_cutoff_ms: Option<i64>,
     pub subtitle_version_id: String,
+    #[cfg_attr(test, schemars(range(min = 1, max = 9007199254740991_u64)))]
     pub subtitle_version_number: i64,
     pub subtitle_role: String,
     pub subtitle_language: String,
+    #[cfg_attr(test, schemars(range(min = 1, max = 9007199254740991_u64)))]
     pub segment_count: usize,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub first_start_ms: Option<i64>,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub last_end_ms: Option<i64>,
     pub prompt_template: String,
     pub one_time_requirements: String,
     pub frames: Vec<SummaryFrame>,
+}
+
+#[cfg(test)]
+pub(crate) fn dispatch_contract_example() -> serde_json::Value {
+    serde_json::to_value(SummaryDispatchPreview {
+        task_id: "summary-task-1".into(), confirmation_sha256: "a".repeat(64),
+        execution_kind: SummaryExecutionKind::Codex, receiver: "OpenAI（经本机 Codex）".into(), endpoint: None,
+        model: "Codex 默认模型".into(), scope: AnalysisScope::CurrentProgress, playback_cutoff_ms: Some(15000),
+        subtitle_version_id: "subtitle-1".into(), subtitle_version_number: 3, subtitle_role: "original".into(),
+        subtitle_language: "en".into(), segment_count: 12, first_start_ms: Some(0), last_end_ms: Some(16000),
+        prompt_template: "自动判断".into(), one_time_requirements: "".into(),
+        frames: vec![SummaryFrame { id: "frame".into(), ordinal: 0, timestamp_ms: 1000,
+            relative_path: "input/frames/frame.jpg".into(), sha256: "b".repeat(64) }],
+    }).unwrap()
 }
 
 pub(crate) fn preview(

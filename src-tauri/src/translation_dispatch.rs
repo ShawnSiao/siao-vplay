@@ -10,28 +10,60 @@ use std::collections::BTreeSet;
 
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct SegmentScope {
     id: String,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     start_ms: i64,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     end_ms: i64,
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
+enum TranslationDispatchKind { Codex, Manual, Api }
+
+impl TranslationDispatchKind {
+    fn as_str(&self) -> &'static str {
+        match self { Self::Codex => "codex", Self::Manual => "manual", Self::Api => "api" }
+    }
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
+enum TranslationDispatchScope { FullSubtitles, SelectedSubtitles }
+
+#[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct TranslationDispatchPreview {
     task_id: String,
     confirmation_sha256: String,
-    handoff_kind: String,
+    handoff_kind: TranslationDispatchKind,
     receiver: String,
     model: String,
     source_version_id: String,
+    #[cfg_attr(test, schemars(range(min = 1, max = 9007199254740991_u64)))]
     source_version_number: i64,
     source_language_code: String,
     target_language_code: String,
-    scope: String,
+    scope: TranslationDispatchScope,
     segments: Vec<SegmentScope>,
-    context: Value,
-    glossary: Value,
+    context: serde_json::Map<String, Value>,
+    glossary: serde_json::Map<String, Value>,
+}
+
+#[cfg(test)]
+pub(crate) fn dispatch_contract_example() -> Value {
+    serde_json::to_value(TranslationDispatchPreview {
+        task_id: "translation-task".into(), confirmation_sha256: "c".repeat(64), handoff_kind: TranslationDispatchKind::Codex,
+        receiver: "OpenAI（经本机 Codex）".into(), model: "Codex 默认模型".into(), source_version_id: "source".into(),
+        source_version_number: 1, source_language_code: "ja".into(), target_language_code: "zh-CN".into(),
+        scope: TranslationDispatchScope::FullSubtitles, segments: vec![SegmentScope { id: "segment".into(), start_ms: 0, end_ms: 1000 }],
+        context: serde_json::Map::new(), glossary: serde_json::Map::new(),
+    }).unwrap()
 }
 
 pub(crate) fn read(
@@ -100,10 +132,10 @@ pub(crate) fn preview(
     let api = if task.handoff_kind == "api" {
         Some(crate::ai::translation_api::receiver(store, task_id).map_err(|error| TranslationError::TaskIntegrity(error.to_string()))?)
     } else { None };
-    let receiver = match task.handoff_kind.as_str() {
-        "codex" => "OpenAI（通过本机 Codex 登录，需要联网）",
-        "manual" => "自行选择的外部工具（本应用不自动发送）",
-        "api" => &api.as_ref().expect("API receiver was resolved").base_url,
+    let (handoff_kind, receiver) = match task.handoff_kind.as_str() {
+        "codex" => (TranslationDispatchKind::Codex, "OpenAI（通过本机 Codex 登录，需要联网）"),
+        "manual" => (TranslationDispatchKind::Manual, "自行选择的外部工具（本应用不自动发送）"),
+        "api" => (TranslationDispatchKind::Api, api.as_ref().expect("API receiver was resolved").base_url.as_str()),
         _ => return Err(TranslationError::InvalidHandoff(task.handoff_kind.clone())),
     };
     let prompt = read(store, task_id, "prompt.md")?;
@@ -111,7 +143,7 @@ pub(crate) fn preview(
     let mut value = TranslationDispatchPreview {
         task_id: task_id.into(),
         confirmation_sha256: String::new(),
-        handoff_kind: task.handoff_kind.clone(),
+        handoff_kind,
         receiver: receiver.into(),
         model: if let Some(api) = &api { api.model_id.as_str() } else if task.handoff_kind == "codex" {
             "Codex 默认模型"
@@ -124,11 +156,10 @@ pub(crate) fn preview(
         source_language_code: task.source_language_code.clone(),
         target_language_code: task.target_language_code.clone(),
         scope: if total == segments.len() as i64 {
-            "full_subtitles"
+            TranslationDispatchScope::FullSubtitles
         } else {
-            "selected_subtitles"
-        }
-        .into(),
+            TranslationDispatchScope::SelectedSubtitles
+        },
         segments,
         context: read_json(store, task_id, "input/context.json")?,
         glossary: read_json(store, task_id, "input/glossary.json")?,
@@ -156,7 +187,7 @@ pub(crate) fn verify_api(store: &ProjectStore, task_id: &str, hash: &str) -> Res
 
 fn verify_kind(store: &ProjectStore, task_id: &str, hash: &str, kind: &str) -> Result<(), TranslationError> {
     let value = preview(store, task_id)?;
-    if value.handoff_kind != kind || hash.len() != 64 || value.confirmation_sha256 != hash {
+    if value.handoff_kind.as_str() != kind || hash.len() != 64 || value.confirmation_sha256 != hash {
         return Err(TranslationError::TaskIntegrity(
             "接收方或材料已改变，请重新确认翻译清单".into(),
         ));
@@ -195,7 +226,7 @@ mod tests {
         )
         .unwrap();
         let value = preview(&fixture.store, &task.id).unwrap();
-        assert_eq!(value.scope, "full_subtitles");
+        assert_eq!(serde_json::to_value(value.scope).unwrap(), "full_subtitles");
         assert_eq!(value.segments.len(), 2);
         assert_eq!(value.segments[1].end_ms, 2600);
         assert_eq!(value.source_version_id, fixture.source_version_id);

@@ -1,12 +1,23 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import { createTranslationTask, translationDispatchFixture } from "../../test-fixtures/translation";
 import { previewTranslationDispatch } from "./translationDispatch";
+import schema from "../../../contracts/translation-dispatch-preview.schema.json";
 
 const mocks = vi.hoisted(() => ({ invoke: vi.fn() }));
 vi.mock("@tauri-apps/api/core", () => ({ invoke: mocks.invoke }));
 const source = { id: "source", versionNumber: 2, segments: [{ id: "segment", startMs: 10, endMs: 20 }] };
 const task = createTranslationTask("project", source);
 beforeEach(() => vi.resetAllMocks());
+
+it("accepts the actual Rust translation serialization", async () => {
+  mocks.invoke.mockResolvedValue(schema.examples[0]);
+  expect(await previewTranslationDispatch("translation-task")).toEqual(schema.examples[0]);
+});
+
+it.each([null, [], "context"])("rejects a non-object context: %j", async (context) => {
+  mocks.invoke.mockResolvedValue({ ...schema.examples[0], context });
+  await expect(previewTranslationDispatch("translation-task")).rejects.toThrow("翻译清单无效");
+});
 
 it("reads the actual translation scope without invoking a runner", async () => {
   const preview = translationDispatchFixture(task, source);

@@ -82,6 +82,12 @@ fn committed_schemas_match_rust() {
         frames: vec![DispatchFrame { id: "frame".into(), timestamp_ms: 900, sha256: "b".repeat(64) }],
     }]);
     check_schema("task-dispatch-preview", &dispatch);
+    let mut summary = serialized_schema::<crate::summary::SummaryDispatchPreview>();
+    summary["examples"] = serde_json::json!([crate::summary::dispatch_contract_example()]);
+    check_schema("summary-dispatch-preview", &summary);
+    let mut translation = serialized_schema::<crate::translation_dispatch::TranslationDispatchPreview>();
+    translation["examples"] = serde_json::json!([crate::translation_dispatch::dispatch_contract_example()]);
+    check_schema("translation-dispatch-preview", &translation);
 }
 
 fn serialized_schema<T: schemars::JsonSchema>() -> serde_json::Value {

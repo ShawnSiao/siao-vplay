@@ -1,25 +1,13 @@
+import validateTranslationDispatch from "../../generated/translation-dispatch-preview.validator.mjs";
 import { invoke } from "@tauri-apps/api/core";
 
-export type TranslationDispatchPreview = {
-  taskId: string;
-  confirmationSha256: string;
-  handoffKind: "codex" | "manual" | "api";
-  receiver: string;
-  model: string;
-  sourceVersionId: string;
-  sourceVersionNumber: number;
-  sourceLanguageCode: string;
-  targetLanguageCode: string;
-  scope: "full_subtitles" | "selected_subtitles";
-  segments: Array<{ id: string; startMs: number; endMs: number }>;
-  context: Record<string, unknown>;
-  glossary: Record<string, unknown>;
-};
+export type { TranslationDispatchPreview } from "../../generated/translation-dispatch-preview";
 
 const text = (value: unknown) => typeof value === "string" && value.length > 0;
 const record = (value: unknown) => value !== null && typeof value === "object" && !Array.isArray(value);
 export async function previewTranslationDispatch(taskId: string) {
-  const value = await invoke<TranslationDispatchPreview>("preview_translation_dispatch", { input: { taskId } });
+  const value = await invoke<unknown>("preview_translation_dispatch", { input: { taskId } });
+  if (!validateTranslationDispatch(value)) throw new Error("翻译清单无效，请重新准备材料。");
   if (!value || value.taskId !== taskId || !/^[0-9a-f]{64}$/.test(value.confirmationSha256) ||
       !["codex", "manual", "api"].includes(value.handoffKind) || !text(value.receiver) || !text(value.model) ||
       !text(value.sourceVersionId) || !Number.isSafeInteger(value.sourceVersionNumber) || value.sourceVersionNumber < 1 ||

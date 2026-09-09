@@ -110,6 +110,7 @@ impl PromptSelection {
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub enum AnalysisScope {
     CurrentProgress,
     FullVideo,
@@ -164,6 +165,7 @@ impl AnalysisMode {
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub enum SummaryExecutionKind {
     Manual,
     Codex,

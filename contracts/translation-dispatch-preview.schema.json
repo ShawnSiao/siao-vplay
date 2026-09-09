@@ -1,0 +1,134 @@
+{
+  "$defs": {
+    "SegmentScope": {
+      "properties": {
+        "endMs": {
+          "format": "int64",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "id": {
+          "type": "string"
+        },
+        "startMs": {
+          "format": "int64",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "startMs",
+        "endMs"
+      ],
+      "type": "object"
+    },
+    "TranslationDispatchKind": {
+      "enum": [
+        "codex",
+        "manual",
+        "api"
+      ],
+      "type": "string"
+    },
+    "TranslationDispatchScope": {
+      "enum": [
+        "full_subtitles",
+        "selected_subtitles"
+      ],
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "examples": [
+    {
+      "confirmationSha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "context": {},
+      "glossary": {},
+      "handoffKind": "codex",
+      "model": "Codex 默认模型",
+      "receiver": "OpenAI（经本机 Codex）",
+      "scope": "full_subtitles",
+      "segments": [
+        {
+          "endMs": 1000,
+          "id": "segment",
+          "startMs": 0
+        }
+      ],
+      "sourceLanguageCode": "ja",
+      "sourceVersionId": "source",
+      "sourceVersionNumber": 1,
+      "targetLanguageCode": "zh-CN",
+      "taskId": "translation-task"
+    }
+  ],
+  "properties": {
+    "confirmationSha256": {
+      "type": "string"
+    },
+    "context": {
+      "additionalProperties": true,
+      "type": "object"
+    },
+    "glossary": {
+      "additionalProperties": true,
+      "type": "object"
+    },
+    "handoffKind": {
+      "$ref": "#/$defs/TranslationDispatchKind"
+    },
+    "model": {
+      "type": "string"
+    },
+    "receiver": {
+      "type": "string"
+    },
+    "scope": {
+      "$ref": "#/$defs/TranslationDispatchScope"
+    },
+    "segments": {
+      "items": {
+        "$ref": "#/$defs/SegmentScope"
+      },
+      "type": "array"
+    },
+    "sourceLanguageCode": {
+      "type": "string"
+    },
+    "sourceVersionId": {
+      "type": "string"
+    },
+    "sourceVersionNumber": {
+      "format": "int64",
+      "maximum": 9007199254740991,
+      "minimum": 1,
+      "type": "integer"
+    },
+    "targetLanguageCode": {
+      "type": "string"
+    },
+    "taskId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "taskId",
+    "confirmationSha256",
+    "handoffKind",
+    "receiver",
+    "model",
+    "sourceVersionId",
+    "sourceVersionNumber",
+    "sourceLanguageCode",
+    "targetLanguageCode",
+    "scope",
+    "segments",
+    "context",
+    "glossary"
+  ],
+  "title": "TranslationDispatchPreview",
+  "type": "object"
+}
