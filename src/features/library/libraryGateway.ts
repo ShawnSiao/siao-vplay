@@ -9,6 +9,7 @@ import { subscribeLibraryScanProgress } from "../../lib/libraryScanProgressGatew
 import { readLibraryScanPreview } from "../../lib/libraryScanPreviewGateway";
 import { importLibraryPreview } from "../../lib/libraryImportGateway";
 import { revokeRoot } from "../../lib/libraryRootRevokeGateway";
+import { inspectRelocation, applyRelocation } from "../../lib/libraryRelocationGateway";
 import { invokeProject } from "../../lib/projectGateway";
 import { invoke } from "@tauri-apps/api/core";
 import type { UnlistenFn } from "@tauri-apps/api/event";
@@ -230,18 +231,13 @@ export async function inspectLibraryRootRelocation(
   rootId: string,
   newRootPath: string,
 ): Promise<LibraryRootRelocationPreview> {
-  return invoke<LibraryRootRelocationPreview>(
-    "inspect_library_root_relocation",
-    { input: { rootId, newRootPath } },
-  );
+  return inspectRelocation(rootId, newRootPath);
 }
 
 export async function applyLibraryRootRelocation(
-  previewToken: string,
+  preview: LibraryRootRelocationPreview,
 ): Promise<LibraryRootRelocationResult> {
-  return invoke<LibraryRootRelocationResult>("apply_library_root_relocation", {
-    input: { previewToken },
-  });
+  return applyRelocation(preview);
 }
 
 export async function openProjectMediaLocation(projectId: string): Promise<void> {

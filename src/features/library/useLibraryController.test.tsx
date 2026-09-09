@@ -411,4 +411,14 @@ describe("useLibraryController", () => {
     });
     expect(result.current.state.recovery.stage).toBe("closed");
   });
+  it("passes the confirmed relocation preview when applying", async () => {
+    const preview = { previewToken: "token", rootId: "root", currentRootPath: "W:\\Old", newRootPath: "W:\\Moved", matchedItemCount: 1, mismatches: [], expiresAtMs: 1_900_000_000_000 };
+    gatewayMocks.inspectLibraryRootRelocation.mockResolvedValue(preview);
+    gatewayMocks.applyLibraryRootRelocation.mockResolvedValue({ root: { id: "root", path: "W:\\Moved", displayName: "Moved", availability: "available", status: "linked", lastScannedAtMs: 1, itemCount: 1 }, updatedItemCount: 1 });
+    const { result } = renderHook(() => useLibraryController());
+    await waitFor(() => expect(result.current.state.loading).toBe(false));
+    await act(async () => { await result.current.inspectRootRelocation("root", "W:\\Moved"); });
+    await act(async () => { await result.current.applyRootRelocation(); });
+    expect(gatewayMocks.applyLibraryRootRelocation).toHaveBeenCalledWith(preview);
+  });
 });

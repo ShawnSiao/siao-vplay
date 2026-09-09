@@ -1221,7 +1221,7 @@ export function useLibraryController() {
     dispatch({ type: "recovery_applying" });
     try {
       const result = await applyLibraryRootRelocation(
-        snapshot.relocationPreview.previewToken,
+        snapshot.relocationPreview,
       );
       dispatch({ type: "relocation_succeeded", result });
       void refresh();

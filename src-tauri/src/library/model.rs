@@ -460,6 +460,7 @@ pub(crate) struct InspectLibraryRootRelocationInput {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub(crate) enum RelocationMismatchReason {
     Missing,
     FingerprintChanged,
@@ -468,6 +469,7 @@ pub(crate) enum RelocationMismatchReason {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub(crate) struct LibraryRelocationMismatch {
     pub project_id: String,
     pub relative_path: String,
@@ -476,13 +478,16 @@ pub(crate) struct LibraryRelocationMismatch {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub(crate) struct LibraryRootRelocationPreview {
     pub preview_token: String,
     pub root_id: String,
     pub current_root_path: String,
     pub new_root_path: String,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub matched_item_count: u64,
     pub mismatches: Vec<LibraryRelocationMismatch>,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub expires_at_ms: i64,
 }
 
@@ -494,7 +499,9 @@ pub(crate) struct ApplyLibraryRootRelocationInput {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub(crate) struct LibraryRootRelocationResult {
     pub root: LibraryRootSummary,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub updated_item_count: u64,
 }

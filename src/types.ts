@@ -179,20 +179,9 @@ export type LibraryRelocationMismatch = {
   reason: RelocationMismatchReason;
 };
 
-export type LibraryRootRelocationPreview = {
-  previewToken: string;
-  rootId: string;
-  currentRootPath: string;
-  newRootPath: string;
-  matchedItemCount: number;
-  mismatches: LibraryRelocationMismatch[];
-  expiresAtMs: number;
-};
+export type { LibraryRootRelocationPreview } from "./generated/library-relocation-preview";
 
-export type LibraryRootRelocationResult = {
-  root: LibraryRootSummary;
-  updatedItemCount: number;
-};
+export type { LibraryRootRelocationResult } from "./generated/library-relocation-result";
 
 export type { LibraryCollectionDeletionResult } from "./generated/collection-deletion-result";
 
