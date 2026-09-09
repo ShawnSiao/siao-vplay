@@ -1,3 +1,4 @@
+import { ExternalResultNotice } from "./components/ExternalResultNotice";
 import { useSettingsNavigation } from "./features/environment-settings/useSettingsNavigation";
 import { useTrackedTranscription } from "./features/playback/useTrackedTranscription";
 import { posterCandidates } from "./features/library/posterCandidates";
@@ -629,7 +630,7 @@ export default function App() {
   );
   const activeProjectId = activeProject?.id;
 
-  useExternalAgentResults({
+  const externalResults = useExternalAgentResults({
     enabled: isDesktopApp,
     reconcile: reconcileExternalAgentResults,
     acknowledge: acknowledgeExternalAgentResults,
@@ -741,6 +742,7 @@ export default function App() {
         onOpenSettings={settingsNavigation.openDefault}
       >
         {startupError ? <div className="notice danger" role="alert">{startupError}</div> : null}
+        <ExternalResultNotice failure={externalResults.failure} onRetry={externalResults.retry} />
         {screen === "library" ? (
           <LibraryScreen
             home={libraryState.home}

@@ -81,3 +81,27 @@ test("invalid notification does not reach acknowledgement or block a valid resul
   expect(await page.evaluate(() => (window as unknown as { invalidAcknowledgements: number }).invalidAcknowledgements)).toBe(0);
   await expect(page.getByText("后台结果已准备好", { exact: true })).toBeVisible();
 });
+
+
+test("external scan failure has visible recovery without exposing its raw error", async ({ page }) => {
+  await page.addInitScript(() => {
+    const state = window as unknown as { __TAURI_INTERNALS__: unknown; recovered: boolean };
+    state.recovered = false;
+    state.__TAURI_INTERNALS__ = { invoke: async (command: string) => {
+      if (command === "reconcile_external_agent_results") {
+        if (!state.recovered) throw new Error("private W:/data/video.mp4");
+        return [];
+      }
+      throw new Error("测试环境未提供此服务");
+    } };
+  });
+  await page.clock.install();
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  await expect(page.getByText("暂时无法检查外部结果。应用会自动重试。", { exact: true })).toBeVisible();
+  await expect(page.getByText("private W:/data/video.mp4")).toHaveCount(0);
+  await page.screenshot({ path: "designs/open-source-readiness/external-result-recovery.png" });
+  await page.evaluate(() => { (window as unknown as { recovered: boolean }).recovered = true; });
+  await page.getByRole("button", { name: "重新检查外部结果" }).click();
+  await expect(page.getByText("暂时无法检查外部结果。应用会自动重试。", { exact: true })).toHaveCount(0);
+});

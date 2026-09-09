@@ -11,6 +11,7 @@ it("delivers a consumed result to the latest handler when the video changes duri
   const reconcile = vi.fn(() => new Promise<ExternalAgentResultUpdate[]>(resolve => { finish = resolve; }));
   const oldHandler = vi.fn(); const currentHandler = vi.fn();
   const { rerender } = renderHook(({ handler }) => useExternalAgentResults({ enabled: true, reconcile, acknowledge, onUpdates: handler }), { initialProps: { handler: oldHandler } });
+  await waitFor(() => expect(reconcile).toHaveBeenCalledTimes(1));
   rerender({ handler: currentHandler });
   await act(async () => finish(updates));
   expect(oldHandler).not.toHaveBeenCalled();
@@ -23,6 +24,7 @@ it("does not deliver results after unmount", async () => {
   const reconcile = vi.fn(() => new Promise<ExternalAgentResultUpdate[]>(resolve => { finish = resolve; }));
   const handler = vi.fn();
   const { unmount } = renderHook(() => useExternalAgentResults({ enabled: true, reconcile, acknowledge, onUpdates: handler }));
+  await waitFor(() => expect(reconcile).toHaveBeenCalledTimes(1));
   unmount();
   await act(async () => finish(updates));
   expect(handler).not.toHaveBeenCalled();
@@ -41,6 +43,7 @@ it("retains the in-flight result across StrictMode effect replay", async () => {
   const reconcile = vi.fn(() => new Promise<ExternalAgentResultUpdate[]>(resolve => { finish = resolve; }));
   const handler = vi.fn();
   renderHook(() => useExternalAgentResults({ enabled: true, reconcile, acknowledge, onUpdates: handler }), { wrapper: StrictMode });
+  await waitFor(() => expect(reconcile).toHaveBeenCalledTimes(1));
   await act(async () => finish(updates));
   expect(handler).toHaveBeenCalledWith(updates, expect.any(Function));
   expect(reconcile).toHaveBeenCalledTimes(1);
@@ -203,5 +206,59 @@ it("still retries consumed transient notices when the next scan fails", async ()
     await act(async () => { await vi.advanceTimersByTimeAsync(1_000); });
     expect(handler).toHaveBeenCalledTimes(2);
     expect(acknowledge).toHaveBeenCalledWith([transient]);
+  } finally { unmount(); vi.useRealTimers(); }
+});
+
+
+it.each(["scan", "delivery", "acknowledgement"])("exposes a safe %s failure and clears it after recovery", async phase => {
+  const reconcile = vi.fn().mockResolvedValue(updates);
+  const acknowledge = vi.fn(async () => undefined);
+  const onUpdates = vi.fn(async () => undefined);
+  const failing = phase === "scan" ? reconcile : phase === "delivery" ? onUpdates : acknowledge;
+  failing.mockRejectedValueOnce(new Error("private W:/data/video.mp4"));
+  const { result } = renderHook(() => useExternalAgentResults({ enabled: true, reconcile, acknowledge, onUpdates }));
+  await waitFor(() => expect(result.current.failure).toBe(phase));
+  await act(async () => { await result.current.retry(); });
+  expect(result.current.failure).toBeNull();
+});
+
+
+it("shares an in-flight manual retry instead of starting overlapping checks", async () => {
+  let finish!: (value: ExternalAgentResultUpdate[]) => void;
+  const reconcile = vi.fn().mockRejectedValueOnce(new Error("scan failed")).mockImplementation(() => new Promise<ExternalAgentResultUpdate[]>(resolve => { finish = resolve; }));
+  const { result } = renderHook(() => useExternalAgentResults({ enabled: true, reconcile, acknowledge, onUpdates: () => undefined }));
+  await waitFor(() => expect(result.current.failure).toBe("scan"));
+  let first!: Promise<void>; let second!: Promise<void>;
+  act(() => { first = result.current.retry(); second = result.current.retry(); });
+  expect(first).toBe(second);
+  await waitFor(() => expect(reconcile).toHaveBeenCalledTimes(2));
+  await act(async () => { finish([]); await first; });
+  expect(result.current.failure).toBeNull();
+});
+
+it("does not publish an old consumer failure after its lifetime was interrupted", async () => {
+  vi.useFakeTimers();
+  let fail!: (error: Error) => void;
+  const reconcile = vi.fn().mockResolvedValue(updates);
+  const onUpdates = vi.fn(() => new Promise<void>((_resolve, reject) => { fail = reject; }));
+  const { result, rerender, unmount } = renderHook(({ enabled }) => useExternalAgentResults({ enabled, reconcile, acknowledge, onUpdates }), { initialProps: { enabled: true } });
+  try {
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    rerender({ enabled: false }); rerender({ enabled: true });
+    await act(async () => { fail(new Error("old failure")); });
+    expect(result.current.failure).toBeNull();
+  } finally { unmount(); vi.useRealTimers(); }
+});
+
+
+it("publishes an observed failure before a later consumer finishes", async () => {
+  vi.useFakeTimers();
+  const reconcile = vi.fn().mockResolvedValue([...updates, { ...updates[0], taskId: "slow" }]);
+  const onUpdates = vi.fn().mockRejectedValueOnce(new Error("first failure")).mockImplementation(() => new Promise<void>(() => undefined));
+  const { result, unmount } = renderHook(() => useExternalAgentResults({ enabled: true, reconcile, acknowledge, onUpdates }));
+  try {
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    expect(onUpdates).toHaveBeenCalledTimes(2);
+    expect(result.current.failure).toBe("delivery");
   } finally { unmount(); vi.useRealTimers(); }
 });
