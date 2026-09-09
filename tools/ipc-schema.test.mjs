@@ -2,6 +2,14 @@ import { strict as assert } from "node:assert";
 import { test } from "node:test";
 import { prepareRuntimeSchema } from "./ipc-schema.mjs";
 
+test("normalizes Rust bytes only when their integer bounds remain within 0..255", () => {
+  const field = { type: "integer", format: "uint8", minimum: 0, maximum: 255 };
+  assert.deepEqual(prepareRuntimeSchema(field), { type: "integer", minimum: 0, maximum: 255 });
+  for (const patch of [{ minimum: -1 }, { maximum: 256 }, { maximum: undefined }, { type: "number" }]) {
+    assert.throws(() => prepareRuntimeSchema({ ...field, ...patch }), /byte bounds/);
+  }
+});
+
 test("preserves nullable integer types while requiring numeric bounds", () => {
   const field = { type: ["integer", "null"], format: "uint64", minimum: 0, maximum: Number.MAX_SAFE_INTEGER };
   assert.deepEqual(prepareRuntimeSchema(field), { type: ["integer", "null"], minimum: 0, maximum: Number.MAX_SAFE_INTEGER });

@@ -57,6 +57,8 @@ fn committed_schemas_match_rust() {
     check_schema("learning-cards-export", &serialized_schema::<crate::learning::LearningCardsExport>());
     check_schema("remote-media-preview", &serialized_schema::<crate::remote_media::RemoteMediaPreview>());
     check_schema("explanation-evidence", &serialized_schema::<crate::understanding_evidence::ExplanationEvidence>());
+    check_schema("speech-voice", &serialized_schema::<crate::speech::SpeechVoice>());
+    check_schema("speech-audio", &serialized_schema::<crate::speech::SpeechAudio>());
     check_schema("subtitle-export", &serialized_schema::<crate::delivery::SubtitleExport>());
     check_schema("summary-export", &serialized_schema::<crate::summary::SummaryExport>());
     check_schema("library-search-result", &serialized_schema::<crate::library::SearchResult>());

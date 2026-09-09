@@ -2,6 +2,13 @@
 // Reject schemas lacking these bounds instead of silently ignoring the format.
 function normalizeNumericFormats(value) {
   if (!value || typeof value !== "object") return;
+  if (value.format === "uint8") {
+    if (value.type !== "integer" || !Number.isInteger(value.minimum) || !Number.isInteger(value.maximum) ||
+        value.minimum < 0 || value.maximum > 255 || value.minimum > value.maximum) {
+      throw new Error("IPC uint8 requires explicit byte bounds");
+    }
+    delete value.format;
+  }
   if (["int64", "uint64", "uint32", "uint"].includes(value.format)) {
     const integerType = value.type === "integer" || (Array.isArray(value.type) && value.type.length === 2 && value.type.includes("integer") && value.type.includes("null"));
     if (!integerType || !Number.isSafeInteger(value.minimum) || !Number.isSafeInteger(value.maximum) || value.minimum > value.maximum || (value.format.startsWith("uint") && value.minimum < 0)) {
