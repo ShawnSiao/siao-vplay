@@ -194,7 +194,13 @@ export function CurrentScenePanel({
     };
   }, [prompt, task]);
 
-  useExplanationPolling({ projectId, task, read: getExplanationTask, onTask: setTask,
+  useExplanationPolling({ projectId, task, read: getExplanationTask, onTask: next => setTask(current => {
+    if (!current || current.id !== next.id || current.projectId !== next.projectId ||
+      !["awaiting_external_result", "running", "validating"].includes(current.status)) return current;
+    if (current.stage === "cancelling" && next.stage !== "cancelling" &&
+      ["awaiting_external_result", "running", "validating"].includes(next.status)) return current;
+    return next;
+  }),
     onError: cause => setError(commandError(cause).message) });
 
   useEffect(() => {

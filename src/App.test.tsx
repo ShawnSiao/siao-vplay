@@ -3059,3 +3059,25 @@ describe("App", () => {
     );
   });
 });
+
+it.each(["cancelled", "running"] as const)("retains explanation %s cancellation when an older poll resolves in the same batch", async (status) => {
+  const running = { ...explanationTask, status: "running" as const, stage: "running" };
+  desktopMocks.listSubtitleVersions.mockResolvedValue([subtitleVersion, translatedVersion]);
+  desktopMocks.listExplanationTasks.mockResolvedValue([running]);
+  let finishPoll!: (value: typeof running) => void;
+  let finishCancel!: (value: unknown) => void;
+  desktopMocks.getExplanationTask.mockImplementation(() => new Promise(resolve => { finishPoll = resolve; }));
+  desktopMocks.cancelExplanationTask.mockImplementation(() => new Promise(resolve => { finishCancel = resolve; }));
+  render(<App />);
+  fireEvent.click(await screen.findByRole("button", { name: /继续播放/ }));
+  fireEvent.click(await screen.findByRole("button", { name: "理解" }));
+  await waitFor(() => expect(finishPoll).toBeTypeOf("function"), { timeout: 2500 });
+  fireEvent.click(screen.getByRole("button", { name: /^取消$/ }));
+  await act(async () => {
+    finishCancel({ ...running, status, stage: status === "cancelled" ? "cancelled" : "cancelling" });
+    await Promise.resolve();
+    finishPoll(running);
+    await Promise.resolve();
+  });
+  expect(screen.getByText(status === "cancelled" ? "本次理解已取消" : "正在取消请求…")).toBeInTheDocument();
+});
