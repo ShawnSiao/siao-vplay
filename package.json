@@ -10,11 +10,11 @@
   "scripts": {
     "check:release": "node tools/release-metadata.mjs",
     "release:sync": "node tools/release-metadata.mjs --sync",
-    "test:tools": "node --test tools/release-metadata.test.mjs tools/ipc-schema.test.mjs tools/gateway-boundary.test.mjs && powershell -NoProfile -ExecutionPolicy Bypass -File tools/build-policy.test.ps1",
+    "test:tools": "node --test tools/release-metadata.test.mjs tools/ipc-schema.test.mjs tools/gateway-boundary.test.mjs tools/check-deferred-build.test.mjs && powershell -NoProfile -ExecutionPolicy Bypass -File tools/build-policy.test.ps1",
     "notices:generate": "node tools/generate-third-party-notices.mjs",
     "notices:check": "node tools/generate-third-party-notices.mjs --check",
     "dev": "vite --host 127.0.0.1 --port 1420",
-    "build": "tsc -b && vite build",
+    "build": "tsc -b && vite build --manifest && node tools/check-deferred-build.mjs",
     "build:e2e": "tsc -b && vite build --mode e2e",
     "preview": "vite preview",
     "typecheck": "tsc -b --pretty false",

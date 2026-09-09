@@ -29,6 +29,7 @@ jobs:
       - run: npm run typecheck
       - run: npm run lint
       - run: npm run lint:size
+      - run: npm run build
       - run: npm test
       - run: npx playwright install chromium
       - run: npm run test:e2e

@@ -23,7 +23,7 @@ import {
 } from "./features/library/useEpisodeNavigation";
 import { PreparationScreen } from "./components/PreparationScreen";
 import { RemoteUrlDialog } from "./components/RemoteUrlDialog";
-import { EnvironmentSettingsDialog } from "./features/environment-settings/EnvironmentSettingsDialog";
+import { createDeferredDialog } from "./components/createDeferredDialog";
 import { backgroundResultNotice } from "./features/ai-tasks/backgroundNotice";
 import type { PendingResourceAction } from "./features/environment-settings/LocalFeaturesDialog";
 import { SubtitleImportDialog } from "./components/SubtitleImportDialog";
@@ -67,6 +67,11 @@ const activeTranscriptionStatuses = new Set<TranscriptionJob["status"]>(
 );
 
 type PendingResourceResume = PendingResourceAction & { resume: () => Promise<void> | void };
+
+const EnvironmentSettingsDialog = createDeferredDialog(
+  () => import("./features/environment-settings/EnvironmentSettingsDialog").then(module => module.EnvironmentSettingsDialog),
+  "设置",
+);
 
 export default function App() {
   const shellController = useShellController();
