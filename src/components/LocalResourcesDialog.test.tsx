@@ -209,7 +209,7 @@ describe("LocalResourcesDialog", () => {
       reusableBytes: 18_202_192,
     });
     const chooseMoveLocation = vi.fn().mockResolvedValue({
-      previousRoot: "W:\\SiaoVPlay\\SiaoVPlay",
+      planFingerprint: "a".repeat(64), previousRoot: "W:\\SiaoVPlay\\SiaoVPlay",
       selectedParent: "E:\\Resources",
       resourceRoot: "E:\\Resources\\SiaoVPlay",
       bytesToCopy: 194_129_082,
@@ -252,7 +252,7 @@ describe("LocalResourcesDialog", () => {
     expect(await screen.findByText("E:\\Resources\\SiaoVPlay")).toBeInTheDocument();
     expect(screen.getByText(/切换成功后原目录仍保留/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "确认复制并切换" }));
-    await waitFor(() => expect(moveLocation).toHaveBeenCalledWith("E:\\Resources"));
+    await waitFor(() => expect(moveLocation).toHaveBeenCalledWith(expect.objectContaining({ selectedParent: "E:\\Resources", planFingerprint: "a".repeat(64) })));
     fireEvent.click(screen.getByRole("button", { name: "取消复制" }));
     expect(cancelMove).toHaveBeenCalledOnce();
   });
@@ -627,7 +627,7 @@ describe("LocalResourcesDialog", () => {
 
 it("expires a move confirmation after a failed attempt", async () => {
   const moveLocation = vi.fn().mockRejectedValue(new Error("copy interrupted"));
-  const chooseMoveLocation = vi.fn().mockResolvedValue({ previousRoot: "W:/old", selectedParent: "W:/new",
+  const chooseMoveLocation = vi.fn().mockResolvedValue({ planFingerprint: "a".repeat(64), previousRoot: "W:/old", selectedParent: "W:/new",
     resourceRoot: "W:/new/SiaoVPlay", bytesToCopy: 10, fileCount: 1, freeSpaceBytes: 100,
     crossVolume: false, destinationExists: false, confirmationRequired: true });
   render(<LocalResourcesDialog controller={makeController({ status: { ...setupStatus, configured: true,

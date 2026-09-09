@@ -87,7 +87,7 @@ export type LocalResourcesController = {
   } | null>;
   adoptResources: (sourcePath?: string) => Promise<ResourceAdoptionResult>;
   chooseMoveLocation: () => Promise<LocalResourceMovePlan | null>;
-  moveLocation: (parentPath: string) => Promise<LocalResourceMoveResult>;
+  moveLocation: (plan: LocalResourceMovePlan) => Promise<LocalResourceMoveResult>;
   moving?: boolean;
   cancellingMove?: boolean;
   cancelMove?: () => Promise<boolean>;

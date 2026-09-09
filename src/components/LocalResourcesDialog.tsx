@@ -263,9 +263,9 @@ export function LocalResourcesDialog({
       if (!movePlan) {
         return;
       }
-      const parentPath = movePlan.selectedParent;
+      const confirmedPlan = movePlan;
       setMovePlan(null);
-      await controller.moveLocation(parentPath);
+      await controller.moveLocation(confirmedPlan);
       onNotice("资源已复制、校验并切换到新位置；原目录仍保留，可确认后自行清理。");
     });
 

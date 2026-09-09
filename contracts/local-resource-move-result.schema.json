@@ -13,11 +13,18 @@
     "currentRoot": {
       "type": "string"
     },
+    "planFingerprint": {
+      "pattern": "^[a-f0-9]{64}$",
+      "type": "string"
+    },
     "previousRoot": {
       "type": "string"
     },
     "previousRootRetained": {
       "type": "boolean"
+    },
+    "requestId": {
+      "type": "string"
     },
     "verifiedFileCount": {
       "format": "uint",
@@ -27,6 +34,8 @@
     }
   },
   "required": [
+    "planFingerprint",
+    "requestId",
     "previousRoot",
     "currentRoot",
     "copiedBytes",

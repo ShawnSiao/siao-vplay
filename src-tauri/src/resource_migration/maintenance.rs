@@ -54,6 +54,7 @@ pub fn adopt_local_resources(
 
 pub fn move_resource_root(
     input: MoveLocalResourceRootInput,
+    request_id: &str,
 ) -> Result<LocalResourceMoveResult, ResourceMigrationError> {
     let _maintenance = crate::resource_leases::maintain_all()?;
     if !input.confirmed {
@@ -63,6 +64,7 @@ pub fn move_resource_root(
         return Err(ResourceMigrationError::Busy);
     }
     let plan = plan_resource_root_move(&input.parent_path)?;
+    move_confirmation::verify(&input.plan_fingerprint, &plan.plan_fingerprint)?;
     if plan.destination_exists {
         return Err(ResourceMigrationError::DestinationExists(
             plan.resource_root,
@@ -73,6 +75,8 @@ pub fn move_resource_root(
     let target_root = PathBuf::from(&plan.resource_root);
     let recovery = move_staging::Staging::open(&previous_root, &target_root)?;
     let staging = &recovery.path;
+    #[cfg(test)]
+    move_confirmation::run_before_copy();
     let verified = copy_root_verified_inner(
         &previous_root,
         &staging,
@@ -83,6 +87,10 @@ pub fn move_resource_root(
         },
         true,
     )?;
+    let reviewed_configuration = local_resources::configuration_snapshot()
+        .ok_or(LocalResourceError::ConfirmationRequired)?;
+    let copied_fingerprint = move_confirmation::fingerprint(&reviewed_configuration, &plan, &verified.manifest)?;
+    move_confirmation::verify(&input.plan_fingerprint, &copied_fingerprint)?;
     if let Err(error) = move_control::begin_commit() {
         let _ = fs::remove_dir_all(&staging);
         return Err(error);
@@ -108,6 +116,8 @@ pub fn move_resource_root(
         })?;
     recovery.finish();
     Ok(LocalResourceMoveResult {
+        plan_fingerprint: plan.plan_fingerprint,
+        request_id: request_id.to_owned(),
         previous_root: path_string(&previous_root),
         current_root: path_string(&target_root),
         copied_bytes: verified.bytes,

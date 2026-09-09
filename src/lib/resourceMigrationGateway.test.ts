@@ -5,9 +5,9 @@ vi.mock("@tauri-apps/api/core", () => ({ invoke: mocks.invoke }));
 beforeEach(() => mocks.invoke.mockReset());
 const location = { selectedParent: "W:/new", resourceRoot: "W:/new/SiaoVPlay", parentExists: true,
   resourceRootExists: false, freeSpaceBytes: null, confirmationRequired: true };
-const movePlan = { previousRoot: "W:/old", selectedParent: location.selectedParent, resourceRoot: location.resourceRoot,
+const movePlan = { planFingerprint: "a".repeat(64), previousRoot: "W:/old", selectedParent: location.selectedParent, resourceRoot: location.resourceRoot,
   bytesToCopy: 10, fileCount: 1, freeSpaceBytes: null, crossVolume: false, destinationExists: false, confirmationRequired: true };
-const moved = { previousRoot: "W:/old", currentRoot: location.resourceRoot, copiedBytes: 10, verifiedFileCount: 1,
+const moved = { planFingerprint: "a".repeat(64), requestId: "request-1", previousRoot: "W:/old", currentRoot: location.resourceRoot, copiedBytes: 10, verifiedFileCount: 1,
   crossVolume: false, previousRootRetained: true };
 const candidate = { sourceKind: "selected_directory", sourceRoot: "W:/source", resourceId: "tool", resourcePath: "W:/source/tool",
   state: "verified", reusableBytes: 10, message: null };
@@ -16,7 +16,7 @@ const preview = { sources: [{ kind: "selected_directory", path: "W:/source" }], 
 const adopted = { adoptedResourceIds: ["tool"], alreadyActiveResourceIds: [], rejectedResourceIds: [], reusableBytes: 10 };
 const operations = {
   location: () => planLocalResourceLocation("W:/new"), plan: () => planLocalResourceMove("W:/new"),
-  move: () => moveLocalResourceRoot("W:/new", "request-1"), inspect: () => inspectLocalResourceMigration("W:/source"),
+  move: () => moveLocalResourceRoot(movePlan, "request-1"), inspect: () => inspectLocalResourceMigration("W:/source"),
   adopt: () => adoptLocalResources("W:/source"),
 };
 it.each([
@@ -51,7 +51,7 @@ it("accepts duplicate candidate resource IDs and rejected copies of an adopted r
 
 it("preserves exact caller arguments and the move request identity", async () => {
   mocks.invoke.mockResolvedValue(moved); await operations.move();
-  expect(mocks.invoke).toHaveBeenLastCalledWith("move_local_resource_root", { input: { parentPath: "W:/new", confirmed: true }, requestId: "request-1" });
+  expect(mocks.invoke).toHaveBeenLastCalledWith("move_local_resource_root", { input: { parentPath: "W:/new", confirmed: true, planFingerprint: "a".repeat(64) }, requestId: "request-1" });
   mocks.invoke.mockResolvedValue(preview); await operations.inspect();
   expect(mocks.invoke).toHaveBeenLastCalledWith("inspect_local_resource_migration", { input: { sourcePath: "W:/source", sourceKind: "selected_directory" } });
   mocks.invoke.mockResolvedValue({ adoptedResourceIds: [], alreadyActiveResourceIds: [], rejectedResourceIds: [], reusableBytes: 0 });

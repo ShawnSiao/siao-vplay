@@ -2,7 +2,8 @@
 "use strict";
 export const validate = validate20;
 export default validate20;
-const schema31 = {"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"bytesToCopy":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"confirmationRequired":{"type":"boolean"},"crossVolume":{"type":"boolean"},"destinationExists":{"type":"boolean"},"fileCount":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"freeSpaceBytes":{"maximum":9007199254740991,"minimum":0,"type":["integer","null"]},"previousRoot":{"type":"string"},"resourceRoot":{"type":"string"},"selectedParent":{"type":"string"}},"required":["previousRoot","selectedParent","resourceRoot","bytesToCopy","fileCount","freeSpaceBytes","crossVolume","destinationExists","confirmationRequired"],"title":"LocalResourceMovePlan","type":"object"};
+const schema31 = {"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"bytesToCopy":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"confirmationRequired":{"type":"boolean"},"crossVolume":{"type":"boolean"},"destinationExists":{"type":"boolean"},"fileCount":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"freeSpaceBytes":{"maximum":9007199254740991,"minimum":0,"type":["integer","null"]},"planFingerprint":{"pattern":"^[a-f0-9]{64}$","type":"string"},"previousRoot":{"type":"string"},"resourceRoot":{"type":"string"},"selectedParent":{"type":"string"}},"required":["planFingerprint","previousRoot","selectedParent","resourceRoot","bytesToCopy","fileCount","freeSpaceBytes","crossVolume","destinationExists","confirmationRequired"],"title":"LocalResourceMovePlan","type":"object"};
+const pattern4 = new RegExp("^[a-f0-9]{64}$", "u");
 
 function validate20(data, {instancePath="", parentData, parentDataProperty, rootData=data, dynamicAnchors={}}={}){
 let vErrors = null;
@@ -17,7 +18,7 @@ evaluated0.items = undefined;
 if(errors === 0){
 if(data && typeof data == "object" && !Array.isArray(data)){
 let missing0;
-if((((((((((data.previousRoot === undefined) && (missing0 = "previousRoot")) || ((data.selectedParent === undefined) && (missing0 = "selectedParent"))) || ((data.resourceRoot === undefined) && (missing0 = "resourceRoot"))) || ((data.bytesToCopy === undefined) && (missing0 = "bytesToCopy"))) || ((data.fileCount === undefined) && (missing0 = "fileCount"))) || ((data.freeSpaceBytes === undefined) && (missing0 = "freeSpaceBytes"))) || ((data.crossVolume === undefined) && (missing0 = "crossVolume"))) || ((data.destinationExists === undefined) && (missing0 = "destinationExists"))) || ((data.confirmationRequired === undefined) && (missing0 = "confirmationRequired"))){
+if(((((((((((data.planFingerprint === undefined) && (missing0 = "planFingerprint")) || ((data.previousRoot === undefined) && (missing0 = "previousRoot"))) || ((data.selectedParent === undefined) && (missing0 = "selectedParent"))) || ((data.resourceRoot === undefined) && (missing0 = "resourceRoot"))) || ((data.bytesToCopy === undefined) && (missing0 = "bytesToCopy"))) || ((data.fileCount === undefined) && (missing0 = "fileCount"))) || ((data.freeSpaceBytes === undefined) && (missing0 = "freeSpaceBytes"))) || ((data.crossVolume === undefined) && (missing0 = "crossVolume"))) || ((data.destinationExists === undefined) && (missing0 = "destinationExists"))) || ((data.confirmationRequired === undefined) && (missing0 = "confirmationRequired"))){
 validate20.errors = [{instancePath,schemaPath:"#/required",keyword:"required",params:{missingProperty: missing0},message:"must have required property '"+missing0+"'"}];
 return false;
 }
@@ -139,11 +140,20 @@ else {
 var valid0 = true;
 }
 if(valid0){
-if(data.previousRoot !== undefined){
+if(data.planFingerprint !== undefined){
+let data6 = data.planFingerprint;
 const _errs13 = errors;
-if(typeof data.previousRoot !== "string"){
-validate20.errors = [{instancePath:instancePath+"/previousRoot",schemaPath:"#/properties/previousRoot/type",keyword:"type",params:{type: "string"},message:"must be string"}];
+if(errors === _errs13){
+if(typeof data6 === "string"){
+if(!pattern4.test(data6)){
+validate20.errors = [{instancePath:instancePath+"/planFingerprint",schemaPath:"#/properties/planFingerprint/pattern",keyword:"pattern",params:{pattern: "^[a-f0-9]{64}$"},message:"must match pattern \""+"^[a-f0-9]{64}$"+"\""}];
 return false;
+}
+}
+else {
+validate20.errors = [{instancePath:instancePath+"/planFingerprint",schemaPath:"#/properties/planFingerprint/type",keyword:"type",params:{type: "string"},message:"must be string"}];
+return false;
+}
 }
 var valid0 = _errs13 === errors;
 }
@@ -151,10 +161,10 @@ else {
 var valid0 = true;
 }
 if(valid0){
-if(data.resourceRoot !== undefined){
+if(data.previousRoot !== undefined){
 const _errs15 = errors;
-if(typeof data.resourceRoot !== "string"){
-validate20.errors = [{instancePath:instancePath+"/resourceRoot",schemaPath:"#/properties/resourceRoot/type",keyword:"type",params:{type: "string"},message:"must be string"}];
+if(typeof data.previousRoot !== "string"){
+validate20.errors = [{instancePath:instancePath+"/previousRoot",schemaPath:"#/properties/previousRoot/type",keyword:"type",params:{type: "string"},message:"must be string"}];
 return false;
 }
 var valid0 = _errs15 === errors;
@@ -163,16 +173,29 @@ else {
 var valid0 = true;
 }
 if(valid0){
-if(data.selectedParent !== undefined){
+if(data.resourceRoot !== undefined){
 const _errs17 = errors;
-if(typeof data.selectedParent !== "string"){
-validate20.errors = [{instancePath:instancePath+"/selectedParent",schemaPath:"#/properties/selectedParent/type",keyword:"type",params:{type: "string"},message:"must be string"}];
+if(typeof data.resourceRoot !== "string"){
+validate20.errors = [{instancePath:instancePath+"/resourceRoot",schemaPath:"#/properties/resourceRoot/type",keyword:"type",params:{type: "string"},message:"must be string"}];
 return false;
 }
 var valid0 = _errs17 === errors;
 }
 else {
 var valid0 = true;
+}
+if(valid0){
+if(data.selectedParent !== undefined){
+const _errs19 = errors;
+if(typeof data.selectedParent !== "string"){
+validate20.errors = [{instancePath:instancePath+"/selectedParent",schemaPath:"#/properties/selectedParent/type",keyword:"type",params:{type: "string"},message:"must be string"}];
+return false;
+}
+var valid0 = _errs19 === errors;
+}
+else {
+var valid0 = true;
+}
 }
 }
 }
@@ -192,4 +215,4 @@ return false;
 validate20.errors = vErrors;
 return errors === 0;
 }
-validate20.evaluated = {"props":{"bytesToCopy":true,"confirmationRequired":true,"crossVolume":true,"destinationExists":true,"fileCount":true,"freeSpaceBytes":true,"previousRoot":true,"resourceRoot":true,"selectedParent":true},"dynamicProps":false,"dynamicItems":false};
+validate20.evaluated = {"props":{"bytesToCopy":true,"confirmationRequired":true,"crossVolume":true,"destinationExists":true,"fileCount":true,"freeSpaceBytes":true,"planFingerprint":true,"previousRoot":true,"resourceRoot":true,"selectedParent":true},"dynamicProps":false,"dynamicItems":false};

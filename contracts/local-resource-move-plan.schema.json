@@ -31,6 +31,10 @@
         "null"
       ]
     },
+    "planFingerprint": {
+      "pattern": "^[a-f0-9]{64}$",
+      "type": "string"
+    },
     "previousRoot": {
       "type": "string"
     },
@@ -42,6 +46,7 @@
     }
   },
   "required": [
+    "planFingerprint",
     "previousRoot",
     "selectedParent",
     "resourceRoot",

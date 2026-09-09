@@ -1,3 +1,5 @@
+#[cfg(test)]
+mod move_confirmation_tests;
 mod contracts;
 pub use contracts::{
     LocalResourceMovePlan, LocalResourceMoveResult, ResourceAdoptionResult,
@@ -8,6 +10,7 @@ pub(crate) mod move_control;
 mod move_io;
 mod move_commit;
 mod move_staging;
+mod move_confirmation;
 pub use maintenance::{adopt_local_resources, move_resource_root, reconnect_resource_root, cleanup_unused_resources};
 
 use std::{
@@ -49,6 +52,8 @@ pub enum ResourceMigrationError {
     Serialization(#[from] serde_json::Error),
     #[error("执行此资源操作前需要明确确认")]
     ConfirmationRequired,
+    #[error("资源移动计划已变化，请重新检查保存位置并确认")]
+    PlanChanged,
     #[error("候选资源目录无效：{0}")]
     InvalidSource(String),
     #[error("目标资源目录已存在，请选择空的新位置或使用重新连接：{0}")]
@@ -75,6 +80,7 @@ impl ResourceMigrationError {
             Self::Runtime(_) => "runtime_storage_root_invalid",
             Self::FileSystem(_) => "local_resource_filesystem_error",
             Self::Serialization(_) => "local_resource_serialization_error",
+            Self::PlanChanged => "local_resource_move_plan_changed",
             Self::ConfirmationRequired => "local_resource_confirmation_required",
             Self::InvalidSource(_) => "local_resource_candidate_invalid",
             Self::DestinationExists(_) => "local_resource_destination_exists",
@@ -109,6 +115,7 @@ pub struct AdoptLocalResourcesInput {
 #[serde(rename_all = "camelCase")]
 pub struct MoveLocalResourceRootInput {
     pub parent_path: String,
+    pub plan_fingerprint: String,
     pub confirmed: bool,
 }
 
@@ -239,11 +246,13 @@ pub fn plan_resource_root_move(
             "新位置与当前资源目录相同".to_owned(),
         ));
     }
+    let previous_root = dunce::canonicalize(previous_root)?;
     let manifest = move_io::manifest(&previous_root)?;
     let bytes_to_copy = manifest
         .iter()
         .fold(0_u64, |total, file| total.saturating_add(file.size));
-    Ok(LocalResourceMovePlan {
+    let mut plan = LocalResourceMovePlan {
+        plan_fingerprint: String::new(),
         previous_root: path_string(&previous_root),
         selected_parent: path_string(&selected_parent),
         resource_root: path_string(&resource_root),
@@ -253,7 +262,9 @@ pub fn plan_resource_root_move(
         cross_volume: volume_key(&previous_root) != volume_key(&resource_root),
         destination_exists: resource_root.exists(),
         confirmation_required: true,
-    })
+    };
+    plan.plan_fingerprint = move_confirmation::fingerprint(&configuration, &plan, &manifest)?;
+    Ok(plan)
 }
 
 
@@ -736,6 +747,7 @@ struct MoveCopyOptions {
 }
 
 struct VerifiedCopy {
+    manifest: Vec<ReceiptFile>,
     bytes: u64,
     files: usize,
     cross_volume: bool,
@@ -811,6 +823,7 @@ fn copy_root_verified_inner(
     Ok(VerifiedCopy {
         bytes,
         files: source_manifest.len(),
+        manifest: target_manifest,
         cross_volume: options.cross_volume,
     })
 }

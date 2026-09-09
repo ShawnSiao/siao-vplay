@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import type { LocalResourceMovePlan } from "../../types";
 import { useRef, useState } from "react";
 import { moveLocalResourceRoot } from "../../lib/desktop";
 
@@ -6,14 +7,14 @@ export function useResourceMove(onMoved: () => Promise<void>, onError: (error: u
   const activeId = useRef<string | null>(null);
   const [moving, setMoving] = useState(false);
   const [cancelling, setCancelling] = useState(false);
-  const move = async (parentPath: string) => {
+  const move = async (plan: LocalResourceMovePlan) => {
     if (activeId.current) throw new Error("已有资源复制正在进行。");
     const id = crypto.randomUUID();
     activeId.current = id;
     setMoving(true);
     setCancelling(false);
     try {
-      const result = await moveLocalResourceRoot(parentPath, id);
+      const result = await moveLocalResourceRoot(plan, id);
       await onMoved();
       return result;
     } catch (error) {

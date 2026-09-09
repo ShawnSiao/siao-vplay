@@ -1,3 +1,4 @@
+import type { LocalResourceMovePlan } from "../types";
 import { invoke } from "@tauri-apps/api/core";
 const nonblank = (value: string) => value.trim().length > 0;
 const unique = (values: string[]) => values.every(nonblank) && new Set(values).size === values.length;
@@ -12,14 +13,19 @@ export async function planLocalResourceLocation(parentPath: string) {
 export async function planLocalResourceMove(parentPath: string) {
   const value = await invoke<unknown>("plan_local_resource_move", { input: { parentPath } });
   const { default: validate } = await import("../generated/local-resource-move-plan.validator.mjs");
-  if (!validate(value) || !value.confirmationRequired || !nonblank(value.previousRoot) ||
+  if (!validate(value) || !/^[a-f0-9]{64}$/.test(value.planFingerprint) || !value.confirmationRequired || !nonblank(value.previousRoot) ||
       !nonblank(value.selectedParent) || !nonblank(value.resourceRoot)) invalid();
   return value;
 }
-export async function moveLocalResourceRoot(parentPath: string, requestId: string) {
-  const value = await invoke<unknown>("move_local_resource_root", { input: { parentPath, confirmed: true }, requestId });
+export async function moveLocalResourceRoot(confirmedPlan: LocalResourceMovePlan, requestId: string) {
+  const plan = { ...confirmedPlan };
+  const { default: validatePlan } = await import("../generated/local-resource-move-plan.validator.mjs");
+  if (!validatePlan(plan) || !/^[a-f0-9]{64}$/.test(plan.planFingerprint) || !plan.confirmationRequired || plan.destinationExists || !nonblank(requestId)) invalid();
+  const value = await invoke<unknown>("move_local_resource_root", { input: { parentPath: plan.selectedParent, planFingerprint: plan.planFingerprint, confirmed: true }, requestId });
   const { default: validate } = await import("../generated/local-resource-move-result.validator.mjs");
-  if (!validate(value) || !value.previousRootRetained || !nonblank(value.previousRoot) || !nonblank(value.currentRoot)) invalid();
+  if (!validate(value) || !value.previousRootRetained || value.requestId !== requestId || value.planFingerprint !== plan.planFingerprint ||
+      value.previousRoot !== plan.previousRoot || value.currentRoot !== plan.resourceRoot || value.copiedBytes !== plan.bytesToCopy ||
+      value.verifiedFileCount !== plan.fileCount || value.crossVolume !== plan.crossVolume) invalid();
   return value;
 }
 export async function inspectLocalResourceMigration(sourcePath?: string) {

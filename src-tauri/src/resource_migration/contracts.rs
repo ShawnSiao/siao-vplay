@@ -50,6 +50,8 @@ pub struct ResourceAdoptionResult {
 #[serde(rename_all = "camelCase")]
 #[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct LocalResourceMovePlan {
+    #[cfg_attr(test, schemars(regex(pattern = "^[a-f0-9]{64}$")))]
+    pub plan_fingerprint: String,
     pub previous_root: String,
     pub selected_parent: String,
     pub resource_root: String,
@@ -68,6 +70,9 @@ pub struct LocalResourceMovePlan {
 #[serde(rename_all = "camelCase")]
 #[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct LocalResourceMoveResult {
+    #[cfg_attr(test, schemars(regex(pattern = "^[a-f0-9]{64}$")))]
+    pub plan_fingerprint: String,
+    pub request_id: String,
     pub previous_root: String,
     pub current_root: String,
     #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]

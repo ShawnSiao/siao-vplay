@@ -7,6 +7,7 @@ export interface LocalResourceMovePlan {
   destinationExists: boolean;
   fileCount: number;
   freeSpaceBytes: number | null;
+  planFingerprint: string;
   previousRoot: string;
   resourceRoot: string;
   selectedParent: string;

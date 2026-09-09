@@ -98,6 +98,7 @@ export function RuntimeHarness() {
       cancellingMove,
       cancelMove: async () => { setCancellingMove(true); return true; },
       moveLocation: async () => ({
+        planFingerprint: "a".repeat(64), requestId: "preview-request",
         previousRoot: status.resourceRoot ?? "",
         currentRoot: status.resourceRoot ?? "",
         copiedBytes: 0,

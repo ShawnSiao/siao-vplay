@@ -1,3 +1,4 @@
+import { resourceMovePlan } from "../../test-fixtures/resourceMove";
 import { act, renderHook } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
 import { useResourceMove } from "./useResourceMove";
@@ -15,10 +16,10 @@ it("cancels the same request and ignores an acknowledgement after completion", a
   const onMoved = vi.fn().mockResolvedValue(undefined);
   const { result } = renderHook(() => useResourceMove(onMoved, vi.fn()));
   let moving!: Promise<unknown>;
-  act(() => { moving = result.current.move("W:\\Resources"); });
+  act(() => { moving = result.current.move(resourceMovePlan); });
   const requestId = mocks.move.mock.calls[0][1];
   expect(result.current.moving).toBe(true);
-  await expect(result.current.move("W:\\Other")).rejects.toThrow("已有资源复制");
+  await expect(result.current.move({ ...resourceMovePlan, selectedParent: "W:/other" })).rejects.toThrow("已有资源复制");
   let cancelling!: Promise<boolean>;
   act(() => { cancelling = result.current.cancel(); });
   expect(mocks.invoke).toHaveBeenCalledWith("cancel_local_resource_move", { requestId });
@@ -35,7 +36,7 @@ it("keeps failure available for recovery and releases request ownership", async 
   const onError = vi.fn();
   const onMoved = vi.fn();
   const { result } = renderHook(() => useResourceMove(onMoved, onError));
-  await act(async () => { await expect(result.current.move("W:\\Resources")).rejects.toBe(failure); });
+  await act(async () => { await expect(result.current.move(resourceMovePlan)).rejects.toBe(failure); });
   expect(onError).toHaveBeenCalledWith(failure);
   expect(onMoved).not.toHaveBeenCalled();
   expect(result.current.moving).toBe(false);
