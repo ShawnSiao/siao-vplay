@@ -1776,6 +1776,7 @@ fn now_ms() -> Result<i64, StoreError> {
 mod tests {
     mod read_tests;
     mod metadata_page_tests;
+    mod metadata_benchmark;
     use std::{fs, process::Command};
 
     use crate::{domain::CreateLocalProjectInput, media};
