@@ -1,3 +1,4 @@
+import { aiExecutionRequest } from "../../lib/aiExecutionRequest";
 import { parseExecutionPreview } from "./executionPreviewContract";
 import validateServiceSettings from "../../generated/ai-service-settings.validator.mjs";
 import validateServiceTest from "../../generated/ai-service-test-result.validator.mjs";
@@ -98,8 +99,7 @@ export async function previewAiExecution(
   execution: AiExecutionTarget,
   authorization: AiMaterialAuthorization,
 ): Promise<AiExecutionPreview> {
-  const target = { ...execution };
-  const materials = { ...authorization };
+  const { execution: target, authorization: materials } = aiExecutionRequest(execution, authorization);
   const result = await invoke<unknown>("preview_ai_execution", {
     input: { execution: target, authorization: materials },
   });

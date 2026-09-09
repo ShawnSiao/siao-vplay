@@ -58,6 +58,17 @@ fn committed_schemas_match_rust() {
             frames_requested: false, frames_effective: false, service_revision: Some(7) },
     ]);
     check_schema("ai-execution-preview", &preview);
+    use crate::ai::types::{AiExecutionTarget, AiMaterialAuthorization, PreviewAiExecutionInput};
+    let mut request = serialized_schema::<PreviewAiExecutionInput>();
+    request["examples"] = serde_json::json!([
+        PreviewAiExecutionInput { execution: AiExecutionTarget::Manual,
+            authorization: AiMaterialAuthorization { subtitles: true, current_question: true, frames: false, service_revision: None } },
+        PreviewAiExecutionInput { execution: AiExecutionTarget::Codex,
+            authorization: AiMaterialAuthorization { subtitles: true, current_question: true, frames: true, service_revision: None } },
+        PreviewAiExecutionInput { execution: AiExecutionTarget::Api { service_config_id: "service".into(), model_id: "model".into() },
+            authorization: AiMaterialAuthorization { subtitles: true, current_question: true, frames: false, service_revision: Some(7) } },
+    ]);
+    check_schema("ai-execution-request", &request);
 }
 
 fn serialized_schema<T: schemars::JsonSchema>() -> serde_json::Value {

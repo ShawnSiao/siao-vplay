@@ -1,0 +1,133 @@
+{
+  "$defs": {
+    "AiExecutionTarget": {
+      "oneOf": [
+        {
+          "properties": {
+            "kind": {
+              "const": "manual",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "codex",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "api",
+              "type": "string"
+            },
+            "modelId": {
+              "type": "string"
+            },
+            "serviceConfigId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "serviceConfigId",
+            "modelId"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "AiMaterialAuthorization": {
+      "properties": {
+        "currentQuestion": {
+          "type": "boolean"
+        },
+        "frames": {
+          "type": "boolean"
+        },
+        "serviceRevision": {
+          "format": "uint64",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "subtitles": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "subtitles",
+        "currentQuestion",
+        "frames",
+        "serviceRevision"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "examples": [
+    {
+      "authorization": {
+        "currentQuestion": true,
+        "frames": false,
+        "serviceRevision": null,
+        "subtitles": true
+      },
+      "execution": {
+        "kind": "manual"
+      }
+    },
+    {
+      "authorization": {
+        "currentQuestion": true,
+        "frames": true,
+        "serviceRevision": null,
+        "subtitles": true
+      },
+      "execution": {
+        "kind": "codex"
+      }
+    },
+    {
+      "authorization": {
+        "currentQuestion": true,
+        "frames": false,
+        "serviceRevision": 7,
+        "subtitles": true
+      },
+      "execution": {
+        "kind": "api",
+        "modelId": "model",
+        "serviceConfigId": "service"
+      }
+    }
+  ],
+  "properties": {
+    "authorization": {
+      "$ref": "#/$defs/AiMaterialAuthorization"
+    },
+    "execution": {
+      "$ref": "#/$defs/AiExecutionTarget"
+    }
+  },
+  "required": [
+    "execution",
+    "authorization"
+  ],
+  "title": "PreviewAiExecutionInput",
+  "type": "object"
+}

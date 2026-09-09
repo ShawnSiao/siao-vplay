@@ -244,6 +244,7 @@ pub struct AiServiceTestResult {
     rename_all = "snake_case",
     rename_all_fields = "camelCase"
 )]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub enum AiExecutionTarget {
     Manual,
     Codex,
@@ -265,10 +266,12 @@ impl AiExecutionTarget {
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct AiMaterialAuthorization {
     pub subtitles: bool,
     pub current_question: bool,
     pub frames: bool,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub service_revision: Option<u64>,
 }
 
@@ -286,6 +289,7 @@ pub struct AiTaskExecutionInfo {
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(serde::Serialize, schemars::JsonSchema))]
 pub struct PreviewAiExecutionInput {
     pub execution: AiExecutionTarget,
     pub authorization: AiMaterialAuthorization,

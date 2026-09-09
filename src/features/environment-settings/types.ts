@@ -24,16 +24,6 @@ export type AiServiceProbeInput = {
   apiKey: string | null;
 };
 
-export type AiExecutionTarget =
-  | { kind: "manual" }
-  | { kind: "codex" }
-  | { kind: "api"; serviceConfigId: string; modelId: string };
-
-export type AiMaterialAuthorization = {
-  subtitles: boolean;
-  currentQuestion: boolean;
-  frames: boolean;
-  serviceRevision: number | null;
-};
+export type { AiExecutionTarget, AiMaterialAuthorization } from "../../generated/ai-execution-request";
 
 export type { AiExecutionPreview } from "../../generated/ai-execution-preview";
