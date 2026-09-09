@@ -32,6 +32,7 @@ static STORE: OnceLock<NetworkStore> = OnceLock::new();
 
 pub struct NetworkStore {
     path: PathBuf,
+    storage: Option<crate::storage::StorageManager>,
     mutation_lock: Mutex<()>,
 }
 
@@ -39,8 +40,14 @@ impl NetworkStore {
     pub fn new(path: PathBuf) -> Self {
         Self {
             path,
+            storage: None,
             mutation_lock: Mutex::new(()),
         }
+    }
+
+    pub(crate) fn with_storage(mut self, storage: crate::storage::StorageManager) -> Self {
+        self.storage = Some(storage);
+        self
     }
 
     fn load(&self) -> Result<NetworkSettingsFile, AiError> {
@@ -96,6 +103,8 @@ impl NetworkStore {
     }
 
     fn set_observed(&self, input: SetNetworkSettingsInput) -> Result<NetworkObservation, AiError> {
+        let _usage = self.storage.as_ref().map(|storage| storage.acquire_usage()).transpose()
+            .map_err(|_| AiError::Validation("存储目录正在迁移或等待重启，暂时无法保存设置；迁移完成后请重启应用".into()))?;
         let _guard = self
             .mutation_lock
             .lock()
@@ -137,8 +146,8 @@ fn snapshot_from_settings(settings: NetworkSettingsFile) -> NetworkSettings {
     }
 }
 
-pub fn initialize(data_directory: &Path, legacy_proxy: Option<&str>) -> Result<(), AiError> {
-    let store = NetworkStore::new(data_directory.join(SETTINGS_FILE_NAME));
+pub fn initialize(data_directory: &Path, legacy_proxy: Option<&str>, storage: crate::storage::StorageManager) -> Result<(), AiError> {
+    let store = NetworkStore::new(data_directory.join(SETTINGS_FILE_NAME)).with_storage(storage);
     store.migrate_legacy_proxy(legacy_proxy)?;
     let _ = store.snapshot()?;
     STORE

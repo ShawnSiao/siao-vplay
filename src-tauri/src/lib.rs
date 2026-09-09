@@ -176,7 +176,7 @@ pub fn run() {
             let data_directory = storage.app_data_root()?;
             local_resources::initialize(&data_directory)?;
             let legacy_proxy = local_resources::configured_proxy_url();
-            ai::initialize(&data_directory, legacy_proxy.as_deref())?;
+            ai::initialize(&data_directory, legacy_proxy.as_deref(), storage.clone())?;
             resource_download::initialize_for_startup()?;
             runtime::initialize(&data_directory)?;
             let database_path = data_directory.join("projects").join("siaovplay.db");

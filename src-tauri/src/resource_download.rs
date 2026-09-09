@@ -2292,7 +2292,8 @@ mod tests {
             .map(PathBuf::from)
             .expect("SIAOVPLAY_PROXY_DOWNLOAD_ROOT is required");
         fs::create_dir_all(&evidence_root).expect("evidence root should create");
-        ai::network::initialize(&evidence_root.join("network-settings"), None)
+        ai::network::initialize(&evidence_root.join("network-settings"), None,
+            crate::storage::StorageManager::initialize(&evidence_root, evidence_root.clone(), None).unwrap())
             .expect("isolated network settings should initialize");
         let resource = local_resources::resource_definition("whisper-cpu")
             .expect("Whisper CPU resource should exist");

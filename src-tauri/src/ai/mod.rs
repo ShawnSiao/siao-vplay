@@ -29,7 +29,10 @@ use std::path::Path;
 pub use error::AiError;
 pub(crate) use types::AiTaskExecutionInfo;
 
-pub fn initialize(data_directory: &Path, legacy_proxy: Option<&str>) -> Result<(), AiError> {
-    config::initialize(data_directory)?;
-    network::initialize(data_directory, legacy_proxy)
+pub fn initialize(data_directory: &Path, legacy_proxy: Option<&str>, storage: crate::storage::StorageManager) -> Result<(), AiError> {
+    config::initialize(data_directory, storage.clone())?;
+    network::initialize(data_directory, legacy_proxy, storage)
 }
+
+#[cfg(test)]
+mod migration_guard_tests;
