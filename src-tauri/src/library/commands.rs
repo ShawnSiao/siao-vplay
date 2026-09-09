@@ -93,20 +93,6 @@ pub(crate) fn get_collection_detail(
 }
 
 #[tauri::command]
-pub(crate) fn list_collection_episodes(
-    app: AppHandle,
-    store: State<'_, ProjectStore>,
-    collection_id: String,
-    season_number: Option<i64>,
-) -> Result<Vec<MediaSummary>, CommandError> {
-    let episodes = LibraryService::new(store.inner().clone())
-        .list_collection_episodes(&collection_id, season_number)
-        .map_err(CommandError::from)?;
-    allow_media_posters(&app, &episodes)?;
-    Ok(episodes)
-}
-
-#[tauri::command]
 pub(crate) fn add_project_to_collection(
     store: State<'_, ProjectStore>,
     input: AddProjectToCollectionInput,
@@ -381,7 +367,7 @@ fn allow_home_posters(app: &AppHandle, home: &LibraryHome) -> Result<(), Command
     allow_media_posters(app, &home.recently_added)
 }
 
-fn allow_media_posters(app: &AppHandle, media: &[MediaSummary]) -> Result<(), CommandError> {
+pub(super) fn allow_media_posters(app: &AppHandle, media: &[MediaSummary]) -> Result<(), CommandError> {
     for poster_path in media.iter().filter_map(|item| item.poster_path.as_deref()) {
         allow_poster(app, poster_path)?;
     }

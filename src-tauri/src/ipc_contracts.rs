@@ -55,6 +55,7 @@ fn committed_schemas_match_rust() {
     check_schema("summary-export", &serialized_schema::<crate::summary::SummaryExport>());
     check_schema("library-search-result", &serialized_schema::<crate::library::SearchResult>());
     check_schema("collection-detail", &serialized_schema::<crate::library::CollectionDetail>());
+    check_schema("collection-episode-page", &serialized_schema::<crate::library::CollectionEpisodePage>());
     check_schema("library-collection", &serialized_schema::<crate::library::Collection>());
     check_schema("collection-deletion-result", &serialized_schema::<crate::library::LibraryCollectionDeletionResult>());
     check_schema("library-media-summary", &serialized_schema::<crate::library::MediaSummary>());

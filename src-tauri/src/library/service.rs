@@ -357,7 +357,7 @@ pub(super) fn validate_title(value: &str) -> Result<String, LibraryError> {
     Ok(title.to_owned())
 }
 
-fn validate_id(label: &str, value: &str) -> Result<(), LibraryError> {
+pub(super) fn validate_id(label: &str, value: &str) -> Result<(), LibraryError> {
     Uuid::parse_str(value)
         .map(|_| ())
         .map_err(|_| LibraryError::Validation(format!("{label} ID 无效")))

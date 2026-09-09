@@ -1,4 +1,21 @@
 #[test]
+fn collection_episode_page_count_and_rows_share_snapshot() {
+    let fixture = Fixture::new();
+    let collection = fixture.collection("snapshot");
+    let project = fixture.project("page-snapshot.mp4");
+    fixture.add(&collection, &project, 1, 1, 0);
+    let input = crate::library::ListCollectionEpisodePageInput { collection_id: collection.id.clone(), season_number: None, offset: 0 };
+    let page = fixture.service.collection_episode_page_with_checkpoint(input.clone(), || {
+        fixture.service.remove_project_from_collection(&collection.id, &project.id).unwrap();
+    }).unwrap();
+    assert_eq!(page.total_count, 1);
+    assert_eq!(page.items.len(), 1, "page must retain count's snapshot");
+    let next = fixture.service.list_collection_episode_page(input).unwrap();
+    assert_eq!(next.total_count, 0);
+    assert!(next.items.is_empty());
+}
+
+#[test]
 fn episode_windows_preserve_order_without_gaps_or_duplicates() {
     let fixture = Fixture::new();
     let collection = fixture.collection("paged");
@@ -12,6 +29,20 @@ fn episode_windows_preserve_order_without_gaps_or_duplicates() {
         connection.execute("UPDATE collections SET sort_mode = ?1 WHERE id = ?2", rusqlite::params![sort_mode, collection.id]).unwrap();
         for season in [None, Some(1), Some(2), Some(99)] {
             let full = repository.list_collection_episodes(&collection.id, season).unwrap();
+            let input = crate::library::ListCollectionEpisodePageInput {
+                collection_id: collection.id.clone(), season_number: season, offset: 0,
+            };
+            let first = fixture.service.list_collection_episode_page(input.clone()).unwrap();
+            assert_eq!(first.collection_id, collection.id);
+            assert_eq!(first.season_number, season);
+            assert_eq!(first.offset, 0);
+            assert_eq!(first.total_count, full.len() as i64);
+            assert_eq!(first.items, full[..full.len().min(24)]);
+            assert_eq!(first.next_offset, (full.len() > 24).then_some(24));
+            let end = fixture.service.list_collection_episode_page(crate::library::ListCollectionEpisodePageInput { offset: 24, ..input.clone() }).unwrap();
+            assert_eq!(end.items, full[full.len().min(24)..]);
+            assert_eq!(end.next_offset, None);
+            assert!(fixture.service.list_collection_episode_page(crate::library::ListCollectionEpisodePageInput { offset: -1, ..input }).is_err());
             let mut joined = Vec::new();
             for offset in (0..30).step_by(7) {
                 let page = repository.list_collection_episode_window(&collection.id, season, 7, offset).unwrap();
