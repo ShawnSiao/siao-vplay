@@ -18,3 +18,19 @@ test("environment tabs use manual keyboard activation and linked panels", async 
   await page.keyboard.press("Space");
   await expect(local).toHaveAttribute("aria-selected", "true");
 });
+
+
+test("storage default draft survives tab navigation and cache maintenance", async ({ page }) => {
+  await page.goto("/e2e/runtime.html?environment&storage");
+  const dialog = page.getByRole("dialog", { name: "设置" });
+  await dialog.getByRole("tab", { name: "存储", exact: true }).click();
+  await dialog.getByRole("button", { name: "选择默认位置", exact: true }).click();
+  const draft = dialog.getByText("D:\\SiaoVPlay\\Subtitles", { exact: true });
+  await expect(draft).toBeVisible();
+  await dialog.getByRole("tab", { name: "本地功能", exact: true }).click();
+  await dialog.getByRole("tab", { name: "存储", exact: true }).click();
+  await expect(draft).toBeVisible();
+  await dialog.getByRole("button", { name: "清理缓存", exact: true }).click();
+  await dialog.getByRole("button", { name: "确认清理", exact: true }).click();
+  await expect(draft).toBeVisible();
+});

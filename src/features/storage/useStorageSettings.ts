@@ -68,10 +68,15 @@ export function useStorageSettings(
   const [error, setError] = useState<string | null>(null);
   const lastStatus = useRef<string | null>(null);
 
-  const applySettings = useCallback((next: StorageSettings) => {
+  const appliedSettings = useRef<StorageSettings | null>(null);
+  const applySettings = useCallback((next: StorageSettings, saved?: { subtitle: string | null; report: string | null }) => {
+    const previous = appliedSettings.current;
+    appliedSettings.current = next;
     setSettings(next);
-    setSubtitleDirectory(next.defaultSubtitleExportDirectory);
-    setReportDirectory(next.defaultVideoReportExportDirectory);
+    setSubtitleDirectory(current => !previous || current === (saved ? saved.subtitle : previous.defaultSubtitleExportDirectory)
+      ? next.defaultSubtitleExportDirectory : current);
+    setReportDirectory(current => !previous || current === (saved ? saved.report : previous.defaultVideoReportExportDirectory)
+      ? next.defaultVideoReportExportDirectory : current);
   }, []);
 
   const load = useCallback(async () => {
@@ -139,7 +144,7 @@ export function useStorageSettings(
     setError(null);
     try {
       if (previewMode) {
-        applySettings({ ...settings, defaultSubtitleExportDirectory: subtitleDirectory, defaultVideoReportExportDirectory: reportDirectory });
+        applySettings({ ...settings, defaultSubtitleExportDirectory: subtitleDirectory, defaultVideoReportExportDirectory: reportDirectory }, { subtitle: subtitleDirectory, report: reportDirectory });
       } else {
         applySettings(await saveStorageSettings({
           expectedRevision: settings.revision,
@@ -147,7 +152,7 @@ export function useStorageSettings(
           mediaCacheRoot: settings.mediaCacheUsesDefault ? null : settings.mediaCacheRoot,
           defaultSubtitleExportDirectory: subtitleDirectory,
           defaultVideoReportExportDirectory: reportDirectory,
-        }));
+        }), { subtitle: subtitleDirectory, report: reportDirectory });
       }
       onNotice("默认保存位置已更新；导出时仍可临时改选。");
     } catch (cause) {
