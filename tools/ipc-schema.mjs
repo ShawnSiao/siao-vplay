@@ -2,9 +2,9 @@
 // Reject schemas lacking these bounds instead of silently ignoring the format.
 function normalizeIntegerFormats(value) {
   if (!value || typeof value !== "object") return;
-  if (value.format === "int64") {
-    if (value.type !== "integer" || !Number.isSafeInteger(value.minimum) || !Number.isSafeInteger(value.maximum)) {
-      throw new Error("IPC int64 requires explicit JavaScript-safe integer bounds");
+  if (["int64", "uint64", "uint32"].includes(value.format)) {
+    if (value.type !== "integer" || !Number.isSafeInteger(value.minimum) || !Number.isSafeInteger(value.maximum) || value.minimum > value.maximum || (value.format.startsWith("uint") && value.minimum < 0)) {
+      throw new Error("IPC integer requires explicit JavaScript-safe integer bounds");
     }
     delete value.format;
   }

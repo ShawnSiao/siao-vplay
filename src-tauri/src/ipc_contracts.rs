@@ -35,6 +35,17 @@ fn committed_schemas_match_rust() {
         }], manual_entry_allowed: true },
     ]);
     check_schema("ai-model-list", &models);
+    use crate::ai::types::NetworkSettings;
+    // Output contracts require nullable fields that Serde always emits.
+    let generator = schemars::generate::SchemaSettings::draft2020_12().for_serialize().into_generator();
+    let mut network = serde_json::to_value(generator.into_root_schema_for::<NetworkSettings>()).unwrap();
+    network["examples"] = serde_json::json!([
+        NetworkSettings { schema_version: 1, revision: 0, custom_proxy_url: None,
+            effective_mode: "direct".into(), effective_source: "direct".into(), effective_proxy_address: None },
+        NetworkSettings { schema_version: 1, revision: 7, custom_proxy_url: Some("http://127.0.0.1:7890".into()),
+            effective_mode: "custom".into(), effective_source: "custom".into(), effective_proxy_address: Some("127.0.0.1:7890".into()) },
+    ]);
+    check_schema("network-settings", &network);
 }
 
 fn check_schema(name: &str, schema: &serde_json::Value) {

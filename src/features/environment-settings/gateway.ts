@@ -1,3 +1,4 @@
+import validateNetworkSettings from "../../generated/network-settings.validator.mjs";
 import validateModelList from "../../generated/ai-model-list.validator.mjs";
 import { invoke } from "@tauri-apps/api/core";
 
@@ -65,17 +66,22 @@ export function testAiService(
   return invoke("test_ai_service", { input });
 }
 
-export function getNetworkSettings(): Promise<NetworkSettings> {
-  return invoke("get_network_settings");
+function parseNetworkSettings(value: unknown): NetworkSettings {
+  if (!validateNetworkSettings(value)) throw new Error("网络设置格式无效");
+  return value;
 }
 
-export function setNetworkSettings(
+export async function getNetworkSettings(): Promise<NetworkSettings> {
+  return parseNetworkSettings(await invoke<unknown>("get_network_settings"));
+}
+
+export async function setNetworkSettings(
   expectedRevision: number,
   customProxyUrl: string | null,
 ): Promise<NetworkSettings> {
-  return invoke("set_network_settings", {
+  return parseNetworkSettings(await invoke<unknown>("set_network_settings", {
     input: { expectedRevision, customProxyUrl },
-  });
+  }));
 }
 
 export function previewAiExecution(

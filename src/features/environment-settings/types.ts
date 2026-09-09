@@ -1,3 +1,4 @@
+export type { NetworkSettings } from "../../generated/network-settings";
 import type { AiModelInfo } from "../../generated/ai-model-list";
 export type { AiModelInfo, AiModelList } from "../../generated/ai-model-list";
 export type AiProviderId =
@@ -65,15 +66,6 @@ export type AiServiceTestResult = {
   minimalRequestUsed: boolean;
   mayIncurUsage: boolean;
   providerRequestId: string | null;
-};
-
-export type NetworkSettings = {
-  schemaVersion: number;
-  revision: number;
-  customProxyUrl: string | null;
-  effectiveMode: string;
-  effectiveSource: string;
-  effectiveProxyAddress: string | null;
 };
 
 export type AiServiceDraft = {

@@ -155,8 +155,11 @@ pub struct NetworkSettingsFile {
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct NetworkSettings {
+    #[cfg_attr(test, schemars(range(min = 0, max = 4294967295_u64)))]
     pub schema_version: u32,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub revision: u64,
     pub custom_proxy_url: Option<String>,
     pub effective_mode: String,

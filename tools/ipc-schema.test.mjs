@@ -2,6 +2,15 @@ import { strict as assert } from "node:assert";
 import { test } from "node:test";
 import { prepareRuntimeSchema } from "./ipc-schema.mjs";
 
+test("normalizes explicitly bounded unsigned wire integers", () => {
+  for (const format of ["uint32", "uint64"]) {
+    assert.deepEqual(prepareRuntimeSchema({ type: "integer", format, minimum: 0, maximum: Number.MAX_SAFE_INTEGER }),
+      { type: "integer", minimum: 0, maximum: Number.MAX_SAFE_INTEGER });
+    assert.throws(() => prepareRuntimeSchema({ type: "integer", format, minimum: 0 }), /safe integer bounds/);
+    assert.throws(() => prepareRuntimeSchema({ type: "integer", format, minimum: -1, maximum: 100 }), /safe integer bounds/);
+  }
+});
+
 test("keeps integer bounds and original schema while removing build-only examples", () => {
   const schema = { examples: [{ value: 1 }], properties: { value: { type: "integer", format: "int64", minimum: 1, maximum: Number.MAX_SAFE_INTEGER } } };
   const output = prepareRuntimeSchema(schema);
