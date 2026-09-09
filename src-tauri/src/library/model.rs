@@ -267,15 +267,21 @@ pub(crate) struct LibraryRootRevokeResult {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub(crate) struct SeasonSummary {
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub season_number: Option<i64>,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub episode_count: i64,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub watched_count: i64,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub total_duration_ms: Option<i64>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub(crate) struct CollectionDetail {
     pub summary: CollectionSummary,
     pub seasons: Vec<SeasonSummary>,

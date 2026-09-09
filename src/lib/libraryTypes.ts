@@ -63,10 +63,7 @@ export type SeasonSummary = {
   totalDurationMs: number | null;
 };
 
-export type CollectionDetail = {
-  summary: CollectionSummary;
-  seasons: SeasonSummary[];
-};
+export type { CollectionDetail } from "../generated/collection-detail";
 
 export type EpisodeReference = {
   projectId: string;

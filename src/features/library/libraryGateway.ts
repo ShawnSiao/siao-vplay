@@ -1,6 +1,7 @@
 import { readLibrarySection } from "../../lib/libraryPageGateway";
 import { readLibraryHome } from "../../lib/libraryHomeGateway";
 import { readLibrarySearch } from "../../lib/librarySearchGateway";
+import { invokeCollectionDetail, invokeWatchLater } from "../../lib/collectionDetailGateway";
 import { invokeProject } from "../../lib/projectGateway";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
@@ -119,7 +120,7 @@ export async function deleteCollection(
 export async function getCollectionDetail(
   collectionId: string,
 ): Promise<CollectionDetail> {
-  return invoke<CollectionDetail>("get_collection_detail", { collectionId });
+  return invokeCollectionDetail("get_collection_detail", { collectionId }, collectionId);
 }
 
 export async function listCollectionEpisodes(
@@ -135,17 +136,17 @@ export async function listCollectionEpisodes(
 export async function addProjectToCollection(
   input: AddProjectToCollectionInput,
 ): Promise<CollectionDetail> {
-  return invoke<CollectionDetail>("add_project_to_collection", { input });
+  return invokeCollectionDetail("add_project_to_collection", { input }, input.collectionId);
 }
 
 export async function removeProjectFromCollection(
   collectionId: string,
   projectId: string,
 ): Promise<CollectionDetail> {
-  return invoke<CollectionDetail>("remove_project_from_collection", {
+  return invokeCollectionDetail("remove_project_from_collection", {
     collectionId,
     projectId,
-  });
+  }, collectionId);
 }
 
 export async function getEpisodeNeighbors(
@@ -162,7 +163,7 @@ export async function setWatchLater(
   projectId: string,
   enabled: boolean,
 ): Promise<CollectionDetail | null> {
-  return invoke<CollectionDetail | null>("set_watch_later", { projectId, enabled });
+  return invokeWatchLater(projectId, enabled);
 }
 
 export async function setProjectWatched(projectId: string, watched: boolean): Promise<Project> {
