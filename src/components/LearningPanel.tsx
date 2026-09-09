@@ -244,7 +244,8 @@ function LearningPanelSession({
     };
   }, [prompt, task]);
 
-  useLearningPolling({ projectId, task, read: getLearningTask, onTask: setTask,
+  useLearningPolling({ projectId, task, read: getLearningTask,
+    onTask: next => setTask(current => current?.id === next.id && current.projectId === next.projectId && activeStatuses.has(current.status) ? next : current),
     onError: cause => setError(commandError(cause).message) });
 
   useEffect(() => {

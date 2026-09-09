@@ -2055,7 +2055,10 @@ describe("App", () => {
       receiverLabel: "自行选择的工具",
     };
     desktopMocks.prepareLearningTask.mockResolvedValue(manualTask);
-    desktopMocks.getLearningTask.mockResolvedValue(manualTask);
+    let finishPoll!: (value: LearningTask) => void;
+    desktopMocks.getLearningTask.mockReturnValue(new Promise<LearningTask>(resolve => { finishPoll = resolve; }));
+    let finishImport!: (value: unknown) => void;
+    desktopMocks.importLearningResult.mockReturnValue(new Promise(resolve => { finishImport = resolve; }));
     desktopMocks.chooseLearningResultFile.mockResolvedValue(
       "W:\\SiaoVPlay\\handoff\\learning.json",
     );
@@ -2086,7 +2089,13 @@ describe("App", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: /手动选择 JSON/ }));
     await waitFor(() => expect(screen.getByText("learning.json")).toBeInTheDocument());
+    await waitFor(() => expect(desktopMocks.getLearningTask).toHaveBeenCalled());
     fireEvent.click(screen.getByRole("button", { name: "检查并显示词义" }));
+    await act(async () => {
+      finishImport({ task: { ...manualTask, status: "completed", stage: "completed", progress: 1,
+        outputDictionaryEntryId: dictionaryEntry.id, completedAtMs: 1_785_354_350_000 }, dictionaryEntry });
+      finishPoll(manualTask);
+    });
 
     expect(
       await screen.findByText("结合当前台词，询问对方是否一直在等待。"),
