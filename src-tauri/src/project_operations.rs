@@ -20,6 +20,12 @@ fn busy() -> io::Error { io::Error::new(io::ErrorKind::WouldBlock, "项目仍有
 #[must_use]
 pub(crate) struct Operation(Arc<Gate>);
 impl Operation {
+    pub(crate) fn ensure_project(&self, store: &ProjectStore, project: &str) -> Result<(), StoreError> {
+        if !Arc::ptr_eq(&self.0, &gate(store, project)?) {
+            return Err(StoreError::Validation("项目操作使用权与当前项目不一致".into()));
+        }
+        Ok(())
+    }
     pub(crate) fn acquire(store: &ProjectStore, project: &str) -> Result<Self, StoreError> {
         let gate = gate(store, project)?;
         {

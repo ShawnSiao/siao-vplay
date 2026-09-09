@@ -27,7 +27,6 @@ use crate::{
     burn_style::subtitle_force_style,
     delivery::{
         DeliveryError, ExportSubtitlesInput, SubtitleExportFormat, SubtitleExportMode,
-        export_subtitles,
     },
     media::{self, MediaError},
     store::{ProjectStore, StoreError},
@@ -36,6 +35,8 @@ use crate::{
 pub use crate::burn_style::SubtitleBurnStyle;
 #[cfg(test)]
 use crate::burn_style::SubtitleBurnTextSize;
+#[cfg(test)]
+use crate::delivery::export_subtitles;
 
 const POLL_INTERVAL: Duration = Duration::from_millis(100);
 const BURN_MANIFEST_FORMAT: &str = "siaovplay-subtitle-burn-v1";
@@ -230,6 +231,7 @@ pub fn start_subtitle_burn(
     let job_directory = reset_job_directory(store, &project.id, &job_id)?;
     let subtitle = match prepare_internal_subtitle(
         store,
+        &_project_operation,
         &project.id,
         input.mode,
         input.source_version_id.clone(),
@@ -469,6 +471,7 @@ pub fn resume_subtitle_burn_job(
     job_id: &str,
 ) -> Result<SubtitleBurnJob, SubtitleBurnError> {
     let job = load_stored_job(store, job_id)?;
+    let _project_operation = crate::project_operations::Operation::acquire(store, &job.public.project_id)?;
     if !matches!(
         job.public.status.as_str(),
         "failed" | "cancelled" | "interrupted"
@@ -482,6 +485,7 @@ pub fn resume_subtitle_burn_job(
     let job_directory = reset_job_directory(store, &project.id, job_id)?;
     let subtitle = prepare_internal_subtitle(
         store,
+        &_project_operation,
         &project.id,
         job.public.mode,
         job.public.source_version_id.clone(),
@@ -682,13 +686,14 @@ fn ensure_no_active_job(
 
 fn prepare_internal_subtitle(
     store: &ProjectStore,
+    operation: &crate::project_operations::Operation,
     project_id: &str,
     mode: SubtitleBurnMode,
     source_version_id: Option<String>,
     translation_version_id: String,
     job_directory: &Path,
 ) -> Result<crate::delivery::SubtitleExport, SubtitleBurnError> {
-    let exported = export_subtitles(
+    let exported = crate::delivery::export_subtitles_owned(
         store,
         ExportSubtitlesInput {
             project_id: project_id.to_owned(),
@@ -699,6 +704,7 @@ fn prepare_internal_subtitle(
             destination_directory: path_to_string(job_directory),
             confirm_version_selection: true,
         },
+        operation,
     )?;
     let subtitle_path = job_directory.join("burn.srt");
     let manifest_path = job_directory.join("burn.srt.siaovplay.json");

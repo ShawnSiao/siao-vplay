@@ -363,3 +363,15 @@ fn assert_manifest_matches(exported: &SubtitleExport) {
         exported.file_sha256
     );
 }
+
+#[test]
+fn owned_export_rejects_a_different_projects_operation() {
+    let first = fixture();
+    let second = fixture();
+    let wrong = crate::project_operations::Operation::acquire(&second.store, &second.project_id).unwrap();
+    assert!(export_subtitles_owned(&first.store, input(&first, SubtitleExportMode::Original, SubtitleExportFormat::Srt), &wrong).is_err(),
+        "an admitted export must verify the operation belongs to its database and project");
+    assert_eq!(fs::read_dir(&first.destination).unwrap().count(), 0);
+    let own = crate::project_operations::Operation::acquire(&first.store, &first.project_id).unwrap();
+    assert!(export_subtitles_owned(&first.store, input(&first, SubtitleExportMode::Original, SubtitleExportFormat::Srt), &own).is_ok());
+}

@@ -144,16 +144,22 @@ struct ExportCue {
     text: String,
 }
 
-pub fn export_subtitles(
+pub fn export_subtitles(store: &ProjectStore, input: ExportSubtitlesInput) -> Result<SubtitleExport, DeliveryError> {
+    let operation = crate::project_operations::Operation::acquire(store, &input.project_id)?;
+    export_subtitles_owned(store, input, &operation)
+}
+
+pub(crate) fn export_subtitles_owned(
     store: &ProjectStore,
     input: ExportSubtitlesInput,
+    operation: &crate::project_operations::Operation,
 ) -> Result<SubtitleExport, DeliveryError> {
+    operation.ensure_project(store, &input.project_id)?;
     if !input.confirm_version_selection {
         return Err(DeliveryError::InvalidExport(
             "导出前必须确认字幕版本".to_owned(),
         ));
     }
-    let _project_operation = crate::project_operations::Operation::acquire(store, &input.project_id)?;
     let project = store.get_project(&input.project_id)?;
     let source = optional_version(
         store,
