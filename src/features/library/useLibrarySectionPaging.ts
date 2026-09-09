@@ -20,10 +20,20 @@ export function useLibrarySectionPaging(
     unclassified: 0,
   });
 
+  const activeRequests = useRef<Partial<Record<LibraryMediaSection, number>>>({});
+  useEffect(() => () => {
+    for (const section of Object.keys(requestSequences.current) as LibraryMediaSection[]) {
+      requestSequences.current[section] += 1;
+    }
+    activeRequests.current = {};
+  }, []);
+
   const loadSectionPage = useCallback(
     async (mediaSection: LibraryMediaSection, offset = 0) => {
+      if (offset > 0 && activeRequests.current[mediaSection] !== undefined) return null;
       const sequence = requestSequences.current[mediaSection] + 1;
       requestSequences.current[mediaSection] = sequence;
+      activeRequests.current[mediaSection] = sequence;
       const append = offset > 0;
       dispatch({ type: "section_page_started", section: mediaSection, append });
       try {
@@ -38,7 +48,7 @@ export function useLibrarySectionPaging(
             append,
           });
         }
-        return page;
+        return requestSequences.current[mediaSection] === sequence ? page : null;
       } catch (error) {
         if (requestSequences.current[mediaSection] === sequence) {
           dispatch({
@@ -48,6 +58,8 @@ export function useLibrarySectionPaging(
           });
         }
         return null;
+      } finally {
+        if (activeRequests.current[mediaSection] === sequence) delete activeRequests.current[mediaSection];
       }
     },
     [dispatch],
