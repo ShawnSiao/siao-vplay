@@ -1,3 +1,4 @@
+import { invokeProject } from "./projectGateway";
 export { reconcileExternalAgentResults, acknowledgeExternalAgentResults } from "./externalResultGateway";
 export { retryLocalResourceBinding, inspectLocalResourceBinding } from "./resourceLocationGateway";
 export { planLocalResourceLocation, planLocalResourceMove, moveLocalResourceRoot, inspectLocalResourceMigration, adoptLocalResources } from "./resourceMigrationGateway";
@@ -105,7 +106,7 @@ export async function listProjects(): Promise<Project[]> {
 }
 
 export async function getProject(projectId: string): Promise<Project> {
-  return invoke<Project>("get_project", { projectId });
+  return invokeProject("get_project", { projectId });
 }
 
 export async function chooseLocalVideo(): Promise<string | null> {
@@ -157,11 +158,11 @@ export async function chooseSubtitleFile(): Promise<string | null> {
 }
 
 export async function openLocalProject(mediaPath: string): Promise<Project> {
-  return invoke<Project>("open_local_project", { input: { mediaPath, title: null } });
+  return invokeProject("open_local_project", { input: { mediaPath, title: null } });
 }
 
 export async function createLocalProject(mediaPath: string): Promise<Project> {
-  return invoke<Project>("create_local_project", {
+  return invokeProject("create_local_project", {
     input: { mediaPath, title: null },
   });
 }
@@ -179,7 +180,7 @@ export async function importRemoteMediaUrl(
   expectedPreviewToken: string,
   operationId: string,
 ): Promise<Project> {
-  return invoke<Project>("import_remote_media_url", {
+  return invokeProject("import_remote_media_url", {
     input: {
       url,
       expectedPreviewToken,
@@ -198,11 +199,11 @@ export async function cancelRemoteMediaImport(
 }
 
 export async function markProjectOpened(projectId: string): Promise<Project> {
-  return invoke<Project>("mark_project_opened", { projectId });
+  return invokeProject("mark_project_opened", { projectId });
 }
 
 export async function ensureProjectPoster(projectId: string): Promise<Project> {
-  return invoke<Project>("ensure_project_poster", { projectId });
+  return invokeProject("ensure_project_poster", { projectId });
 }
 
 export async function updatePlaybackState(
@@ -216,7 +217,7 @@ export async function updatePlaybackState(
     subtitleMode: "original" | "translation" | "bilingual";
   },
 ): Promise<Project> {
-  return invoke<Project>("update_playback_state", {
+  return invokeProject("update_playback_state", {
     input: { projectId, ...values },
   });
 }
@@ -225,7 +226,7 @@ export async function relinkProjectMedia(
   projectId: string,
   mediaPath: string,
 ): Promise<Project> {
-  return invoke<Project>("relink_project_media", {
+  return invokeProject("relink_project_media", {
     input: { projectId, mediaPath },
   });
 }

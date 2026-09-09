@@ -64,17 +64,7 @@ export type PlaybackState = {
 
 export type SubtitleDisplayMode = "original" | "translation" | "bilingual";
 
-export type Project = {
-  id: string;
-  title: string;
-  status: ProjectStatus;
-  revision: number;
-  createdAtMs: number;
-  updatedAtMs: number;
-  lastOpenedAtMs: number;
-  mediaSource: MediaSource;
-  playbackState: PlaybackState;
-};
+export type { Project } from "./generated/project";
 
 export type LibrarySearchResult = {
   kind: "collection" | "episode" | "unclassified";
