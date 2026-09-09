@@ -110,6 +110,7 @@ fn reconcile_external_agent_result(
     store: &ProjectStore,
     task: &ActiveManualTask,
 ) -> Result<Option<ExternalAgentResultUpdate>, ExternalHandoffError> {
+    let _project_operation = crate::project_operations::Operation::acquire(store, &task.project_id)?;
     let Some(candidate) = result_candidate(store, &task.id)? else {
         return Ok(None);
     };

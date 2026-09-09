@@ -277,3 +277,19 @@ fn pending_receipts_beyond_the_first_hundred_are_reachable_without_acknowledgeme
         "task-0100"
     );
 }
+
+#[test]
+fn automatic_result_reconciliation_respects_project_deletion() {
+    let fixture = crate::understanding::test_fixture::Fixture::new();
+    let task = fixture.prepare();
+    let result = fixture.result_path(&task, task.playback_cutoff_ms);
+    let destination = fixture.store.data_directory().join("agent-tasks").join(&task.id).join("output/result.json");
+    fs::copy(result, &destination).unwrap();
+    let active = ActiveManualTask { kind: "explanation".into(), id: task.id.clone(), project_id: fixture.project_id.clone(), status: "awaiting_external_result".into() };
+    let deleting = crate::project_operations::Deletion::acquire(&fixture.store, &fixture.project_id).unwrap();
+    assert!(super::reconcile_external_agent_result(&fixture.store, &active).is_err(),
+        "automatic reconciliation must not stage files while project deletion owns admission");
+    assert_eq!(crate::understanding::get_explanation_task(&fixture.store, &task.id).unwrap().status, "awaiting_external_result");
+    drop(deleting);
+    assert!(super::reconcile_external_agent_result(&fixture.store, &active).unwrap().is_some());
+}

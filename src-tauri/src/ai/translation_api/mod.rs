@@ -45,6 +45,7 @@ pub(crate) fn confirmation_policy() -> Result<serde_json::Value, AiTaskError> {
 }
 
 fn prepare(store: &ProjectStore, input: PrepareInput) -> Result<TranslationTask, AiTaskError> {
+    let _project_operation = crate::project_operations::Operation::acquire(store, &input.project_id)?;
     let service = connection::resolve_execution(&input.execution, Some(input.service_revision))?;
     let task = translation::prepare_translation_task(
         store,

@@ -20,6 +20,7 @@ pub fn prepare_explanation(
     store: &ProjectStore,
     input: StartExplanationTaskInput,
 ) -> Result<ExplanationTask, AiTaskError> {
+    let _project_operation = crate::project_operations::Operation::acquire(store, &input.project_id)?;
     validate_authorization(&input.authorization)?;
     let service = api_service(&input.execution, &input.authorization)?;
     let include_frames =
@@ -92,6 +93,7 @@ pub fn prepare_learning(
     store: &ProjectStore,
     input: StartLearningTaskInput,
 ) -> Result<LearningTask, AiTaskError> {
+    let _project_operation = crate::project_operations::Operation::acquire(store, &input.project_id)?;
     validate_authorization(&input.authorization)?;
     let service = api_service(&input.execution, &input.authorization)?;
     let task = learning::prepare_learning_task(
