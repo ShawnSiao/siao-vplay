@@ -29,9 +29,6 @@ import type {
   Project,
   RemoteMediaPreview,
   RuntimeCatalog,
-  SubtitleExport,
-  SubtitleExportFormat,
-  SubtitleExportMode,
 } from "../types";
 
 export const isDesktopApp = "__TAURI_INTERNALS__" in window;
@@ -369,26 +366,7 @@ export async function chooseSubtitleDeliveryDirectory(
   );
 }
 
-export async function exportSubtitles(
-  projectId: string,
-  mode: SubtitleExportMode,
-  format: SubtitleExportFormat,
-  sourceVersionId: string | null,
-  translationVersionId: string | null,
-  destinationDirectory: string,
-): Promise<SubtitleExport> {
-  return invoke<SubtitleExport>("export_subtitles", {
-    input: {
-      projectId,
-      mode,
-      format,
-      sourceVersionId,
-      translationVersionId,
-      destinationDirectory,
-      confirmVersionSelection: true,
-    },
-  });
-}
+export { exportSubtitles } from "./subtitleExportGateway";
 
 export function playbackUrl(path: string): string {
   return isDesktopApp ? convertFileSrc(path) : "";

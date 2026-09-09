@@ -49,6 +49,7 @@ impl DeliveryError {
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub enum SubtitleExportMode {
     Original,
     Translation,
@@ -67,6 +68,7 @@ impl SubtitleExportMode {
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub enum SubtitleExportFormat {
     Srt,
     Vtt,
@@ -95,16 +97,19 @@ pub struct ExportSubtitlesInput {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct SubtitleExport {
     pub file_path: String,
     pub manifest_path: String,
     pub file_sha256: String,
     pub mode: SubtitleExportMode,
     pub format: SubtitleExportFormat,
+    #[cfg_attr(test, schemars(range(min = 1, max = 9007199254740991_u64)))]
     pub cue_count: usize,
     pub source_version_id: Option<String>,
     pub translation_version_id: Option<String>,
     pub media_sha256: String,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_i64)))]
     pub exported_at_ms: i64,
 }
 

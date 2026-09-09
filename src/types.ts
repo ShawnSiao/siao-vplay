@@ -455,22 +455,11 @@ export type LearningCardsExport = {
   cardCount: number;
 };
 
-export type SubtitleExportMode = "original" | "translation" | "bilingual";
 
-export type SubtitleExportFormat = "srt" | "vtt";
 
-export type SubtitleExport = {
-  filePath: string;
-  manifestPath: string;
-  fileSha256: string;
-  mode: SubtitleExportMode;
-  format: SubtitleExportFormat;
-  cueCount: number;
-  sourceVersionId: string | null;
-  translationVersionId: string | null;
-  mediaSha256: string;
-  exportedAtMs: number;
-};
+
+
+export type { SubtitleExport, SubtitleExportMode, SubtitleExportFormat } from "./generated/subtitle-export";
 
 export type { SubtitleBurnMode, SubtitleBurnJob } from "./generated/subtitle-burn-job";
 
