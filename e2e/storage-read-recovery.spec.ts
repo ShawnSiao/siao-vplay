@@ -1,4 +1,4 @@
-import { storageSettingsFixture } from "../src/test-fixtures/storage";
+import { storageSettingsFixture, storageMigrationFixture } from "../src/test-fixtures/storage";
 import { join } from "node:path";
 import { expect, test } from "@playwright/test";
 
@@ -70,4 +70,31 @@ test("uncertain storage save reads back without repeating the write", async ({ p
   await expect(dialog.getByRole("alert")).toHaveCount(0);
   await expect(dialog.getByRole("button", { name: "应用设置", exact: true })).toBeDisabled();
   expect(await page.evaluate(() => (window as unknown as { storageWrites: number }).storageWrites)).toBe(1);
+});
+
+
+test("post-migration refresh failure remains visible and can be reread", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", error => errors.push(error.message));
+  await page.addInitScript(({ settings, migration }) => {
+    const state = window as unknown as { storageReads: number; __TAURI_INTERNALS__: unknown };
+    state.storageReads = 0;
+    state.__TAURI_INTERNALS__ = { invoke: async (command: string) => {
+      if (command === "get_ai_service_settings") return { schemaVersion: 1, revision: 0, providerCatalog: { schemaVersion: 1, providers: [] }, services: [], defaultServiceId: null };
+      if (command === "get_current_storage_migration") return migration;
+      if (command === "get_storage_settings") {
+        if (++state.storageReads === 2) throw new Error("读取暂时失败");
+        return settings;
+      }
+      throw new Error(`Unexpected fixture IPC: ${command}`);
+    } };
+  }, { settings: storageSettingsFixture, migration: storageMigrationFixture });
+  await page.goto("/e2e/runtime.html?environment");
+  const dialog = page.getByRole("dialog", { name: "设置" });
+  await dialog.getByRole("tab", { name: "存储", exact: true }).click();
+  await expect(dialog.getByRole("alert")).toContainText("存储设置刷新失败");
+  await dialog.getByRole("button", { name: "重新读取存储设置" }).click();
+  await expect(dialog.getByRole("alert")).toHaveCount(0);
+  expect(await page.evaluate(() => (window as unknown as { storageReads: number }).storageReads)).toBe(3);
+  expect(errors).toEqual([]);
 });

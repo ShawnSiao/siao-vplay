@@ -67,6 +67,9 @@ export function useStorageSettings(
   const [operation, setOperation] = useState<Operation | null>(null);
   const [error, setError] = useState<string | null>(null);
   const lastStatus = useRef<string | null>(null);
+  const settingsReadEpoch = useRef(0);
+  const noticeRef = useRef(onNotice);
+  useEffect(() => { noticeRef.current = onNotice; }, [onNotice]);
 
   const appliedSettings = useRef<StorageSettings | null>(null);
   const applySettings = useCallback((next: StorageSettings, saved?: { subtitle: string | null; report: string | null }) => {
@@ -80,6 +83,7 @@ export function useStorageSettings(
   }, []);
 
   const load = useCallback(async () => {
+    const epoch = ++settingsReadEpoch.current;
     setOperation("loading");
     setError(null);
     try {
@@ -91,13 +95,14 @@ export function useStorageSettings(
           getStorageSettings(),
           getCurrentStorageMigration(),
         ]);
+        if (epoch !== settingsReadEpoch.current) return;
         applySettings(nextSettings);
         setMigration(currentMigration);
       }
     } catch (cause) {
-      setError(message(cause));
+      if (epoch === settingsReadEpoch.current) setError(message(cause));
     } finally {
-      setOperation(null);
+      if (epoch === settingsReadEpoch.current) setOperation(null);
     }
   }, [applySettings, previewMode]);
 
@@ -118,13 +123,21 @@ export function useStorageSettings(
   }, [active, migration?.id, migration?.status, previewMode]);
 
   useEffect(() => {
+    let active = true;
     const status = migration?.status ?? null;
-    if (status && status !== lastStatus.current && ["completed", "restart_required"].includes(status)) {
-      onNotice(status === "restart_required" ? "应用数据已校验，重启后切换到新位置。" : "存储位置迁移完成，旧目录仍保留。");
-      if (!previewMode) void getStorageSettings().then(applySettings);
+    const identity = migration?.id ? `${migration.id}:${status}` : null;
+    const epoch = settingsReadEpoch.current;
+    if (status && identity !== lastStatus.current && ["completed", "restart_required"].includes(status)) {
+      noticeRef.current(status === "restart_required" ? "应用数据已校验，重启后切换到新位置。" : "存储位置迁移完成，旧目录仍保留。");
+      if (!previewMode) void getStorageSettings().then(next => {
+        if (active && epoch === settingsReadEpoch.current) applySettings(next);
+      }).catch(cause => {
+        if (active && epoch === settingsReadEpoch.current) setError(`迁移状态已更新，但存储设置刷新失败：${message(cause)}`);
+      });
     }
-    lastStatus.current = status;
-  }, [applySettings, migration?.status, onNotice, previewMode]);
+    lastStatus.current = identity;
+    return () => { active = false; };
+  }, [applySettings, migration?.id, migration?.status, previewMode]);
 
   const chooseDefault = useCallback(async (kind: "subtitle" | "report") => {
     const selected = previewMode
@@ -140,6 +153,7 @@ export function useStorageSettings(
 
   const saveDefaults = useCallback(async () => {
     if (!settings) return;
+    ++settingsReadEpoch.current;
     setOperation("saving");
     setError(null);
     try {
