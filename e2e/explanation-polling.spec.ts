@@ -1,0 +1,33 @@
+import { expect, test } from "@playwright/test";
+import { createUnderstandingFixtures } from "../src/test-fixtures/understanding";
+import { createPlayerSubtitleFixtures } from "../src/e2e/playerSubtitleFixtures";
+
+test("explanation keeps one slow read and stops polling after failure", async ({ page }) => {
+  const { originalSubtitle: source } = createPlayerSubtitleFixtures("e2e-project");
+  const task = { ...createUnderstandingFixtures({ projectId: source.projectId, sourceVersionId: source.id,
+    translationVersionId: "", sourceSegmentId: source.segments[0].id }).explanationTask,
+    translationVersionId: null, frames: [], status: "running", playbackCutoffMs: 15000 };
+  await page.addInitScript(({ task, source }) => {
+    const state = window as unknown as { __TAURI_INTERNALS__: unknown; polls: number; finish: () => void };
+    state.polls = 0;
+    state.__TAURI_INTERNALS__ = { invoke: async (command: string) => {
+      switch (command) {
+        case "get_codex_runtime_status": return { available: true, authenticated: true, supported: true };
+        case "get_ai_service_settings": return { schemaVersion: 1, revision: 0, providerCatalog: { schemaVersion: 1, providers: [] }, services: [], defaultServiceId: null };
+        case "list_explanation_tasks": return [task];
+        case "get_explanation_task": state.polls++; return new Promise(resolve => { state.finish = () => resolve({ ...task, status: "failed", errorMessage: "测试任务已终止" }); });
+        case "get_subtitle_version": return source;
+        case "list_explanations": case "list_analysis_prompt_templates": return [];
+        default: throw new Error(`Unexpected fixture IPC: ${command}`);
+      }
+    } };
+  }, { task, source });
+  await page.clock.install();
+  await page.goto("/e2e/player.html?ai-confirm=explanation");
+  await page.clock.runFor(4000);
+  expect(await page.evaluate(() => (window as unknown as { polls: number }).polls)).toBe(1);
+  await page.evaluate(() => (window as unknown as { finish: () => void }).finish());
+  await expect(page.getByRole("strong").filter({ hasText: "测试任务已终止" })).toBeVisible();
+  await page.clock.runFor(4000);
+  expect(await page.evaluate(() => (window as unknown as { polls: number }).polls)).toBe(1);
+});

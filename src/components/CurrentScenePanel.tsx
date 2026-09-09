@@ -1,3 +1,4 @@
+import { useExplanationPolling } from "../features/analysis/useExplanationPolling";
 import { AiTaskDispatchConfirm } from "../features/ai-tasks/AiTaskDispatchConfirm";
 import { executeExplanationDispatch, previewTaskDispatch, type TaskDispatchPreview } from "../features/ai-tasks/taskDispatch";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -192,34 +193,8 @@ export function CurrentScenePanel({
     };
   }, [prompt, task]);
 
-  useEffect(() => {
-    if (
-      !task ||
-      !["awaiting_external_result", "running", "validating"].includes(
-        task.status,
-      )
-    ) {
-      return;
-    }
-    let active = true;
-    const timer = window.setInterval(() => {
-      void getExplanationTask(task.id)
-        .then((nextTask) => {
-          if (active) {
-            setTask(nextTask);
-          }
-        })
-        .catch((cause: unknown) => {
-          if (active) {
-            setError(commandError(cause).message);
-          }
-        });
-    }, 800);
-    return () => {
-      active = false;
-      window.clearInterval(timer);
-    };
-  }, [task]);
+  useExplanationPolling({ projectId, task, read: getExplanationTask, onTask: setTask,
+    onError: cause => setError(commandError(cause).message) });
 
   useEffect(() => {
     if (
