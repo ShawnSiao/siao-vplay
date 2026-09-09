@@ -94,3 +94,19 @@ it("restores a metadata-only historical version and retains prior versions as me
   fireEvent.click(screen.getByRole("tab", { name: "逐句修正" }));
   expect(screen.getByRole("textbox", { name: "简体中文字幕" })).toHaveValue("历史内容");
 });
+
+it("updates the visible history page without losing an editor draft", () => {
+  const current = track("translation");
+  const renderPage = (label: string) => <SubtitleRevisionDialog project={{ id: "p", revision: 1, playbackState: { positionMs: 0 } } as Project}
+    versions={[current]} historyVersions={[{ ...subtitleMetadata(current), id: label, sourceLabel: label, isCurrent: false }]}
+    onClose={vi.fn()} onVersionCreated={vi.fn()} onRetranslate={vi.fn()} />;
+  const { rerender } = render(renderPage("第一页"));
+  fireEvent.change(screen.getByRole("textbox", { name: "简体中文字幕" }), { target: { value: "继续保留" } });
+  fireEvent.click(screen.getByRole("tab", { name: "历史版本" }));
+  expect(screen.getByText("第一页")).toBeInTheDocument();
+  rerender(renderPage("第二页"));
+  expect(screen.getByText("第二页")).toBeInTheDocument();
+  expect(screen.queryByText("第一页")).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("tab", { name: "逐句修正" }));
+  expect(screen.getByRole("textbox", { name: "简体中文字幕" })).toHaveValue("继续保留");
+});

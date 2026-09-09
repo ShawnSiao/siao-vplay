@@ -4,12 +4,16 @@ vi.mock("@tauri-apps/api/core", () => mocks);
 import { readSubtitleMetadataPage } from "./subtitleMetadataPageGateway";
 const item = { id: "v", trackId: "t", projectId: "p", role: "original", versionNumber: 1, status: "ready",
   sourceLabel: "字幕", languageCode: "en", createdAtMs: 1, isCurrent: true, segmentCount: 2 };
-const page = { projectId: "p", offset: 0, totalCount: 2, nextOffset: 1, snapshotToken: "a".repeat(64), items: [item] };
+const page = { projectId: "p", offset: 0, totalCount: 2, nextOffset: 1, snapshotToken: "a".repeat(64), items: [item], currentVersions: [item] };
 beforeEach(() => mocks.invoke.mockReset());
 it.each([{}, { ...page, projectId: "other" }, { ...page, offset: 1 }, { ...page, nextOffset: 0 },
   { ...page, nextOffset: null }, { ...page, totalCount: -1 }, { ...page, snapshotToken: "x".repeat(64) },
   { ...page, items: [item, item], nextOffset: null }, { ...page, items: [{ ...item, projectId: "other" }] },
   { ...page, items: [{ ...item, segmentCount: -1 }] }, { ...page, items: [{ ...item, id: "" }] },
+  { ...page, currentVersions: [{ ...item, isCurrent: false }] },
+  { ...page, currentVersions: [{ ...item, projectId: "other" }] },
+  { ...page, currentVersions: [item, item] }, { ...page, currentVersions: [] },
+  { ...page, currentVersions: [{ ...item, segmentCount: 10 }] },
   { ...page, items: Array.from({ length: 25 }, (_, index) => ({ ...item, id: `v${index}` })), totalCount: 25, nextOffset: null },
 ].map(value => ({ value })))("rejects invalid or unrelated metadata pages", async ({ value }) => {
   mocks.invoke.mockResolvedValue(value);

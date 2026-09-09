@@ -80,6 +80,12 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "properties": {
+    "currentVersions": {
+      "items": {
+        "$ref": "#/$defs/SubtitleVersionMetadata"
+      },
+      "type": "array"
+    },
     "items": {
       "items": {
         "$ref": "#/$defs/SubtitleVersionMetadata"
@@ -123,7 +129,8 @@
     "totalCount",
     "nextOffset",
     "snapshotToken",
-    "items"
+    "items",
+    "currentVersions"
   ],
   "title": "SubtitleMetadataPage",
   "type": "object"

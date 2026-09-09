@@ -23,10 +23,13 @@ import type {
 import { Dialog } from "./Dialog";
 import { readSubtitleDisplayPreferences } from "../features/playback/playbackPreferences";
 import { versionLabel, jobStatusLabel } from "../features/subtitle-delivery/deliveryLabels";
+import { SubtitleHistoryPager } from "../features/subtitle-revision/SubtitleHistoryPager";
+import type { HistoryPagination } from "../features/subtitle-revision/useSubtitleHistoryPages";
 
 type SubtitleDeliveryDialogProps = {
   project: Project;
   versions: SubtitleVersionMetadata[];
+  historyPagination?: HistoryPagination;
   currentSubtitle: SubtitleVersion | null;
   currentTranslation: SubtitleVersion | null;
   onClose: () => void;
@@ -40,17 +43,30 @@ const retryableStatuses = new Set(["failed", "cancelled", "interrupted"]);
 export function SubtitleDeliveryDialog({
   project,
   versions,
+  historyPagination,
   currentSubtitle,
   currentTranslation,
   onClose,
 }: SubtitleDeliveryDialogProps) {
+  const [retainedVersions, setRetainedVersions] = useState(() => [
+    versions.find(version => version.id === currentSubtitle?.id) ?? versions.find(version => version.role === "original"),
+    versions.find(version => version.id === currentTranslation?.id) ?? versions.find(version => version.role === "translation"),
+  ].filter((version): version is SubtitleVersionMetadata => Boolean(version)));
+  const availableVersions = useMemo(() => [...new Map([
+    ...retainedVersions.map(version => ({ ...version, isCurrent: versions.some(item => item.id === version.id && item.isCurrent) })),
+    ...versions,
+  ].map(version => [version.id, version])).values()], [retainedVersions, versions]);
+  const retainVersion = (id: string) => {
+    const version = availableVersions.find(item => item.id === id);
+    if (version) setRetainedVersions(current => [...current.filter(item => item.role !== version.role), version]);
+  };
   const sourceVersions = useMemo(
-    () => versions.filter((version) => version.role === "original"),
-    [versions],
+    () => availableVersions.filter((version) => version.role === "original"),
+    [availableVersions],
   );
   const translationVersions = useMemo(
-    () => versions.filter((version) => version.role === "translation"),
-    [versions],
+    () => availableVersions.filter((version) => version.role === "translation"),
+    [availableVersions],
   );
   const [outputKind, setOutputKind] = useState<OutputKind>("subtitle");
   const [mode, setMode] = useState<SubtitleExportMode>(
@@ -441,6 +457,7 @@ export function SubtitleDeliveryDialog({
           </div>
         </section>
 
+        <SubtitleHistoryPager page={historyPagination} />
         <section className="delivery-section delivery-version-grid">
           {needsSource ? (
             <label>
@@ -450,6 +467,7 @@ export function SubtitleDeliveryDialog({
                 value={sourceVersionId}
                 onChange={(event) => {
                   setSourceVersionId(event.target.value);
+                  retainVersion(event.target.value);
                   setConfirmed(false);
                 }}
               >
@@ -469,6 +487,7 @@ export function SubtitleDeliveryDialog({
                 value={translationVersionId}
                 onChange={(event) => {
                   setTranslationVersionId(event.target.value);
+                  retainVersion(event.target.value);
                   setConfirmed(false);
                 }}
               >

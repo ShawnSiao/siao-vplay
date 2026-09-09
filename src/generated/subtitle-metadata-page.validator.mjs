@@ -2,7 +2,7 @@
 "use strict";
 export const validate = validate20;
 export default validate20;
-const schema31 = {"$defs":{"SubtitleRevisionStatus":{"enum":["draft","ready","rejected"],"type":"string"},"SubtitleTrackRole":{"enum":["original","translation"],"type":"string"},"SubtitleVersionMetadata":{"additionalProperties":false,"properties":{"createdAtMs":{"maximum":9007199254740991,"minimum":-9007199254740991,"type":"integer"},"id":{"type":"string"},"isCurrent":{"type":"boolean"},"languageCode":{"type":"string"},"projectId":{"type":"string"},"role":{"$ref":"#/$defs/SubtitleTrackRole"},"segmentCount":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"sourceLabel":{"type":"string"},"status":{"$ref":"#/$defs/SubtitleRevisionStatus"},"trackId":{"type":"string"},"versionNumber":{"maximum":9007199254740991,"minimum":1,"type":"integer"}},"required":["id","trackId","projectId","role","versionNumber","status","sourceLabel","languageCode","createdAtMs","isCurrent","segmentCount"],"type":"object"}},"$schema":"https://json-schema.org/draft/2020-12/schema","additionalProperties":false,"properties":{"items":{"items":{"$ref":"#/$defs/SubtitleVersionMetadata"},"maxItems":24,"type":"array"},"nextOffset":{"maximum":9007199254740991,"minimum":0,"type":["integer","null"]},"offset":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"projectId":{"type":"string"},"snapshotToken":{"maxLength":64,"minLength":64,"type":"string"},"totalCount":{"maximum":9007199254740991,"minimum":0,"type":"integer"}},"required":["projectId","offset","totalCount","nextOffset","snapshotToken","items"],"title":"SubtitleMetadataPage","type":"object"};
+const schema31 = {"$defs":{"SubtitleRevisionStatus":{"enum":["draft","ready","rejected"],"type":"string"},"SubtitleTrackRole":{"enum":["original","translation"],"type":"string"},"SubtitleVersionMetadata":{"additionalProperties":false,"properties":{"createdAtMs":{"maximum":9007199254740991,"minimum":-9007199254740991,"type":"integer"},"id":{"type":"string"},"isCurrent":{"type":"boolean"},"languageCode":{"type":"string"},"projectId":{"type":"string"},"role":{"$ref":"#/$defs/SubtitleTrackRole"},"segmentCount":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"sourceLabel":{"type":"string"},"status":{"$ref":"#/$defs/SubtitleRevisionStatus"},"trackId":{"type":"string"},"versionNumber":{"maximum":9007199254740991,"minimum":1,"type":"integer"}},"required":["id","trackId","projectId","role","versionNumber","status","sourceLabel","languageCode","createdAtMs","isCurrent","segmentCount"],"type":"object"}},"$schema":"https://json-schema.org/draft/2020-12/schema","additionalProperties":false,"properties":{"currentVersions":{"items":{"$ref":"#/$defs/SubtitleVersionMetadata"},"type":"array"},"items":{"items":{"$ref":"#/$defs/SubtitleVersionMetadata"},"maxItems":24,"type":"array"},"nextOffset":{"maximum":9007199254740991,"minimum":0,"type":["integer","null"]},"offset":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"projectId":{"type":"string"},"snapshotToken":{"maxLength":64,"minLength":64,"type":"string"},"totalCount":{"maximum":9007199254740991,"minimum":0,"type":"integer"}},"required":["projectId","offset","totalCount","nextOffset","snapshotToken","items","currentVersions"],"title":"SubtitleMetadataPage","type":"object"};
 const schema32 = {"additionalProperties":false,"properties":{"createdAtMs":{"maximum":9007199254740991,"minimum":-9007199254740991,"type":"integer"},"id":{"type":"string"},"isCurrent":{"type":"boolean"},"languageCode":{"type":"string"},"projectId":{"type":"string"},"role":{"$ref":"#/$defs/SubtitleTrackRole"},"segmentCount":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"sourceLabel":{"type":"string"},"status":{"$ref":"#/$defs/SubtitleRevisionStatus"},"trackId":{"type":"string"},"versionNumber":{"maximum":9007199254740991,"minimum":1,"type":"integer"}},"required":["id","trackId","projectId","role","versionNumber","status","sourceLabel","languageCode","createdAtMs","isCurrent","segmentCount"],"type":"object"};
 const schema33 = {"enum":["original","translation"],"type":"string"};
 const schema34 = {"enum":["draft","ready","rejected"],"type":"string"};
@@ -259,40 +259,70 @@ evaluated0.items = undefined;
 if(errors === 0){
 if(data && typeof data == "object" && !Array.isArray(data)){
 let missing0;
-if(((((((data.projectId === undefined) && (missing0 = "projectId")) || ((data.offset === undefined) && (missing0 = "offset"))) || ((data.totalCount === undefined) && (missing0 = "totalCount"))) || ((data.nextOffset === undefined) && (missing0 = "nextOffset"))) || ((data.snapshotToken === undefined) && (missing0 = "snapshotToken"))) || ((data.items === undefined) && (missing0 = "items"))){
+if((((((((data.projectId === undefined) && (missing0 = "projectId")) || ((data.offset === undefined) && (missing0 = "offset"))) || ((data.totalCount === undefined) && (missing0 = "totalCount"))) || ((data.nextOffset === undefined) && (missing0 = "nextOffset"))) || ((data.snapshotToken === undefined) && (missing0 = "snapshotToken"))) || ((data.items === undefined) && (missing0 = "items"))) || ((data.currentVersions === undefined) && (missing0 = "currentVersions"))){
 validate20.errors = [{instancePath,schemaPath:"#/required",keyword:"required",params:{missingProperty: missing0},message:"must have required property '"+missing0+"'"}];
 return false;
 }
 else {
 const _errs1 = errors;
 for(const key0 in data){
-if(!((((((key0 === "items") || (key0 === "nextOffset")) || (key0 === "offset")) || (key0 === "projectId")) || (key0 === "snapshotToken")) || (key0 === "totalCount"))){
+if(!(((((((key0 === "currentVersions") || (key0 === "items")) || (key0 === "nextOffset")) || (key0 === "offset")) || (key0 === "projectId")) || (key0 === "snapshotToken")) || (key0 === "totalCount"))){
 validate20.errors = [{instancePath,schemaPath:"#/additionalProperties",keyword:"additionalProperties",params:{additionalProperty: key0},message:"must NOT have additional properties"}];
 return false;
 break;
 }
 }
 if(_errs1 === errors){
-if(data.items !== undefined){
-let data0 = data.items;
+if(data.currentVersions !== undefined){
+let data0 = data.currentVersions;
 const _errs2 = errors;
 if(errors === _errs2){
 if(Array.isArray(data0)){
-if(data0.length > 24){
-validate20.errors = [{instancePath:instancePath+"/items",schemaPath:"#/properties/items/maxItems",keyword:"maxItems",params:{limit: 24},message:"must NOT have more than 24 items"}];
-return false;
-}
-else {
 var valid1 = true;
 const len0 = data0.length;
 for(let i0=0; i0<len0; i0++){
 const _errs4 = errors;
-if(!(validate21(data0[i0], {instancePath:instancePath+"/items/" + i0,parentData:data0,parentDataProperty:i0,rootData,dynamicAnchors}))){
+if(!(validate21(data0[i0], {instancePath:instancePath+"/currentVersions/" + i0,parentData:data0,parentDataProperty:i0,rootData,dynamicAnchors}))){
 vErrors = vErrors === null ? validate21.errors : vErrors.concat(validate21.errors);
 errors = vErrors.length;
 }
 var valid1 = _errs4 === errors;
 if(!valid1){
+break;
+}
+}
+}
+else {
+validate20.errors = [{instancePath:instancePath+"/currentVersions",schemaPath:"#/properties/currentVersions/type",keyword:"type",params:{type: "array"},message:"must be array"}];
+return false;
+}
+}
+var valid0 = _errs2 === errors;
+}
+else {
+var valid0 = true;
+}
+if(valid0){
+if(data.items !== undefined){
+let data2 = data.items;
+const _errs5 = errors;
+if(errors === _errs5){
+if(Array.isArray(data2)){
+if(data2.length > 24){
+validate20.errors = [{instancePath:instancePath+"/items",schemaPath:"#/properties/items/maxItems",keyword:"maxItems",params:{limit: 24},message:"must NOT have more than 24 items"}];
+return false;
+}
+else {
+var valid2 = true;
+const len1 = data2.length;
+for(let i1=0; i1<len1; i1++){
+const _errs7 = errors;
+if(!(validate21(data2[i1], {instancePath:instancePath+"/items/" + i1,parentData:data2,parentDataProperty:i1,rootData,dynamicAnchors}))){
+vErrors = vErrors === null ? validate21.errors : vErrors.concat(validate21.errors);
+errors = vErrors.length;
+}
+var valid2 = _errs7 === errors;
+if(!valid2){
 break;
 }
 }
@@ -303,89 +333,89 @@ validate20.errors = [{instancePath:instancePath+"/items",schemaPath:"#/propertie
 return false;
 }
 }
-var valid0 = _errs2 === errors;
-}
-else {
-var valid0 = true;
-}
-if(valid0){
-if(data.nextOffset !== undefined){
-let data2 = data.nextOffset;
-const _errs5 = errors;
-if((!(((typeof data2 == "number") && (!(data2 % 1) && !isNaN(data2))) && (isFinite(data2)))) && (data2 !== null)){
-validate20.errors = [{instancePath:instancePath+"/nextOffset",schemaPath:"#/properties/nextOffset/type",keyword:"type",params:{type: schema31.properties.nextOffset.type},message:"must be integer,null"}];
-return false;
-}
-if(errors === _errs5){
-if((typeof data2 == "number") && (isFinite(data2))){
-if(data2 > 9007199254740991 || isNaN(data2)){
-validate20.errors = [{instancePath:instancePath+"/nextOffset",schemaPath:"#/properties/nextOffset/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"}];
-return false;
-}
-else {
-if(data2 < 0 || isNaN(data2)){
-validate20.errors = [{instancePath:instancePath+"/nextOffset",schemaPath:"#/properties/nextOffset/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"}];
-return false;
-}
-}
-}
-}
 var valid0 = _errs5 === errors;
 }
 else {
 var valid0 = true;
 }
 if(valid0){
+if(data.nextOffset !== undefined){
+let data4 = data.nextOffset;
+const _errs8 = errors;
+if((!(((typeof data4 == "number") && (!(data4 % 1) && !isNaN(data4))) && (isFinite(data4)))) && (data4 !== null)){
+validate20.errors = [{instancePath:instancePath+"/nextOffset",schemaPath:"#/properties/nextOffset/type",keyword:"type",params:{type: schema31.properties.nextOffset.type},message:"must be integer,null"}];
+return false;
+}
+if(errors === _errs8){
+if((typeof data4 == "number") && (isFinite(data4))){
+if(data4 > 9007199254740991 || isNaN(data4)){
+validate20.errors = [{instancePath:instancePath+"/nextOffset",schemaPath:"#/properties/nextOffset/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"}];
+return false;
+}
+else {
+if(data4 < 0 || isNaN(data4)){
+validate20.errors = [{instancePath:instancePath+"/nextOffset",schemaPath:"#/properties/nextOffset/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"}];
+return false;
+}
+}
+}
+}
+var valid0 = _errs8 === errors;
+}
+else {
+var valid0 = true;
+}
+if(valid0){
 if(data.offset !== undefined){
-let data3 = data.offset;
-const _errs7 = errors;
-if(!(((typeof data3 == "number") && (!(data3 % 1) && !isNaN(data3))) && (isFinite(data3)))){
+let data5 = data.offset;
+const _errs10 = errors;
+if(!(((typeof data5 == "number") && (!(data5 % 1) && !isNaN(data5))) && (isFinite(data5)))){
 validate20.errors = [{instancePath:instancePath+"/offset",schemaPath:"#/properties/offset/type",keyword:"type",params:{type: "integer"},message:"must be integer"}];
 return false;
 }
-if(errors === _errs7){
-if((typeof data3 == "number") && (isFinite(data3))){
-if(data3 > 9007199254740991 || isNaN(data3)){
+if(errors === _errs10){
+if((typeof data5 == "number") && (isFinite(data5))){
+if(data5 > 9007199254740991 || isNaN(data5)){
 validate20.errors = [{instancePath:instancePath+"/offset",schemaPath:"#/properties/offset/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"}];
 return false;
 }
 else {
-if(data3 < 0 || isNaN(data3)){
+if(data5 < 0 || isNaN(data5)){
 validate20.errors = [{instancePath:instancePath+"/offset",schemaPath:"#/properties/offset/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"}];
 return false;
 }
 }
 }
 }
-var valid0 = _errs7 === errors;
+var valid0 = _errs10 === errors;
 }
 else {
 var valid0 = true;
 }
 if(valid0){
 if(data.projectId !== undefined){
-const _errs9 = errors;
+const _errs12 = errors;
 if(typeof data.projectId !== "string"){
 validate20.errors = [{instancePath:instancePath+"/projectId",schemaPath:"#/properties/projectId/type",keyword:"type",params:{type: "string"},message:"must be string"}];
 return false;
 }
-var valid0 = _errs9 === errors;
+var valid0 = _errs12 === errors;
 }
 else {
 var valid0 = true;
 }
 if(valid0){
 if(data.snapshotToken !== undefined){
-let data5 = data.snapshotToken;
-const _errs11 = errors;
-if(errors === _errs11){
-if(typeof data5 === "string"){
-if(func2(data5) > 64){
+let data7 = data.snapshotToken;
+const _errs14 = errors;
+if(errors === _errs14){
+if(typeof data7 === "string"){
+if(func2(data7) > 64){
 validate20.errors = [{instancePath:instancePath+"/snapshotToken",schemaPath:"#/properties/snapshotToken/maxLength",keyword:"maxLength",params:{limit: 64},message:"must NOT have more than 64 characters"}];
 return false;
 }
 else {
-if(func2(data5) < 64){
+if(func2(data7) < 64){
 validate20.errors = [{instancePath:instancePath+"/snapshotToken",schemaPath:"#/properties/snapshotToken/minLength",keyword:"minLength",params:{limit: 64},message:"must NOT have fewer than 64 characters"}];
 return false;
 }
@@ -396,37 +426,38 @@ validate20.errors = [{instancePath:instancePath+"/snapshotToken",schemaPath:"#/p
 return false;
 }
 }
-var valid0 = _errs11 === errors;
+var valid0 = _errs14 === errors;
 }
 else {
 var valid0 = true;
 }
 if(valid0){
 if(data.totalCount !== undefined){
-let data6 = data.totalCount;
-const _errs13 = errors;
-if(!(((typeof data6 == "number") && (!(data6 % 1) && !isNaN(data6))) && (isFinite(data6)))){
+let data8 = data.totalCount;
+const _errs16 = errors;
+if(!(((typeof data8 == "number") && (!(data8 % 1) && !isNaN(data8))) && (isFinite(data8)))){
 validate20.errors = [{instancePath:instancePath+"/totalCount",schemaPath:"#/properties/totalCount/type",keyword:"type",params:{type: "integer"},message:"must be integer"}];
 return false;
 }
-if(errors === _errs13){
-if((typeof data6 == "number") && (isFinite(data6))){
-if(data6 > 9007199254740991 || isNaN(data6)){
+if(errors === _errs16){
+if((typeof data8 == "number") && (isFinite(data8))){
+if(data8 > 9007199254740991 || isNaN(data8)){
 validate20.errors = [{instancePath:instancePath+"/totalCount",schemaPath:"#/properties/totalCount/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"}];
 return false;
 }
 else {
-if(data6 < 0 || isNaN(data6)){
+if(data8 < 0 || isNaN(data8)){
 validate20.errors = [{instancePath:instancePath+"/totalCount",schemaPath:"#/properties/totalCount/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"}];
 return false;
 }
 }
 }
 }
-var valid0 = _errs13 === errors;
+var valid0 = _errs16 === errors;
 }
 else {
 var valid0 = true;
+}
 }
 }
 }

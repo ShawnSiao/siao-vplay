@@ -1,7 +1,7 @@
 WITH selected AS MATERIALIZED (
     SELECT v.id
     FROM subtitle_versions v JOIN subtitle_tracks t ON t.id = v.track_id
-    WHERE v.project_id = ?1
+    WHERE v.project_id = ?1 AND (?4 = 0 OR t.current_version_id = v.id)
     ORDER BY v.created_at_ms DESC, v.version_number DESC, v.id DESC
     LIMIT ?2 OFFSET ?3
 )

@@ -1,0 +1,23 @@
+.subtitle-history-pager { display: grid; gap: 8px; color: var(--text-secondary); font-size: 12px; }
+.subtitle-history-pager > div { display: flex; flex-wrap: wrap; gap: 8px; }
+.subtitle-history-pager > p { margin: 0; }
+.revision-track-panel, .revision-mode-panel { display: grid; gap: inherit; }
+.dialog:has(.revision-workspace-paged-history) { height: min(760px, calc(100dvh - 64px)); }
+.dialog:has(.revision-workspace-paged-history) .dialog-body { display: flex; }
+.revision-workspace-paged-history,
+.revision-workspace-paged-history .revision-track-panel,
+.revision-workspace-paged-history .revision-mode-panel,
+.revision-workspace-paged-history .revision-history { display: flex; flex: 1; flex-direction: column; min-height: 0; }
+.revision-workspace-paged-history .revision-history-list { flex: 1; min-height: 84px; max-height: none; }
+.revision-workspace-paged-history > p[role="status"] { margin: 0; }
+@media (max-height: 700px) {
+  .dialog:has(.revision-workspace-paged-history) { padding: 18px; gap: 12px; }
+  .revision-workspace-paged-history { gap: 6px; }
+  .revision-workspace-paged-history .revision-track-switch button { min-height: 34px; padding: 4px 8px; }
+  .revision-workspace-paged-history .revision-mode-tabs { padding-bottom: 4px; }
+  .revision-workspace-paged-history .revision-mode-tabs button { padding: 4px 8px; }
+  .revision-workspace-paged-history .revision-history-current { padding: 6px 10px; }
+  .revision-workspace-paged-history .revision-history-list article { padding: 6px 10px; }
+  .revision-workspace-paged-history .subtitle-history-pager { gap: 4px; }
+  .revision-workspace-paged-history .subtitle-history-pager button { padding: 5px 10px; }
+}

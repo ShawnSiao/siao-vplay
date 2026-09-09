@@ -1,5 +1,6 @@
 import type { SubtitleSegment } from "../types";
 import { Dialog } from "./Dialog";
+import { SubtitleHistoryPager } from "../features/subtitle-revision/SubtitleHistoryPager";
 import { useTabNavigation } from "./useTabNavigation";
 import { useSubtitleRevisionController, type SubtitleRevisionDialogProps } from "../features/subtitle-revision/useSubtitleRevisionController";
 
@@ -57,7 +58,7 @@ export function SubtitleRevisionDialog(props: SubtitleRevisionDialogProps) {
         </button>
       }
     >
-      <fieldset className="revision-workspace" disabled={busy} style={{ border: 0, margin: 0, padding: 0, minWidth: 0 }}>
+      <fieldset className={`revision-workspace${mode === "history" && props.historyPagination ? " revision-workspace-paged-history" : ""}`} disabled={busy} style={{ border: 0, margin: 0, padding: 0, minWidth: 0 }}>
         {dirty ? <p role="status">有未保存的修改；切句或切轨会保留草稿。</p> : null}
         <div className="revision-track-switch" {...tabs.listProps} aria-label="字幕轨">
           <button
@@ -85,7 +86,7 @@ export function SubtitleRevisionDialog(props: SubtitleRevisionDialogProps) {
           </button>
         </div>
 
-        <div {...tabs.panelProps} style={{ display: "grid", gap: "inherit" }}>
+        <div {...tabs.panelProps} className="revision-track-panel">
         <div className="revision-mode-tabs" {...modeTabs.listProps} aria-label="修正方式">
           {(
             [
@@ -105,7 +106,7 @@ export function SubtitleRevisionDialog(props: SubtitleRevisionDialogProps) {
           ))}
         </div>
 
-        <div {...modeTabs.panelProps} style={{ display: "grid", gap: "inherit" }}>
+        <div {...modeTabs.panelProps} className="revision-mode-panel">
         {!currentVersion ? (
           <div className="translation-empty">
             <span className="translation-empty-mark">字</span>
@@ -335,8 +336,9 @@ export function SubtitleRevisionDialog(props: SubtitleRevisionDialogProps) {
                 ))}
               </div>
             ) : (
-              <p className="revision-empty-copy">当前字幕轨还没有历史版本。</p>
+              <p className="revision-empty-copy">{props.historyPagination ? "本页没有当前字幕轨的历史版本。" : "当前字幕轨还没有历史版本。"}</p>
             )}
+            <SubtitleHistoryPager page={props.historyPagination} />
           </section>
         )}
 

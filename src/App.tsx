@@ -965,11 +965,12 @@ export default function App() {
           key={`revision:${sessionId}`}
           projectId={activeProject.id}
           onClose={() => setRevisionDialogOpen(false)}
-        >{({ currentVersions, history }) => (
+        >{({ currentVersions, history, pagination }) => (
         <SubtitleRevisionDialog
           project={activeProject}
           versions={currentVersions}
           historyVersions={history}
+          historyPagination={pagination}
           onClose={() => setRevisionDialogOpen(false)}
           onVersionCreated={handleSubtitleVersionCreated}
           onRetranslate={(segmentIds) => {
@@ -986,9 +987,10 @@ export default function App() {
           key={`delivery:${sessionId}`}
           projectId={activeProject.id}
           onClose={() => setDeliveryDialogOpen(false)}
-        >{({ currentVersions, history }) => (
+        >{({ currentVersions, history, pagination }) => (
         <SubtitleDeliveryDialog
           project={activeProject}
+          historyPagination={pagination}
           versions={history}
           currentSubtitle={
             currentVersions.find(

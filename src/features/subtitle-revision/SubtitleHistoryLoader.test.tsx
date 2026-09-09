@@ -5,10 +5,23 @@ import { SubtitleHistoryLoader } from "./SubtitleHistoryLoader";
 import type { SubtitleVersion } from "../../types";
 const read = vi.hoisted(() => vi.fn());
 const metadata = vi.hoisted(() => vi.fn());
+const paged = vi.hoisted(() => vi.fn());
+vi.mock("../../lib/subtitleMetadataPageGateway", () => ({ readSubtitleMetadataPage: paged }));
 vi.mock("../../lib/desktop", () => ({ listSubtitleVersions: read, listSubtitleVersionMetadata: metadata, commandError: (error: Error) => error }));
-beforeEach(() => { read.mockReset(); metadata.mockReset().mockImplementation(async () => (await read.mock.results.at(-1)!.value).map(subtitleMetadata)); });
+beforeEach(() => { read.mockReset(); metadata.mockReset().mockImplementation(async () => (await read.mock.results.at(-1)!.value).map(subtitleMetadata));
+  paged.mockReset().mockImplementation(async () => { const items = await metadata(); return { projectId: "A", offset: 0, totalCount: items.length, nextOffset: null, snapshotToken: "a".repeat(64), items, currentVersions: items.filter((item: { isCurrent: boolean }) => item.isCurrent) }; }); });
 const rows = (id: string) => [{ id, isCurrent: true, segments: [] }] as unknown as SubtitleVersion[];
 const show = ({ currentVersions }: { currentVersions: SubtitleVersion[] }) => <p>{currentVersions[0]?.id}</p>;
+it("uses the bounded page gateway while retaining an older current track", async () => {
+  read.mockResolvedValue(rows("old-current"));
+  const current = rows("old-current").map(subtitleMetadata);
+  paged.mockResolvedValue({ projectId: "A", offset: 0, totalCount: 10000, nextOffset: 24, snapshotToken: "a".repeat(64),
+    currentVersions: current, items: [{ ...current[0], id: "recent", isCurrent: false }] });
+  render(<SubtitleHistoryLoader projectId="A" onClose={vi.fn()}>{show}</SubtitleHistoryLoader>);
+  expect(await screen.findByText("old-current")).toBeInTheDocument();
+  expect(paged).toHaveBeenCalledWith("A", 0);
+  expect(metadata).not.toHaveBeenCalled();
+});
 it("clears the previous project while another history is loading", async () => {
   let finish!: (versions: SubtitleVersion[]) => void;
   read.mockResolvedValueOnce(rows("history-A")).mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));

@@ -25,6 +25,9 @@ fn metadata_pages_are_bounded_and_reject_same_count_reordering() {
     assert_eq!(page.next_offset, Some(24));
     assert_eq!(page.items[0].id, "page-29");
     assert_eq!(page.items[23].id, "page-06");
+    assert_eq!(page.current_versions.len(), 1);
+    assert_eq!(page.current_versions[0].id, original.id);
+    assert_eq!(page.current_versions[0].segment_count, 2);
     let next = MetadataPageInput { offset: 24, expected_snapshot_token: Some(page.snapshot_token), ..first(&project_id) };
     let end = page_with_checkpoint(&store, next.clone(), || {}).unwrap();
     assert_eq!(end.items.len(), 7);
@@ -45,6 +48,7 @@ fn metadata_page_count_and_rows_share_a_snapshot() {
     assert_eq!(page.total_count, 1);
     assert_eq!(page.items.len(), 1);
     assert_eq!(page.items[0].id, original.id);
+    assert_eq!(page.current_versions[0].id, original.id);
     assert_eq!(page.next_offset, None);
     assert_eq!(page_with_checkpoint(&store, first(&project_id), || {}).unwrap().total_count, 0);
 }

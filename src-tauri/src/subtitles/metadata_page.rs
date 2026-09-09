@@ -28,6 +28,7 @@ pub(crate) struct SubtitleMetadataPage {
     pub snapshot_token: String,
     #[cfg_attr(test, schemars(length(max = 24)))]
     pub items: Vec<SubtitleVersionMetadata>,
+    pub current_versions: Vec<SubtitleVersionMetadata>,
 }
 
 pub(super) fn page_with_checkpoint(store: &ProjectStore, input: MetadataPageInput, checkpoint: impl FnOnce()) -> Result<SubtitleMetadataPage, SubtitleError> {
@@ -44,10 +45,11 @@ pub(super) fn page_with_checkpoint(store: &ProjectStore, input: MetadataPageInpu
     }
     checkpoint();
     let items = read_metadata_window(&transaction, &input.project_id, Some((input.offset as usize, PAGE_SIZE)))?;
+    let current_versions = super::metadata::read_metadata_selection(&transaction, &input.project_id, None, true)?;
     let loaded = input.offset + items.len() as i64;
     transaction.commit()?;
     Ok(SubtitleMetadataPage { project_id: input.project_id, offset: input.offset, total_count,
-        next_offset: (loaded < total_count).then_some(loaded), snapshot_token, items })
+        next_offset: (loaded < total_count).then_some(loaded), snapshot_token, items, current_versions })
 }
 
 #[tauri::command]

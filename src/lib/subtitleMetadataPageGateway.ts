@@ -12,6 +12,13 @@ export async function readSubtitleMetadataPage(projectId: string, offset: number
     || !/^[a-f0-9]{64}$/.test(value.snapshotToken)
     || (expectedSnapshotToken !== undefined && value.snapshotToken !== expectedSnapshotToken)) throw invalid();
   const loaded = offset + value.items.length;
+  const current = new Map(value.currentVersions.map(item => [item.id, item]));
+  if (current.size !== value.currentVersions.length || current.size > value.totalCount
+    || new Set(value.currentVersions.map(item => item.trackId)).size !== current.size
+    || value.currentVersions.some(item => !item.isCurrent || item.projectId !== projectId || !item.id.trim() || !item.trackId.trim())
+    || value.items.some(item => item.isCurrent !== current.has(item.id)
+      || (item.isCurrent && (["trackId", "role", "versionNumber", "status", "sourceLabel", "languageCode", "createdAtMs", "segmentCount"] as const)
+        .some(key => item[key] !== current.get(item.id)?.[key])))) throw invalid();
   const ids = value.items.map(item => item.id);
   if (!Number.isSafeInteger(loaded) || new Set(ids).size !== ids.length
     || value.items.some(item => item.projectId !== projectId || !item.id.trim() || !item.trackId.trim())

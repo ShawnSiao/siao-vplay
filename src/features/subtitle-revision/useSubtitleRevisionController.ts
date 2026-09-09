@@ -2,6 +2,7 @@ import { subtitleMetadata, type SubtitleVersionMetadata } from "./subtitleMetada
 import { useMemo, useState } from "react";
 import { commandError, restoreSubtitleVersion, reviseSubtitleVersion } from "../../lib/desktop";
 import type { Project, SubtitleSegment, SubtitleVersion } from "../../types";
+import type { HistoryPagination } from "./useSubtitleHistoryPages";
 
 type RevisionMode = "segments" | "replace" | "offset" | "history";
 type TrackRole = "original" | "translation";
@@ -10,6 +11,7 @@ export type SubtitleRevisionDialogProps = {
   project: Project;
   versions: SubtitleVersion[];
   historyVersions?: SubtitleVersionMetadata[];
+  historyPagination?: HistoryPagination;
   onClose: () => void;
   onVersionCreated: (
     version: SubtitleVersion,
@@ -37,7 +39,7 @@ function segmentNearPlayback(
 
 export function useSubtitleRevisionController({ project, versions, historyVersions = [], onClose, onVersionCreated }: SubtitleRevisionDialogProps) {
   const [workingVersions, setWorkingVersions] = useState(versions.filter((item) => item.isCurrent));
-  const [historyRecords, setHistoryRecords] = useState(() => new Map([...historyVersions, ...versions.map(subtitleMetadata)].map((item) => [item.id, item])));
+  const [historyRecords, setHistoryRecords] = useState(() => new Map(versions.map(item => [item.id, subtitleMetadata(item)])));
   const [expectedRevision, setExpectedRevision] = useState(project.revision);
   const currentOriginal =
     workingVersions.find((version) => version.role === "original" && version.isCurrent) ??
@@ -106,7 +108,7 @@ export function useSubtitleRevisionController({ project, versions, historyVersio
       : currentVersion.segments
     : [];
   const history = currentVersion
-    ? Array.from(historyRecords.values())
+    ? Array.from(new Map([...historyVersions.map(item => [item.id, item] as const), ...historyRecords]).values())
         .filter(
           (version) =>
             version.trackId === currentVersion.trackId &&

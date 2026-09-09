@@ -4,6 +4,7 @@ export type SubtitleTrackRole = "original" | "translation";
 export type SubtitleRevisionStatus = "draft" | "ready" | "rejected";
 
 export interface SubtitleMetadataPage {
+  currentVersions: SubtitleVersionMetadata[];
   /**
    * @maxItems 24
    */
