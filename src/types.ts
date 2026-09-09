@@ -104,23 +104,7 @@ export type IgnoredLibraryEntry = {
     | "unreadable";
 };
 
-export type LibraryScanPhase =
-  | "scanning"
-  | "fingerprinting"
-  | "completed"
-  | "cancelled"
-  | "failed";
-
-export type LibraryScanProgress = {
-  scanId: string;
-  phase: LibraryScanPhase;
-  scannedDirectories: number;
-  scannedFiles: number;
-  candidateFiles: number;
-  ignoredEntries: number;
-  currentRelativePath: string | null;
-  message: string | null;
-};
+export type { LibraryScanPhase, LibraryScanProgress } from "./generated/library-scan-progress";
 
 export type LibraryScanPreview = {
   scanId: string;

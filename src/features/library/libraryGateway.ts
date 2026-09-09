@@ -5,9 +5,10 @@ import { invokeCollectionDetail, invokeWatchLater } from "../../lib/collectionDe
 import { invokeCollectionMutation, invokeCollectionDeletion } from "../../lib/collectionMutationGateway";
 import { readCollectionEpisodes } from "../../lib/collectionEpisodesGateway";
 import { readEpisodeNeighbors } from "../../lib/episodeNeighborsGateway";
+import { subscribeLibraryScanProgress } from "../../lib/libraryScanProgressGateway";
 import { invokeProject } from "../../lib/projectGateway";
 import { invoke } from "@tauri-apps/api/core";
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import type { UnlistenFn } from "@tauri-apps/api/event";
 
 import { isDesktopApp } from "../../lib/desktop";
 import type {
@@ -183,9 +184,7 @@ export async function listenLibraryScanProgress(
   if (!isDesktopApp) {
     return () => undefined;
   }
-  return listen<LibraryScanProgress>("library-scan-progress", (event) => {
-    onProgress(event.payload);
-  });
+  return subscribeLibraryScanProgress(onProgress);
 }
 
 export async function confirmLibraryImport(

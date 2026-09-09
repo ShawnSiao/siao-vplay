@@ -410,6 +410,7 @@ pub(crate) struct IgnoredLibraryEntry {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub(crate) enum LibraryScanPhase {
     Scanning,
     Fingerprinting,
@@ -420,12 +421,17 @@ pub(crate) enum LibraryScanPhase {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub(crate) struct LibraryScanProgress {
     pub scan_id: String,
     pub phase: LibraryScanPhase,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub scanned_directories: u64,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub scanned_files: u64,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub candidate_files: u64,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub ignored_entries: u64,
     pub current_relative_path: Option<String>,
     pub message: Option<String>,
