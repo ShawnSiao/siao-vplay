@@ -1,0 +1,94 @@
+{
+  "$defs": {
+    "EpisodeNeighbors": {
+      "properties": {
+        "next": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/EpisodeReference"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "previous": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/EpisodeReference"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "previous",
+        "next"
+      ],
+      "type": "object"
+    },
+    "EpisodeReference": {
+      "properties": {
+        "absoluteOrder": {
+          "format": "int64",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "displayTitle": {
+          "type": "string"
+        },
+        "episodeNumber": {
+          "format": "int64",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "projectId": {
+          "type": "string"
+        },
+        "seasonNumber": {
+          "format": "int64",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "projectId",
+        "displayTitle",
+        "seasonNumber",
+        "episodeNumber",
+        "absoluteOrder"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "collectionId": {
+      "type": "string"
+    },
+    "neighbors": {
+      "$ref": "#/$defs/EpisodeNeighbors"
+    },
+    "projectId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "collectionId",
+    "projectId",
+    "neighbors"
+  ],
+  "title": "EpisodeNeighborsResult",
+  "type": "object"
+}

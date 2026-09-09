@@ -58,6 +58,7 @@ fn committed_schemas_match_rust() {
     check_schema("library-collection", &serialized_schema::<crate::library::Collection>());
     check_schema("collection-deletion-result", &serialized_schema::<crate::library::LibraryCollectionDeletionResult>());
     check_schema("library-media-summary", &serialized_schema::<crate::library::MediaSummary>());
+    check_schema("episode-neighbors-result", &serialized_schema::<crate::library::EpisodeNeighborsResult>());
     check_schema("library-home", &serialized_schema::<crate::library::LibraryHome>());
     check_schema("library-section-page", &serialized_schema::<crate::library::LibrarySectionPage>());
     check_schema("project", &serialized_schema::<crate::domain::Project>());

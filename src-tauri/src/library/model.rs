@@ -289,23 +289,6 @@ pub(crate) struct CollectionDetail {
     pub seasons: Vec<SeasonSummary>,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct EpisodeReference {
-    pub project_id: String,
-    pub display_title: String,
-    pub season_number: Option<i64>,
-    pub episode_number: Option<i64>,
-    pub absolute_order: i64,
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct EpisodeNeighbors {
-    pub previous: Option<EpisodeReference>,
-    pub next: Option<EpisodeReference>,
-}
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 #[cfg_attr(test, derive(schemars::JsonSchema))]

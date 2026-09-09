@@ -4,6 +4,7 @@ import { readLibrarySearch } from "../../lib/librarySearchGateway";
 import { invokeCollectionDetail, invokeWatchLater } from "../../lib/collectionDetailGateway";
 import { invokeCollectionMutation, invokeCollectionDeletion } from "../../lib/collectionMutationGateway";
 import { readCollectionEpisodes } from "../../lib/collectionEpisodesGateway";
+import { readEpisodeNeighbors } from "../../lib/episodeNeighborsGateway";
 import { invokeProject } from "../../lib/projectGateway";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
@@ -152,10 +153,7 @@ export async function getEpisodeNeighbors(
   collectionId: string,
   projectId: string,
 ): Promise<EpisodeNeighbors> {
-  return invoke<EpisodeNeighbors>("get_episode_neighbors", {
-    collectionId,
-    projectId,
-  });
+  return readEpisodeNeighbors(collectionId, projectId);
 }
 
 export async function setWatchLater(

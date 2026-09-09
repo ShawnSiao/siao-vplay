@@ -7,7 +7,7 @@ use crate::{commands::CommandError, store::ProjectStore};
 use super::{
     AddProjectToCollectionInput, ApplyLibraryRescanInput, ApplyLibraryRootRebuildInput,
     ApplyLibraryRootRelocationInput, Collection, CollectionDetail, ConfirmLibraryImportInput,
-    CreateCollectionInput, EpisodeNeighbors, InspectLibraryRootRebuildInput,
+    CreateCollectionInput, EpisodeNeighborsResult, InspectLibraryRootRebuildInput,
     InspectLibraryRootRelocationInput, LibraryCollectionDeletionResult, LibraryError, LibraryHome,
     LibraryImportResult, LibraryImportService, LibraryPreviewStore, LibraryRecoveryService,
     LibraryRecoveryStore, LibraryRescanPreview, LibraryRescanResult, LibraryRootRebuildPreview,
@@ -132,10 +132,10 @@ pub(crate) fn get_episode_neighbors(
     store: State<'_, ProjectStore>,
     collection_id: String,
     project_id: String,
-) -> Result<EpisodeNeighbors, CommandError> {
-    LibraryService::new(store.inner().clone())
-        .get_episode_neighbors(&collection_id, &project_id)
-        .map_err(Into::into)
+) -> Result<EpisodeNeighborsResult, CommandError> {
+    let neighbors = LibraryService::new(store.inner().clone())
+        .get_episode_neighbors(&collection_id, &project_id)?;
+    Ok(EpisodeNeighborsResult { collection_id, project_id, neighbors })
 }
 
 #[tauri::command]

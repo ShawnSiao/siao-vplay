@@ -54,15 +54,4 @@ export type SeasonSummary = {
 
 export type { CollectionDetail } from "../generated/collection-detail";
 
-export type EpisodeReference = {
-  projectId: string;
-  displayTitle: string;
-  seasonNumber: number | null;
-  episodeNumber: number | null;
-  absoluteOrder: number;
-};
-
-export type EpisodeNeighbors = {
-  previous: EpisodeReference | null;
-  next: EpisodeReference | null;
-};
+export type { EpisodeReference, EpisodeNeighbors } from "../generated/episode-neighbors-result";
