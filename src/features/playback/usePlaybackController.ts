@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createSubtitleTimeIndex } from "./subtitleTimeIndex";
 
 import { playbackUrl } from "../../lib/desktop";
 import { createPlaybackCompletion } from "./playbackCompletion";
@@ -6,7 +7,6 @@ import type {
   MediaPreparation,
   Project,
   SubtitleDisplayMode,
-  SubtitleSegment,
   SubtitleVersion,
 } from "../../types";
 import type {
@@ -38,17 +38,6 @@ type PlaybackControllerOptions = {
   onError: (message: string) => void;
   onFatalError: (message: string) => void;
 };
-
-function activeSegment(
-  version: SubtitleVersion | null,
-  positionMs: number,
-): SubtitleSegment | null {
-  return (
-    version?.segments.find(
-      (segment) => positionMs >= segment.startMs && positionMs < segment.endMs,
-    ) ?? null
-  );
-}
 
 export function usePlaybackController({
   project,
@@ -431,8 +420,10 @@ export function usePlaybackController({
     void persistCurrentState(videoRef.current, nextMode).catch(() => undefined);
   };
 
-  const activeOriginal = activeSegment(currentSubtitle, positionMs);
-  const activeTranslation = activeSegment(currentTranslation, positionMs);
+  const originalIndex = useMemo(() => createSubtitleTimeIndex(currentSubtitle?.segments ?? []), [currentSubtitle]);
+  const translationIndex = useMemo(() => createSubtitleTimeIndex(currentTranslation?.segments ?? []), [currentTranslation]);
+  const activeOriginal = originalIndex(positionMs);
+  const activeTranslation = translationIndex(positionMs);
   const effectiveSubtitleMode: SubtitleDisplayMode =
     subtitleMode === "bilingual"
       ? currentSubtitle && currentTranslation
