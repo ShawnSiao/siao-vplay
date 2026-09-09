@@ -40,6 +40,7 @@ pub(crate) fn export(
         ));
     }
     let summary = SummaryResultRepository::new(store).get_summary(&input.summary_id)?;
+    let _project_operation = crate::project_operations::Operation::acquire(store, &summary.project_id)?;
     let task = SummaryTaskRepository::new(store).get(&summary.task_id)?;
     let project = store.get_project(&summary.project_id)?;
     let final_directory = unique_directory(&destination, &project.title, now_ms()?);

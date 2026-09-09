@@ -153,6 +153,7 @@ pub fn export_subtitles(
             "导出前必须确认字幕版本".to_owned(),
         ));
     }
+    let _project_operation = crate::project_operations::Operation::acquire(store, &input.project_id)?;
     let project = store.get_project(&input.project_id)?;
     let source = optional_version(
         store,

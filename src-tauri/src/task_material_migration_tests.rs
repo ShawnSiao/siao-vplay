@@ -17,3 +17,17 @@ fn explanation_material_preparation_excludes_database_migration() {
     assert!(!task.frames.is_empty());
     assert!(crate::storage::database_access::exclusive(fixture.store.database_path()).is_ok());
 }
+
+#[test]
+fn manual_result_import_is_rejected_while_project_deletion_owns_admission() {
+    let fixture = Fixture::new();
+    let task = fixture.prepare();
+    let result = fixture.result_path(&task, task.playback_cutoff_ms);
+    let deleting = crate::project_operations::Deletion::acquire(&fixture.store, &fixture.project_id).unwrap();
+    let input = || understanding::ImportExplanationResultInput { task_id: task.id.clone(), result_path: result.to_string_lossy().into_owned() };
+    assert!(understanding::import_explanation_result(&fixture.store, input()).is_err(),
+        "manual import must not start while project deletion owns admission");
+    assert_eq!(understanding::get_explanation_task(&fixture.store, &task.id).unwrap().status, "awaiting_external_result");
+    drop(deleting);
+    assert_eq!(understanding::import_explanation_result(&fixture.store, input()).unwrap().task.status, "completed");
+}

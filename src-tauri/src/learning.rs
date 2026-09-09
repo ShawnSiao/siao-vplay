@@ -930,6 +930,7 @@ pub fn export_learning_cards(
     store: &ProjectStore,
     input: ExportLearningCardsInput,
 ) -> Result<LearningCardsExport, LearningError> {
+    let _project_operation = crate::project_operations::Operation::acquire(store, &input.project_id)?;
     let project = store.get_project(&input.project_id)?;
     let cards = list_learning_cards(store, &project.id)?;
     if cards.is_empty() {
@@ -1032,6 +1033,7 @@ pub fn import_learning_result(
     input: ImportLearningResultInput,
 ) -> Result<LearningApplication, LearningError> {
     let task = get_learning_task(store, &input.task_id)?;
+    let _project_operation = crate::project_operations::Operation::acquire(store, &task.project_id)?;
     if task.handoff_kind != "manual" || task.status != "awaiting_external_result" {
         return Err(LearningError::InvalidTaskState(task.status));
     }

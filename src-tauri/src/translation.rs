@@ -676,6 +676,7 @@ pub fn import_translation_result(
     input: ImportTranslationResultInput,
 ) -> Result<TranslationApplication, TranslationError> {
     let task = get_translation_task(store, &input.task_id)?;
+    let _project_operation = crate::project_operations::Operation::acquire(store, &task.project_id)?;
     if task.handoff_kind != "manual" || task.status != "awaiting_external_result" {
         return Err(TranslationError::InvalidTaskState(task.status));
     }
