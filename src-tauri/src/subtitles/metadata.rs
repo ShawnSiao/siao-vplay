@@ -44,17 +44,26 @@ pub fn list_metadata(
     store: &ProjectStore,
     project_id: &str,
 ) -> Result<Vec<SubtitleVersionMetadata>, SubtitleError> {
+    list_metadata_window(store, project_id, None)
+}
+
+pub(super) fn list_metadata_window(
+    store: &ProjectStore,
+    project_id: &str,
+    window: Option<(usize, usize)>,
+) -> Result<Vec<SubtitleVersionMetadata>, SubtitleError> {
     store.get_project(project_id)?;
+    let (offset, limit) = match window {
+        Some((offset, limit)) => (
+            i64::try_from(offset).map_err(|_| SubtitleError::InvalidRevision("字幕历史分页位置无效".into()))?,
+            i64::try_from(limit).map_err(|_| SubtitleError::InvalidRevision("字幕历史分页数量无效".into()))?,
+        ),
+        None => (0, -1),
+    };
     let connection = store.connect()?;
-    let mut statement = connection.prepare(
-        "SELECT v.id, v.track_id, v.project_id, t.role, v.version_number, v.status,
-          v.source_label, v.language_code, v.created_at_ms, CASE WHEN t.current_version_id = v.id THEN 1 ELSE 0 END,
-          (SELECT COUNT(*) FROM subtitle_segments s WHERE s.version_id = v.id)
-         FROM subtitle_versions v JOIN subtitle_tracks t ON t.id = v.track_id
-         WHERE v.project_id = ?1 ORDER BY v.created_at_ms DESC, v.version_number DESC, v.id DESC",
-    )?;
+    let mut statement = connection.prepare(include_str!("metadata_window.sql"))?;
     let rows = statement
-        .query_map(params![project_id], |row| {
+        .query_map(params![project_id, limit, offset], |row| {
             Ok(SubtitleVersionMetadata {
                 id: row.get(0)?,
                 track_id: row.get(1)?,

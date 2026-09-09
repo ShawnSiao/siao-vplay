@@ -1,6 +1,40 @@
 use super::*;
 
 #[test]
+fn metadata_window_preserves_order_and_does_not_decode_other_rows() {
+    let (_temp, store, project_id, original) = create_store_with_subtitles();
+    let connection = store.connect().unwrap();
+    connection.execute("UPDATE subtitle_versions SET created_at_ms = 0 WHERE id = ?1", params![original.id]).unwrap();
+    for index in 0..30 {
+        connection.execute(
+            "INSERT INTO subtitle_versions (id, track_id, project_id, version_number, status, source_kind,
+             source_label, source_sha256, media_sha256, language_code, project_revision, preflight_json, created_at_ms)
+             SELECT ?1, track_id, project_id, ?2, status, source_kind, source_label, source_sha256,
+             media_sha256, language_code, project_revision, preflight_json, 100 FROM subtitle_versions WHERE id = ?3",
+            params![format!("window-{index:02}"), index + 2, original.id],
+        ).unwrap();
+    }
+    let page = metadata::list_metadata_window(&store, &project_id, Some((7, 7))).unwrap();
+    assert_eq!(page.len(), 7);
+    assert_eq!(page.iter().map(|item| item.id.as_str()).collect::<Vec<_>>(),
+        vec!["window-22", "window-21", "window-20", "window-19", "window-18", "window-17", "window-16"]);
+    assert!(page.iter().all(|item| item.segment_count == 0 && !item.is_current));
+    assert!(metadata::list_metadata_window(&store, &project_id, Some((40, 7))).unwrap().is_empty());
+    assert!(metadata::list_metadata_window(&store, &project_id, Some((0, 0))).unwrap().is_empty());
+    let last = metadata::list_metadata_window(&store, &project_id, Some((30, 7))).unwrap();
+    assert_eq!(last.len(), 1);
+    assert_eq!(last[0].id, original.id);
+    assert!(last[0].is_current);
+    assert_eq!(last[0].segment_count, 2);
+    assert_eq!(metadata::list_metadata(&store, &project_id).unwrap().len(), 31);
+    // SQLite permits a blob in this text column: decoding it proves an unwanted row was hydrated.
+    connection.execute("UPDATE subtitle_versions SET source_label = X'FF' WHERE id = ?1", params![original.id]).unwrap();
+    assert!(metadata::list_metadata_window(&store, &project_id, Some((7, 7))).is_ok());
+    assert!(metadata::list_metadata_window(&store, &project_id, Some((30, 7))).is_err());
+    assert!(metadata::list_metadata_window(&store, "missing-project", Some((0, 7))).is_err());
+}
+
+#[test]
 fn revision_does_not_read_unselected_history() {
     let (_temp, store, project_id, original) = create_store_with_subtitles();
     let revise = |base: &SubtitleVersion| {
