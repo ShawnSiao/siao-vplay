@@ -46,7 +46,7 @@ type LibraryScreenProps = {
   onSelectSection: (section: LibrarySection) => void;
   onLoadMoreSection: (
     section: "continue_watching" | "watch_later" | "unclassified",
-  ) => void;
+  ) => Promise<boolean>;
   onReloadSection: (
     section: "continue_watching" | "watch_later" | "unclassified",
   ) => void;

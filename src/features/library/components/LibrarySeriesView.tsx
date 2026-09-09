@@ -1,5 +1,5 @@
 import type { LibraryCollectionPagination } from "../useLibraryCollectionPaging";
-import { CollectionEpisodeList } from "./CollectionEpisodeList";
+import { PagedMediaList } from "./PagedMediaList";
 
 import { MenuPopover } from "../../../components/MenuPopover";
 import { playbackUrl } from "../../../lib/desktop";
@@ -215,7 +215,7 @@ function CollectionDetailView(props: LibrarySeriesViewProps) {
           </div>
           {props.collectionLoading ? (
             <div className="library-loading"><span className="spinner" />正在读取单集…</div>
-          ) : <CollectionEpisodeList key={`${summary.id}:${props.selectedSeason ?? "all"}`} episodes={props.currentEpisodes} page={props.collectionPagination}
+          ) : <PagedMediaList key={`${summary.id}:${props.selectedSeason ?? "all"}`} items={props.currentEpisodes} page={props.collectionPagination}
               empty={<div className="library-empty-panel"><strong>合集还是空的</strong><p>可从「未分类」将现有视频加入这个合集。</p></div>}
               renderItem={(media) => (
                 <LibraryMediaItem

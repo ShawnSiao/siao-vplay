@@ -123,3 +123,24 @@ describe("LibraryMediaListView", () => {
     expect(onLoadMore).toHaveBeenCalledOnce();
   });
 });
+
+it.each([120, 1000, 10000])("bounds %i loaded media rows with keyboard page controls", count => {
+  renderList("unclassified", { page: { items: Array.from({ length: count }, (_, index) => ({ ...media, projectId: `item-${index + 1}`, projectTitle: `视频 ${index + 1}` })),
+    totalCount: count, nextOffset: null, initialized: true, loading: false, loadingMore: false, error: null } });
+  expect(document.querySelectorAll(".library-media-item")).toHaveLength(24);
+  fireEvent.click(screen.getByRole("button", { name: "下一页视频" }));
+  expect(screen.getByText("视频 25")).toBeVisible();
+  expect(document.querySelector(".library-media-item button")).toHaveFocus();
+  fireEvent.click(screen.getByRole("button", { name: "上一页视频" }));
+  expect(screen.getByText("视频 1")).toBeVisible();
+});
+
+it("bounds a large watch-later list without losing its removal action", () => {
+  const props = renderList("watch_later", { page: { items: Array.from({ length: 1000 }, (_, index) => ({ ...media, projectId: `item-${index + 1}`, projectTitle: `视频 ${index + 1}` })),
+    totalCount: 1000, nextOffset: null, initialized: true, loading: false, loadingMore: false, error: null } });
+  expect(document.querySelectorAll(".library-media-item")).toHaveLength(24);
+  fireEvent.click(screen.getByRole("button", { name: "下一页视频" }));
+  fireEvent.click(screen.getByRole("button", { name: "视频 25 的更多操作" }));
+  fireEvent.click(screen.getByRole("menuitem", { name: "取消稍后观看" }));
+  expect(props.onSetWatchLater).toHaveBeenCalledWith("item-25", false);
+});

@@ -109,7 +109,7 @@ function renderScreen(
       onDelete: () => undefined,
       onOpenLocation: () => undefined,
       onSelectSection: () => undefined,
-      onLoadMoreSection: () => undefined,
+      onLoadMoreSection: async () => false,
       onReloadSection: () => undefined,
       onOpenCollection: () => undefined,
       onCloseCollection: () => undefined,
@@ -194,7 +194,7 @@ describe("LibraryScreen library lifecycle", () => {
     fireEvent.click(screen.getByRole("button", { name: "确认删除合集" }));
     await waitFor(() => expect(onDeleteCollection).toHaveBeenCalledWith(collection.id));
     expect(onSelectSection).toHaveBeenCalledWith("folders");
-    expect(screen.getByRole("status")).toHaveTextContent("已保留 1 个视频项目");
+    expect(screen.getByText(/已保留 1 个视频项目/)).toHaveAttribute("role", "status");
   });
 
   it("shows orphaned folders with rebuild and revoke actions only", () => {

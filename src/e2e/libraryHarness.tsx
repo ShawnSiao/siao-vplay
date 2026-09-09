@@ -72,7 +72,9 @@ const mediaSummary: LibraryMediaSummary = {
   itemAvailability: null,
 };
 const longListMode = new URLSearchParams(location.search).has("long-list");
-const unclassifiedItems = Array.from({ length: longListMode ? 20 : 12 }, (_, index) => ({
+const listCountParam = new URLSearchParams(location.search).get("mediaCount");
+const loadedListCount = listCountParam === "1000" || listCountParam === "10000" ? Number(listCountParam) : 0;
+const unclassifiedItems = Array.from({ length: loadedListCount || (longListMode ? 20 : 12) }, (_, index) => ({
   ...mediaSummary,
   projectId: `e2e-library-project-${index + 1}`,
   projectTitle: longListMode ? `第 ${index + 1} 集 ${"很长的视频名称与跨语言学习内容".repeat(12)}` : `雨站台 ${index + 1}`,
@@ -174,9 +176,9 @@ const folderPreview: LibraryFolderImportState = {
 export function LibraryHarness() {
   const collectionPreview = useLibraryPagesPreview();
   const emptyMode = new URLSearchParams(window.location.search).has("empty");
-  const [folderImport, setFolderImport] = useState<LibraryFolderImportState | null>(null); const [section, setSection] = useState<LibrarySection>(longListMode ? "unclassified" : "home");
+  const [folderImport, setFolderImport] = useState<LibraryFolderImportState | null>(null); const [section, setSection] = useState<LibrarySection>(loadedListCount ? (new URLSearchParams(location.search).get("section") === "watch_later" ? "watch_later" : "unclassified") : longListMode ? "unclassified" : "home");
   const [recovery, setRecovery] = useState<LibraryRecoveryState | null>(null);
-  const [watchLaterItems, setWatchLaterItems] = useState([mediaSummary]);
+  const [watchLaterItems, setWatchLaterItems] = useState(loadedListCount ? unclassifiedItems : [mediaSummary]);
   const [uncategorizedItems, setUncategorizedItems] = useState(unclassifiedItems);
   const openFolderImport = () => setFolderImport(folderPreview);
   const visibleHome: LibraryHome = emptyMode ? emptyLibraryHome : { ...libraryHome, unclassified: uncategorizedItems, unclassifiedCount: uncategorizedItems.length };
@@ -311,7 +313,7 @@ export function LibraryHarness() {
         onDelete={() => undefined}
         onOpenLocation={() => undefined}
         onSelectSection={setSection}
-        onLoadMoreSection={() => undefined}
+        onLoadMoreSection={async () => false}
         onReloadSection={() => undefined}
         onOpenCollection={() => undefined}
         onCloseCollection={() => undefined}

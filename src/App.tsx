@@ -783,7 +783,7 @@ export default function App() {
               )
             }
             onSelectSection={selectLibrarySection}
-            onLoadMoreSection={(section) => void loadMoreSection(section)}
+            onLoadMoreSection={async (section) => Boolean(await loadMoreSection(section))}
             onReloadSection={(section) => void loadSectionPage(section, 0)}
             onOpenCollection={(collectionId) =>
               void openCollection(collectionId)

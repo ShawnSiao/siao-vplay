@@ -1,1 +1,1 @@
-export const libraryViewPolicy = { collectionRenderPageSize: 24, episodeRenderPageSize: 24 } as const;
+export const libraryViewPolicy = { mediaRenderPageSize: 24, episodeRenderPageSize: 24 } as const;

@@ -1,3 +1,4 @@
+import { PagedMediaList } from "./PagedMediaList";
 import type { CollectionSummary, LibraryMediaSummary } from "../../../types";
 import type { LibrarySectionPageState } from "../useLibraryController";
 import { LibraryMediaItem } from "./LibraryMediaItem";
@@ -8,7 +9,7 @@ type LibraryMediaListViewProps = {
   collections: CollectionSummary[];
   mutationPending: boolean;
   onRetry: () => void;
-  onLoadMore: () => void;
+  onLoadMore: () => Promise<boolean>;
   onOpen: (media: LibraryMediaSummary) => void;
   onRelink: (media: LibraryMediaSummary) => void;
   onDelete: (media: LibraryMediaSummary) => void;
@@ -58,39 +59,17 @@ export function LibraryMediaListView({
           <p>{page.error}</p>
           <button type="button" onClick={onRetry}>重试</button>
         </div>
-      ) : page.items.length ? (
-        <>
-          <div className="library-media-list">
-            {page.items.map((media) => (
+      ) : (
+        <PagedMediaList key={kind} contentKind="videos" items={page.items} empty={<div className="library-empty-panel"><strong>{emptyTitle}</strong><p>{emptyDescription}</p></div>}
+          page={{ totalCount: page.totalCount, nextOffset: page.nextOffset, loadingMore: page.loadingMore || page.loading,
+            error: page.error, loadMore: onLoadMore, reload: onRetry }} renderItem={media => (
               <LibraryMediaItem
                 key={media.projectId}
                 media={media}
                 context={{ kind }}
                 {...mediaProps}
               />
-            ))}
-          </div>
-          <footer className="library-list-footer">
-            <span>已加载 {page.items.length} / {page.totalCount}</span>
-            {page.error ? (
-              <span className="library-inline-error" role="alert">
-                {page.error}
-                <button type="button" onClick={onLoadMore}>重试加载</button>
-              </span>
-            ) : page.nextOffset !== null ? (
-              <button type="button" disabled={page.loadingMore} onClick={onLoadMore}>
-                {page.loadingMore ? "正在加载…" : "加载更多"}
-              </button>
-            ) : (
-              <span>已显示全部</span>
-            )}
-          </footer>
-        </>
-      ) : (
-        <div className="library-empty-panel">
-          <strong>{emptyTitle}</strong>
-          <p>{emptyDescription}</p>
-        </div>
+          )} />
       )}
     </div>
   );
