@@ -15,6 +15,7 @@ export function PagedMediaList({ items, page, empty, renderItem, contentKind }: 
   const focusedProject = useRef<string | null>(null);
   const size = libraryViewPolicy.mediaRenderPageSize;
   const start = Math.min(requestedStart, Math.max(0, Math.floor((items.length - 1) / size) * size));
+  const displayStart = (page?.offset ?? 0) + start;
   const visible = items.slice(start, start + size);
   const hasNext = start + size < items.length;
   const pagination = page ?? { totalCount: items.length, nextOffset: null, error: null, loadingMore: false, loadMore: async () => false, reload: () => undefined };
@@ -22,12 +23,13 @@ export function PagedMediaList({ items, page, empty, renderItem, contentKind }: 
   useLayoutEffect(() => {
     const removedFocus = focusedProject.current !== null && !visible.some(item => item.projectId === focusedProject.current);
     if (removedFocus) focusedProject.current = null;
-    if (priorStart.current !== start || (removedFocus && document.activeElement === document.body)) {
+    const focusIsLocal = document.activeElement === document.body || root.current?.contains(document.activeElement);
+    if ((priorStart.current !== displayStart && focusIsLocal) || (removedFocus && document.activeElement === document.body)) {
       const first = root.current?.querySelector<HTMLButtonElement>(".library-media-item button") ?? root.current;
       first?.focus(); first?.scrollIntoView?.({ block: "nearest" });
-      priorStart.current = start;
     }
-  }, [start, visible]);
+    priorStart.current = displayStart;
+  }, [displayStart, visible]);
   const show = (offset: number) => { intent.current += 1; setRequestedStart(offset); };
   const loadMore = async () => {
     if (requestPending.current) return false;
@@ -36,7 +38,7 @@ export function PagedMediaList({ items, page, empty, renderItem, contentKind }: 
     const next = items.length;
     try {
       const loaded = await pagination.loadMore();
-      if (loaded && current === intent.current) setRequestedStart(Math.floor(next / size) * size);
+      if (loaded && current === intent.current && page?.offset === undefined) setRequestedStart(Math.floor(next / size) * size);
       return loaded;
     } finally { requestPending.current = false; }
   };
@@ -48,8 +50,8 @@ export function PagedMediaList({ items, page, empty, renderItem, contentKind }: 
   }}>
     {visible.length ? <div className="library-media-list">{visible.map(renderItem)}</div> : pagination.error ? null : empty}
     <MediaPageFooter page={{ ...pagination, nextOffset: hasNext ? null : pagination.nextOffset, loadMore }}
-      contentKind={contentKind} count={visible.length} offset={start}
-      onPrevious={start ? () => show(Math.max(0, start - size)) : undefined}
+      contentKind={contentKind} count={visible.length} offset={displayStart}
+      onPrevious={start ? () => show(Math.max(0, start - size)) : page?.offset && page.loadPrevious ? () => { void page.loadPrevious?.(); } : undefined}
       onNext={hasNext ? () => show(start + size) : undefined} />
   </div>;
 }

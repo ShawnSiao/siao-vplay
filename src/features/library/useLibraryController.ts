@@ -316,9 +316,9 @@ function libraryReducer(state: LibraryState, action: LibraryAction): LibraryStat
       };
     case "section_page_remove":
       return { ...state, sectionPages: reduceSectionPages(state.sectionPages, action) };
-    case "collection_appended":
+    case "collection_window_loaded":
       return state.currentCollection?.summary.id === action.collectionId && state.selectedSeason === action.season
-        ? { ...state, currentEpisodes: [...state.currentEpisodes, ...action.episodes] } : state;
+        ? { ...state, currentEpisodes: action.episodes } : state;
     case "collection_started":
       return { ...state, collectionLoading: true };
     case "collection_loaded":

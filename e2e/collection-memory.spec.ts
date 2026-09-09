@@ -1,0 +1,21 @@
+import { expect, test } from "@playwright/test";
+test("bounded collection pages retry and return without retaining previous rows", async ({ page }) => {
+  await page.setViewportSize({ width: 960, height: 640 });
+  await page.goto("/e2e/library.html?collection-pages=10000&bounded-pages");
+  const rows = page.locator(".library-episodes .library-media-item");
+  await expect(rows).toHaveCount(24);
+  const next = page.getByRole("button", { name: "下一页剧集", exact: true });
+  await next.focus(); await page.keyboard.press("Enter");
+  await expect(page.getByRole("alert")).toContainText("后续剧集读取失败");
+  await expect(rows.first()).toContainText("视频 episode-1");
+  await next.focus(); await page.keyboard.press("Enter");
+  await expect(rows.first()).toContainText("视频 episode-25");
+  await expect(rows.first().locator("button").first()).toBeFocused();
+  await expect(rows).toHaveCount(24);
+  await expect(page.getByText("已显示 25–48 / 10000 集")).toBeVisible();
+  await page.screenshot({ path: "designs/open-source-readiness/collection-memory-960.png" });
+  await page.getByRole("button", { name: "上一页剧集", exact: true }).focus(); await page.keyboard.press("Enter");
+  await expect(rows.first()).toContainText("视频 episode-1");
+  await expect(rows.first().locator("button").first()).toBeFocused();
+  await expect(rows).toHaveCount(24);
+});

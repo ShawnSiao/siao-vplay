@@ -23,13 +23,25 @@ async function open() {
   await act(async () => { await view.result.current.openCollection(importedDetail.summary.id); });
   return view;
 }
+it.each([1000, 10000])("retains at most24 collection rows after paging through %i items", async total => {
+  mocks.listCollectionEpisodePage.mockImplementation(async (_id: string, _season: unknown, offset: number) => ({
+    ...page(), totalCount: total, nextOffset: offset + 24 < total ? offset + 24 : null,
+    items: Array.from({ length: Math.min(24, total - offset) }, (_, index) => mediaSummary(`item-${offset + index}`)),
+  }));
+  const { result } = await open();
+  while (result.current.collectionPagination.nextOffset !== null) {
+    await act(async () => { await result.current.collectionPagination.loadMore(); });
+    expect(result.current.state.currentEpisodes.length).toBeLessThanOrEqual(24);
+  }
+  expect(result.current.state.currentEpisodes.at(-1)?.projectId).toBe(`item-${total - 1}`);
+});
 it("opens only the first backend page", async () => {
   const { result } = await open();
   expect(mocks.listCollectionEpisodes).not.toHaveBeenCalled();
   expect(result.current.state.currentEpisodes).toEqual([first]);
   expect(result.current.collectionPagination.nextOffset).toBe(1);
 });
-it("serializes append and preserves a watched update made while the page is pending", async () => {
+it("serializes page reads and preserves watched updates while replacing the visible page", async () => {
   const { result } = await open();
   let resolve!: (value: ReturnType<typeof page>) => void;
   mocks.listCollectionEpisodePage.mockReturnValueOnce(new Promise(done => { resolve = done; }));
@@ -37,10 +49,14 @@ it("serializes append and preserves a watched update made while the page is pend
   expect(mocks.listCollectionEpisodePage).toHaveBeenCalledTimes(2);
   mocks.setProjectWatched.mockResolvedValue({ id: "first", playbackState: { completedAtMs: 99 } });
   await act(async () => { await result.current.changeWatched("first", true); });
+  expect(result.current.state.currentEpisodes).toEqual([{ ...first, completedAtMs: 99 }]);
   await act(async () => { resolve(page([second], null)); });
-  expect(result.current.state.currentEpisodes).toEqual([{ ...first, completedAtMs: 99 }, second]);
+  expect(result.current.state.currentEpisodes).toEqual([second]);
   expect(result.current.state.currentCollection?.summary.watchedCount).toBe(1);
   expect(result.current.collectionPagination.nextOffset).toBeNull();
+  mocks.listCollectionEpisodePage.mockResolvedValueOnce(page([{ ...first, completedAtMs: 99 }]));
+  await act(async () => { await result.current.collectionPagination.loadPrevious?.(); });
+  expect(result.current.state.currentEpisodes).toEqual([{ ...first, completedAtMs: 99 }]);
 });
 it("keeps rows and retries the same cursor after failure", async () => {
   const { result } = await open();
@@ -51,7 +67,33 @@ it("keeps rows and retries the same cursor after failure", async () => {
   mocks.listCollectionEpisodePage.mockResolvedValueOnce(page([second], null));
   await act(async () => { await result.current.collectionPagination.loadMore(); });
   expect(mocks.listCollectionEpisodePage).toHaveBeenLastCalledWith(importedDetail.summary.id, null, 1, "a".repeat(64));
-  expect(result.current.state.currentEpisodes).toEqual([first, second]);
+  expect(result.current.state.currentEpisodes).toEqual([second]);
+});
+it("uses the backend page span when returning to the previous page", async () => {
+  mocks.listCollectionEpisodePage.mockImplementation(async (_id: string, _season: unknown, offset: number) => ({
+    ...page(), items: [mediaSummary(`p${offset}`)], totalCount: 3, nextOffset: offset < 2 ? offset + 1 : null,
+  }));
+  const { result } = await open();
+  await act(async () => { await result.current.collectionPagination.loadMore(); });
+  await act(async () => { await result.current.collectionPagination.loadMore(); });
+  await act(async () => { await result.current.collectionPagination.loadPrevious?.(); });
+  expect(mocks.listCollectionEpisodePage).toHaveBeenLastCalledWith(importedDetail.summary.id, null, 1, "a".repeat(64));
+  expect(result.current.state.currentEpisodes[0].projectId).toBe("p1");
+});
+it("keeps the current page when reading the previous page fails and retries its snapshot", async () => {
+  const { result } = await open();
+  mocks.listCollectionEpisodePage.mockResolvedValueOnce(page([second], null));
+  await act(async () => { await result.current.collectionPagination.loadMore(); });
+  mocks.listCollectionEpisodePage.mockRejectedValueOnce(new Error("previous failed"));
+  await act(async () => { await result.current.collectionPagination.loadPrevious?.(); });
+  expect(result.current.state.currentEpisodes).toEqual([second]);
+  expect(result.current.collectionPagination.offset).toBe(1);
+  expect(result.current.collectionPagination.error).toContain("previous failed");
+  mocks.listCollectionEpisodePage.mockResolvedValueOnce(page());
+  await act(async () => { await result.current.collectionPagination.loadPrevious?.(); });
+  expect(result.current.state.currentEpisodes).toEqual([first]);
+  expect(result.current.collectionPagination.offset).toBe(0);
+  expect(mocks.listCollectionEpisodePage).toHaveBeenLastCalledWith(importedDetail.summary.id, null, 0, "a".repeat(64));
 });
 it("ignores an append after the collection closes", async () => {
   const { result } = await open();
