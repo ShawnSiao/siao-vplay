@@ -23,7 +23,6 @@ import { supportedVideoExtensions } from "./mediaFiles";
 import { chooseConfiguredStorageDirectory } from "./storageDirectoryPicker";
 
 import type {
-  ExternalAgentTaskKind,
   Project,
   RemoteMediaPreview,
   RuntimeCatalog,
@@ -57,16 +56,7 @@ export async function chooseLocalResourceParent(): Promise<string | null> {
   return typeof selected === "string" ? selected : null;
 }
 
-export async function getLocalResourceDiagnosticSummary(): Promise<string> {
-  return invoke<string>("get_local_resource_diagnostic_summary");
-}
-
-export async function getLocalResourceThirdPartyNotices(): Promise<string> {
-  return invoke<string>("get_local_resource_third_party_notices");
-}
-
-
-
+export { getLocalResourceDiagnosticSummary, getLocalResourceThirdPartyNotices } from "./resourceDiagnosticsGateway";
 
 export async function getRuntimeCatalog(): Promise<RuntimeCatalog> {
   if (!isDesktopApp) {
@@ -307,15 +297,7 @@ export async function chooseLearningExportDirectory(): Promise<string | null> {
   return typeof selected === "string" ? selected : null;
 }
 
-export async function openExternalResultDirectory(
-  taskKind: ExternalAgentTaskKind,
-  taskId: string,
-): Promise<boolean> {
-  return invoke<boolean>("open_external_result_directory", {
-    taskKind,
-    taskId,
-  });
-}
+export { openExternalResultDirectory } from "./externalResultGateway";
 
 export { createLearningCard, getLearningCard, listLearningCards, deleteLearningCard, exportLearningCards } from "./learningCardGateway";
 

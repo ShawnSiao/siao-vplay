@@ -18,3 +18,15 @@ export async function getLocalResourceDiagnostics() {
   }
   return value;
 }
+
+export async function getLocalResourceDiagnosticSummary(): Promise<string> {
+  const value = await invoke<unknown>("get_local_resource_diagnostic_summary");
+  if (typeof value !== "string") invalid();
+  return value;
+}
+
+export async function getLocalResourceThirdPartyNotices(): Promise<string> {
+  const value = await invoke<unknown>("get_local_resource_third_party_notices");
+  if (typeof value !== "string") invalid();
+  return value;
+}

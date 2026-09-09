@@ -29,3 +29,9 @@ export async function acknowledgeExternalAgentResults(updates: ExternalAgentResu
   const completed = snapshot.filter(update => update.status === "completed");
   if (completed.length) await invoke<void>("acknowledge_external_agent_results", { updates: completed });
 }
+
+export async function openExternalResultDirectory(taskKind: import("../types").ExternalAgentTaskKind, taskId: string): Promise<boolean> {
+  const value = await invoke<unknown>("open_external_result_directory", { taskKind, taskId });
+  if (typeof value !== "boolean") throw new Error("打开结果目录的响应无效，请重试。");
+  return value;
+}
