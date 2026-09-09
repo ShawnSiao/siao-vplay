@@ -52,7 +52,6 @@ import type {
   SubtitleExport,
   SubtitleExportFormat,
   SubtitleExportMode,
-  TranscriptionJob,
   TranscriptionRuntimeStatus,
   CodexRuntimeStatus,
   TranslationApplication,
@@ -725,51 +724,7 @@ export async function getTranscriptionRuntimeStatus(): Promise<TranscriptionRunt
   return invoke<TranscriptionRuntimeStatus>("get_transcription_runtime_status");
 }
 
-export async function startTranscription(
-  projectId: string,
-  languageCode: "auto" | "en" | "th" | "ja" | "ko",
-  modelKind: "small" | "base" = "small",
-  confirmReplaceOriginal = false,
-): Promise<TranscriptionJob> {
-  return invoke<TranscriptionJob>("start_transcription", {
-    input: {
-      projectId,
-      languageCode,
-      modelKind,
-      confirmReplaceOriginal,
-    },
-  });
-}
-
-export async function getTranscriptionJob(
-  jobId: string,
-): Promise<TranscriptionJob> {
-  return invoke<TranscriptionJob>("get_transcription_job", {
-    input: { jobId },
-  });
-}
-
-export async function listTranscriptionJobs(
-  projectId: string,
-): Promise<TranscriptionJob[]> {
-  return invoke<TranscriptionJob[]>("list_transcription_jobs", { projectId });
-}
-
-export async function cancelTranscriptionJob(
-  jobId: string,
-): Promise<TranscriptionJob> {
-  return invoke<TranscriptionJob>("cancel_transcription_job", {
-    input: { jobId },
-  });
-}
-
-export async function resumeTranscriptionJob(
-  jobId: string,
-): Promise<TranscriptionJob> {
-  return invoke<TranscriptionJob>("resume_transcription_job", {
-    input: { jobId },
-  });
-}
+export { startTranscription, getTranscriptionJob, listTranscriptionJobs, cancelTranscriptionJob, resumeTranscriptionJob } from "./transcriptionGateway";
 
 export async function chooseTranslationResultFile(): Promise<string | null> {
   if (!isDesktopApp) {

@@ -47,6 +47,7 @@ fn committed_schemas_match_rust() {
     ]);
     check_schema("network-settings", &network);
     check_ai_service_schemas();
+    check_transcription_schema();
     use crate::ai::types::{AiExecutionKind, AiExecutionPreview};
     let mut preview = serialized_schema::<AiExecutionPreview>();
     preview["examples"] = serde_json::json!([
@@ -129,4 +130,26 @@ fn check_schema(name: &str, schema: &serde_json::Value) {
     let actual = fs::read_to_string(&path).expect("Run npm run contracts:generate to create contracts");
     assert_eq!(actual.replace("\r\n", "\n"), expected,
         "Rust IPC schema changed; run npm run contracts:generate and review the diff");
+}
+
+fn check_transcription_schema() {
+    use crate::transcription::{TranscriptionJob, TranscriptionLanguage, TranscriptionModelKind};
+    let mut schema = serialized_schema::<TranscriptionJob>();
+    let mut examples = Vec::new();
+    for status in ["queued", "extracting", "transcribing", "validating", "completed", "failed", "cancelled", "interrupted"] {
+        for language in [TranscriptionLanguage::Auto, TranscriptionLanguage::En, TranscriptionLanguage::Th, TranscriptionLanguage::Ja, TranscriptionLanguage::Ko] {
+            examples.push(serde_json::to_value(TranscriptionJob {
+                id: "job".into(), project_id: "project".into(), status: serde_json::from_value(serde_json::json!(status)).unwrap(),
+                stage: status.into(), progress: if status == "completed" { 1.0 } else { 0.0 }, language_code: language,
+                model_kind: if language == TranscriptionLanguage::Auto { TranscriptionModelKind::Base } else { TranscriptionModelKind::Small },
+                runtime_backend: serde_json::from_value(serde_json::json!(if language == TranscriptionLanguage::Auto { "vulkan" } else { "cpu" })).unwrap(),
+                runtime_version: "test".into(), subtitle_version_id: if status == "completed" { Some("version".into()) } else { None },
+                error_code: None, error_message: None, created_at_ms: 1, updated_at_ms: 2,
+                started_at_ms: if status == "queued" { None } else { Some(1) },
+                completed_at_ms: if status == "completed" { Some(2) } else { None },
+            }).unwrap());
+        }
+    }
+    schema["examples"] = examples.into();
+    check_schema("transcription-job", &schema);
 }

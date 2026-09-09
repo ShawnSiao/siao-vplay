@@ -6,15 +6,15 @@ pub(crate) fn run_job(
     cancellation: &AtomicBool,
 ) -> Result<(), TranscriptionError> {
     let job = load_stored_job(store, job_id)?;
-    let model_id = format!("whisper-model-{}", job.public.model_kind);
+    let model_id = format!("whisper-model-{}", job.public.model_kind.as_str());
     let _resources = crate::resource_leases::configured(&[
         "ffmpeg-cpu",
         "whisper-cpu",
         "whisper-vad-silero-6.2",
         &model_id,
     ])?;
-    if job.public.status != "queued" {
-        return Err(TranscriptionError::InvalidJobState(job.public.status));
+    if job.public.status.as_str() != "queued" {
+        return Err(TranscriptionError::InvalidJobState(job.public.status.as_str().to_owned()));
     }
     if job.cancel_requested_at_ms.is_some() || cancellation.load(Ordering::SeqCst) {
         return Err(TranscriptionError::Cancelled);
@@ -79,7 +79,7 @@ pub(crate) fn run_job(
         &model,
         vad_model.as_ref(),
         &audio_path,
-        &job.public.language_code,
+        job.public.language_code.as_str(),
         &output_prefix,
         &whisper_log,
     )?;
@@ -90,7 +90,7 @@ pub(crate) fn run_job(
             vad_model = None;
         }
         let parameters_json =
-            transcription_parameters(&job.public.language_code, &cpu_runtime, vad_model.as_ref())?;
+            transcription_parameters(job.public.language_code.as_str(), &cpu_runtime, vad_model.as_ref())?;
         update_job_runtime(store, job_id, &cpu_runtime, &parameters_json)?;
         runtime = cpu_runtime;
         let _ = fs::remove_file(output_prefix.with_extension("json"));
@@ -103,7 +103,7 @@ pub(crate) fn run_job(
             &model,
             vad_model.as_ref(),
             &audio_path,
-            &job.public.language_code,
+            job.public.language_code.as_str(),
             &output_prefix,
             &whisper_log,
         )?;
@@ -127,7 +127,7 @@ pub(crate) fn run_job(
     let output_hash = hash_file(&output_path)?;
     let parsed = parse_whisper_output(
         &output_path,
-        &job.public.language_code,
+        job.public.language_code.as_str(),
         job.media_duration_ms,
     )?;
     let report = subtitles::inspect_generated_cues(&parsed.cues, Some(job.media_duration_ms));

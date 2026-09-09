@@ -881,32 +881,7 @@ export type TranscriptionRuntimeStatus = {
   models: TranscriptionModelStatus[];
 };
 
-export type TranscriptionJob = {
-  id: string;
-  projectId: string;
-  status:
-    | "queued"
-    | "extracting"
-    | "transcribing"
-    | "validating"
-    | "completed"
-    | "failed"
-    | "cancelled"
-    | "interrupted";
-  stage: string;
-  progress: number;
-  languageCode: "auto" | "en" | "th" | "ja" | "ko";
-  modelKind: "small" | "base";
-  runtimeBackend: "vulkan" | "cpu";
-  runtimeVersion: string;
-  subtitleVersionId: string | null;
-  errorCode: string | null;
-  errorMessage: string | null;
-  createdAtMs: number;
-  updatedAtMs: number;
-  startedAtMs: number | null;
-  completedAtMs: number | null;
-};
+export type { TranscriptionJob } from "./generated/transcription-job";
 
 export type TranslationTask = {
   id: string;

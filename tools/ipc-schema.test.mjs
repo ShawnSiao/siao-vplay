@@ -33,3 +33,12 @@ for (const field of [
     assert.throws(() => prepareRuntimeSchema({ properties: { value: field } }), /safe integer bounds/);
   });
 }
+
+test("normalizes bounded Rust doubles without weakening numeric validation", () => {
+  const field = { type: "number", format: "double", minimum: 0, maximum: 1 };
+  assert.deepEqual(prepareRuntimeSchema(field), { type: "number", minimum: 0, maximum: 1 });
+  assert.equal(field.format, "double");
+  for (const patch of [{ minimum: undefined }, { maximum: Infinity }, { type: "string" }, { minimum: 2 }]) {
+    assert.throws(() => prepareRuntimeSchema({ ...field, ...patch }), /finite numeric bounds/);
+  }
+});
