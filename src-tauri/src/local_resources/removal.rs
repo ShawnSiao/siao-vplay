@@ -12,6 +12,17 @@ struct Journal {
     receipt_raw: String,
     staging_id: String,
     had_payload: bool,
+    #[serde(default)]
+    mode: Mode,
+    #[serde(default)]
+    committed: bool,
+}
+#[derive(Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum Mode {
+    #[default]
+    Active,
+    Inactive,
 }
 fn invalid() -> LocalResourceError {
     LocalResourceError::InvalidReceipt(
@@ -22,7 +33,10 @@ fn journal_path(config: &Path) -> Result<PathBuf, LocalResourceError> {
     Ok(config.parent().ok_or_else(invalid)?.join(JOURNAL))
 }
 fn validate(journal: &Journal) -> Result<(), LocalResourceError> {
-    if journal.schema_version != 1 {
+    if !matches!(journal.schema_version, 1 | 2)
+        || (journal.schema_version == 1 && (journal.mode != Mode::Active || journal.committed))
+        || (journal.mode == Mode::Active && journal.committed)
+    {
         return Err(invalid());
     }
     validate_configuration(&journal.previous)?;
@@ -32,13 +46,19 @@ fn validate(journal: &Journal) -> Result<(), LocalResourceError> {
     validate_identifier(&receipt.version, "资源版本")?;
     validate_receipt(receipt, &receipt.resource_id, &receipt.version)?;
     let expected_raw: ResourceReceipt = serde_json::from_str(&journal.receipt_raw)?;
-    if expected_raw != *receipt
-        || journal.previous.active_resources.get(&receipt.resource_id) != Some(&receipt.version)
-    {
+    if expected_raw != *receipt {
         return Err(invalid());
     }
+    let active =
+        journal.previous.active_resources.get(&receipt.resource_id) == Some(&receipt.version);
     let mut next = journal.previous.clone();
-    next.active_resources.remove(&receipt.resource_id);
+    match journal.mode {
+        Mode::Active if active => {
+            next.active_resources.remove(&receipt.resource_id);
+        }
+        Mode::Inactive if !active => {}
+        _ => return Err(invalid()),
+    }
     if next != journal.next {
         return Err(invalid());
     }
@@ -86,7 +106,7 @@ pub(super) fn recover(config: &Path) -> Result<bool, LocalResourceError> {
         return Ok(false);
     };
     let current = persistence::load_configuration(config)?.ok_or_else(invalid)?;
-    let committed = current == journal.next;
+    let committed = current == journal.next && (journal.mode == Mode::Active || journal.committed);
     if !committed && current != journal.previous {
         return Err(invalid());
     }
@@ -142,17 +162,65 @@ pub(super) fn remove(
     let Some(receipt) = manager.active_receipt(resource_id)? else {
         return Ok(None);
     };
+    execute(manager, receipt, Mode::Active, |_| Ok(()))
+}
+pub(super) fn remove_inactive(
+    manager: &mut LocalResourceManager,
+    resource_id: &str,
+    version: &str,
+) -> Result<bool, LocalResourceError> {
+    if recover(&manager.config_path)? {
+        manager.configuration = persistence::load_configuration(&manager.config_path)?;
+    }
+    validate_identifier(resource_id, "资源 ID")?;
+    validate_identifier(version, "资源版本")?;
+    let configuration = manager
+        .configuration
+        .as_ref()
+        .ok_or(LocalResourceError::ConfirmationRequired)?;
+    if configuration
+        .active_resources
+        .get(resource_id)
+        .is_some_and(|active| active == version)
+    {
+        return Err(LocalResourceError::ResourceNotReady(format!(
+            "不能删除活动版本 {resource_id}@{version}"
+        )));
+    }
+    let target = files::contained(
+        &configuration_root(configuration),
+        &format!("receipts/{resource_id}/{version}.json"),
+    )?;
+    files::check_record(&target)?;
+    let receipt = persistence::read_recovering(&target, |receipt| {
+        validate_receipt(receipt, resource_id, version)
+    })?;
+    let Some(receipt) = receipt else {
+        return Ok(false);
+    };
+    Ok(execute(manager, receipt, Mode::Inactive, |_| Ok(()))?.is_some())
+}
+fn execute(
+    manager: &mut LocalResourceManager,
+    receipt: ResourceReceipt,
+    mode: Mode,
+    before_commit: impl FnOnce(&Path) -> Result<(), LocalResourceError>,
+) -> Result<Option<ResourceReceipt>, LocalResourceError> {
     let previous = manager.configuration.clone().ok_or_else(invalid)?;
     let mut next = previous.clone();
-    next.active_resources.remove(resource_id);
+    if mode == Mode::Active {
+        next.active_resources.remove(&receipt.resource_id);
+    }
     let mut journal = Journal {
-        schema_version: 1,
+        schema_version: 2,
         previous,
         next,
         receipt,
         receipt_raw: String::new(),
         staging_id: uuid::Uuid::new_v4().to_string(),
         had_payload: false,
+        mode,
+        committed: false,
     };
     let (install, stage, target) = paths(&journal)?;
     files::check_record(&target)?;
@@ -170,7 +238,13 @@ pub(super) fn remove(
         if journal.had_payload {
             fs::rename(&install, &stage)?;
         }
-        persist_json(&manager.config_path, &journal.next)?;
+        before_commit(&journal_path(&manager.config_path)?)?;
+        if journal.mode == Mode::Active {
+            persist_json(&manager.config_path, &journal.next)?;
+        } else {
+            journal.committed = true;
+            persist_json(&journal_path(&manager.config_path)?, &journal)?;
+        }
         Ok(())
     })();
     // Adopt committed configuration before cleanup, including when cleanup must be retried.
@@ -179,5 +253,7 @@ pub(super) fn remove(
     operation?;
     Ok(Some(journal.receipt))
 }
+#[cfg(test)]
+mod history_tests;
 #[cfg(test)]
 mod tests;

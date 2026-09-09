@@ -71,7 +71,7 @@ fn inactive_receipt_removal_clears_recovery_sidecars_even_without_primary() {
         let bytes = fs::read(&path).unwrap();
         for extension in ["json.bak", "json.part"] { fs::write(path.with_extension(extension), &bytes).unwrap(); }
         if !primary { fs::remove_file(&path).unwrap(); }
-        assert!(manager.remove_inactive_receipt("ffmpeg-cpu", "1").unwrap());
+        assert!(manager.remove_inactive_resource("ffmpeg-cpu", "1").unwrap());
         for candidate in [&path, &path.with_extension("json.bak"), &path.with_extension("json.part")] { assert!(!candidate.exists(), "removed receipt must not remain recoverable: {}", candidate.display()); }
     }
 }
@@ -83,7 +83,7 @@ fn inactive_receipt_removal_rejects_non_file_sidecar_before_deleting_primary() {
     let path = configuration_root(manager.configuration.as_ref().unwrap()).join("receipts/ffmpeg-cpu/1.json");
     let before = fs::read(&path).unwrap();
     fs::create_dir(path.with_extension("json.bak")).unwrap();
-    assert!(manager.remove_inactive_receipt("ffmpeg-cpu", "1").is_err());
+    assert!(manager.remove_inactive_resource("ffmpeg-cpu", "1").is_err());
     assert_eq!(fs::read(&path).unwrap(), before);
 }
 
@@ -100,4 +100,18 @@ fn active_removal_preflight_failure_preserves_configuration_and_payload() {
     assert_eq!(fs::read(&manager.config_path).unwrap(), before);
     assert_eq!(fs::read(install.join("payload")).unwrap(), b"keep");
     assert!(target.is_file());
+}
+
+#[test]
+fn inactive_resource_removal_deletes_payload_and_preserves_active_version() {
+    let (_data, _parent, mut manager) = setup();
+    let root = configuration_root(manager.configuration.as_ref().unwrap());
+    let old = root.join("packages/ffmpeg-cpu/1"); fs::create_dir_all(&old).unwrap(); fs::write(old.join("payload"), b"old").unwrap();
+    manager.activate_receipt(receipt("2")).unwrap();
+    let active = root.join("packages/ffmpeg-cpu/2"); fs::create_dir_all(&active).unwrap(); fs::write(active.join("payload"), b"active").unwrap();
+    let before = fs::read(&manager.config_path).unwrap();
+    assert!(manager.remove_inactive_resource("ffmpeg-cpu", "1").unwrap());
+    assert!(!old.exists(), "receipt and payload must be removed together");
+    assert_eq!(fs::read(active.join("payload")).unwrap(), b"active");
+    assert_eq!(fs::read(&manager.config_path).unwrap(), before);
 }

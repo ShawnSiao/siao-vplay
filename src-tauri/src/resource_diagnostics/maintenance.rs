@@ -61,7 +61,6 @@ pub fn cleanup_old_versions(
     }
     let configuration = local_resources::configuration_snapshot()
         .ok_or(LocalResourceError::ConfirmationRequired)?;
-    let root = PathBuf::from(&configuration.resource_root);
     let plan = plan_old_version_cleanup()?;
     crate::cleanup_confirmation::verify(&input.plan_fingerprint, &plan.plan_fingerprint)?;
     let mut removed_versions = Vec::new();
@@ -77,35 +76,11 @@ pub fn cleanup_old_versions(
                 candidate.version,
             ));
         }
-        let receipt = local_resources::installed_receipts(&candidate.resource_id)?
-            .into_iter()
-            .find(|receipt| receipt.version == candidate.version)
-            .ok_or_else(|| {
-                ResourceDiagnosticsError::VersionNotFound(
-                    candidate.resource_id.clone(),
-                    candidate.version.clone(),
-                )
-            })?;
-        let install = resource_download::join_safe_relative(&root, &receipt.install_relative_path)?;
-        let staged = root
-            .join("staging")
-            .join(format!("version-cleanup-{}", Uuid::new_v4()));
-        if install.exists() {
-            if let Some(parent) = staged.parent() {
-                fs::create_dir_all(parent)?;
-            }
-            fs::rename(&install, &staged)?;
-        }
-        if let Err(error) =
-            local_resources::remove_inactive_receipt(&candidate.resource_id, &candidate.version)
-        {
-            if staged.exists() && !install.exists() {
-                let _ = fs::rename(&staged, &install);
-            }
-            return Err(error.into());
-        }
-        if staged.is_dir() {
-            fs::remove_dir_all(&staged)?;
+        if !local_resources::remove_inactive_resource(&candidate.resource_id, &candidate.version)? {
+            return Err(ResourceDiagnosticsError::VersionNotFound(
+                candidate.resource_id,
+                candidate.version,
+            ));
         }
         reclaimed_bytes = reclaimed_bytes.saturating_add(candidate.reclaimable_bytes);
         removed_versions.push(format!("{}@{}", candidate.resource_id, candidate.version));

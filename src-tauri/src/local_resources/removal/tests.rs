@@ -1,7 +1,7 @@
 use super::*;
 use tempfile::{TempDir, tempdir};
 
-fn setup() -> (TempDir, LocalResourceManager, Journal) {
+pub(super) fn setup() -> (TempDir, LocalResourceManager, Journal) {
     let data = tempdir().unwrap();
     let mut manager = LocalResourceManager::load(data.path()).unwrap();
     manager
@@ -32,20 +32,22 @@ fn setup() -> (TempDir, LocalResourceManager, Journal) {
     let mut next = previous.clone();
     next.active_resources.remove("ffmpeg-cpu");
     let journal = Journal {
-        schema_version: 1,
+        schema_version: 2,
         previous,
         next,
         receipt,
         receipt_raw,
         staging_id: uuid::Uuid::new_v4().to_string(),
         had_payload: true,
+        mode: Mode::Active,
+        committed: false,
     };
     (data, manager, journal)
 }
 fn prepare(manager: &LocalResourceManager, journal: &Journal) {
     files::prepare(&journal_path(&manager.config_path).unwrap(), journal).unwrap();
 }
-fn stage(journal: &Journal) {
+pub(super) fn stage(journal: &Journal) {
     let (install, stage, _) = paths(journal).unwrap();
     fs::rename(install, stage).unwrap();
 }
@@ -197,7 +199,7 @@ fn journal_rejects_unknown_schema_scope_and_staging_paths() {
     for mutation in 0..4 {
         let (_data, manager, mut journal) = setup();
         match mutation {
-            0 => journal.schema_version = 2,
+            0 => journal.schema_version = 3,
             1 => journal.next.preferred_profile = "fast".into(),
             2 => journal.staging_id = "../outside".into(),
             _ => journal.receipt.install_relative_path = "receipts".into(),

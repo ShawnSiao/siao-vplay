@@ -361,11 +361,11 @@ pub(crate) fn deactivate_resource(
     with_manager_write(|manager| manager.deactivate_resource(resource_id))
 }
 
-pub(crate) fn remove_inactive_receipt(
+pub(crate) fn remove_inactive_resource(
     resource_id: &str,
     version: &str,
 ) -> Result<bool, LocalResourceError> {
-    with_manager_write(|manager| manager.remove_inactive_receipt(resource_id, version))
+    with_manager_write(|manager| manager.remove_inactive_resource(resource_id, version))
 }
 
 pub(crate) fn configuration_snapshot() -> Option<LocalResourceConfiguration> {
@@ -885,31 +885,12 @@ impl LocalResourceManager {
         removal::remove(self, resource_id)
     }
 
-    fn remove_inactive_receipt(
+    fn remove_inactive_resource(
         &mut self,
         resource_id: &str,
         version: &str,
     ) -> Result<bool, LocalResourceError> {
-        validate_identifier(resource_id, "资源 ID")?;
-        validate_identifier(version, "资源版本")?;
-        let configuration = self
-            .configuration
-            .as_ref()
-            .ok_or(LocalResourceError::ConfirmationRequired)?;
-        if configuration
-            .active_resources
-            .get(resource_id)
-            .is_some_and(|active| active == version)
-        {
-            return Err(LocalResourceError::ResourceNotReady(format!(
-                "不能删除活动版本 {resource_id}@{version}"
-            )));
-        }
-        let path = configuration_root(configuration)
-            .join("receipts")
-            .join(resource_id)
-            .join(format!("{version}.json"));
-        persistence::remove_record(&path)
+        removal::remove_inactive(self, resource_id, version)
     }
 }
 

@@ -2,7 +2,6 @@ mod maintenance;
 pub use maintenance::{rollback_resource, cleanup_old_versions};
 
 use std::{
-    fs,
     path::{Path, PathBuf},
     sync::OnceLock,
 };
@@ -12,7 +11,6 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 use url::Url;
-use uuid::Uuid;
 
 use crate::{
     local_resources::{self, LocalResourceError, ResourceDefinition, ResourceReceipt},
