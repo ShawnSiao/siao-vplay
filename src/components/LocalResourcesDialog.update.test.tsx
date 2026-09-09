@@ -25,6 +25,7 @@ const catalog: LocalResourceCatalog = {
   }],
   profiles: [],
   resources: resourceIds.map((id) => ({
+    ...{ installedSize: null, expectedDownloadSize: null, artifact: null, entrypoints: {}, sourceCommit: null, patchSha256: null, requires: null, distribution: null },
     id,
     version: "current",
     platform: "windows-x86_64",
@@ -34,6 +35,7 @@ const catalog: LocalResourceCatalog = {
     license: "test",
     sourcePage: "https://example.com",
     artifact: {
+      stripComponents: null,
       url: `https://example.com/${id}`,
       size: 1,
       sha256: "a".repeat(64),

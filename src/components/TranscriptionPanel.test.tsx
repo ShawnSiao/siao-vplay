@@ -48,6 +48,7 @@ const catalog: LocalResourceCatalog = {
   ],
   resources: [
     {
+      ...{ installedSize: null, expectedDownloadSize: null, artifact: null, entrypoints: {}, sourceCommit: null, patchSha256: null, requires: null, distribution: null },
       id: "whisper-model-base",
       version: "ggml-base",
       platform: "any",
@@ -57,6 +58,7 @@ const catalog: LocalResourceCatalog = {
       license: "MIT",
       sourcePage: "https://example.com/base",
       artifact: {
+        stripComponents: null,
         url: "https://example.com/ggml-base.bin",
         size: 147_951_465,
         sha256: "a".repeat(64),
@@ -66,6 +68,7 @@ const catalog: LocalResourceCatalog = {
       healthCheck: "whisper-model-magic",
     },
     {
+      ...{ installedSize: null, expectedDownloadSize: null, artifact: null, entrypoints: {}, sourceCommit: null, patchSha256: null, requires: null, distribution: null },
       id: "whisper-model-small",
       version: "ggml-small",
       platform: "any",
@@ -75,6 +78,7 @@ const catalog: LocalResourceCatalog = {
       license: "MIT",
       sourcePage: "https://example.com/small",
       artifact: {
+        stripComponents: null,
         url: "https://example.com/ggml-small.bin",
         size: 487_601_967,
         sha256: "b".repeat(64),

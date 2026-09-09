@@ -59,6 +59,9 @@ fn committed_schemas_match_rust() {
     check_schema("unused-resource-cleanup-result", &serialized_schema::<crate::resource_migration::UnusedResourceCleanupResult>());
     check_schema("old-resource-version-cleanup-plan", &serialized_schema::<crate::resource_diagnostics::OldResourceVersionCleanupPlan>());
     check_schema("old-resource-version-cleanup-result", &serialized_schema::<crate::resource_diagnostics::OldResourceVersionCleanupResult>());
+    let mut catalog = serialized_schema::<crate::local_resources::LocalResourceCatalog>();
+    catalog["examples"] = serde_json::json!([crate::local_resources::catalog().unwrap()]);
+    check_schema("local-resource-catalog", &catalog);
     check_schema("local-resource-diagnostics", &serialized_schema::<crate::resource_diagnostics::LocalResourceDiagnostics>());
     check_schema("resource-network-status", &serialized_schema::<crate::resource_download::ResourceNetworkStatus>());
     check_schema("capability-preparation", &serialized_schema::<crate::resource_download::CapabilityPreparation>());

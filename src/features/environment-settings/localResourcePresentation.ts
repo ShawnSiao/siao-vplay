@@ -13,7 +13,7 @@ export function formatBytes(bytes: number | null | undefined): string {
 }
 
 export function resourceDownloadBytes(
-  resource: { artifact?: { size: number }; expectedDownloadSize?: number } | undefined,
+  resource: { artifact?: { size: number } | null; expectedDownloadSize?: number | null } | undefined,
 ): number {
   return resource?.artifact?.size ?? resource?.expectedDownloadSize ?? 0;
 }

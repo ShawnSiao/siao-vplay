@@ -1,0 +1,500 @@
+{
+  "$defs": {
+    "BundlePolicy": {
+      "properties": {
+        "allowlistedResourceIds": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "maximumExceptionBytes": {
+          "format": "uint64",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "maximumExceptionBytes",
+        "allowlistedResourceIds"
+      ],
+      "type": "object"
+    },
+    "CapabilityDefinition": {
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "profileIds": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "requiresCapabilityIds": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "resourceIds": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "resourceIds",
+        "profileIds",
+        "requiresCapabilityIds"
+      ],
+      "type": "object"
+    },
+    "ProfileDefinition": {
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "recommended": {
+          "type": "boolean"
+        },
+        "resourceIds": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "resourceIds",
+        "recommended"
+      ],
+      "type": "object"
+    },
+    "ResourceArtifact": {
+      "properties": {
+        "format": {
+          "type": "string"
+        },
+        "sha256": {
+          "type": "string"
+        },
+        "size": {
+          "format": "uint64",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "stripComponents": {
+          "default": null,
+          "format": "uint32",
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "url": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "url",
+        "size",
+        "sha256",
+        "format",
+        "stripComponents"
+      ],
+      "type": "object"
+    },
+    "ResourceDefinition": {
+      "properties": {
+        "artifact": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ResourceArtifact"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "bundled": {
+          "type": "boolean"
+        },
+        "distribution": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ResourceDistribution"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "entrypoints": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {},
+          "type": "object"
+        },
+        "expectedDownloadSize": {
+          "default": null,
+          "format": "uint64",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "healthCheck": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "installedSize": {
+          "default": null,
+          "format": "uint64",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "kind": {
+          "type": "string"
+        },
+        "license": {
+          "type": "string"
+        },
+        "patchSha256": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "platform": {
+          "type": "string"
+        },
+        "requires": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "sourceCommit": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "sourcePage": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "version",
+        "platform",
+        "kind",
+        "bundled",
+        "installedSize",
+        "expectedDownloadSize",
+        "license",
+        "sourcePage",
+        "artifact",
+        "entrypoints",
+        "healthCheck",
+        "sourceCommit",
+        "patchSha256",
+        "requires",
+        "distribution"
+      ],
+      "type": "object"
+    },
+    "ResourceDistribution": {
+      "properties": {
+        "status": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "status"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "examples": [
+    {
+      "bundlePolicy": {
+        "allowlistedResourceIds": [],
+        "maximumExceptionBytes": 20000000
+      },
+      "capabilities": [
+        {
+          "id": "basic_media",
+          "profileIds": [],
+          "requiresCapabilityIds": [],
+          "resourceIds": [
+            "ffmpeg-cpu"
+          ],
+          "title": "基础视频支持"
+        },
+        {
+          "id": "url_import",
+          "profileIds": [],
+          "requiresCapabilityIds": [],
+          "resourceIds": [
+            "ffmpeg-cpu",
+            "yt-dlp"
+          ],
+          "title": "在线视频导入"
+        },
+        {
+          "id": "local_transcription",
+          "profileIds": [
+            "fast",
+            "standard"
+          ],
+          "requiresCapabilityIds": [],
+          "resourceIds": [
+            "ffmpeg-cpu",
+            "whisper-cpu"
+          ],
+          "title": "本地字幕识别"
+        }
+      ],
+      "packageProfile": "app-only",
+      "productId": "siaovplay",
+      "profiles": [
+        {
+          "id": "fast",
+          "recommended": false,
+          "resourceIds": [
+            "whisper-model-base"
+          ],
+          "title": "快速"
+        },
+        {
+          "id": "standard",
+          "recommended": true,
+          "resourceIds": [
+            "whisper-model-small"
+          ],
+          "title": "标准"
+        }
+      ],
+      "resources": [
+        {
+          "artifact": {
+            "format": "zip",
+            "sha256": "c222a490dde4e7059f45495deef6bfb98dbcacc2b43df5b607546252037aa95c",
+            "size": 70508781,
+            "stripComponents": 1,
+            "url": "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-07-31-14-10/ffmpeg-n8.1.2-34-g9b6c8969e0-win64-lgpl-shared-8.1.zip"
+          },
+          "bundled": false,
+          "distribution": null,
+          "entrypoints": {
+            "ffmpeg": "bin/ffmpeg.exe",
+            "ffprobe": "bin/ffprobe.exe"
+          },
+          "expectedDownloadSize": null,
+          "healthCheck": "ffmpeg-version",
+          "id": "ffmpeg-cpu",
+          "installedSize": 175929962,
+          "kind": "archive",
+          "license": "LGPL-2.1-or-later",
+          "patchSha256": null,
+          "platform": "windows-x86_64",
+          "requires": null,
+          "sourceCommit": null,
+          "sourcePage": "https://github.com/BtbN/FFmpeg-Builds",
+          "version": "8.1.2-34-g9b6c8969e0"
+        },
+        {
+          "artifact": {
+            "format": "file",
+            "sha256": "66674953fe251b89f4d08c5f0e35e0728679bd67ab3d7d05c0562af101dd3e7a",
+            "size": 17840399,
+            "stripComponents": null,
+            "url": "https://github.com/yt-dlp/yt-dlp/releases/download/2026.08.19/yt-dlp.exe"
+          },
+          "bundled": false,
+          "distribution": null,
+          "entrypoints": {
+            "ytDlp": "yt-dlp.exe"
+          },
+          "expectedDownloadSize": null,
+          "healthCheck": "yt-dlp-version",
+          "id": "yt-dlp",
+          "installedSize": 17840399,
+          "kind": "file",
+          "license": "GPL-3.0-or-later for the combined Windows executable; yt-dlp source is Unlicense",
+          "patchSha256": null,
+          "platform": "windows-x86_64",
+          "requires": null,
+          "sourceCommit": null,
+          "sourcePage": "https://github.com/yt-dlp/yt-dlp",
+          "version": "2026.08.19"
+        },
+        {
+          "artifact": {
+            "format": "zip",
+            "sha256": "7d8be46ecd31828e1eb7a2ecdd0d6b314feafd82163038ab6092594b0a063539",
+            "size": 7982101,
+            "stripComponents": 1,
+            "url": "https://github.com/ggml-org/whisper.cpp/releases/download/v1.9.1/whisper-bin-x64.zip"
+          },
+          "bundled": false,
+          "distribution": null,
+          "entrypoints": {
+            "whisperCli": "whisper-cli.exe"
+          },
+          "expectedDownloadSize": null,
+          "healthCheck": "whisper-cli-version",
+          "id": "whisper-cpu",
+          "installedSize": 20355072,
+          "kind": "archive",
+          "license": "MIT",
+          "patchSha256": null,
+          "platform": "windows-x86_64",
+          "requires": null,
+          "sourceCommit": null,
+          "sourcePage": "https://github.com/ggml-org/whisper.cpp",
+          "version": "1.9.1"
+        },
+        {
+          "artifact": {
+            "format": "file",
+            "sha256": "60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe",
+            "size": 147951465,
+            "stripComponents": null,
+            "url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin"
+          },
+          "bundled": false,
+          "distribution": null,
+          "entrypoints": {},
+          "expectedDownloadSize": null,
+          "healthCheck": "sha256",
+          "id": "whisper-model-base",
+          "installedSize": 147951465,
+          "kind": "model",
+          "license": "MIT",
+          "patchSha256": null,
+          "platform": "all",
+          "requires": null,
+          "sourceCommit": null,
+          "sourcePage": "https://huggingface.co/ggerganov/whisper.cpp",
+          "version": "whisper.cpp-base"
+        },
+        {
+          "artifact": {
+            "format": "file",
+            "sha256": "1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b",
+            "size": 487601967,
+            "stripComponents": null,
+            "url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin"
+          },
+          "bundled": false,
+          "distribution": null,
+          "entrypoints": {},
+          "expectedDownloadSize": null,
+          "healthCheck": "sha256",
+          "id": "whisper-model-small",
+          "installedSize": 487601967,
+          "kind": "model",
+          "license": "MIT",
+          "patchSha256": null,
+          "platform": "all",
+          "requires": null,
+          "sourceCommit": null,
+          "sourcePage": "https://huggingface.co/ggerganov/whisper.cpp",
+          "version": "whisper.cpp-small"
+        }
+      ],
+      "schemaVersion": 1,
+      "updatedAt": "2026-08-20"
+    }
+  ],
+  "properties": {
+    "bundlePolicy": {
+      "$ref": "#/$defs/BundlePolicy"
+    },
+    "capabilities": {
+      "items": {
+        "$ref": "#/$defs/CapabilityDefinition"
+      },
+      "type": "array"
+    },
+    "packageProfile": {
+      "type": "string"
+    },
+    "productId": {
+      "type": "string"
+    },
+    "profiles": {
+      "items": {
+        "$ref": "#/$defs/ProfileDefinition"
+      },
+      "type": "array"
+    },
+    "resources": {
+      "items": {
+        "$ref": "#/$defs/ResourceDefinition"
+      },
+      "type": "array"
+    },
+    "schemaVersion": {
+      "format": "uint32",
+      "maximum": 1,
+      "minimum": 1,
+      "type": "integer"
+    },
+    "updatedAt": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "productId",
+    "updatedAt",
+    "packageProfile",
+    "bundlePolicy",
+    "capabilities",
+    "profiles",
+    "resources"
+  ],
+  "title": "LocalResourceCatalog",
+  "type": "object"
+}

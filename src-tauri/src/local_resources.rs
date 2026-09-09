@@ -1,3 +1,5 @@
+mod catalog_contract;
+pub use catalog_contract::{LocalResourceCatalog, ResourceDefinition, ResourceArtifact};
 #[cfg(test)]
 mod receipt_tests;
 mod receipts;
@@ -69,95 +71,6 @@ pub enum LocalResourceError {
     FileSystem(#[from] io::Error),
     #[error("本地资源配置序列化失败：{0}")]
     Serialization(#[from] serde_json::Error),
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct LocalResourceCatalog {
-    pub schema_version: u32,
-    pub product_id: String,
-    pub updated_at: String,
-    pub package_profile: String,
-    pub bundle_policy: BundlePolicy,
-    pub capabilities: Vec<CapabilityDefinition>,
-    pub profiles: Vec<ProfileDefinition>,
-    pub resources: Vec<ResourceDefinition>,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct BundlePolicy {
-    pub maximum_exception_bytes: u64,
-    pub allowlisted_resource_ids: Vec<String>,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CapabilityDefinition {
-    pub id: String,
-    pub title: String,
-    #[serde(default)]
-    pub resource_ids: Vec<String>,
-    #[serde(default)]
-    pub profile_ids: Vec<String>,
-    #[serde(default)]
-    pub requires_capability_ids: Vec<String>,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ProfileDefinition {
-    pub id: String,
-    pub title: String,
-    #[serde(default)]
-    pub resource_ids: Vec<String>,
-    pub recommended: bool,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ResourceDefinition {
-    pub id: String,
-    pub version: String,
-    pub platform: String,
-    pub kind: String,
-    pub bundled: bool,
-    #[serde(default)]
-    pub installed_size: Option<u64>,
-    #[serde(default)]
-    pub expected_download_size: Option<u64>,
-    pub license: String,
-    pub source_page: String,
-    #[serde(default)]
-    pub artifact: Option<ResourceArtifact>,
-    #[serde(default)]
-    pub entrypoints: BTreeMap<String, String>,
-    pub health_check: String,
-    #[serde(default)]
-    pub source_commit: Option<String>,
-    #[serde(default)]
-    pub patch_sha256: Option<String>,
-    #[serde(default)]
-    pub requires: Option<String>,
-    #[serde(default)]
-    pub distribution: Option<ResourceDistribution>,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ResourceArtifact {
-    pub url: String,
-    pub size: u64,
-    pub sha256: String,
-    pub format: String,
-    #[serde(default)]
-    pub strip_components: Option<u32>,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ResourceDistribution {
-    pub status: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]

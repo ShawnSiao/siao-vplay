@@ -19,7 +19,7 @@ test("late status from the first completion cannot undo a newer ready capability
         if (command === "plugin:event|listen") { active.add(args.handler!); return args.handler; }
         if (command === "plugin:event|unlisten") return;
         if (command === "get_local_resource_catalog") return { schemaVersion: 1, productId: "siaovplay", updatedAt: "2026-09-09", packageProfile: "app-only",
-          bundlePolicy: { maximumExceptionBytes: 20000000, allowlistedResourceIds: [] }, profiles: [], resources: [],
+          bundlePolicy: { maximumExceptionBytes: 20000000, allowlistedResourceIds: [] }, profiles: [{ id: "standard", title: "标准", resourceIds: [], recommended: true }], resources: [{ id: "ffmpeg-cpu", version: "1", platform: "windows-x86_64", kind: "archive", bundled: false, installedSize: 12, expectedDownloadSize: 10, sourceCommit: null, patchSha256: null, requires: null, distribution: { status: "pending_release_asset" }, license: "test", sourcePage: "https://example.test", artifact: null, entrypoints: {}, healthCheck: "version" }],
           capabilities: [{ id: "basic_media", title: "基础视频支持", resourceIds: ["ffmpeg-cpu"], profileIds: [], requiresCapabilityIds: [] }] };
         if (command === "get_local_resource_status") {
           const revision = ++state.reads;

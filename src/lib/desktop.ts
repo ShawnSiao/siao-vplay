@@ -1,7 +1,7 @@
+export { getLocalResourceCatalog } from "./resourceCatalogGateway";
 export { getLocalResourceDiagnostics } from "./resourceDiagnosticsGateway";
 export { planUnusedResourceCleanup, cleanupUnusedResources, removeLocalResource, rollbackLocalResource, planOldResourceVersionCleanup, cleanupOldResourceVersions } from "./resourceMaintenanceGateway";
 export { getLocalResourceStatus, configureLocalResourceRoot, repairLocalResourceRoot, reconnectLocalResourceRoot, setLocalResourceProfile, getLocalResourceNetworkStatus, setLocalResourceProxy } from "./resourceStatusGateway";
-import { browserResourceCapabilities } from "./resourceBrowserCapabilities";
 export { listResourceDownloadTasks, listenResourceDownloadTasks, prepareLocalCapability, pauseResourceDownload, resumeResourceDownload, cancelResourceDownload, retryResourceDownload, repairLocalResource, updateLocalResource } from "./resourceTaskGateway";
 export { startSubtitleBurn, getSubtitleBurnJob, listSubtitleBurnJobs, cancelSubtitleBurnJob, resumeSubtitleBurnJob } from "./burnGateway";
 export { commandError } from "./commandError";
@@ -26,7 +26,6 @@ import type {
   ExternalAgentTaskKind,
   LearningCard,
   LearningCardsExport,
-  LocalResourceCatalog,
   LocalResourceLocationPlan,
   LocalResourceMovePlan,
   LocalResourceMoveResult,
@@ -75,131 +74,6 @@ export async function getMediaRuntimeStatus(): Promise<MediaRuntimeStatus> {
   }
   return invoke<MediaRuntimeStatus>("get_media_runtime_status");
 }
-
-export async function getLocalResourceCatalog(): Promise<LocalResourceCatalog> {
-  if (!isDesktopApp) {
-    return {
-      schemaVersion: 1,
-      productId: "siaovplay",
-      updatedAt: "",
-      packageProfile: "app-only",
-      bundlePolicy: {
-        maximumExceptionBytes: 20_000_000,
-        allowlistedResourceIds: [],
-      },
-      capabilities: browserResourceCapabilities,
-      profiles: [
-        {
-          id: "fast",
-          title: "快速",
-          resourceIds: ["whisper-model-base"],
-          recommended: false,
-        },
-        {
-          id: "standard",
-          title: "标准",
-          resourceIds: ["whisper-model-small"],
-          recommended: true,
-        },
-      ],
-      resources: [
-        {
-          id: "ffmpeg-cpu",
-          version: "8.1.2-34-g9b6c8969e0",
-          platform: "windows-x86_64",
-          kind: "archive",
-          bundled: false,
-          installedSize: 175_929_962,
-          license: "LGPL-2.1-or-later",
-          sourcePage: "https://github.com/BtbN/FFmpeg-Builds",
-          artifact: {
-            url: "https://example.invalid/ffmpeg.zip",
-            size: 70_508_781,
-            sha256: "0".repeat(64),
-            format: "zip",
-          },
-          entrypoints: {},
-          healthCheck: "ffmpeg-version",
-        },
-        {
-          id: "yt-dlp",
-          version: "2026.08.19",
-          platform: "windows-x86_64",
-          kind: "file",
-          bundled: false,
-          installedSize: 17_840_399,
-          license: "GPL-3.0-or-later",
-          sourcePage: "https://github.com/yt-dlp/yt-dlp",
-          artifact: {
-            url: "https://example.invalid/yt-dlp.exe",
-            size: 17_840_399,
-            sha256: "0".repeat(64),
-            format: "file",
-          },
-          entrypoints: {},
-          healthCheck: "yt-dlp-version",
-        },
-        {
-          id: "whisper-cpu",
-          version: "1.9.1",
-          platform: "windows-x86_64",
-          kind: "archive",
-          bundled: false,
-          installedSize: 20_355_072,
-          license: "MIT",
-          sourcePage: "https://github.com/ggml-org/whisper.cpp",
-          artifact: {
-            url: "https://example.invalid/whisper-bin-x64.zip",
-            size: 7_982_101,
-            sha256: "0".repeat(64),
-            format: "zip",
-            stripComponents: 1,
-          },
-          entrypoints: { whisperCli: "whisper-cli.exe" },
-          healthCheck: "whisper-cli-version",
-        },
-        {
-          id: "whisper-model-base",
-          version: "whisper.cpp-base",
-          platform: "all",
-          kind: "model",
-          bundled: false,
-          installedSize: 147_951_465,
-          license: "MIT",
-          sourcePage: "https://huggingface.co/ggerganov/whisper.cpp",
-          artifact: {
-            url: "https://example.invalid/base.bin",
-            size: 147_951_465,
-            sha256: "0".repeat(64),
-            format: "file",
-          },
-          entrypoints: {},
-          healthCheck: "sha256",
-        },
-        {
-          id: "whisper-model-small",
-          version: "whisper.cpp-small",
-          platform: "all",
-          kind: "model",
-          bundled: false,
-          installedSize: 487_601_967,
-          license: "MIT",
-          sourcePage: "https://huggingface.co/ggerganov/whisper.cpp",
-          artifact: {
-            url: "https://example.invalid/small.bin",
-            size: 487_601_967,
-            sha256: "0".repeat(64),
-            format: "file",
-          },
-          entrypoints: {},
-          healthCheck: "sha256",
-        },
-      ],
-    };
-  }
-  return invoke<LocalResourceCatalog>("get_local_resource_catalog");
-}
-
 
 export async function chooseLocalResourceParent(): Promise<string | null> {
   if (!isDesktopApp) {

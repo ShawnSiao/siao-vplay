@@ -1,15 +1,16 @@
 import { expect, test } from "@playwright/test";
-for (const mode of ["invalid", "stale", "refresh-failure", "partial", "partial-refresh", "unrelated-result", "pending-diagnostic", "partial-diagnostic", "unreadable-diagnostic", "unverified-diagnostic"] as const) test(`cleanup confirmation and result feedback: ${mode}`, async ({ page }) => {
+for (const mode of ["invalid", "stale", "refresh-failure", "partial", "partial-refresh", "unrelated-result", "pending-diagnostic", "partial-diagnostic", "unreadable-diagnostic", "unverified-diagnostic", "catalog-retry"] as const) test(`cleanup confirmation and result feedback: ${mode}`, async ({ page }) => {
   const errors: string[] = []; page.on("pageerror", error => errors.push(error.message));
   await page.addInitScript((mode) => {
-    const state = window as unknown as { cleanupCalls: number; fingerprint?: string; __TAURI_INTERNALS__: unknown }; state.cleanupCalls = 0;
+    const state = window as unknown as { cleanupCalls: number; catalogReads: number; fingerprint?: string; __TAURI_INTERNALS__: unknown }; state.cleanupCalls = 0; state.catalogReads = 0;
     const resource = { id: "ffmpeg", version: "1", platform: "windows-x86_64", kind: "archive", bundled: false,
-      installedSize: 12, license: "test", sourcePage: "https://example.test", artifact: null, entrypoints: {}, healthCheck: "version" };
+      installedSize: 12, expectedDownloadSize: 10, sourceCommit: null, patchSha256: null, requires: null, distribution: { status: "pending_release_asset" }, license: "test", sourcePage: "https://example.test", artifact: null, entrypoints: {}, healthCheck: "version" };
     const diagnosticResource = { id: "ffmpeg", catalogVersion: "1", activeVersion: "1", state: "repair_required", license: "test",
       sourcePage: "https://example.test", artifactSha256: null, artifactUrl: null, healthCheck: "version", versionsReadable: mode !== "unreadable-diagnostic", unverifiedReceiptCount: mode === "unverified-diagnostic" ? 3 : 0, versions: [] };
     state.__TAURI_INTERNALS__ = { transformCallback: () => 1, unregisterCallback: () => undefined, invoke: async (command: string, args?: { input?: { planFingerprint?: string } }) => {
       if (command.startsWith("plugin:event|")) return 1;
-      if (command === "get_local_resource_catalog") return { schemaVersion: 1, productId: "siaovplay", updatedAt: "", packageProfile: "app-only", bundlePolicy: { maximumExceptionBytes: 0, allowlistedResourceIds: [] }, capabilities: [], profiles: [], resources: (mode === "unreadable-diagnostic" || mode === "unverified-diagnostic") ? [resource] : [] };
+      if (command === "get_local_resource_catalog" && ++state.catalogReads === 1 && mode === "catalog-retry") return { schemaVersion: 99 };
+      if (command === "get_local_resource_catalog") return { schemaVersion: 1, productId: "siaovplay", updatedAt: "", packageProfile: "app-only", bundlePolicy: { maximumExceptionBytes: 0, allowlistedResourceIds: [] }, capabilities: [], profiles: [{ id: "standard", title: "标准", resourceIds: [], recommended: true }], resources: (mode === "unreadable-diagnostic" || mode === "unverified-diagnostic") ? [resource] : [] };
       if (command === "get_local_resource_status" && (mode === "refresh-failure" || mode === "partial-refresh") && state.cleanupCalls > 0) throw new Error("status unavailable");
       if (command === "get_local_resource_status") return { snapshotRevision: 1, configured: true, selectedParent: "W:\\fixture", resourceRoot: "W:\\fixture\\resources", rootState: "ready", freeSpaceBytes: 1024, preferredProfile: "standard", capabilities: [] };
       if (command === "get_local_resource_network_status") return { snapshotRevision: 1, mode: "direct", proxySource: "direct", proxyAddress: null };
@@ -26,6 +27,20 @@ for (const mode of ["invalid", "stale", "refresh-failure", "partial", "partial-r
     } };
   }, mode);
   await page.goto("/e2e/runtime.html?live=1");
+  if (mode === "catalog-retry") {
+    await expect(page.getByText("资源目录清单无效，请重新检查应用版本和资源状态。", { exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "准备所选功能" })).toHaveCount(0);
+    const retry = page.getByRole("button", { name: "重新读取资源状态", exact: true });
+    await expect(retry).toBeVisible();
+    await page.screenshot({ path: "designs/open-source-readiness/resource-catalog-retry.png" });
+    await retry.click();
+    await expect(page.locator("details.local-resources-maintenance")).toBeVisible();
+    expect(await page.evaluate(() => (window as unknown as { catalogReads: number }).catalogReads)).toBe(2);
+    expect(await page.evaluate(() => (window as unknown as { cleanupCalls: number }).cleanupCalls)).toBe(0);
+    await expect(page.getByText("资源目录清单无效，请重新检查应用版本和资源状态。", { exact: true })).toHaveCount(0);
+    expect(errors).toEqual([]);
+    return;
+  }
   const maintenance = page.locator("details.local-resources-maintenance");
   await expect(maintenance).toBeVisible();
   if (await maintenance.getAttribute("open") === null) await maintenance.locator("summary").click();

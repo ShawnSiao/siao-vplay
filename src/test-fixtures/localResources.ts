@@ -30,6 +30,7 @@ export const catalog: LocalResourceCatalog = {
   profiles: [],
   resources: [
     {
+      ...{ installedSize: null, expectedDownloadSize: null, artifact: null, entrypoints: {}, sourceCommit: null, patchSha256: null, requires: null, distribution: null },
       id: "ffmpeg-cpu",
       version: "8.1.2-34-g9b6c8969e0",
       platform: "windows-x86_64",
@@ -39,6 +40,7 @@ export const catalog: LocalResourceCatalog = {
       license: "LGPL-2.1-or-later",
       sourcePage: "https://example.com/ffmpeg",
       artifact: {
+        stripComponents: null,
         url: "https://example.com/ffmpeg.zip",
         size: 70_508_781,
         sha256: "a".repeat(64),
@@ -48,6 +50,7 @@ export const catalog: LocalResourceCatalog = {
       healthCheck: "ffmpeg-version",
     },
     {
+      ...{ installedSize: null, expectedDownloadSize: null, artifact: null, entrypoints: {}, sourceCommit: null, patchSha256: null, requires: null, distribution: null },
       id: "yt-dlp",
       version: "2026.08.19",
       platform: "windows-x86_64",
@@ -57,6 +60,7 @@ export const catalog: LocalResourceCatalog = {
       license: "GPL-3.0-or-later",
       sourcePage: "https://example.com/yt-dlp",
       artifact: {
+        stripComponents: null,
         url: "https://example.com/yt-dlp.exe",
         size: 17_840_399,
         sha256: "b".repeat(64),

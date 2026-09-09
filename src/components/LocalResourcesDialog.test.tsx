@@ -322,6 +322,7 @@ describe("LocalResourcesDialog", () => {
       resources: [
         ...catalog.resources,
         {
+          ...{ installedSize: null, expectedDownloadSize: null, artifact: null, entrypoints: {}, sourceCommit: null, patchSha256: null, requires: null, distribution: null },
           id: "whisper-cpu",
           version: "1.9.1",
           platform: "windows-x86_64",
@@ -331,6 +332,7 @@ describe("LocalResourcesDialog", () => {
           license: "MIT",
           sourcePage: "https://example.com/whisper-cpu",
           artifact: {
+            stripComponents: null,
             url: "https://example.com/whisper-bin-x64.zip",
             size: 7_982_101,
             sha256: "f".repeat(64),
@@ -340,6 +342,7 @@ describe("LocalResourcesDialog", () => {
           healthCheck: "whisper-cli-version",
         },
         {
+          ...{ installedSize: null, expectedDownloadSize: null, artifact: null, entrypoints: {}, sourceCommit: null, patchSha256: null, requires: null, distribution: null },
           id: "whisper-model-base",
           version: "ggml-base",
           platform: "any",
@@ -349,6 +352,7 @@ describe("LocalResourcesDialog", () => {
           license: "MIT",
           sourcePage: "https://example.com/base",
           artifact: {
+            stripComponents: null,
             url: "https://example.com/ggml-base.bin",
             size: 147_951_465,
             sha256: "c".repeat(64),
@@ -358,6 +362,7 @@ describe("LocalResourcesDialog", () => {
           healthCheck: "whisper-model-magic",
         },
         {
+          ...{ installedSize: null, expectedDownloadSize: null, artifact: null, entrypoints: {}, sourceCommit: null, patchSha256: null, requires: null, distribution: null },
           id: "whisper-model-small",
           version: "ggml-small",
           platform: "any",
@@ -367,6 +372,7 @@ describe("LocalResourcesDialog", () => {
           license: "MIT",
           sourcePage: "https://example.com/small",
           artifact: {
+            stripComponents: null,
             url: "https://example.com/ggml-small.bin",
             size: 487_601_967,
             sha256: "d".repeat(64),

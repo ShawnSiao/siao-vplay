@@ -12,7 +12,7 @@ for (const { multiple, failedNetwork } of [{ multiple: false, failedNetwork: fal
     state.__TAURI_INTERNALS__ = { transformCallback: () => 1, invoke: async (command: string) => {
       if (command === "plugin:event|listen" || command === "plugin:event|unlisten") return 1;
       if (command === "get_local_resource_catalog") return { schemaVersion: 1, productId: "siaovplay", updatedAt: "2026-09-09", packageProfile: "app-only",
-        bundlePolicy: { maximumExceptionBytes: 20000000, allowlistedResourceIds: [] }, capabilities: [], profiles: [], resources: [] };
+        bundlePolicy: { maximumExceptionBytes: 20000000, allowlistedResourceIds: [] }, capabilities: [], profiles: [{ id: "standard", title: "标准", resourceIds: [], recommended: true }], resources: [] };
       if (command === "get_local_resource_status") return { snapshotRevision: 1, configured: true, selectedParent: null, resourceRoot: null, rootState: "ready",
         freeSpaceBytes: null, preferredProfile: "standard", capabilities: [] };
       if (command === "get_local_resource_network_status" && failedNetwork) throw new Error("fixture network state unavailable");

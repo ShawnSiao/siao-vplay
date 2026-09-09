@@ -1,12 +1,12 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { LocalResourceStatus, ResourceNetworkStatus } from "../types";
 import { parseLocalResourceStatus, parseResourceNetworkStatus } from "./resourceStatusContract";
-import { browserResourceCapabilities } from "./resourceBrowserCapabilities";
 let browserSnapshotRevision = 0;
 const isDesktopApp = "__TAURI_INTERNALS__" in window;
 
 export async function getLocalResourceStatus(): Promise<LocalResourceStatus> {
   if (!isDesktopApp) {
+    const catalog = (await import("./resourceCatalogPreview")).getBrowserResourceCatalog();
     return {
       snapshotRevision: ++browserSnapshotRevision,
       configured: false,
@@ -15,7 +15,7 @@ export async function getLocalResourceStatus(): Promise<LocalResourceStatus> {
       rootState: "setup_required",
       freeSpaceBytes: null,
       preferredProfile: "standard",
-      capabilities: browserResourceCapabilities.map((capability) => ({
+      capabilities: catalog.capabilities.map((capability) => ({
         id: capability.id,
         title: capability.title,
         state: "setup_required" as const,
