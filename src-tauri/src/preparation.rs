@@ -85,6 +85,11 @@ struct Registry {
     completed_order: Vec<String>,
 }
 impl Registry {
+    fn cancel_project(&self, project_id: &str) -> usize {
+        self.tasks.values().filter(|control| control.snapshot().project_id == project_id)
+            .filter(|control| control.request_cancel()).count()
+    }
+
     fn begin(&mut self, request_id: &str, project_id: &str) -> io::Result<Control> {
         if self.tasks.contains_key(request_id)
             || self.tasks.values().any(|task| {
@@ -147,8 +152,25 @@ pub(crate) fn cancel(request_id: &str) -> bool {
         .unwrap_or(false)
 }
 
+pub(crate) fn cancel_project(project_id: &str) -> io::Result<usize> {
+    Ok(registry().lock().map_err(|_| io::Error::other("准备状态不可用"))?.cancel_project(project_id))
+}
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn project_cancellation_targets_only_active_preparations() {
+        let mut registry = super::Registry::default();
+        let first = registry.begin("one", "project-a").unwrap();
+        let other = registry.begin("two", "project-b").unwrap();
+        assert_eq!(registry.cancel_project("project-a"), 1);
+        assert_eq!(first.snapshot().status, super::Status::Cancelling);
+        assert!(first.cancel.check().is_err());
+        assert_eq!(other.snapshot().status, super::Status::Running);
+        first.finish(super::Status::Cancelled);
+        assert_eq!(registry.cancel_project("project-a"), 0);
+    }
+
     use super::*;
     #[test]
     fn cancellation_remains_active_until_worker_releases_the_project() {

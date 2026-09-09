@@ -585,6 +585,10 @@ pub fn delete_project(
     project_id: String,
 ) -> Result<DeleteProjectResult, CommandError> {
     let _usage = storage.acquire_usage()?;
+    crate::summary::cancel_project_tasks(store.inner(), &project_id)?;
+    crate::preparation::cancel_project(&project_id).map_err(|error| CommandError {
+        code: "preparation_cancel_failed", message: error.to_string(),
+    })?;
     transcription::cancel_project_transcriptions(store.inner(), &project_id)?;
     codex_runner::cancel_project_translation_tasks(store.inner(), &project_id)?;
     codex_runner::cancel_project_explanation_tasks(store.inner(), &project_id)?;

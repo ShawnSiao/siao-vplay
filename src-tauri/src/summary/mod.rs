@@ -51,3 +51,6 @@ pub(crate) fn recover_summary_tasks(
     task_repository::SummaryTaskRepository::new(store).recover_interrupted()?;
     Ok(())
 }
+
+mod project_cancellation;
+pub(crate) use project_cancellation::cancel_project_tasks;
