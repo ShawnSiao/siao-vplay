@@ -204,7 +204,7 @@ impl StorageManager {
         } else {
             Vec::new()
         };
-        migration_copy::copy_and_verify(&entries, &destination, &cancelled, |bytes, files| {
+        let mut verified = migration_copy::copy_and_verify(&entries, &destination, &cancelled, |bytes, files| {
             self.update_progress(bytes, files)
         })?;
         if cancelled.load(Ordering::Relaxed) {
@@ -220,15 +220,24 @@ impl StorageManager {
                     &source,
                     &destination,
                 )?;
+                verified.push(super::migration_receipt::VerifiedFile::database(&destination, &cancelled)?);
+                self.persist_migration_receipt(task, verified, &cancelled)?;
                 self.update_progress(task.bytes_to_copy, task.file_count)?;
                 self.commit_app_data_destination(task)?;
                 Ok(StorageMigrationStatus::RestartRequired)
             }
             StorageArea::RemoteMedia | StorageArea::MediaCache => {
+                self.persist_migration_receipt(task, verified, &cancelled)?;
                 self.commit_destination(current_database, task)?;
                 Ok(StorageMigrationStatus::Completed)
             }
         }
+    }
+
+    fn persist_migration_receipt(&self, task: &StorageMigrationTask, files: Vec<super::migration_receipt::VerifiedFile>, cancelled: &AtomicBool) -> Result<(), StorageError> {
+        let bootstrap = self.read_state()?.settings_path.parent().map(Path::to_path_buf)
+            .ok_or_else(|| StorageError::InvalidPath("启动配置目录缺失".to_owned()))?;
+        super::migration_receipt::persist(&bootstrap, task, files, cancelled)
     }
 
     fn scan_migration_files(&self, source: &Path, database: Option<&Path>, cancelled: &AtomicBool) -> Result<Vec<migration_copy::CopyEntry>, StorageError> {

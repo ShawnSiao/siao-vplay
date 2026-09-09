@@ -6,7 +6,7 @@ use std::{
     sync::atomic::{AtomicBool, Ordering},
 };
 
-use super::{StorageError, migration_stream};
+use super::{StorageError, migration_stream, migration_receipt::VerifiedFile};
 
 #[derive(Clone, Debug)]
 pub(crate) struct CopyEntry {
@@ -83,16 +83,17 @@ pub(super) fn scan_files_excluding(
     Ok(files)
 }
 
-pub(crate) fn copy_and_verify<F>(
+pub(super) fn copy_and_verify<F>(
     entries: &[CopyEntry],
     destination: &Path,
     cancelled: &AtomicBool,
     mut progress: F,
-) -> Result<(), StorageError>
+) -> Result<Vec<VerifiedFile>, StorageError>
 where
     F: FnMut(u64, usize) -> Result<(), StorageError>,
 {
     let mut copied_bytes = 0_u64;
+    let mut verified = Vec::with_capacity(entries.len());
     for (index, entry) in entries.iter().enumerate() {
         if cancelled.load(Ordering::Relaxed) {
             return Err(StorageError::MigrationCancelled);
@@ -102,17 +103,21 @@ where
             fs::create_dir_all(parent)?;
         }
         copy_file(&entry.source, &target, cancelled)?;
-        if file_sha256(&entry.source, cancelled)? != file_sha256(&target, cancelled)? {
+        let hash = file_sha256(&target, cancelled)?;
+        if file_sha256(&entry.source, cancelled)? != hash {
             return Err(StorageError::MigrationIntegrity(format!(
                 "文件校验失败：{}",
                 entry.relative.display()
             )));
         }
-        copied_bytes = copied_bytes.saturating_add(entry.bytes);
+        let file = VerifiedFile::copied(&entry.relative, &target, hash)?;
+        copied_bytes = copied_bytes.saturating_add(file.bytes);
+        verified.push(file);
         migration_stream::check(cancelled)?;
         progress(copied_bytes, index + 1)?;
     }
-    migration_stream::check(cancelled)
+    migration_stream::check(cancelled)?;
+    Ok(verified)
 }
 
 fn copy_file(
@@ -156,7 +161,7 @@ fn copy_reader(
     result
 }
 
-fn file_sha256(path: &Path, cancelled: &AtomicBool) -> Result<String, StorageError> {
+pub(super) fn file_sha256(path: &Path, cancelled: &AtomicBool) -> Result<String, StorageError> {
     migration_stream::check(cancelled)?;
     migration_stream::hash_bytes(&mut fs::File::open(path)?, cancelled)
 }

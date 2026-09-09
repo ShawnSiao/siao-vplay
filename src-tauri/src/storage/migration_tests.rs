@@ -215,3 +215,6 @@ fn running_migration_is_recovered_as_interrupted() {
         StorageMigrationStatus::Interrupted
     );
 }
+
+#[path = "migration_receipt_tests.rs"]
+mod receipt_tests;
