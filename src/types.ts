@@ -345,17 +345,7 @@ export type { OldResourceVersionCleanupResult } from "./generated/old-resource-v
 
 export type { DeleteProjectResult } from "./generated/delete-project-result";
 
-export type RemoteMediaKind = "direct_file" | "hls";
-
-export type RemoteMediaPreview = {
-  originalUrl: string;
-  finalUrl: string;
-  displayName: string;
-  mediaKind: RemoteMediaKind;
-  contentType: string | null;
-  contentLength: number | null;
-  previewToken: string;
-};
+export type { RemoteMediaKind, RemoteMediaPreview } from "./generated/remote-media-preview";
 
 export type YouTubeMediaPreview = {
   originalUrl: string;

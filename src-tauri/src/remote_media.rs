@@ -106,6 +106,7 @@ pub struct CancelRemoteMediaImportInput {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub enum RemoteMediaKind {
     DirectFile,
     Hls,
@@ -113,12 +114,14 @@ pub enum RemoteMediaKind {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct RemoteMediaPreview {
     pub original_url: String,
     pub final_url: String,
     pub display_name: String,
     pub media_kind: RemoteMediaKind,
     pub content_type: Option<String>,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub content_length: Option<u64>,
     pub preview_token: String,
 }

@@ -24,7 +24,6 @@ import { chooseConfiguredStorageDirectory } from "./storageDirectoryPicker";
 
 import type {
   Project,
-  RemoteMediaPreview,
   RuntimeCatalog,
 } from "../types";
 
@@ -152,13 +151,7 @@ export async function createLocalProject(mediaPath: string): Promise<Project> {
   });
 }
 
-export async function inspectRemoteMediaUrl(
-  url: string,
-): Promise<RemoteMediaPreview> {
-  return invoke<RemoteMediaPreview>("inspect_remote_media_url", {
-    input: { url },
-  });
-}
+export { inspectRemoteMediaUrl, cancelRemoteMediaImport } from "./remoteMediaGateway";
 
 export async function importRemoteMediaUrl(
   url: string,
@@ -172,14 +165,6 @@ export async function importRemoteMediaUrl(
       operationId,
       title: null,
     },
-  });
-}
-
-export async function cancelRemoteMediaImport(
-  operationId: string,
-): Promise<boolean> {
-  return invoke<boolean>("cancel_remote_media_import", {
-    input: { operationId },
   });
 }
 
