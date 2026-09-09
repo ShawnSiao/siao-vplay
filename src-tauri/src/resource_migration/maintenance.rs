@@ -98,10 +98,7 @@ pub fn move_resource_root(
     move_commit::switch_configuration(&previous_configuration, &configuration,
         |configuration| local_resources::replace_configuration(configuration.clone()).map(|_| ()).map_err(Into::into),
         || {
-            let downloads = resource_download::bind_configured_root();
-            let runtime = crate::runtime::sync_managed_root();
-            downloads?;
-            runtime?;
+            resource_download::bind_configured_root()?;
             Ok(())
         })?;
     recovery.finish();
@@ -171,7 +168,6 @@ pub fn reconnect_resource_root(
             .and_then(|configuration| configuration.proxy_url.clone()),
     })?;
     resource_download::bind_configured_root()?;
-    crate::runtime::sync_managed_root()?;
     Ok(status)
 }
 

@@ -1,3 +1,5 @@
+#[cfg(test)]
+mod resource_location_tests;
 use serde::Serialize;
 use tauri::{AppHandle, Manager, State};
 
@@ -625,7 +627,6 @@ pub fn configure_local_resource_root(
 ) -> Result<LocalResourceStatus, CommandError> {
     let status = local_resources::configure_confirmed_location(&input)?;
     resource_download::bind_configured_root()?;
-    runtime::sync_managed_root()?;
     Ok(status)
 }
 
@@ -635,7 +636,6 @@ pub fn repair_local_resource_root(
 ) -> Result<LocalResourceStatus, CommandError> {
     let status = local_resources::repair_configured_root(input.confirmed)?;
     resource_download::bind_configured_root()?;
-    runtime::sync_managed_root()?;
     Ok(status)
 }
 

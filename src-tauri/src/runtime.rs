@@ -176,15 +176,6 @@ pub fn preferred_model_kind() -> String {
     settings_snapshot().preferred_model
 }
 
-pub(crate) fn sync_managed_root() -> Result<(), RuntimeError> {
-    let root = local_resources::configured_root()
-        .ok_or_else(|| RuntimeError::InvalidStorageRoot("本地资源目录尚未配置".to_owned()))?;
-    update_settings(|settings| {
-        settings.storage_root = Some(root.to_string_lossy().into_owned());
-    })?;
-    Ok(())
-}
-
 pub fn download_component(component_id: &str) -> Result<RuntimeCatalog, RuntimeError> {
     let _guard = DOWNLOAD_LOCK
         .get_or_init(|| Mutex::new(()))
@@ -237,6 +228,7 @@ fn normalize_settings(mut settings: RuntimeSettings) -> RuntimeSettings {
     settings
 }
 
+// Resource configuration owns the current root; legacy settings are a read fallback only.
 fn settings_snapshot() -> RuntimeSettings {
     let mut settings = persisted_settings_snapshot();
     if let Some(root) = local_resources::configured_root() {
