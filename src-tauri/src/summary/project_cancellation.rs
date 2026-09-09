@@ -23,6 +23,20 @@ mod tests {
     use super::*;
     use crate::summary::{test_support, task_repository::SummaryTaskRepository};
     #[test]
+    fn project_deletion_removes_only_its_summary_materials() {
+        let (_directory, store, task) = test_support::prepared_summary();
+        let repository = SummaryTaskRepository::new(&store);
+        let materials = repository.materials_directory(&task.id);
+        std::fs::create_dir_all(&materials).unwrap();
+        std::fs::write(materials.join("sentinel.txt"), b"task").unwrap();
+        let unrelated = repository.materials_directory(&uuid::Uuid::new_v4().to_string());
+        std::fs::create_dir_all(&unrelated).unwrap();
+        std::fs::write(unrelated.join("sentinel.txt"), b"retain").unwrap();
+        assert!(store.delete_project(&task.project_id).unwrap().deleted);
+        assert!(!materials.exists(), "deleted project left summary materials behind");
+        assert_eq!(std::fs::read(unrelated.join("sentinel.txt")).unwrap(), b"retain");
+    }
+    #[test]
     fn project_cancellation_marks_summary_without_faking_worker_exit() {
         for status in ["prepared", "awaiting_external_result", "running", "validating"] {
             let (_directory, store, task) = test_support::prepared_summary();

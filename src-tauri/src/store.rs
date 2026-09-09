@@ -658,6 +658,10 @@ impl ProjectStore {
             )?
             .query_map(params![project_id], |row| row.get::<_, String>(0))?
             .collect::<Result<Vec<_>, _>>()?;
+        let summary_task_ids = connection
+            .prepare("SELECT id FROM summary_tasks WHERE project_id = ?1")?
+            .query_map(params![project_id], |row| row.get::<_, String>(0))?
+            .collect::<Result<Vec<_>, _>>()?;
         let changed =
             connection.execute("DELETE FROM projects WHERE id = ?1", params![project_id])?;
         let cached_media_deleted = if changed > 0 {
@@ -674,7 +678,8 @@ impl ProjectStore {
             false
         };
         if changed > 0 {
-            self.remove_agent_task_materials(&agent_task_ids);
+            self.remove_task_materials("agent-tasks", &agent_task_ids);
+            self.remove_task_materials("summary-tasks", &summary_task_ids);
             self.remove_learning_card_materials(project_id);
             self.remove_subtitle_burn_materials(project_id);
         }
@@ -687,8 +692,8 @@ impl ProjectStore {
         })
     }
 
-    fn remove_agent_task_materials(&self, task_ids: &[String]) {
-        let task_root = self.data_directory().join("agent-tasks");
+    fn remove_task_materials(&self, directory: &str, task_ids: &[String]) {
+        let task_root = self.data_directory().join(directory);
         for task_id in task_ids {
             if Uuid::parse_str(task_id).is_ok() {
                 let _ = fs::remove_dir_all(task_root.join(task_id));
