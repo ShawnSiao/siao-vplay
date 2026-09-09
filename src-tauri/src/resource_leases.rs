@@ -32,13 +32,33 @@ pub(crate) fn configured(required_ids: &[&str]) -> io::Result<ResourceLease> {
     Ok(lease)
 }
 
-pub(crate) fn maintain_all() -> io::Result<ResourceLease> {
-    registry().write(Scope::All)
+pub(crate) fn maintain_all() -> io::Result<MaintenanceLease> {
+    maintain(registry(), local_resources::storage_manager()?, Scope::All)
 }
-pub(crate) fn maintain_resource(id: &str) -> io::Result<ResourceLease> {
-    registry().write(Scope::Resource(id.to_owned()))
+pub(crate) fn maintain_resource(id: &str) -> io::Result<MaintenanceLease> {
+    maintain(registry(), local_resources::storage_manager()?, Scope::Resource(id.to_owned()))
 }
 
-pub(crate) fn maintain_policy() -> io::Result<ResourceLease> {
-    registry().write(Scope::Policy)
+pub(crate) fn maintain_policy() -> io::Result<MaintenanceLease> {
+    maintain(registry(), local_resources::storage_manager()?, Scope::Policy)
+}
+
+pub(crate) struct MaintenanceLease {
+    _resource: ResourceLease,
+    _storage: Option<crate::storage::StorageLease>,
+}
+fn maintain(registry: &Arc<ResourceUsage>, storage: Option<crate::storage::StorageManager>, scope: Scope) -> io::Result<MaintenanceLease> {
+    let storage = acquire_storage(storage)?;
+    Ok(MaintenanceLease { _resource: registry.write(scope)?, _storage: storage })
+}
+#[cfg(test)]
+#[path = "resource_leases_migration_tests.rs"]
+mod migration_tests;
+
+fn acquire_storage(storage: Option<crate::storage::StorageManager>) -> io::Result<Option<crate::storage::StorageLease>> {
+    storage.map(|storage| storage.acquire_usage()).transpose()
+        .map_err(|error| io::Error::new(io::ErrorKind::WouldBlock, error.to_string()))
+}
+pub(crate) fn storage_usage() -> io::Result<Option<crate::storage::StorageLease>> {
+    acquire_storage(local_resources::storage_manager()?)
 }

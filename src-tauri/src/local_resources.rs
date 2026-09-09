@@ -1708,3 +1708,8 @@ mod tests {
 mod mutation;
 #[cfg(test)]
 mod migration_guard_tests;
+
+pub(crate) fn storage_manager() -> io::Result<Option<crate::storage::StorageManager>> {
+    let Some(state) = MANAGER.get() else { return Ok(None); };
+    Ok(state.read().map_err(|_| io::Error::other("本地资源设置锁不可用"))?.storage.clone())
+}

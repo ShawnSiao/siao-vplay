@@ -119,3 +119,5 @@ mod startup_owner_tests;
 mod maintenance_conflict_tests;
 
 pub(crate) mod database_access;
+
+pub(crate) use usage::StorageLease;

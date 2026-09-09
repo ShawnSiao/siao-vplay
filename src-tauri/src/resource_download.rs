@@ -656,6 +656,7 @@ fn active_controls() -> &'static Mutex<HashMap<String, Arc<DownloadControl>>> {
 }
 
 fn spawn_task(task_id: String, app: Option<AppHandle>) -> Result<(), ResourceDownloadError> {
+    let storage_usage = crate::resource_leases::storage_usage()?;
     let control = Arc::new(DownloadControl::default());
     {
         let mut controls = active_controls()
@@ -671,6 +672,7 @@ fn spawn_task(task_id: String, app: Option<AppHandle>) -> Result<(), ResourceDow
     let spawn_result = thread::Builder::new()
         .name(format!("resource-download-{task_id}"))
         .spawn(move || {
+            let _storage_usage = storage_usage;
             execute_task(&worker_task_id, &control, worker_app.as_ref());
             if let Ok(mut controls) = active_controls().lock() {
                 controls.remove(&worker_task_id);
