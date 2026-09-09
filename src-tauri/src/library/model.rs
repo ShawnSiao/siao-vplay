@@ -383,11 +383,15 @@ pub(crate) struct ConfirmLibraryImportInput {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub(crate) struct LibraryImportResult {
     pub root_id: String,
     pub collection: CollectionDetail,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub imported_item_count: u64,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub created_project_count: u64,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub reused_project_count: u64,
 }
 

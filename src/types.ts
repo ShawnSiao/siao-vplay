@@ -124,13 +124,7 @@ export type ConfirmLibraryImportInput = {
   confirmFingerprintDuplicates: boolean;
 };
 
-export type LibraryImportResult = {
-  rootId: string;
-  collection: CollectionDetail;
-  importedItemCount: number;
-  createdProjectCount: number;
-  reusedProjectCount: number;
-};
+export type { LibraryImportResult } from "./generated/library-import-result";
 
 export type LibraryRecoveryItem = {
   collectionId: string;

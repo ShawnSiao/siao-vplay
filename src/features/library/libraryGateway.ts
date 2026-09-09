@@ -7,6 +7,7 @@ import { readCollectionEpisodes } from "../../lib/collectionEpisodesGateway";
 import { readEpisodeNeighbors } from "../../lib/episodeNeighborsGateway";
 import { subscribeLibraryScanProgress } from "../../lib/libraryScanProgressGateway";
 import { readLibraryScanPreview } from "../../lib/libraryScanPreviewGateway";
+import { importLibraryPreview } from "../../lib/libraryImportGateway";
 import { invokeProject } from "../../lib/projectGateway";
 import { invoke } from "@tauri-apps/api/core";
 import type { UnlistenFn } from "@tauri-apps/api/event";
@@ -191,7 +192,7 @@ export async function listenLibraryScanProgress(
 export async function confirmLibraryImport(
   input: ConfirmLibraryImportInput,
 ): Promise<LibraryImportResult> {
-  return invoke<LibraryImportResult>("confirm_library_import", { input });
+  return importLibraryPreview(input);
 }
 
 export async function inspectLibraryRescan(

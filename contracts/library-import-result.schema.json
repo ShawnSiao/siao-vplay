@@ -1,0 +1,229 @@
+{
+  "$defs": {
+    "CollectionDetail": {
+      "properties": {
+        "seasons": {
+          "items": {
+            "$ref": "#/$defs/SeasonSummary"
+          },
+          "type": "array"
+        },
+        "summary": {
+          "$ref": "#/$defs/CollectionSummary"
+        }
+      },
+      "required": [
+        "summary",
+        "seasons"
+      ],
+      "type": "object"
+    },
+    "CollectionKind": {
+      "enum": [
+        "series",
+        "folder",
+        "manual"
+      ],
+      "type": "string"
+    },
+    "CollectionSortMode": {
+      "enum": [
+        "episode",
+        "natural",
+        "manual",
+        "added_at"
+      ],
+      "type": "string"
+    },
+    "CollectionSummary": {
+      "properties": {
+        "autoPlayNext": {
+          "type": "boolean"
+        },
+        "createdAtMs": {
+          "format": "int64",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "id": {
+          "type": "string"
+        },
+        "itemCount": {
+          "format": "int64",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "kind": {
+          "$ref": "#/$defs/CollectionKind"
+        },
+        "lastOpenedAtMs": {
+          "format": "int64",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "posterPath": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "rootId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "seasonCount": {
+          "format": "int64",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "sortMode": {
+          "$ref": "#/$defs/CollectionSortMode"
+        },
+        "systemKey": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CollectionSystemKey"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "title": {
+          "type": "string"
+        },
+        "totalDurationMs": {
+          "format": "int64",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "updatedAtMs": {
+          "format": "int64",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "watchedCount": {
+          "format": "int64",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "title",
+        "rootId",
+        "systemKey",
+        "posterPath",
+        "sortMode",
+        "autoPlayNext",
+        "lastOpenedAtMs",
+        "createdAtMs",
+        "updatedAtMs",
+        "itemCount",
+        "seasonCount",
+        "watchedCount",
+        "totalDurationMs"
+      ],
+      "type": "object"
+    },
+    "CollectionSystemKey": {
+      "enum": [
+        "watch_later"
+      ],
+      "type": "string"
+    },
+    "SeasonSummary": {
+      "properties": {
+        "episodeCount": {
+          "format": "int64",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "seasonNumber": {
+          "format": "int64",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "totalDurationMs": {
+          "format": "int64",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "watchedCount": {
+          "format": "int64",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "seasonNumber",
+        "episodeCount",
+        "watchedCount",
+        "totalDurationMs"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "collection": {
+      "$ref": "#/$defs/CollectionDetail"
+    },
+    "createdProjectCount": {
+      "format": "uint64",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "importedItemCount": {
+      "format": "uint64",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "reusedProjectCount": {
+      "format": "uint64",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "rootId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "rootId",
+    "collection",
+    "importedItemCount",
+    "createdProjectCount",
+    "reusedProjectCount"
+  ],
+  "title": "LibraryImportResult",
+  "type": "object"
+}
