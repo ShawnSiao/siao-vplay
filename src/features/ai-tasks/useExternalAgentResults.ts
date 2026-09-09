@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { externalResultPollingPolicy } from "./pollingPolicy";
 import type { ExternalAgentResultUpdate } from "../../types";
 
 export type ExternalResultFailure = "scan" | "delivery" | "acknowledgement";
@@ -17,6 +18,8 @@ export function useExternalAgentResults({ enabled, reconcile, acknowledge, onUpd
   const retryPoll = useRef<() => Promise<void>>(async () => undefined);
   const [failure, setFailure] = useState<ExternalResultFailure | null>(null);
   const pending = useRef<ExternalAgentResultUpdate[] | null>(null);
+  const currentStep = useRef<{ phase: ExternalResultFailure; startedAt: number } | null>(null);
+  const [slowPhase, setSlowPhase] = useState<ExternalResultFailure | null>(null);
   const live = useRef(false);
   const retry = useCallback(() => live.current ? retryPoll.current() : Promise.resolve(), []);
   const lifetime = useRef(0);
@@ -31,13 +34,21 @@ export function useExternalAgentResults({ enabled, reconcile, acknowledge, onUpd
         if (!live.current) { scanning.current = null; return; }
         let problem: ExternalResultFailure | null = null;
         let feedbackIdentity = lifetime.current;
+        const observe = async <T,>(phase: ExternalResultFailure, run: () => Promise<T> | T): Promise<T> => {
+          currentStep.current = { phase, startedAt: performance.now() };
+          if (live.current) setSlowPhase(null);
+          try { return await run(); } finally {
+            currentStep.current = null;
+            if (live.current) setSlowPhase(null);
+          }
+        };
         const report = (phase: ExternalResultFailure) => {
           problem ??= phase;
           if (live.current && lifetime.current === feedbackIdentity) setFailure(problem);
         };
         try {
           let fresh: ExternalAgentResultUpdate[] = [];
-          try { fresh = await reconcile(); } catch {
+          try { fresh = await observe("scan", reconcile); } catch {
             problem = "scan";
             // A failed scan must not discard previously consumed transient notices.
           }
@@ -56,9 +67,9 @@ export function useExternalAgentResults({ enabled, reconcile, acknowledge, onUpd
               if (!isActive()) break;
               let phase: ExternalResultFailure = "delivery";
               try {
-                await handler.current([update], isActive);
+                await observe("delivery", () => handler.current([update], isActive));
                 phase = "acknowledgement";
-                if (isActive()) await acknowledge([update]);
+                if (isActive()) await observe("acknowledgement", () => acknowledge([update]));
                 if (isActive()) {
                   const remaining = pending.current?.filter(candidate => candidate !== update) ?? [];
                   pending.current = remaining.length ? remaining : null;
@@ -86,8 +97,12 @@ export function useExternalAgentResults({ enabled, reconcile, acknowledge, onUpd
     };
     retryPoll.current = poll;
     void poll();
-    const timer = window.setInterval(() => void poll(), 1_000);
+    const timer = window.setInterval(() => {
+      const step = currentStep.current;
+      if (step && performance.now() - step.startedAt >= externalResultPollingPolicy.slowStepMs) setSlowPhase(step.phase);
+      void poll();
+    }, externalResultPollingPolicy.intervalMs);
     return () => { live.current = false; lifetime.current += 1; window.clearInterval(timer); };
   }, [enabled, reconcile, acknowledge]);
-  return { failure: enabled ? failure : null, retry };
+  return { failure: enabled ? failure : null, slowPhase: enabled ? slowPhase : null, retry };
 }

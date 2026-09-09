@@ -105,3 +105,34 @@ test("external scan failure has visible recovery without exposing its raw error"
   await page.getByRole("button", { name: "重新检查外部结果" }).click();
   await expect(page.getByText("暂时无法检查外部结果。应用会自动重试。", { exact: true })).toHaveCount(0);
 });
+
+
+test("a long check stays single-flight while the rest of the App remains usable", async ({ page }) => {
+  await page.addInitScript(() => {
+    const state = window as unknown as { __TAURI_INTERNALS__: unknown; scans: number; finishExternal?: () => void };
+    state.scans = 0;
+    state.__TAURI_INTERNALS__ = { invoke: async (command: string) => {
+      if (command === "reconcile_external_agent_results") {
+        state.scans++;
+        return new Promise(resolve => { state.finishExternal = () => resolve([]); });
+      }
+      throw new Error("测试环境未提供此服务");
+    } };
+  });
+  await page.clock.install();
+  await page.setViewportSize({ width: 960, height: 640 });
+  await page.goto("/");
+  await expect.poll(() => page.evaluate(() => (window as unknown as { scans: number }).scans)).toBe(1);
+  await page.clock.runFor(16_000);
+  const waiting = page.getByRole("button", { name: "外部结果仍在等待响应" });
+  await expect(waiting).toBeDisabled();
+  await expect(page.locator(".external-result-notice")).toContainText("仍在等待响应");
+  expect(await page.locator(".external-result-notice").evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
+  await page.screenshot({ path: "designs/open-source-readiness/external-result-delayed-960.png" });
+  await page.clock.runFor(90_000);
+  expect(await page.evaluate(() => (window as unknown as { scans: number }).scans)).toBe(1);
+  await page.getByRole("button", { name: "导入视频", exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "导入视频" })).toBeVisible();
+  await page.evaluate(() => { (window as unknown as { finishExternal: () => void }).finishExternal(); });
+  await expect(page.locator(".external-result-notice")).toHaveCount(0);
+});

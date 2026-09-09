@@ -262,3 +262,72 @@ it("publishes an observed failure before a later consumer finishes", async () =>
     expect(result.current.failure).toBe("delivery");
   } finally { unmount(); vi.useRealTimers(); }
 });
+
+
+it.each(["scan", "delivery", "acknowledgement"])("reports a delayed %s without replacing its operation", async phase => {
+  vi.useFakeTimers();
+  let finish!: (value: ExternalAgentResultUpdate[]) => void;
+  const pending = new Promise<ExternalAgentResultUpdate[]>(resolve => { finish = resolve; });
+  const reconcile = vi.fn(() => phase === "scan" ? pending : Promise.resolve(updates));
+  const onUpdates = vi.fn(async () => { if (phase === "delivery") await pending; });
+  const acknowledge = vi.fn(async () => { if (phase === "acknowledgement") await pending; });
+  const { result, unmount } = renderHook(() => useExternalAgentResults({ enabled: true, reconcile, acknowledge, onUpdates }));
+  try {
+    await act(async () => { await vi.advanceTimersByTimeAsync(14_999); });
+    expect(result.current.slowPhase).toBeNull();
+    await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+    expect(result.current.slowPhase).toBe(phase);
+    await act(async () => { await vi.advanceTimersByTimeAsync(90_000); });
+    const retry = result.current.retry();
+    expect(reconcile).toHaveBeenCalledTimes(1);
+    expect(onUpdates).toHaveBeenCalledTimes(phase === "scan" ? 0 : 1);
+    expect(acknowledge).toHaveBeenCalledTimes(phase === "acknowledgement" ? 1 : 0);
+    await act(async () => { finish(updates); await retry; });
+    expect(result.current.slowPhase).toBeNull();
+    expect(result.current.failure).toBeNull();
+    expect(onUpdates).toHaveBeenCalledTimes(1);
+    expect(acknowledge).toHaveBeenCalledTimes(1);
+  } finally { unmount(); vi.useRealTimers(); }
+});
+
+
+it("observes a still-running step after re-enabling without leaving extra timers", async () => {
+  vi.useFakeTimers();
+  let finish!: (value: ExternalAgentResultUpdate[]) => void;
+  const reconcile = vi.fn(() => new Promise<ExternalAgentResultUpdate[]>(resolve => { finish = resolve; }));
+  const { result, rerender, unmount } = renderHook(({ enabled }) => useExternalAgentResults({ enabled, reconcile, acknowledge, onUpdates: () => undefined }), { initialProps: { enabled: true } });
+  try {
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    rerender({ enabled: false });
+    expect(vi.getTimerCount()).toBe(0);
+    await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
+    expect(result.current.slowPhase).toBeNull();
+    rerender({ enabled: true });
+    await act(async () => { await vi.advanceTimersByTimeAsync(1_000); });
+    expect(result.current.slowPhase).toBe("scan");
+    expect(reconcile).toHaveBeenCalledTimes(1);
+    await act(async () => { finish([]); });
+    expect(result.current.slowPhase).toBeNull();
+  } finally { unmount(); expect(vi.getTimerCount()).toBe(0); vi.useRealTimers(); }
+});
+
+it("starts a fresh delay threshold when work moves to the next step", async () => {
+  vi.useFakeTimers();
+  let finishScan!: (value: ExternalAgentResultUpdate[]) => void;
+  let finishDelivery!: () => void;
+  const reconcile = vi.fn(() => new Promise<ExternalAgentResultUpdate[]>(resolve => { finishScan = resolve; }));
+  const onUpdates = vi.fn(() => new Promise<void>(resolve => { finishDelivery = resolve; }));
+  const { result, unmount } = renderHook(() => useExternalAgentResults({ enabled: true, reconcile, acknowledge, onUpdates }));
+  try {
+    await act(async () => { await vi.advanceTimersByTimeAsync(15_000); });
+    expect(result.current.slowPhase).toBe("scan");
+    await act(async () => { finishScan(updates); });
+    expect(result.current.slowPhase).toBeNull();
+    await act(async () => { await vi.advanceTimersByTimeAsync(14_999); });
+    expect(result.current.slowPhase).toBeNull();
+    await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+    expect(result.current.slowPhase).toBe("delivery");
+    await act(async () => { finishDelivery(); });
+    expect(result.current.slowPhase).toBeNull();
+  } finally { unmount(); vi.useRealTimers(); }
+});

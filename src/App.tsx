@@ -742,7 +742,7 @@ export default function App() {
         onOpenSettings={settingsNavigation.openDefault}
       >
         {startupError ? <div className="notice danger" role="alert">{startupError}</div> : null}
-        <ExternalResultNotice failure={externalResults.failure} onRetry={externalResults.retry} />
+        <ExternalResultNotice failure={externalResults.failure} slowPhase={externalResults.slowPhase} onRetry={externalResults.retry} />
         {screen === "library" ? (
           <LibraryScreen
             home={libraryState.home}

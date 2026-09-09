@@ -5,7 +5,7 @@ type Options<T extends TaskIdentity> = {
   onTask: (task: T) => void; onError: (cause: unknown) => void;
   shouldPoll: (task: T) => boolean; intervalMs: number;
 };
-export const taskPollingIntervals = { learning: 800, explanation: 800, summary: 900, transcription: 900, burn: 500 } as const;
+export { taskPollingIntervals } from "./pollingPolicy";
 export function useTaskPolling<T extends TaskIdentity>({ projectId, task, read, onTask, onError, shouldPoll, intervalMs }: Options<T>) {
   const latest = useRef({ onTask, onError });
   useLayoutEffect(() => { latest.current = { onTask, onError }; }, [onTask, onError]);
