@@ -307,19 +307,24 @@ pub struct SummaryTask {
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct VideoSummary {
     pub id: String,
     pub task_id: String,
     pub project_id: String,
+    #[cfg_attr(test, schemars(with = "super::wire_schema::ProtocolVersion"))]
     pub protocol_version: String,
     pub scope: AnalysisScope,
+    #[cfg_attr(test, schemars(range(min = -9007199254740991_i64, max = 9007199254740991_i64)))]
     pub playback_cutoff_ms: Option<i64>,
     pub analysis_mode: AnalysisMode,
     pub subtitle_version_id: String,
     pub material_manifest_sha256: String,
     pub result: SummaryResult,
     pub visual_material_used: bool,
+    #[cfg_attr(test, schemars(range(min = -9007199254740991_i64, max = 9007199254740991_i64)))]
     pub created_at_ms: i64,
+    #[cfg_attr(test, schemars(range(min = -9007199254740991_i64, max = 9007199254740991_i64)))]
     pub updated_at_ms: i64,
 }
 

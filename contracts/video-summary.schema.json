@@ -1,0 +1,350 @@
+{
+  "$defs": {
+    "AnalysisMode": {
+      "enum": [
+        "automatic",
+        "general",
+        "science_technology",
+        "software_architecture"
+      ],
+      "type": "string"
+    },
+    "AnalysisScope": {
+      "enum": [
+        "current_progress",
+        "full_video"
+      ],
+      "type": "string"
+    },
+    "EvidenceKind": {
+      "enum": [
+        "video_statement",
+        "subtitle_or_frame",
+        "ai_inference",
+        "needs_external_validation"
+      ],
+      "type": "string"
+    },
+    "Ordinal": {
+      "format": "uint",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "ProtocolVersion": {
+      "enum": [
+        "siaovplay-summary-v1"
+      ],
+      "type": "string"
+    },
+    "SummaryCitation": {
+      "properties": {
+        "endMs": {
+          "format": "int64",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "excerpt": {
+          "type": "string"
+        },
+        "startMs": {
+          "format": "int64",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "subtitleCount": {
+          "format": "uint",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "startMs",
+        "endMs",
+        "subtitleCount",
+        "excerpt"
+      ],
+      "type": "object"
+    },
+    "SummaryEvidence": {
+      "properties": {
+        "citations": {
+          "items": {
+            "$ref": "#/$defs/SummaryCitation"
+          },
+          "type": "array"
+        },
+        "claim": {
+          "type": "string"
+        },
+        "frameTimestampsMs": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Timestamp"
+          },
+          "type": "array"
+        },
+        "kind": {
+          "$ref": "#/$defs/EvidenceKind"
+        },
+        "subtitleIds": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "kind",
+        "claim",
+        "subtitleIds",
+        "frameTimestampsMs"
+      ],
+      "type": "object"
+    },
+    "SummaryGlossaryEntry": {
+      "properties": {
+        "citations": {
+          "items": {
+            "$ref": "#/$defs/SummaryCitation"
+          },
+          "type": "array"
+        },
+        "explanation": {
+          "type": "string"
+        },
+        "subtitleIds": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "term": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "term",
+        "explanation",
+        "subtitleIds"
+      ],
+      "type": "object"
+    },
+    "SummaryResult": {
+      "properties": {
+        "conclusions": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/SummarySection"
+          },
+          "type": "array"
+        },
+        "coreConcepts": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/SummarySection"
+          },
+          "type": "array"
+        },
+        "coveredChunkOrdinals": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Ordinal"
+          },
+          "type": "array"
+        },
+        "designTradeoffs": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/SummarySection"
+          },
+          "type": "array"
+        },
+        "examplesAndScenarios": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/SummarySection"
+          },
+          "type": "array"
+        },
+        "formatVersion": {
+          "default": 1,
+          "format": "uint32",
+          "maximum": 2,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "glossary": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/SummaryGlossaryEntry"
+          },
+          "type": "array"
+        },
+        "limitations": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "mermaid": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "overview": {
+          "type": "string"
+        },
+        "principlesOrArchitecture": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/SummarySection"
+          },
+          "type": "array"
+        },
+        "speakerNarrative": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/SummarySection"
+          },
+          "type": "array"
+        },
+        "timeline": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/SummarySection"
+          },
+          "type": "array"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "formatVersion",
+        "title",
+        "overview",
+        "coveredChunkOrdinals",
+        "speakerNarrative",
+        "timeline",
+        "coreConcepts",
+        "principlesOrArchitecture",
+        "examplesAndScenarios",
+        "designTradeoffs",
+        "conclusions",
+        "limitations",
+        "glossary",
+        "mermaid"
+      ],
+      "type": "object"
+    },
+    "SummarySection": {
+      "properties": {
+        "body": {
+          "type": "string"
+        },
+        "evidence": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/SummaryEvidence"
+          },
+          "type": "array"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "title",
+        "body",
+        "evidence"
+      ],
+      "type": "object"
+    },
+    "Timestamp": {
+      "format": "int64",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "analysisMode": {
+      "$ref": "#/$defs/AnalysisMode"
+    },
+    "createdAtMs": {
+      "format": "int64",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+    },
+    "id": {
+      "type": "string"
+    },
+    "materialManifestSha256": {
+      "type": "string"
+    },
+    "playbackCutoffMs": {
+      "format": "int64",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "projectId": {
+      "type": "string"
+    },
+    "protocolVersion": {
+      "$ref": "#/$defs/ProtocolVersion"
+    },
+    "result": {
+      "$ref": "#/$defs/SummaryResult"
+    },
+    "scope": {
+      "$ref": "#/$defs/AnalysisScope"
+    },
+    "subtitleVersionId": {
+      "type": "string"
+    },
+    "taskId": {
+      "type": "string"
+    },
+    "updatedAtMs": {
+      "format": "int64",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+    },
+    "visualMaterialUsed": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "id",
+    "taskId",
+    "projectId",
+    "protocolVersion",
+    "scope",
+    "playbackCutoffMs",
+    "analysisMode",
+    "subtitleVersionId",
+    "materialManifestSha256",
+    "result",
+    "visualMaterialUsed",
+    "createdAtMs",
+    "updatedAtMs"
+  ],
+  "title": "VideoSummary",
+  "type": "object"
+}

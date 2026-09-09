@@ -1,3 +1,4 @@
+import { parseVideoSummary, parseVideoSummaries } from "./resultContract";
 import { parseSummaryTask, parseSummaryTasks } from "./taskContract";
 import { invoke } from "@tauri-apps/api/core";
 export { previewSummaryDispatch } from "./dispatchGateway";
@@ -35,12 +36,12 @@ export async function listSummaryTasks(projectId: string): Promise<SummaryTask[]
   return parseSummaryTasks(await invoke<unknown>("list_summary_tasks", { input: { projectId } }), projectId);
 }
 
-export function getVideoSummary(summaryId: string): Promise<VideoSummary> {
-  return invoke("get_video_summary", { input: { summaryId } });
+export async function getVideoSummary(summaryId: string): Promise<VideoSummary> {
+  return parseVideoSummary(await invoke<unknown>("get_video_summary", { input: { summaryId } }), { summaryId });
 }
 
-export function listVideoSummaries(projectId: string): Promise<VideoSummary[]> {
-  return invoke("list_video_summaries", { input: { projectId } });
+export async function listVideoSummaries(projectId: string): Promise<VideoSummary[]> {
+  return parseVideoSummaries(await invoke<unknown>("list_video_summaries", { input: { projectId } }), projectId);
 }
 
 export async function chooseSummaryExportDirectory(): Promise<string | null> {
