@@ -43,10 +43,9 @@ pub(crate) fn export(
     let task = SummaryTaskRepository::new(store).get(&summary.task_id)?;
     let project = store.get_project(&summary.project_id)?;
     let final_directory = unique_directory(&destination, &project.title, now_ms()?);
-    let temporary = destination.join(format!(".siaovplay-summary-{}.tmp", summary.id));
-    if temporary.exists() {
-        return Err(StoreError::Validation("总结报告临时目录已存在".to_owned()));
-    }
+    // A crashed export may leave staging files. Own a fresh directory for this attempt;
+    // never reuse or delete another attempt's partial report.
+    let temporary = destination.join(format!(".siaovplay-summary-{}.tmp", uuid::Uuid::new_v4()));
     fs::create_dir(&temporary)?;
     let result = (|| {
         let assets_directory = temporary.join("assets");

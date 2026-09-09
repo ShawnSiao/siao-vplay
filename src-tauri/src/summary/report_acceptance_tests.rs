@@ -265,3 +265,36 @@ fn summary_result() -> SummaryResult {
         mermaid: Some("flowchart LR\nA --> B".to_owned()),
     }
 }
+
+#[test]
+fn interrupted_export_directory_does_not_block_a_new_verified_report() {
+    let (directory, store, task) = super::test_support::prepared_summary();
+    // No frame timestamp is within this isolated zero-cutoff report.
+    store.connect().unwrap().execute(
+        "UPDATE summary_tasks SET playback_cutoff_ms=0 WHERE id=?1", [&task.id],
+    ).unwrap();
+    SummaryTaskRepository::new(&store).set_task_state(&task.id, "validating", "validating", 0.9).unwrap();
+    let summary = SummaryResultRepository::new(&store).save_summary(&task.id, &summary_result(), false).unwrap();
+    let output = directory.path().join("reports");
+    fs::create_dir(&output).unwrap();
+    let abandoned = output.join(format!(".siaovplay-summary-{}.tmp", summary.id));
+    fs::create_dir(&abandoned).unwrap();
+    fs::write(abandoned.join("report.md"), b"interrupted export retained").unwrap();
+    let run = || report::export(&store, ExportVideoSummaryInput {
+        summary_id: summary.id.clone(), directory: output.to_string_lossy().into_owned(),
+    }).unwrap();
+    let first = run();
+    let first_bytes = fs::read(&first.report_path).unwrap();
+    let second = run();
+    assert_ne!(first.directory, second.directory);
+    assert_eq!(fs::read(&first.report_path).unwrap(), first_bytes);
+    assert_eq!(fs::read(abandoned.join("report.md")).unwrap(), b"interrupted export retained");
+    for exported in [first, second] {
+        assert_eq!(exported.asset_count, 0);
+        let bytes = fs::read(&exported.report_path).unwrap();
+        assert_eq!(format!("{:x}", Sha256::digest(&bytes)), exported.report_sha256);
+        let manifest: Value = serde_json::from_slice(&fs::read(&exported.manifest_path).unwrap()).unwrap();
+        assert_eq!(manifest["reportSha256"], exported.report_sha256);
+    }
+    assert_eq!(fs::read_dir(output).unwrap().count(), 3);
+}
