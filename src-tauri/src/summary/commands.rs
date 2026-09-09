@@ -164,11 +164,18 @@ pub fn list_video_summaries(
 }
 
 #[tauri::command]
-pub fn export_video_summary(
+pub async fn export_video_summary(
     store: State<'_, ProjectStore>,
     input: ExportVideoSummaryInput,
 ) -> Result<SummaryExport, SummaryCommandError> {
-    report::export(store.inner(), input).map_err(Into::into)
+    let store = store.inner().clone();
+    run_blocking(move || report::export(&store, input)).await.map_err(|mut error| {
+        if error.code == "summary_background_failed" {
+            error.code = "summary_export_unconfirmed";
+            error.message = "报告导出意外中断，保存结果尚未确认。请先检查所选目录，避免重复导出。".to_owned();
+        }
+        error
+    })
 }
 
 #[tauri::command]
@@ -204,4 +211,35 @@ pub async fn preview_summary_dispatch(
 ) -> Result<SummaryDispatchPreview, SummaryCommandError> {
     let store = store.inner().clone();
     run_blocking(move || dispatch::preview(&store, &input.task_id)).await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn export_command_returns_a_future_instead_of_blocking_the_dispatcher() {
+        fn assert_async<F, R>(_: F)
+        where
+            F: FnOnce(State<'static, ProjectStore>, ExportVideoSummaryInput) -> R,
+            R: std::future::Future<Output = Result<SummaryExport, SummaryCommandError>>,
+        {}
+        assert_async(export_video_summary);
+    }
+
+    #[test]
+    fn blocking_work_runs_off_the_calling_thread() {
+        let caller = std::thread::current().id();
+        let worker = tauri::async_runtime::block_on(run_blocking(|| Ok(std::thread::current().id()))).unwrap();
+        assert_ne!(caller, worker);
+    }
+
+    #[test]
+    fn blocking_work_preserves_validation_errors() {
+        let error = tauri::async_runtime::block_on(run_blocking::<()>(|| {
+            Err(StoreError::Validation("请选择已存在的报告保存目录".to_owned()))
+        })).unwrap_err();
+        assert_eq!(error.code, "validation_failed");
+        assert!(error.message.contains("请选择已存在的报告保存目录"));
+    }
 }
