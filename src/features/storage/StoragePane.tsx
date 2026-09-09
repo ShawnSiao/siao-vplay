@@ -91,7 +91,7 @@ function MigrationDialog({
         <div className="storage-migration-body">
           {!task ? (
             <>
-              <p>{area === "app_data" ? "项目、字幕、观看记录、学习卡片和任务状态会整体复制。校验完成后，重启应用才会切换。" : area === "remote_media" ? "URL 导入的原视频会复制到新位置，全部校验通过后才更新项目路径。" : "播放缓存可以复制，也可以在新位置按需重新生成。"}</p>
+              <p>{area === "app_data" ? "项目、字幕、观看记录、学习卡片和任务状态会整体复制。界面偏好保留在原系统位置。校验完成后，重启应用才会切换。" : area === "remote_media" ? "URL 导入的原视频会复制到新位置，全部校验通过后才更新项目路径。" : "播放缓存可以复制，也可以在新位置按需重新生成。"}</p>
               {area === "media_cache" ? (
                 <fieldset className="storage-mode-choice">
                   <legend>处理现有缓存</legend>

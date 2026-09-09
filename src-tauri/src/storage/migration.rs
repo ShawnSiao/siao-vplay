@@ -43,12 +43,12 @@ impl StorageManager {
         let database = (input.area == StorageArea::AppData)
             .then(|| source.join("projects").join("siaovplay.db"));
         let files = if input.mode == StorageMigrationMode::Copy {
-            migration_copy::scan_files(&source, database.as_deref())?
+            self.scan_migration_files(&source, database.as_deref(), &AtomicBool::new(false))?
         } else {
             Vec::new()
         };
         let bytes_to_copy = if input.mode == StorageMigrationMode::Copy {
-            super::paths::directory_size(&source)
+            super::migration_scope::estimated_bytes(&files, database.as_deref())?
         } else {
             0
         };
@@ -200,7 +200,7 @@ impl StorageManager {
             (task.area == StorageArea::AppData).then_some(source_database.as_path());
         let cancelled = self.cancel_flag()?;
         let entries = if task.mode == StorageMigrationMode::Copy {
-            migration_copy::scan_files_controlled(&source, skip_database, &cancelled)?
+            self.scan_migration_files(&source, skip_database, &cancelled)?
         } else {
             Vec::new()
         };
@@ -229,6 +229,12 @@ impl StorageManager {
                 Ok(StorageMigrationStatus::Completed)
             }
         }
+    }
+
+    fn scan_migration_files(&self, source: &Path, database: Option<&Path>, cancelled: &AtomicBool) -> Result<Vec<migration_copy::CopyEntry>, StorageError> {
+        let bootstrap = self.read_state()?.settings_path.parent().map(Path::to_path_buf)
+            .ok_or_else(|| StorageError::InvalidPath("启动配置目录缺失".to_owned()))?;
+        super::migration_scope::scan(source, database, &bootstrap, cancelled)
     }
 
     fn source_root(&self, area: StorageArea) -> Result<PathBuf, StorageError> {

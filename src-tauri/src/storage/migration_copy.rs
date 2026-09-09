@@ -15,6 +15,7 @@ pub(crate) struct CopyEntry {
     pub bytes: u64,
 }
 
+#[cfg(test)]
 pub(crate) fn scan_files(
     source: &Path,
     skip_database: Option<&Path>,
@@ -22,10 +23,20 @@ pub(crate) fn scan_files(
     scan_files_controlled(source, skip_database, &AtomicBool::new(false))
 }
 
+#[cfg(test)]
 pub(crate) fn scan_files_controlled(
     source: &Path,
     skip_database: Option<&Path>,
     cancelled: &AtomicBool,
+) -> Result<Vec<CopyEntry>, StorageError> {
+    scan_files_excluding(source, skip_database, cancelled, &[])
+}
+
+pub(super) fn scan_files_excluding(
+    source: &Path,
+    skip_database: Option<&Path>,
+    cancelled: &AtomicBool,
+    excluded_top_level: &[&str],
 ) -> Result<Vec<CopyEntry>, StorageError> {
     migration_stream::check(cancelled)?;
     let mut files = Vec::new();
@@ -39,6 +50,10 @@ pub(crate) fn scan_files_controlled(
             migration_stream::check(cancelled)?;
             let entry = entry?;
             if directory == source && entry.file_name() == crate::instance_lock::LOCK_FILE_NAME {
+                continue;
+            }
+            if directory == source && entry.file_name().to_str().is_some_and(|name|
+                excluded_top_level.iter().any(|excluded| name.eq_ignore_ascii_case(excluded))) {
                 continue;
             }
             let metadata = entry.metadata()?;

@@ -148,6 +148,7 @@ for (const viewport of [
 
     await dialog.getByRole("button", { name: "迁移" }).click();
     const migration = page.getByRole("dialog", { name: "迁移应用数据与数据库" });
+    await expect(migration.getByText(/界面偏好保留在原系统位置/)).toBeVisible();
     await migration.getByRole("button", { name: "选择文件夹" }).click();
     await migration.getByRole("button", { name: "检查迁移条件" }).click();
     await expect(migration.getByRole("button", { name: "开始迁移" })).toBeVisible();
