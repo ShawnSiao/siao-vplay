@@ -67,19 +67,21 @@ impl StorageManager {
         fs::create_dir_all(bootstrap_directory)?;
         let settings_path = bootstrap_directory.join(SETTINGS_FILE_NAME);
         let mut settings = load_settings(&settings_path)?;
-        if settings.version == 1 {
+        let upgrade_settings = settings.version == 1;
+        if upgrade_settings {
             if settings.pending_migration_commit.is_some() { return Err(super::migration_commit::pending_error()); }
             settings.version = settings_version();
-            persist_settings(&settings_path, &settings)?;
         }
         if settings.version != settings_version() {
             return Err(StorageError::UnsupportedVersion(settings.version));
         }
-        if environment_app_data_root.is_none() {
-            promote_pending_app_data_root(&settings_path, &mut settings)?;
-        }
+        let pending_root = if environment_app_data_root.is_none() {
+            settings.pending_app_data_root.as_deref().map(PathBuf::from)
+                .filter(|root| root.is_dir() && root.join("projects/siaovplay.db").is_file())
+        } else { None };
         let active_root = environment_app_data_root
             .clone()
+            .or_else(|| pending_root.clone())
             .or_else(|| settings.active_app_data_root.as_deref().map(PathBuf::from))
             .unwrap_or_else(|| default_app_data_root.clone());
         let owner = if acquire_owner {
@@ -92,6 +94,15 @@ impl StorageManager {
         } else {
             None
         };
+        // Do not publish the new root or upgrade its bootstrap config until ownership succeeds.
+        if pending_root.is_some() {
+            promote_pending_app_data_root(&settings_path, &mut settings)?;
+            if settings.pending_app_data_root.is_some() {
+                return Err(StorageError::RootUnavailable("待切换的数据目录已不可用，未修改存储配置".to_owned()));
+            }
+        } else if upgrade_settings {
+            persist_settings(&settings_path, &settings)?;
+        }
         let committed_app_root = if environment_app_data_root.is_none() {
             settings.active_app_data_root.as_deref().map(Path::new)
         } else { None };
