@@ -2035,13 +2035,15 @@ describe("App", () => {
       subtitleVersion,
       translatedVersion,
     ]);
-    desktopMocks.prepareLearningTask.mockResolvedValue({
+    const manualTask: LearningTask = {
       ...learningTask,
       handoffKind: "manual",
       status: "awaiting_external_result",
       stage: "awaiting_external_result",
       receiverLabel: "自行选择的工具",
-    });
+    };
+    desktopMocks.prepareLearningTask.mockResolvedValue(manualTask);
+    desktopMocks.getLearningTask.mockResolvedValue(manualTask);
     desktopMocks.chooseLearningResultFile.mockResolvedValue(
       "W:\\SiaoVPlay\\handoff\\learning.json",
     );

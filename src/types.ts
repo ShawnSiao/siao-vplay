@@ -540,32 +540,7 @@ export type LocalResourceCatalog = {
   resources: LocalResourceDefinition[];
 };
 
-export type ResourceDownloadTaskState =
-  | "queued"
-  | "downloading"
-  | "paused"
-  | "verifying"
-  | "installing"
-  | "completed"
-  | "failed"
-  | "cancelled";
-
-export type ResourceDownloadTask = {
-  id: string;
-  resourceId: string;
-  version: string;
-  state: ResourceDownloadTaskState;
-  downloadedBytes: number;
-  totalBytes: number;
-  requestedByCapabilityIds: string[];
-  pendingActionIds: string[];
-  attempt: number;
-  errorCode: string | null;
-  errorMessage: string | null;
-  createdAtMs: number;
-  updatedAtMs: number;
-  forceReinstall: boolean;
-};
+export type { ResourceDownloadTaskState, ResourceDownloadTask } from "./generated/resource-download-task";
 
 export type ResourceNetworkStatus = {
   mode: "direct" | "proxy";
@@ -573,14 +548,7 @@ export type ResourceNetworkStatus = {
   proxyAddress: string | null;
 };
 
-export type CapabilityPreparation = {
-  capabilityId: string;
-  pendingActionId: string | null;
-  state: "ready" | "preparing";
-  resourceIds: string[];
-  readyResourceIds: string[];
-  taskIds: string[];
-};
+export type { CapabilityPreparation } from "./generated/capability-preparation";
 
 export type ResourceRemovalResult = {
   resourceId: string;

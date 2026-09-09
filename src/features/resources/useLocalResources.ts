@@ -263,9 +263,9 @@ export function useLocalResources(): LocalResourcesController {
               setStatus(nextStatus);
             }
           })
-          .catch(captureError);
+          .catch(cause => { if (active) captureError(cause); });
       }
-    })
+    }, cause => { if (active) captureError(cause); })
       .then((stop) => {
         if (active) {
           unlisten = stop;
@@ -273,7 +273,7 @@ export function useLocalResources(): LocalResourcesController {
           stop();
         }
       })
-      .catch(captureError);
+      .catch(cause => { if (active) captureError(cause); });
     return () => {
       active = false;
       unlisten?.();

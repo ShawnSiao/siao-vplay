@@ -1,3 +1,4 @@
+export { listResourceDownloadTasks, listenResourceDownloadTasks, prepareLocalCapability, pauseResourceDownload, resumeResourceDownload, cancelResourceDownload, retryResourceDownload, repairLocalResource, updateLocalResource } from "./resourceTaskGateway";
 export { startSubtitleBurn, getSubtitleBurnJob, listSubtitleBurnJobs, cancelSubtitleBurnJob, resumeSubtitleBurnJob } from "./burnGateway";
 export { commandError } from "./commandError";
 export { prepareExplanationTask, getExplanationTask, listExplanationTasks, readExplanationPrompt, openExplanationMaterials, getExplanation, listExplanations, importExplanationResult, startCodexExplanationTask, cancelExplanationTask, resumeCodexExplanationTask } from "./explanationGateway";
@@ -8,7 +9,6 @@ export { inspectSubtitleFile, importSubtitleFile, listSubtitleVersions, getSubti
 export { inspectYouTubeUrl, importYouTubeUrl, cancelYouTubeImport, getPublicResolverDisclosure } from "./publicVideoGateway";
 export { getMediaPreparation, cancelMediaPreparation } from "./mediaPreparationGateway";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 
 import { supportedVideoExtensions } from "./mediaFiles";
@@ -17,7 +17,6 @@ import { chooseConfiguredStorageDirectory } from "./storageDirectoryPicker";
 
 import type {
   AppStatus,
-  CapabilityPreparation,
   DeleteProjectResult,
   ExternalAgentResultUpdate,
   ExternalAgentTaskKind,
@@ -34,7 +33,6 @@ import type {
   Project,
   RemoteMediaPreview,
   RuntimeCatalog,
-  ResourceDownloadTask,
   ResourceNetworkStatus,
   ResourceAdoptionResult,
   ResourceMigrationPreview,
@@ -357,15 +355,6 @@ export async function setLocalResourceProfile(
   });
 }
 
-export async function listResourceDownloadTasks(): Promise<
-  ResourceDownloadTask[]
-> {
-  if (!isDesktopApp) {
-    return [];
-  }
-  return invoke<ResourceDownloadTask[]>("list_resource_download_tasks");
-}
-
 export async function getLocalResourceNetworkStatus(): Promise<ResourceNetworkStatus> {
   if (!isDesktopApp) {
     return { mode: "direct", proxySource: "direct", proxyAddress: null };
@@ -378,75 +367,6 @@ export async function setLocalResourceProxy(
 ): Promise<ResourceNetworkStatus> {
   return invoke<ResourceNetworkStatus>("set_local_resource_proxy", {
     input: { proxyUrl },
-  });
-}
-
-export async function listenResourceDownloadTasks(
-  listener: (task: ResourceDownloadTask) => void,
-): Promise<UnlistenFn> {
-  if (!isDesktopApp) {
-    return () => undefined;
-  }
-  return listen<ResourceDownloadTask>(
-    "local-resource-task-updated",
-    (event) => listener(event.payload),
-  );
-}
-
-export async function prepareLocalCapability(
-  capabilityId: string,
-  pendingActionId?: string,
-): Promise<CapabilityPreparation> {
-  return invoke<CapabilityPreparation>("prepare_local_capability", {
-    input: { capabilityId, pendingActionId: pendingActionId ?? null },
-  });
-}
-
-export async function pauseResourceDownload(
-  taskId: string,
-): Promise<ResourceDownloadTask> {
-  return invoke<ResourceDownloadTask>("pause_resource_download", {
-    input: { taskId },
-  });
-}
-
-export async function resumeResourceDownload(
-  taskId: string,
-): Promise<ResourceDownloadTask> {
-  return invoke<ResourceDownloadTask>("resume_resource_download", {
-    input: { taskId },
-  });
-}
-
-export async function cancelResourceDownload(
-  taskId: string,
-): Promise<ResourceDownloadTask> {
-  return invoke<ResourceDownloadTask>("cancel_resource_download", {
-    input: { taskId },
-  });
-}
-
-export async function retryResourceDownload(
-  taskId: string,
-): Promise<ResourceDownloadTask> {
-  return invoke<ResourceDownloadTask>("retry_resource_download", {
-    input: { taskId },
-  });
-}
-
-export async function repairLocalResource(
-  resourceId: string,
-): Promise<ResourceDownloadTask> {
-  return invoke<ResourceDownloadTask>("repair_local_resource", {
-    input: { resourceId },
-  });
-}
-
-export async function updateLocalResource(
-  resourceId: string,
-): Promise<ResourceDownloadTask> {
-  return invoke<ResourceDownloadTask>("update_local_resource", {
-    input: { resourceId },
   });
 }
 

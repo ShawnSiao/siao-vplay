@@ -1,3 +1,5 @@
+mod contract;
+pub use contract::{ResourceDownloadTask, ResourceDownloadTaskState, CapabilityPreparation};
 use std::{
     collections::{BTreeMap, HashMap},
     fs::{self, File, OpenOptions},
@@ -117,70 +119,12 @@ impl ResourceDownloadError {
     }
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum ResourceDownloadTaskState {
-    Queued,
-    Downloading,
-    Paused,
-    Verifying,
-    Installing,
-    Completed,
-    Failed,
-    Cancelled,
-}
-
-impl ResourceDownloadTaskState {
-    fn is_worker_active(self) -> bool {
-        matches!(
-            self,
-            Self::Queued | Self::Downloading | Self::Verifying | Self::Installing
-        )
-    }
-
-    fn is_terminal(self) -> bool {
-        matches!(self, Self::Completed | Self::Failed | Self::Cancelled)
-    }
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub struct ResourceDownloadTask {
-    pub id: String,
-    pub resource_id: String,
-    pub version: String,
-    pub state: ResourceDownloadTaskState,
-    pub downloaded_bytes: u64,
-    pub total_bytes: u64,
-    pub requested_by_capability_ids: Vec<String>,
-    #[serde(default)]
-    pub pending_action_ids: Vec<String>,
-    pub attempt: u32,
-    pub error_code: Option<String>,
-    pub error_message: Option<String>,
-    pub created_at_ms: i64,
-    pub updated_at_ms: i64,
-    #[serde(default)]
-    force_reinstall: bool,
-}
-
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct ResourceNetworkStatus {
     pub mode: String,
     pub proxy_source: String,
     pub proxy_address: Option<String>,
-}
-
-#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub struct CapabilityPreparation {
-    pub capability_id: String,
-    pub pending_action_id: Option<String>,
-    pub state: String,
-    pub resource_ids: Vec<String>,
-    pub ready_resource_ids: Vec<String>,
-    pub task_ids: Vec<String>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
