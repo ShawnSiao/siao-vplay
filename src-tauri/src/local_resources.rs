@@ -1,3 +1,6 @@
+#[cfg(test)]
+mod receipt_tests;
+mod receipts;
 mod activation;
 mod transaction_paths;
 mod removal;
@@ -815,19 +818,7 @@ impl LocalResourceManager {
         let configuration = self.configuration.as_ref().ok_or_else(|| {
             LocalResourceError::ResourceNotReady(format!("{resource_id} 尚未配置"))
         })?;
-        let path = configuration_root(configuration)
-            .join("receipts")
-            .join(resource_id)
-            .join(format!("{version}.json"));
-        let receipt =
-            serde_json::from_slice::<ResourceReceipt>(&fs::read(&path).map_err(|_| {
-                LocalResourceError::ResourceNotReady(format!(
-                    "缺少资源安装凭据：{}",
-                    path.display()
-                ))
-            })?)?;
-        validate_receipt(&receipt, resource_id, version)?;
-        Ok(receipt)
+        receipts::read(configuration, resource_id, version)
     }
 
     fn activate_receipt(&mut self, receipt: ResourceReceipt) -> Result<(), LocalResourceError> {
@@ -851,40 +842,7 @@ impl LocalResourceManager {
         &self,
         resource_id: &str,
     ) -> Result<Vec<ResourceReceipt>, LocalResourceError> {
-        validate_identifier(resource_id, "资源 ID")?;
-        let Some(configuration) = self.configuration.as_ref() else {
-            return Ok(Vec::new());
-        };
-        let directory = configuration_root(configuration)
-            .join("receipts")
-            .join(resource_id);
-        if !directory.is_dir() {
-            return Ok(Vec::new());
-        }
-        let mut receipts = Vec::new();
-        for entry in fs::read_dir(directory)? {
-            let entry = entry?;
-            let path = entry.path();
-            if !entry.file_type()?.is_file()
-                || path.extension().and_then(|value| value.to_str()) != Some("json")
-            {
-                continue;
-            }
-            let Ok(receipt) = serde_json::from_slice::<ResourceReceipt>(&fs::read(&path)?) else {
-                continue;
-            };
-            if validate_receipt(&receipt, resource_id, &receipt.version).is_ok() {
-                receipts.push(receipt);
-            }
-        }
-        receipts.sort_by(|left, right| {
-            right
-                .activated_at_ms
-                .unwrap_or_default()
-                .cmp(&left.activated_at_ms.unwrap_or_default())
-                .then(right.version.cmp(&left.version))
-        });
-        Ok(receipts)
+        receipts::list(self.configuration.as_ref(), resource_id)
     }
 
     fn deactivate_resource(

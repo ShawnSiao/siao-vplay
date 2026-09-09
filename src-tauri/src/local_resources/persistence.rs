@@ -30,7 +30,7 @@ pub(super) fn read_recovering<T: DeserializeOwned>(
     }
     Ok(None)
 }
-fn read_candidate<T: DeserializeOwned>(
+pub(super) fn read_candidate<T: DeserializeOwned>(
     path: &Path,
     validate: &impl Fn(&T) -> Result<(), LocalResourceError>,
 ) -> Result<Option<T>, LocalResourceError> {

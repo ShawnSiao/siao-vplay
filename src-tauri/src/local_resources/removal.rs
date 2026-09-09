@@ -225,6 +225,16 @@ fn execute(
     };
     let (install, stage, target) = paths(&journal)?;
     paths_io::check_record(&target)?;
+    let restored = persistence::read_recovering(&target, |receipt| {
+        validate_receipt(
+            receipt,
+            &journal.receipt.resource_id,
+            &journal.receipt.version,
+        )
+    })?;
+    if restored.as_ref() != Some(&journal.receipt) {
+        return Err(invalid());
+    }
     journal.receipt_raw = fs::read_to_string(&target)?;
     journal.had_payload = paths_io::directory(&install)?;
     if journal.had_payload {
