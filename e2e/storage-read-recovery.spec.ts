@@ -98,3 +98,31 @@ test("post-migration refresh failure remains visible and can be reread", async (
   expect(await page.evaluate(() => (window as unknown as { storageReads: number }).storageReads)).toBe(3);
   expect(errors).toEqual([]);
 });
+
+
+test("slow migration polling is serial and stops at cancellation", async ({ page }) => {
+  await page.addInitScript(({ settings, migration }) => {
+    const state = window as unknown as { migrationReads: number; releaseMigrationRead: () => void; __TAURI_INTERNALS__: unknown };
+    state.migrationReads = 0;
+    state.__TAURI_INTERNALS__ = { invoke: async (command: string) => {
+      if (command === "get_ai_service_settings") return { schemaVersion: 1, revision: 0, providerCatalog: { schemaVersion: 1, providers: [] }, services: [], defaultServiceId: null };
+      if (command === "get_current_storage_migration") return { ...migration, status: "running" };
+      if (command === "get_storage_settings") return settings;
+      if (command === "get_storage_migration") {
+        state.migrationReads++;
+        return new Promise(resolve => { state.releaseMigrationRead = () => resolve({ ...migration, status: "cancelled" }); });
+      }
+      throw new Error(`Unexpected fixture IPC: ${command}`);
+    } };
+  }, { settings: storageSettingsFixture, migration: storageMigrationFixture });
+  await page.goto("/e2e/runtime.html?environment");
+  const dialog = page.getByRole("dialog", { name: "设置" });
+  await dialog.getByRole("tab", { name: "存储", exact: true }).click();
+  await expect.poll(() => page.evaluate(() => (window as unknown as { migrationReads: number }).migrationReads)).toBe(1);
+  await page.waitForTimeout(1600);
+  expect(await page.evaluate(() => (window as unknown as { migrationReads: number }).migrationReads)).toBe(1);
+  await page.evaluate(() => (window as unknown as { releaseMigrationRead: () => void }).releaseMigrationRead());
+  await expect(dialog.getByRole("button", { name: "查看迁移", exact: true })).toHaveCount(0);
+  await page.waitForTimeout(600);
+  expect(await page.evaluate(() => (window as unknown as { migrationReads: number }).migrationReads)).toBe(1);
+});

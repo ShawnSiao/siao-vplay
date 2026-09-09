@@ -1,3 +1,4 @@
+import { useStorageMigrationPolling } from "./useStorageMigrationPolling";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import type {
@@ -14,7 +15,6 @@ import {
   chooseStorageDirectory,
   clearPlaybackCache,
   getCurrentStorageMigration,
-  getStorageMigration,
   getStorageSettings,
   openStorageLocation,
   prepareStorageMigration,
@@ -112,15 +112,7 @@ export function useStorageSettings(
     return () => window.clearTimeout(timer);
   }, [active, load]);
 
-  useEffect(() => {
-    if (!active || previewMode || migration?.status !== "running") return;
-    const timer = window.setInterval(() => {
-      void getStorageMigration(migration.id)
-        .then((task) => setMigration(task))
-        .catch((cause) => setError(message(cause)));
-    }, 500);
-    return () => window.clearInterval(timer);
-  }, [active, migration?.id, migration?.status, previewMode]);
+  useStorageMigrationPolling(active && !previewMode, migration, setMigration, cause => setError(message(cause)));
 
   useEffect(() => {
     let active = true;
