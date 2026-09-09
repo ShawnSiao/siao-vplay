@@ -1160,7 +1160,7 @@ export function useLibraryController() {
         confirmMissing: snapshot.confirmMissing,
         confirmChanged: snapshot.confirmChanged,
         confirmFingerprintDuplicates: snapshot.confirmFingerprintDuplicates,
-      });
+      }, snapshot.rescanPreview);
       dispatch({ type: "rescan_succeeded", result });
       void refresh();
       return result;

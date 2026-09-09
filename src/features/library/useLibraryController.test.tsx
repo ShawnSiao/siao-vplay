@@ -369,6 +369,7 @@ describe("useLibraryController", () => {
         previewToken: preview.previewToken,
         newItems: [expect.objectContaining({ episodeNumber: 2 })],
       }),
+      preview,
     );
     expect(result.current.state.recovery.stage).toBe("closed");
     expect(result.current.state.home.totalProjectCount).toBe(2);

@@ -134,20 +134,7 @@ export type LibraryRecoveryItem = {
   previousAvailability: LibraryItemAvailability;
 };
 
-export type LibraryRescanPreview = {
-  previewToken: string;
-  rootId: string;
-  rootPath: string;
-  rootDisplayName: string;
-  collectionId: string;
-  rootOffline: boolean;
-  newCandidates: LibraryScanCandidate[];
-  missingItems: LibraryRecoveryItem[];
-  changedItems: LibraryRecoveryItem[];
-  availableItemCount: number;
-  ignoredCount: number;
-  expiresAtMs: number;
-};
+export type { LibraryRescanPreview } from "./generated/library-rescan-preview";
 
 export type ApplyLibraryRescanInput = {
   previewToken: string;
@@ -157,16 +144,7 @@ export type ApplyLibraryRescanInput = {
   confirmFingerprintDuplicates: boolean;
 };
 
-export type LibraryRescanResult = {
-  root: LibraryRootSummary;
-  collection: CollectionDetail;
-  addedItemCount: number;
-  createdProjectCount: number;
-  reusedProjectCount: number;
-  missingItemCount: number;
-  changedItemCount: number;
-  availableItemCount: number;
-};
+export type { LibraryRescanResult } from "./generated/library-rescan-result";
 
 export type RelocationMismatchReason =
   | "missing"

@@ -400,6 +400,7 @@ pub(crate) struct LibraryImportResult {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub(crate) struct LibraryRecoveryItem {
     pub collection_id: String,
     pub project_id: String,
@@ -410,6 +411,7 @@ pub(crate) struct LibraryRecoveryItem {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub(crate) struct LibraryRescanPreview {
     pub preview_token: String,
     pub root_id: String,
@@ -420,8 +422,11 @@ pub(crate) struct LibraryRescanPreview {
     pub new_candidates: Vec<LibraryScanCandidate>,
     pub missing_items: Vec<LibraryRecoveryItem>,
     pub changed_items: Vec<LibraryRecoveryItem>,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub available_item_count: u64,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub ignored_count: u64,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub expires_at_ms: i64,
 }
 
@@ -440,14 +445,21 @@ pub(crate) struct ApplyLibraryRescanInput {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub(crate) struct LibraryRescanResult {
     pub root: LibraryRootSummary,
     pub collection: CollectionDetail,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub added_item_count: u64,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub created_project_count: u64,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub reused_project_count: u64,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub missing_item_count: u64,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub changed_item_count: u64,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub available_item_count: u64,
 }
 
