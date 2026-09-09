@@ -418,6 +418,12 @@ impl<'connection> LibraryRepository<'connection> {
         &self,
         collection_id: &str,
     ) -> Result<CollectionDetail, LibraryError> {
+        self.get_collection_detail_with_checkpoint(collection_id, || {})
+    }
+
+    pub(super) fn get_collection_detail_with_checkpoint(
+        &self, collection_id: &str, after_summary: impl FnOnce(),
+    ) -> Result<CollectionDetail, LibraryError> {
         let summary = self
             .connection
             .query_row(
@@ -441,6 +447,7 @@ impl<'connection> LibraryRepository<'connection> {
             .optional()?
             .ok_or_else(|| LibraryError::CollectionNotFound(collection_id.to_owned()))?;
 
+        after_summary();
         let mut statement = self.connection.prepare(
             "SELECT
                 ci.season_number,

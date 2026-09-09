@@ -161,9 +161,19 @@ impl LibraryService {
         &self,
         collection_id: &str,
     ) -> Result<CollectionDetail, LibraryError> {
+        self.get_collection_detail_with_checkpoint(collection_id, || {})
+    }
+
+    fn get_collection_detail_with_checkpoint(
+        &self, collection_id: &str, after_summary: impl FnOnce(),
+    ) -> Result<CollectionDetail, LibraryError> {
         validate_id("集合", collection_id)?;
-        let connection = self.store.connect()?;
-        LibraryRepository::new(&connection).get_collection_detail(collection_id)
+        let mut connection = self.store.connect()?;
+        let transaction = connection.transaction()?;
+        let detail = LibraryRepository::new(&transaction)
+            .get_collection_detail_with_checkpoint(collection_id, after_summary)?;
+        transaction.commit()?;
+        Ok(detail)
     }
 
     pub(crate) fn project_media_location(&self, project_id: &str) -> Result<String, LibraryError> {

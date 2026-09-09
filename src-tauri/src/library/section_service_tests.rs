@@ -1,6 +1,24 @@
 use crate::library::{LibraryMediaSection, ListLibrarySectionInput};
 
 #[test]
+fn collection_summary_and_seasons_share_a_snapshot() {
+    let fixture = Fixture::new();
+    let collection = fixture.collection("snapshot");
+    let project = fixture.project("collection-snapshot.mp4");
+    fixture.add(&collection, &project, 1, 1, 0);
+    let detail = fixture.service.get_collection_detail_with_checkpoint(&collection.id, || {
+        fixture.service.remove_project_from_collection(&collection.id, &project.id).unwrap();
+    }).unwrap();
+    assert_eq!(detail.summary.item_count, 1);
+    assert_eq!(detail.seasons.len(), 1, "seasons must match the summary read snapshot");
+    assert_eq!(detail.seasons[0].episode_count, 1);
+    let current = fixture.service.get_collection_detail(&collection.id).unwrap();
+    assert_eq!(current.summary.item_count, 0);
+    assert!(current.seasons.is_empty());
+    assert!(fixture.service.store.get_project(&project.id).is_ok());
+}
+
+#[test]
 fn home_counts_and_previews_share_a_snapshot_during_deletion() {
     let fixture = Fixture::new();
     let project = fixture.project("home-snapshot.mp4");
