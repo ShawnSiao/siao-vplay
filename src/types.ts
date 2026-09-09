@@ -838,7 +838,8 @@ export type CodexRuntimeStatus = {
   errorCode: string | null;
   errorMessage: string | null;
 };
-export type AiTaskExecutionInfo = { kind: "manual" | "codex" | "api"; serviceConfigId: string | null; serviceRevision: number | null; providerId: string | null; modelId: string | null; providerRequestId: string | null; usage: Record<string, unknown> | null };
+export type { AiTaskExecutionInfo } from "./generated/learning-task";
+import type { AiTaskExecutionInfo } from "./generated/learning-task";
 export type ExplanationFrame = {
   id: string;
   ordinal: number;
@@ -946,47 +947,10 @@ export type ExplanationApplication = {
 
 export type LearningSelectionKind = "word" | "phrase" | "sentence";
 
-export type LearningTask = {
-  id: string;
-  projectId: string;
-  handoffKind: "manual" | "codex" | "api";
-  execution?: AiTaskExecutionInfo;
-  protocolVersion: string;
-  status:
-    | "awaiting_external_result"
-    | "queued"
-    | "running"
-    | "validating"
-    | "completed"
-    | "failed"
-    | "cancelled"
-    | "interrupted";
-  stage: string;
-  progress: number;
-  receiverLabel: string;
-  materialScope: string[];
-  sourceVersionId: string;
-  translationVersionId: string | null;
-  sourceSegmentId: string;
-  selectedText: string;
-  selectionKind: LearningSelectionKind;
-  playbackPositionMs: number;
-  expectedProjectRevision: number;
-  outputDictionaryEntryId: string | null;
-  errorCode: string | null;
-  errorMessage: string | null;
-  createdAtMs: number;
-  updatedAtMs: number;
-  startedAtMs: number | null;
-  completedAtMs: number | null;
-};
-import type { DictionaryEntry } from "./generated/dictionary-entry";
+export type { LearningTask } from "./generated/learning-task";
 export type { DictionaryEntry } from "./generated/dictionary-entry";
 
-export type LearningApplication = {
-  task: LearningTask;
-  dictionaryEntry: DictionaryEntry;
-};
+export type { LearningApplication } from "./generated/learning-application";
 
 export type LearningCard = {
   id: string;

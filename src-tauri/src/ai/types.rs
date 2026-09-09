@@ -277,9 +277,12 @@ pub struct AiMaterialAuthorization {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct AiTaskExecutionInfo {
+    #[cfg_attr(test, schemars(with = "AiExecutionKind"))]
     pub kind: String,
     pub service_config_id: Option<String>,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub service_revision: Option<u64>,
     pub provider_id: Option<String>,
     pub model_id: Option<String>,

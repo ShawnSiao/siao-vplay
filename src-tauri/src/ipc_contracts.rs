@@ -50,6 +50,8 @@ fn committed_schemas_match_rust() {
     check_transcription_schema();
     check_subtitle_body_schema();
     check_translation_schemas();
+    check_schema("learning-task", &serialized_schema::<crate::learning::LearningTask>());
+    check_schema("learning-application", &serialized_schema::<crate::learning::LearningApplication>());
     check_schema("dictionary-entry", &serialized_schema::<crate::learning::DictionaryEntry>());
     check_schema("video-summary", &serialized_schema::<crate::summary::VideoSummary>());
     check_schema("summary-task", &serialized_schema::<crate::summary::SummaryTask>());

@@ -1,3 +1,4 @@
+import { createLearningTaskFixture } from "./test-fixtures/learning";
 import { verifyBackgroundTranscription } from "./appTranscriptionCompletionTest";
 import { verifyDismissedResourceAction, verifySelectedResourceResume } from "./appResourcePreparationTest";
 import { subtitleMetadata } from "./features/subtitle-revision/subtitleMetadata";
@@ -628,6 +629,7 @@ const { explanationTask, explanation } = createUnderstandingFixtures({
 });
 
 const learningTask: LearningTask = {
+  ...createLearningTaskFixture(),
   id: "d34346c4-ec23-4f05-aee5-29ec8c8942aa",
   projectId: project.id,
   handoffKind: "codex",

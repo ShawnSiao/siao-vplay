@@ -1,3 +1,5 @@
+mod task_contract;
+pub use task_contract::{LearningTask, LearningApplication};
 mod dictionary;
 pub use dictionary::DictionaryEntry;
 #[cfg(test)]
@@ -138,43 +140,11 @@ pub struct ImportLearningResultInput {
     pub result_path: String,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct LearningTask {
-    pub id: String,
-    pub project_id: String,
-    pub handoff_kind: String,
-    pub execution: AiTaskExecutionInfo,
-    pub protocol_version: String,
-    pub status: String,
-    pub stage: String,
-    pub progress: f64,
-    pub receiver_label: String,
-    pub material_scope: Vec<String>,
-    pub source_version_id: String,
-    pub translation_version_id: Option<String>,
-    pub source_segment_id: String,
-    pub selected_text: String,
-    pub selection_kind: String,
-    pub playback_position_ms: i64,
-    pub expected_project_revision: i64,
-    pub output_dictionary_entry_id: Option<String>,
-    pub error_code: Option<String>,
-    pub error_message: Option<String>,
-    pub created_at_ms: i64,
-    pub updated_at_ms: i64,
-    pub started_at_ms: Option<i64>,
-    pub completed_at_ms: Option<i64>,
-}
 
 
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct LearningApplication {
-    pub task: LearningTask,
-    pub dictionary_entry: DictionaryEntry,
-}
+
+
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]

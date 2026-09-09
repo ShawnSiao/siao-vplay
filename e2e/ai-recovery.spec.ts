@@ -1,3 +1,4 @@
+import { createLearningTaskFixture } from "../src/test-fixtures/learning";
 import { expect, test } from "@playwright/test";
 import { createUnderstandingFixtures } from "../src/test-fixtures/understanding";
 import { taskDispatchFixture } from "../src/test-fixtures/taskDispatch";
@@ -5,7 +6,7 @@ import { taskDispatchFixture } from "../src/test-fixtures/taskDispatch";
 for (const kind of ["explanation", "learning"] as const) {
   test(`${kind} restores an interrupted task without preparing or sending again`, async ({ page }) => {
     const { explanationTask } = createUnderstandingFixtures({ projectId: "e2e-project", sourceVersionId: "e2e-original", translationVersionId: "", sourceSegmentId: "e2e-original-segment" });
-    const task = { ...explanationTask, status: "interrupted", stage: "interrupted", frames: [], playbackCutoffMs: 15_000,
+    const task = { ...createLearningTaskFixture(), ...explanationTask, protocolVersion: kind === "learning" ? "siaovplay-learning-v1" : explanationTask.protocolVersion, status: "interrupted", stage: "interrupted", frames: [], playbackCutoffMs: 15_000,
       translationVersionId: null, sourceSegmentId: "e2e-original-segment", selectedText: "Okay", selectionKind: "word", playbackPositionMs: 15_000, outputDictionaryEntryId: null };
     const preview = taskDispatchFixture(task);
     preview.taskKind = kind;

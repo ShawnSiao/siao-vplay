@@ -1,3 +1,4 @@
+export { prepareLearningTask, getLearningTask, listLearningTasks, readLearningPrompt, importLearningResult, startCodexLearningTask, cancelLearningTask, resumeCodexLearningTask } from "./learningGateway";
 export { getDictionaryEntry, listDictionaryEntries } from "./dictionaryGateway";
 export { prepareTranslationTask, getTranslationTask, listTranslationTasks, readTranslationPrompt, importTranslationResult, startCodexTranslationTask, cancelTranslationTask, resumeCodexTranslationTask } from "./translationGateway";
 export { inspectSubtitleFile, importSubtitleFile, listSubtitleVersions, getSubtitleVersion, listSubtitleVersionMetadata, reviseSubtitleVersion, restoreSubtitleVersion, inspectEmbeddedSubtitle, importEmbeddedSubtitle } from "./subtitleGateway";
@@ -21,11 +22,8 @@ import type {
   Explanation,
   ExplanationApplication,
   ExplanationTask,
-  LearningApplication,
   LearningCard,
   LearningCardsExport,
-  LearningSelectionKind,
-  LearningTask,
   LocalResourceCatalog,
   LocalResourceLocationPlan,
   LocalResourceMovePlan,
@@ -880,75 +878,6 @@ export async function chooseLearningExportDirectory(): Promise<string | null> {
     title: "选择学习卡片导出位置",
   });
   return typeof selected === "string" ? selected : null;
-}
-
-export async function prepareLearningTask(
-  projectId: string,
-  handoffKind: "manual" | "codex",
-  sourceSegmentId: string,
-  selectedText: string,
-  selectionKind: LearningSelectionKind,
-  playbackPositionMs: number,
-): Promise<LearningTask> {
-  return invoke<LearningTask>("prepare_learning_task", {
-    input: {
-      projectId,
-      handoffKind,
-      sourceSegmentId,
-      selectedText,
-      selectionKind,
-      playbackPositionMs,
-    },
-  });
-}
-
-export async function getLearningTask(taskId: string): Promise<LearningTask> {
-  return invoke<LearningTask>("get_learning_task", { taskId });
-}
-
-export async function listLearningTasks(
-  projectId: string,
-): Promise<LearningTask[]> {
-  return invoke<LearningTask[]>("list_learning_tasks", { projectId });
-}
-
-export async function readLearningPrompt(taskId: string): Promise<string> {
-  return invoke<string>("read_learning_prompt", { taskId });
-}
-
-export async function importLearningResult(
-  taskId: string,
-  resultPath: string,
-): Promise<LearningApplication> {
-  return invoke<LearningApplication>("import_learning_result", {
-    input: { taskId, resultPath },
-  });
-}
-
-export async function startCodexLearningTask(
-  taskId: string,
-  timeoutSeconds: number | undefined,
-  confirmationSha256: string,
-): Promise<LearningTask> {
-  return invoke<LearningTask>("start_codex_learning_task", {
-    input: { taskId, timeoutSeconds }, confirmationSha256,
-  });
-}
-
-export async function cancelLearningTask(
-  taskId: string,
-): Promise<LearningTask> {
-  return invoke<LearningTask>("cancel_learning_task", { taskId });
-}
-
-export async function resumeCodexLearningTask(
-  taskId: string,
-  timeoutSeconds: number | undefined,
-  confirmationSha256: string,
-): Promise<LearningTask> {
-  return invoke<LearningTask>("resume_codex_learning_task", {
-    input: { taskId, timeoutSeconds }, confirmationSha256,
-  });
 }
 
 export async function reconcileExternalAgentResults(): Promise<

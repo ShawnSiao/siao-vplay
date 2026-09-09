@@ -1,3 +1,4 @@
+import { createLearningTaskFixture } from "../../test-fixtures/learning";
 import { beforeEach, expect, it, vi } from "vitest";
 import { previewAiExecution } from "../environment-settings/gateway";
 import { prepareAiExplanationTask, prepareAiLearningTask, resumeExplanationTask, resumeLearningTask } from "./gateway";
@@ -15,7 +16,7 @@ it.each(schema.examples)("accepts the Rust request wire shape %j", (payload) => 
 });
 
 it("preserves task identity and confirmation while copying authorization", async () => {
-  mocks.invoke.mockResolvedValue({ id: "task" });
+  mocks.invoke.mockResolvedValue({ ...createLearningTaskFixture(), id: "task", handoffKind: "api", execution: { ...createLearningTaskFixture().execution, kind: "api" } });
   await resumeLearningTask("task", execution, authorization, "confirmed-hash");
   expect(mocks.invoke).toHaveBeenCalledExactlyOnceWith("resume_learning_task", {
     input: { taskId: "task", execution, authorization, confirmationSha256: "confirmed-hash" },

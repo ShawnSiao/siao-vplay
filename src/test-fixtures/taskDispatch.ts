@@ -2,7 +2,7 @@ import type { TaskDispatchPreview } from "../features/ai-tasks/taskDispatch";
 import type { ExplanationTask, LearningTask } from "../types";
 
 export function taskDispatchFixture(task: ExplanationTask | LearningTask): TaskDispatchPreview {
-  const explanation = "frames" in task;
+  const explanation = isExplanation(task);
   const frames = explanation ? task.frames.map(({ id, timestampMs, sha256 }) => ({ id, timestampMs, sha256 })) : [];
   return {
     taskId: task.id, taskKind: explanation ? "explanation" : "learning", confirmationSha256: "b".repeat(64),
@@ -14,4 +14,8 @@ export function taskDispatchFixture(task: ExplanationTask | LearningTask): TaskD
     playbackCutoffMs: explanation ? task.playbackCutoffMs : task.playbackPositionMs,
     selectedText: explanation ? null : task.selectedText, frames, prompt: null,
   };
+}
+
+function isExplanation(task: ExplanationTask | LearningTask): task is ExplanationTask {
+  return Array.isArray(task.frames);
 }

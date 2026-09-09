@@ -1,3 +1,4 @@
+import { createLearningTaskFixture } from "../src/test-fixtures/learning";
 import { join } from "node:path";
 import { expect, test } from "@playwright/test";
 import { createUnderstandingFixtures } from "../src/test-fixtures/understanding";
@@ -12,7 +13,7 @@ for (const kind of ["explanation", "learning"] as const) {
     explanationTask.frames = [];
     explanationTask.playbackCutoffMs = 15_000;
     explanationTask.materialSummary = { subtitleCount: 1, frameCount: 0, startMs: 0, endMs: 15_000 };
-    const learningTask: LearningTask = { ...explanationTask, sourceSegmentId: "e2e-original-segment", selectedText: "Okay, and that's essentially how the system stores the new memories.", selectionKind: "sentence", playbackPositionMs: 15_000, outputDictionaryEntryId: null };
+    const learningTask: LearningTask = { ...createLearningTaskFixture(), projectId: explanationTask.projectId, sourceVersionId: explanationTask.sourceVersionId, status: "queued", sourceSegmentId: "e2e-original-segment", selectedText: "Okay, and that's essentially how the system stores the new memories.", selectionKind: "sentence", playbackPositionMs: 15_000, outputDictionaryEntryId: null };
     const task = kind === "learning" ? learningTask : explanationTask;
     const preview = taskDispatchFixture(task);
     // The fixture carries common metadata; learning only sends the current sentence.

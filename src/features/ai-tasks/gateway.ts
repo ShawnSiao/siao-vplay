@@ -1,3 +1,4 @@
+import { parseLearningTask } from "../../lib/learningContract";
 import { aiExecutionRequest } from "../../lib/aiExecutionRequest";
 import { invoke } from "@tauri-apps/api/core";
 
@@ -37,7 +38,7 @@ export async function prepareAiLearningTask(input: {
   authorization: AiMaterialAuthorization;
 }): Promise<LearningTask> {
   const request = aiExecutionRequest(input.execution, input.authorization);
-  return invoke("prepare_ai_learning_task", { input: { ...input, ...request } });
+  return parseLearningTask(await invoke<unknown>("prepare_ai_learning_task", { input: { ...input, ...request } }), { projectId: input.projectId, handoffKind: input.execution.kind });
 }
 
 export async function resumeLearningTask(
@@ -46,7 +47,7 @@ export async function resumeLearningTask(
   authorization: AiMaterialAuthorization,
   confirmationSha256: string,
 ): Promise<LearningTask> {
-  return invoke("resume_learning_task", {
+  return parseLearningTask(await invoke<unknown>("resume_learning_task", {
     input: { taskId, ...aiExecutionRequest(execution, authorization), confirmationSha256 },
-  });
+  }), { taskId, handoffKind: execution.kind });
 }
