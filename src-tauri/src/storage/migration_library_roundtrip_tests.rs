@@ -1,6 +1,8 @@
 use super::*;
 use crate::domain::{SubtitleDisplayMode, UpdatePlaybackStateInput};
 
+#[path = "migration_asset_fixture.rs"]
+mod asset_fixture;
 #[test]
 fn two_app_data_moves_keep_nested_library_media_and_playback_state() {
     let directory = tempfile::tempdir().unwrap();
@@ -40,6 +42,8 @@ fn two_app_data_moves_keep_nested_library_media_and_playback_state() {
         }
         connection.execute_batch("INSERT INTO collections(id,kind,title,root_id,created_at_ms,updated_at_ms) VALUES ('folder','folder','Retained folder','nested',0,0);").unwrap();
     }
+    let assets = asset_fixture::Assets::seed(&store, &project.id);
+    assets.verify(&store);
     for name in ["second", "third"] {
         let destination = directory.path().join(name);
         fs::create_dir(&destination).unwrap();
@@ -69,6 +73,7 @@ fn two_app_data_moves_keep_nested_library_media_and_playback_state() {
         drop(manager);
         manager = StorageManager::initialize(&bootstrap, bootstrap.clone(), None).unwrap();
         store = ProjectStore::open(destination.join("projects/siaovplay.db")).unwrap();
+        assets.verify(&store);
         let restored = store.get_project(&project.id).unwrap();
         assert_eq!(
             Path::new(&restored.media_source.locator),
