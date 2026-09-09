@@ -1,3 +1,4 @@
+import { verifyBackgroundTranscription } from "./appTranscriptionCompletionTest";
 import { verifyDismissedResourceAction, verifySelectedResourceResume } from "./appResourcePreparationTest";
 import { subtitleMetadata } from "./features/subtitle-revision/subtitleMetadata";
 import { createTranslationTask, translationDispatchFixture } from "./test-fixtures/translation";
@@ -2554,45 +2555,8 @@ describe("App", () => {
     );
   });
 
-  it("refreshes player subtitles when generation finishes after the dialog closes", async () => {
-    const completedJob: TranscriptionJob = {
-      ...transcriptionJob,
-      status: "completed",
-      stage: "completed",
-      progress: 1,
-      subtitleVersionId: subtitleVersion.id,
-      completedAtMs: 1_785_354_220_000,
-    };
-    render(<App />);
-    fireEvent.click(await screen.findByRole("button", { name: /继续播放/ }));
-    fireEvent.click(await screen.findByRole("button", { name: "添加字幕" }));
-    fireEvent.click(screen.getByRole("tab", { name: "从视频生成" }));
-    fireEvent.change(await screen.findByLabelText(/视频原声语言/), {
-      target: { value: "ja" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "生成原文字幕" }));
-
-    await waitFor(() =>
-      expect(desktopMocks.startTranscription).toHaveBeenCalled(),
-    );
-    desktopMocks.getTranscriptionJob.mockResolvedValue(completedJob);
-    desktopMocks.listSubtitleVersions.mockResolvedValue([subtitleVersion]);
-
-    expect(screen.getAllByRole("button", { name: "关闭" })).toHaveLength(1);
-    fireEvent.click(screen.getByRole("button", { name: "关闭" }));
-
-    await waitFor(() =>
-      expect(desktopMocks.getTranscriptionJob).toHaveBeenCalledWith(
-        transcriptionJob.id,
-      ),
-    );
-    expect(
-      await screen.findByText("已生成 1 条原文字幕草稿，可以开始抽查。"),
-    ).toBeInTheDocument();
-    expect(desktopMocks.getSubtitleVersion).toHaveBeenCalledWith(project.id, subtitleVersion.id);
-    expect(
-      screen.getByRole("button", { name: "原文字幕 · 1" }),
-    ).toBeInTheDocument();
+  it.each(["completed", "failed", "interrupted", "wrong-task", "wrong-output"] as const)("handles background transcription outcome %s after closing its dialog", async outcome => {
+    await verifyBackgroundTranscription(outcome, { desktopMocks, project, subtitleVersion, transcriptionJob });
   });
 
   it("keeps tracking a transcription created after its dialog closes", async () => {

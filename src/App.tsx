@@ -1,3 +1,4 @@
+import { transcriptionCompletion, matchesTranscriptionOutput } from "./features/playback/transcriptionCompletion";
 import { posterCandidates } from "./features/library/posterCandidates";
 import { SubtitleHistoryLoader } from "./features/subtitle-revision/SubtitleHistoryLoader";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -57,15 +58,10 @@ import type {
   MediaPreparation,
   Project,
   SubtitleVersion,
-  TranscriptionJob,
   TranslationTask,
   LibraryMediaSummary,
   EpisodeReference,
 } from "./types";
-
-const activeTranscriptionStatuses = new Set<TranscriptionJob["status"]>(
-  ["queued", "extracting", "transcribing", "validating"],
-);
 
 const EnvironmentSettingsDialog = createDeferredDialog(
   () => import("./features/environment-settings/EnvironmentSettingsDialog").then(module => module.EnvironmentSettingsDialog),
@@ -678,23 +674,24 @@ export default function App() {
         if (!active) {
           return;
         }
-        if (activeTranscriptionStatuses.has(job.status)) {
+        const decision = transcriptionCompletion(job, trackedTranscriptionJobId, activeProjectId);
+        if (decision.kind === "waiting") {
           timer = window.setTimeout(() => void poll(), 900);
           return;
         }
 
-        if (
-          job.status !== "completed" ||
-          !job.subtitleVersionId ||
-          job.projectId !== activeProjectId
-        ) {
-          setTrackedTranscriptionJobId((current) =>
-            current === job.id ? null : current,
-          );
+        if (decision.kind === "stop") {
+          if (decision.notice) setToast(decision.notice);
+          setTrackedTranscriptionJobId(current => current === trackedTranscriptionJobId ? null : current);
           return;
         }
-        const version = await getSubtitleVersion(activeProjectId, job.subtitleVersionId);
+        const version = await getSubtitleVersion(activeProjectId, decision.versionId);
         if (!active) {
+          return;
+        }
+        if (!matchesTranscriptionOutput(version, decision.versionId, activeProjectId)) {
+          setToast("返回的字幕版本与任务不匹配，未采用结果。请重新打开字幕工具检查。");
+          setTrackedTranscriptionJobId(current => current === trackedTranscriptionJobId ? null : current);
           return;
         }
         if (!subtitleVersions.some((item) => item.id === version.id)) {
@@ -704,7 +701,7 @@ export default function App() {
           );
         }
         setTrackedTranscriptionJobId((current) =>
-          current === job.id ? null : current,
+          current === trackedTranscriptionJobId ? null : current,
         );
       } catch (error) {
         if (active) {
