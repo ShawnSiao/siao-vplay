@@ -3,7 +3,7 @@ use super::super::metadata_page::{MetadataPageInput, page_with_checkpoint};
 use serde::Serialize;
 use std::time::Instant;
 
-fn measure<T: Serialize>(label: &str, mut read: impl FnMut() -> T) -> (T, usize) {
+pub(super) fn measure<T: Serialize>(label: &str, mut read: impl FnMut() -> T) -> (T, usize) {
     const SAMPLES: usize = 20;
     let mut times = Vec::with_capacity(SAMPLES);
     let mut last = None;

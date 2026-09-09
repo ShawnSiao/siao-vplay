@@ -1777,6 +1777,7 @@ mod tests {
     mod read_tests;
     mod metadata_page_tests;
     mod metadata_benchmark;
+    mod current_track_tests;
     use std::{fs, process::Command};
 
     use crate::{domain::CreateLocalProjectInput, media};

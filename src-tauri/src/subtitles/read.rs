@@ -99,10 +99,13 @@ fn read_versions(
 }
 
 pub(super) fn version_query(selection: Selection<'_>) -> String {
-    // Current-track reads start from the small track set, independently of history size.
+    // Both role branches use project indexes before looking up their current versions.
+    let prefix = if matches!(selection, Selection::Current) {
+        format!("WITH current_tracks AS MATERIALIZED ({})", include_str!("current_tracks.sql"))
+    } else { String::new() };
     let source = match selection {
         Selection::Current => {
-            "FROM subtitle_tracks t CROSS JOIN subtitle_versions v
+            "FROM current_tracks t CROSS JOIN subtitle_versions v
             WHERE t.project_id = ?1 AND v.id = t.current_version_id
               AND v.track_id = t.id AND v.project_id = t.project_id"
         }
@@ -116,7 +119,7 @@ pub(super) fn version_query(selection: Selection<'_>) -> String {
         }
     };
     format!(
-        "SELECT
+        "{prefix} SELECT
             v.id, v.track_id, v.project_id, t.role, v.version_number, v.status,
             v.source_kind, v.source_label, v.source_sha256, v.media_sha256,
             v.language_code, v.project_revision, v.preflight_json,

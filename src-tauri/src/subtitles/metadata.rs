@@ -78,7 +78,7 @@ pub(super) fn read_metadata_selection(
         ),
         None => (0, -1),
     };
-    let mut statement = connection.prepare(metadata_query(current_only))?;
+    let mut statement = connection.prepare(&metadata_query(current_only))?;
     let rows = statement
         .query_map(params![project_id, limit, offset, current_only], |row| {
             Ok(SubtitleVersionMetadata {
@@ -99,9 +99,10 @@ pub(super) fn read_metadata_selection(
     Ok(rows)
 }
 
-pub(super) fn metadata_query(current_only: bool) -> &'static str {
-    if current_only { include_str!("metadata_current.sql") }
-    else { include_str!("metadata_window.sql") }
+pub(super) fn metadata_query(current_only: bool) -> String {
+    if current_only { format!("WITH current_tracks AS MATERIALIZED ({}) {}",
+        include_str!("current_tracks.sql"), include_str!("metadata_current.sql")) }
+    else { include_str!("metadata_window.sql").into() }
 }
 
 #[tauri::command]

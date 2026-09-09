@@ -1,6 +1,24 @@
 use super::*;
 
 #[test]
+fn current_track_queries_use_project_indexes_for_both_roles() {
+    let (_temp, store, project_id, _original) = create_store_with_subtitles();
+    let connection = store.connect().unwrap();
+    for current_metadata in [false, true] {
+        let query = if current_metadata { metadata::metadata_query(true).to_owned() }
+            else { super::super::read::version_query(super::super::read::Selection::Current) };
+        let mut statement = connection.prepare(&format!("EXPLAIN QUERY PLAN {query}")).unwrap();
+        let mut rows = if current_metadata { statement.query(params![project_id, -1, 0, true]).unwrap() }
+            else { statement.query(params![project_id]).unwrap() };
+        let mut plan = Vec::new();
+        while let Some(row) = rows.next().unwrap() { plan.push(row.get::<_, String>(3).unwrap()); }
+        for index in ["one_original_subtitle_track_per_project", "one_translation_subtitle_track_per_language"] {
+            assert!(plan.iter().any(|step| step.contains("SEARCH") && step.contains(index)), "metadata={current_metadata}: {plan:?}");
+        }
+    }
+}
+
+#[test]
 fn current_metadata_uses_version_pointer_without_history_scan() {
     let (_temp, store, project_id, _original) = create_store_with_subtitles();
     let connection = store.connect().unwrap();
