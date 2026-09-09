@@ -5,6 +5,13 @@ pub(super) fn run_job(
     job_id: &str,
     cancellation: &AtomicBool,
 ) -> Result<(), SubtitleBurnError> {
+    check_cancelled(store, job_id, cancellation)?;
+    let _admission = crate::task_admission::acquire(crate::task_admission::Kind::SubtitleBurn,
+        || cancellation.load(Ordering::SeqCst)).map_err(|error| {
+            if error.kind() == std::io::ErrorKind::Interrupted { SubtitleBurnError::Cancelled }
+            else { SubtitleBurnError::BurnFailed(error.to_string()) }
+        })?;
+    check_cancelled(store, job_id, cancellation)?;
     let _resources = crate::resource_leases::configured(&["ffmpeg-cpu"])?;
     transition_job(store, job_id, "queued", "running", "verifying", 0.02)?;
     let job = load_stored_job(store, job_id)?;

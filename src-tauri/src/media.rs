@@ -30,7 +30,7 @@ pub enum MediaError {
     RuntimeUnavailable(String),
     #[error("媒体探测失败：{0}")]
     ProbeFailed(String),
-    #[error("媒体在探测期间发生变化，请重新尝试")]
+    #[error("源视频已发生变化，请重新尝试")]
     SourceChanged,
     #[error("媒体不包含可用的视频轨")]
     MissingVideo,

@@ -34,3 +34,18 @@ test("preparation reports actual transcoding and separates returning from cancel
   await page.getByRole("button", { name: "返回媒体库" }).click();
   await expect(page.getByText("已返回媒体库")).toBeVisible();
 });
+
+test("queued preparation explains waiting and remains cancellable", async ({ page }) => {
+  await page.setViewportSize({ width:960,height:640 });
+  await page.goto("/e2e/subtitle-translation.html?recovery=preparation&queued=1");
+  await expect(page.getByText("正在等待开始处理。可以返回媒体库，或取消本次准备。",{exact:true})).toBeVisible();
+  await expect(page.getByText("轮到这段视频后会继续准备播放。",{exact:true})).toBeVisible();
+  await expect(page.getByText(/已用时 · \d+ 秒/)).toBeVisible();
+  if (process.env.SIAOVPLAY_DESIGN_CAPTURE_DIR) await page.screenshot({ path:join(process.env.SIAOVPLAY_DESIGN_CAPTURE_DIR,"preparation-queued-960.png"),fullPage:true });
+  await page.getByRole("button",{name:"取消并返回媒体库"}).click();
+  await expect(page.getByRole("button",{name:"正在取消…"})).toBeDisabled();
+  await expect(page.getByText("正在停止处理",{exact:true})).toBeVisible();
+  await expect(page.getByText("正在取消本次准备，请稍候。",{exact:true})).toBeVisible();
+  await page.getByRole("button",{name:"返回媒体库"}).click();
+  await expect(page.getByText("已返回媒体库",{exact:true})).toBeVisible();
+});

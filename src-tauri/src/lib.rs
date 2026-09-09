@@ -37,6 +37,7 @@ mod resource_location;
 mod resource_migration;
 mod resource_usage;
 mod resource_leases;
+mod task_admission;
 mod cleanup_confirmation;
 mod cleanup_batch;
 mod runtime;

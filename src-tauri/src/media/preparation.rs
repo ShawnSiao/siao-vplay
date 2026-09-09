@@ -63,7 +63,6 @@ fn generate_playback_proxy(
 ) -> Result<(MediaArtifact, bool), MediaError> {
     runtime.cancel.check()?;
     let project_cache = media_cache_root.join(&project.id);
-    fs::create_dir_all(&project_cache)?;
     let fingerprint_prefix = &inspection.source_sha256[..16];
     let final_path = project_cache.join(format!("playback-{fingerprint_prefix}.mp4"));
     let temporary_path = project_cache.join(format!("playback-{fingerprint_prefix}.part.mp4"));
@@ -79,6 +78,12 @@ fn generate_playback_proxy(
     }
 
     runtime.cancel.check()?;
+    runtime.stage(crate::preparation::Stage::Queued)?;
+    let _admission = crate::task_admission::acquire(crate::task_admission::Kind::PlaybackProxy,
+        || runtime.cancel.check().is_err()).map_err(|error| MediaError::ProxyFailed(error.to_string()))?;
+    runtime.stage(crate::preparation::Stage::Fingerprint)?;
+    verify_proxy_source(source_path, &inspection.source_sha256, &runtime.cancel)?;
+    fs::create_dir_all(&project_cache)?;
     let artifact = store.begin_playback_proxy(
         &project.id,
         &project.media_source.id,
@@ -169,6 +174,10 @@ fn generate_playback_proxy(
         ));
     }
 
+    verify_proxy_source(source_path, &inspection.source_sha256, &runtime.cancel).map_err(|error| {
+        fail_proxy(store, &artifact.id, &temporary_path, &project_cache,
+            if runtime.cancel.check().is_err() { "user_cancelled" } else { "source_changed" }, &error.to_string())
+    })?;
     runtime
         .stage(crate::preparation::Stage::Finalize)
         .map_err(|error| {
@@ -199,3 +208,11 @@ fn generate_playback_proxy(
     )?;
     Ok((completed, false))
 }
+
+fn verify_proxy_source(path: &Path, expected: &str, cancel: &crate::cancellable_process::Cancellation) -> Result<(), MediaError> {
+    if hash_file_controlled(path, cancel)? != expected { return Err(MediaError::SourceChanged); }
+    Ok(())
+}
+#[cfg(test)]
+#[path = "preparation_tests.rs"]
+mod tests;

@@ -6,6 +6,18 @@ pub(crate) fn run_job(
     cancellation: &AtomicBool,
 ) -> Result<(), TranscriptionError> {
     let job = load_stored_job(store, job_id)?;
+    if job.public.status.as_str() != "queued" {
+        return Err(TranscriptionError::InvalidJobState(job.public.status.as_str().to_owned()));
+    }
+    if job.cancel_requested_at_ms.is_some() || cancellation.load(Ordering::SeqCst) {
+        return Err(TranscriptionError::Cancelled);
+    }
+    let _admission = crate::task_admission::acquire(crate::task_admission::Kind::Transcription,
+        || cancellation.load(Ordering::SeqCst)).map_err(|error| {
+            if error.kind() == std::io::ErrorKind::Interrupted { TranscriptionError::Cancelled }
+            else { TranscriptionError::TranscriptionFailed(error.to_string()) }
+        })?;
+    check_cancelled(store, job_id, cancellation)?;
     let model_id = format!("whisper-model-{}", job.public.model_kind.as_str());
     let _resources = crate::resource_leases::configured(&[
         "ffmpeg-cpu",
@@ -13,12 +25,6 @@ pub(crate) fn run_job(
         "whisper-vad-silero-6.2",
         &model_id,
     ])?;
-    if job.public.status.as_str() != "queued" {
-        return Err(TranscriptionError::InvalidJobState(job.public.status.as_str().to_owned()));
-    }
-    if job.cancel_requested_at_ms.is_some() || cancellation.load(Ordering::SeqCst) {
-        return Err(TranscriptionError::Cancelled);
-    }
     transition_job(
         store,
         job_id,

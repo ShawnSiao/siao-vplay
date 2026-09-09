@@ -40,7 +40,7 @@ describe("PreparationScreen", () => {
       />,
     );
 
-    expect(screen.getByText("已处理 · 0 秒")).toBeVisible();
+    expect(screen.getByText("已用时 · 0 秒")).toBeVisible();
     const cancel = screen.getByRole("button", { name: "取消并返回媒体库" });
     fireEvent.click(cancel);
     expect(onCancel).toHaveBeenCalledOnce();
@@ -50,6 +50,17 @@ describe("PreparationScreen", () => {
     expect(onBack).toHaveBeenCalledOnce();
 
     act(() => vi.advanceTimersByTime(6_000));
-    expect(screen.getByText("已处理 · 6 秒")).toBeVisible();
+    expect(screen.getByText("已用时 · 6 秒")).toBeVisible();
   });
+});
+
+it("describes a queued preparation honestly and keeps cancellation separate from returning", () => {
+  const onCancel = vi.fn(); const onBack = vi.fn();
+  render(<PreparationScreen project={project} forceProxy progress={{ requestId:"queued",projectId:project.id,stage:"queued",status:"running" }}
+    error={null} cancelling={false} canCancel onCancel={onCancel} onBack={onBack} onRetry={vi.fn()} />);
+  expect(screen.getByText("正在等待开始处理。可以返回媒体库，或取消本次准备。")).toBeVisible();
+  expect(screen.getByText("轮到这段视频后会继续准备播放。")).toBeVisible();
+  expect(screen.getByText("已用时 · 0 秒")).toBeVisible();
+  fireEvent.click(screen.getByRole("button",{ name:"取消并返回媒体库" }));
+  expect(onCancel).toHaveBeenCalledOnce(); expect(onBack).not.toHaveBeenCalled();
 });

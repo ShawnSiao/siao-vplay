@@ -32,6 +32,7 @@ export function PreparationScreen({
     inspect: "检查视频与音频", transcode: "生成兼容播放版本", validate: "检查生成的播放版本", finalize: "保存播放版本",
   };
   const stageLabel = cancelling ? "正在停止处理" : progress ? stageLabels[progress.stage] : "正在检查";
+  const queued = progress?.stage === "queued";
   const generating = progress?.stage === "transcode";
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   useEffect(() => {
@@ -52,6 +53,10 @@ export function PreparationScreen({
           <p className="lead">
             {error
               ? "项目和源视频都没有改变。可以重新尝试，或返回项目库重新定位媒体。"
+              : cancelling
+                ? "正在取消本次准备，请稍候。"
+              : queued
+                ? "正在等待开始处理。可以返回媒体库，或取消本次准备。"
               : generating
                 ? "正在生成兼容的本地播放版本，原片保持不变。"
                 : "正在读取音视频轨道并确认当前电脑能否直接播放。"}
@@ -79,12 +84,12 @@ export function PreparationScreen({
                     {stageLabel}
                   </strong>
                   <small>
-                    {generating
+                    {cancelling ? "处理停止后可以重新准备播放。" : queued ? "轮到这段视频后会继续准备播放。" : generating
                       ? "原片保持不变，输出保存在 SiaoVPlay 本地缓存。"
                       : "按真实轨道、编码、分辨率和像素格式判断。"}
                   </small>
                 </div>
-                <em>进行中</em>
+                <em>{cancelling ? "正在停止" : queued ? "等待" : "进行中"}</em>
               </div>
               <div className="preparation-step">
                 <span>3</span>
@@ -115,7 +120,7 @@ export function PreparationScreen({
               <div>
                 <span className="working-indicator">
                   <span className="spinner"></span>
-                  {`${cancelling ? "正在停止" : "已处理"} · ${elapsedSeconds} 秒`}
+                  {`${cancelling ? "正在停止" : "已用时"} · ${elapsedSeconds} 秒`}
                 </span>
                 <button className="button quiet" type="button" onClick={onBack}>返回媒体库</button>
                 <button className="button quiet" type="button" onClick={onCancel} disabled={!canCancel || cancelling}>
