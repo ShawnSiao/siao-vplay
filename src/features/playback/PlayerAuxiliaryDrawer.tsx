@@ -1,3 +1,4 @@
+import type { EpisodePagination } from "../library/useCollectionEpisodePages";
 import { LearningPanel } from "../../components/LearningPanel";
 import { useState } from "react";
 import { UnderstandingPanel } from "../../components/UnderstandingPanel";
@@ -24,6 +25,7 @@ type PlayerAuxiliaryDrawerProps = {
   activeOriginal: SubtitleSegment | null;
   activeTranslation: SubtitleSegment | null;
   episodeNavigation: EpisodeNavigationState;
+  episodePagination?: EpisodePagination;
   switchingEpisode: boolean;
   positionMs: number;
   durationMs: number | null;
@@ -47,6 +49,7 @@ export function PlayerAuxiliaryDrawer({
   activeOriginal,
   activeTranslation,
   episodeNavigation,
+  episodePagination,
   switchingEpisode,
   positionMs,
   durationMs,
@@ -92,6 +95,8 @@ export function PlayerAuxiliaryDrawer({
       {activeTab === "episodes" ? (
         <EpisodeDrawer
           projectId={projectId}
+          mediaTitle={mediaTitle}
+          pagination={episodePagination}
           detail={episodeNavigation.detail}
           episodes={episodeNavigation.episodes}
           neighbors={episodeNavigation.neighbors}

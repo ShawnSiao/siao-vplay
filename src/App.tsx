@@ -829,6 +829,7 @@ export default function App() {
             drawerTab={shellController.state.drawerTab}
             contextMenu={shellController.state.contextMenu}
             episodeNavigation={episodeNavigation.state}
+            episodePagination={episodeNavigation.pagination}
             onBack={returnToLibrary}
             onCloseDrawer={shellController.closeDrawer}
             onSelectDrawer={shellController.selectDrawer}

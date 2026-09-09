@@ -214,6 +214,13 @@ function UnderstandingResultPreview() {
 }
 
 export function PlayerHarness() {
+  const pagedEpisodes = new URLSearchParams(window.location.search).has("episodePages");
+  const [loadedMore, setLoadedMore] = useState(false);
+  const [pageError, setPageError] = useState(false);
+  const [pageAttempt, setPageAttempt] = useState(0);
+  const episodeItems = [episodeSummary(project.id, 1, "站台相遇"), episodeSummary(nextEpisode.projectId, 2, nextEpisode.displayTitle)]
+    .slice(0, pagedEpisodes && !loadedMore ? 1 : 2);
+
   const [drawerTab, setDrawerTab] = useState<ShellDrawerTab | null>(null);
   const [contextMenu, setContextMenu] = useState<ShellContextMenu | null>(null);
 
@@ -302,14 +309,17 @@ export function PlayerHarness() {
         contextMenu={contextMenu}
         episodeNavigation={{
           detail: collectionDetail,
-          episodes: [
-            episodeSummary(project.id, 1, "站台相遇"),
-            episodeSummary(nextEpisode.projectId, 2, nextEpisode.displayTitle),
-          ],
+          episodes: episodeItems,
           neighbors: { previous: null, next: nextEpisode },
           loading: false,
           error: null,
         }}
+        episodePagination={pagedEpisodes ? {
+          items: episodeItems, totalCount: 2, nextOffset: loadedMore ? null : 1, loading: false,
+          error: pageError ? "读取暂时失败" : null,
+          loadMore: () => { if (pageAttempt === 0) { setPageError(true); setPageAttempt(1); } else { setLoadedMore(true); setPageError(false); } },
+          reload: () => { setLoadedMore(false); setPageError(false); setPageAttempt(0); },
+        } : undefined}
         onBack={() => undefined}
         onCloseDrawer={() => setDrawerTab(null)}
         onSelectDrawer={setDrawerTab}

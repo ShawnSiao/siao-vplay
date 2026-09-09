@@ -1,4 +1,5 @@
 import { readLibrarySection } from "../../lib/libraryPageGateway";
+export { readCollectionEpisodePage as listCollectionEpisodePage } from "../../lib/collectionEpisodePageGateway";
 import { readLibraryHome } from "../../lib/libraryHomeGateway";
 import { readLibrarySearch } from "../../lib/librarySearchGateway";
 import { invokeCollectionDetail, invokeWatchLater } from "../../lib/collectionDetailGateway";

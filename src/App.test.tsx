@@ -1,3 +1,4 @@
+import { setupLibraryQueryMocks } from "./test/libraryQueryMocks";
 import { confirmProjectDeletion } from "./test/confirmProjectDeletion";
 import { verifyRejectedStartupStatus } from "./appStartupStatusTest";
 import { locationResult } from "./test-fixtures/resourceLocation";
@@ -146,6 +147,7 @@ const libraryGatewayMocks = vi.hoisted(() => ({
   deleteCollection: vi.fn(),
   getCollectionDetail: vi.fn(),
   listCollectionEpisodes: vi.fn(),
+  listCollectionEpisodePage: vi.fn(),
   addProjectToCollection: vi.fn(),
   removeProjectFromCollection: vi.fn(),
   getEpisodeNeighbors: vi.fn(),
@@ -777,11 +779,7 @@ beforeEach(() => {
   dispatchMocks.previewTaskDispatch.mockImplementation(async (kind) => taskDispatchFixture(await (kind === "explanation" ? desktopMocks.prepareExplanationTask : desktopMocks.prepareLearningTask).mock.results.at(-1)!.value));
   window.localStorage.clear();
   window.sessionStorage.clear();
-  libraryGatewayMocks.listLibrarySection.mockResolvedValue({
-    items: [],
-    totalCount: 0,
-    nextOffset: null,
-  });
+  setupLibraryQueryMocks(libraryGatewayMocks);
   desktopMocks.getAppStatus.mockResolvedValue({
     appName: "SiaoVPlay",
     version: "0.3.0",

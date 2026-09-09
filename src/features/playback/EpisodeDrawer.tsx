@@ -1,4 +1,6 @@
 import { formatDuration } from "../../lib/format";
+import type { EpisodePagination } from "../library/useCollectionEpisodePages";
+import "./episode-pagination.css";
 import type {
   CollectionDetail,
   EpisodeNeighbors,
@@ -7,7 +9,9 @@ import type {
 } from "../../types";
 
 type EpisodeDrawerProps = {
+  pagination?: EpisodePagination;
   projectId: string;
+  mediaTitle?: string;
   detail: CollectionDetail | null;
   episodes: LibraryMediaSummary[];
   neighbors: EpisodeNeighbors;
@@ -30,7 +34,9 @@ function mediaReference(media: LibraryMediaSummary): EpisodeReference {
 }
 
 export function EpisodeDrawer({
+  pagination,
   projectId,
+  mediaTitle,
   detail,
   episodes,
   neighbors,
@@ -45,7 +51,8 @@ export function EpisodeDrawer({
     return <div className="player-drawer-empty"><span className="spinner" /><strong>正在读取剧集</strong></div>;
   }
   if (error) {
-    return <div className="player-drawer-empty warning"><strong>剧集列表暂时不可用</strong><p>{error}</p></div>;
+    return <div className="player-drawer-empty warning"><strong>剧集列表暂时不可用</strong><p>{error}</p>
+      {pagination ? <button type="button" className="button quiet" onClick={pagination.reload}>重新加载剧集</button> : null}</div>;
   }
   if (!detail) {
     return <div className="player-drawer-empty"><strong>这是单个视频</strong><p>从剧集详情打开单集后，这里会显示当前季和上一集／下一集。</p></div>;
@@ -71,7 +78,7 @@ export function EpisodeDrawer({
       : "未观看";
 
   return (
-    <div className="episode-drawer">
+    <div className={pagination ? "episode-drawer has-pagination" : "episode-drawer"}>
       <header>
         <div className="episode-drawer-hero">
           <div>
@@ -83,7 +90,7 @@ export function EpisodeDrawer({
         <div className="episode-drawer-progress-row">
           <span>
             <span className="episode-drawer-series">
-              {detail.summary.title} · {currentEpisode?.episodeTitle ?? "当前集"}
+              {detail.summary.title} · {currentEpisode?.episodeTitle ?? mediaTitle ?? "当前集"}
             </span>
             <strong>
               {formatDuration(currentPositionMs)} / {formatDuration(currentDurationMs)}
@@ -147,6 +154,17 @@ export function EpisodeDrawer({
           );
         })}
       </div>
+      {pagination ? <div className="episode-pagination">
+        <p role="status">{pagination.loading ? "正在读取剧集…" : pagination.error && episodes.length === 0
+          ? "未能读取剧集" : `已显示 ${episodes.length} / ${pagination.totalCount} 集`}</p>
+        {pagination.error ? <p role="alert">{pagination.error}</p> : null}
+        {pagination.nextOffset !== null || pagination.error ? <div className="episode-pagination-actions">
+        {pagination.nextOffset !== null ? <button type="button" className="button quiet" disabled={pagination.loading}
+          onClick={pagination.loadMore}>{pagination.error ? "重试加载更多" : "加载更多剧集"}</button> : null}
+        {pagination.error ? <button type="button" className="button quiet" disabled={pagination.loading}
+          onClick={pagination.reload}>重新加载剧集</button> : null}
+        </div> : null}
+      </div> : null}
     </div>
   );
 }

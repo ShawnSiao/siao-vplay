@@ -1,3 +1,4 @@
+import type { EpisodePagination } from "../library/useCollectionEpisodePages";
 import { useCallback, useRef, useState } from "react";
 import { formatDuration } from "../../lib/format";
 import type {
@@ -36,6 +37,7 @@ type PlayerScreenProps = {
   drawerTab: ShellDrawerTab | null;
   contextMenu: ShellContextMenu | null;
   episodeNavigation: EpisodeNavigationState;
+  episodePagination?: EpisodePagination;
   onBack: () => void;
   onCloseDrawer: () => void;
   onSelectDrawer: (tab: ShellDrawerTab) => void;
@@ -56,6 +58,7 @@ export function PlayerScreen({
   drawerTab,
   contextMenu,
   episodeNavigation,
+  episodePagination,
   onBack,
   onCloseDrawer,
   onSelectDrawer,
@@ -370,6 +373,7 @@ export function PlayerScreen({
           activeOriginal={activeOriginal}
           activeTranslation={activeTranslation}
           episodeNavigation={episodeNavigation}
+          episodePagination={episodePagination}
           switchingEpisode={switchingEpisode}
           positionMs={positionMs}
           durationMs={durationMs}

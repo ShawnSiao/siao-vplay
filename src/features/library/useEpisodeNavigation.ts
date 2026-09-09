@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useReducer, useRef } from "react";
 
+import { useCollectionEpisodePages } from "./useCollectionEpisodePages";
 import { commandError } from "../../lib/desktop";
 import type {
   CollectionDetail,
@@ -9,7 +10,6 @@ import type {
 import {
   getCollectionDetail,
   getEpisodeNeighbors,
-  listCollectionEpisodes,
 } from "./libraryGateway";
 
 export type EpisodePlaybackContext = {
@@ -26,11 +26,10 @@ export type EpisodeNavigationState = {
 };
 
 const emptyNeighbors: EpisodeNeighbors = { previous: null, next: null };
-type OwnedState = EpisodeNavigationState & { scope: string | null };
+type OwnedState = Omit<EpisodeNavigationState, "episodes"> & { scope: string | null };
 const initialState: OwnedState = {
   scope: null,
   detail: null,
-  episodes: [],
   neighbors: emptyNeighbors,
   loading: false,
   error: null,
@@ -42,7 +41,6 @@ type Action =
   | {
       type: "loaded";
       detail: CollectionDetail;
-      episodes: LibraryMediaSummary[];
       neighbors: EpisodeNeighbors;
     }
   | { type: "failed"; message: string };
@@ -57,7 +55,6 @@ function reducer(state: OwnedState, action: Action): OwnedState {
       return {
         scope: state.scope,
         detail: action.detail,
-        episodes: action.episodes,
         neighbors: action.neighbors,
         loading: false,
         error: null,
@@ -72,9 +69,10 @@ export function useEpisodeNavigation(
   projectId: string | null,
   includeEpisodes = false,
 ) {
+  const pages = useCollectionEpisodePages(context?.collectionId ?? null, context?.seasonNumber ?? null, includeEpisodes, projectId);
   const [state, dispatch] = useReducer(reducer, initialState);
   const requestSequence = useRef(0);
-  const scope = context && projectId ? JSON.stringify([context.collectionId, context.seasonNumber, projectId, includeEpisodes]) : null;
+  const scope = context && projectId ? JSON.stringify([context.collectionId, context.seasonNumber, projectId]) : null;
 
   const refresh = useCallback(async () => {
     const sequence = requestSequence.current + 1;
@@ -85,20 +83,19 @@ export function useEpisodeNavigation(
     }
     dispatch({ type: "started", scope });
     try {
-      const [detail, episodes, neighbors] = await Promise.all([
+      const [detail, neighbors] = await Promise.all([
         getCollectionDetail(context.collectionId),
-        includeEpisodes ? listCollectionEpisodes(context.collectionId, context.seasonNumber) : Promise.resolve([]),
         getEpisodeNeighbors(context.collectionId, projectId),
       ]);
       if (requestSequence.current === sequence) {
-        dispatch({ type: "loaded", detail, episodes, neighbors });
+        dispatch({ type: "loaded", detail, neighbors });
       }
     } catch (error) {
       if (requestSequence.current === sequence) {
         dispatch({ type: "failed", message: commandError(error).message });
       }
     }
-  }, [context, projectId, scope, includeEpisodes]);
+  }, [context, projectId, scope]);
 
   useEffect(() => {
     void refresh();
@@ -108,5 +105,6 @@ export function useEpisodeNavigation(
   }, [refresh]);
 
   const visibleState = state.scope === scope ? state : { ...initialState, loading: scope !== null };
-  return { state: visibleState, refresh };
+  return { state: { ...visibleState, episodes: pages.items, loading: visibleState.loading || pages.loading }, refresh,
+    pagination: { ...pages, reload: () => { pages.reload(); void refresh(); } } };
 }
