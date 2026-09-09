@@ -8,6 +8,7 @@ const APP_PATH_COLUMNS: &[(&str, &str, bool)] = &[
     ("media_sources", "locator", false),
     ("media_sources", "poster_path", false),
     ("media_artifacts", "path", false),
+    ("collections", "poster_path", false),
     ("transcription_jobs", "model_path", false),
     ("transcription_jobs", "runtime_path", false),
     ("explanation_frames", "path", false),
@@ -92,6 +93,9 @@ pub(super) fn rewrite_paths_in_transaction(connection: &Connection, area: Storag
     };
     for (table, column, json) in columns {
         rewrite_column(connection, table, column, *json, source, destination)?;
+    }
+    if area == StorageArea::AppData {
+        crate::library::relocate_roots_in_transaction(connection, source, destination)?;
     }
     Ok(())
 }
@@ -285,3 +289,7 @@ mod tests {
 #[cfg(test)]
 #[path = "database_backup_tests.rs"]
 mod backup_tests;
+
+#[cfg(test)]
+#[path = "database_library_path_tests.rs"]
+mod library_path_tests;

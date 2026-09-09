@@ -46,3 +46,6 @@ pub(crate) use recovery_store::LibraryRecoveryStore;
 pub(crate) use scan_service::LibraryScanService;
 pub(crate) use section_model::*;
 pub(crate) use service::LibraryService;
+
+mod storage_migration;
+pub(crate) use storage_migration::relocate_roots_in_transaction;
