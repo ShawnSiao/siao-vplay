@@ -670,6 +670,8 @@ fn spawn_worker(
     runtime: RuntimeIdentity,
     timeout: Duration,
 ) -> Result<(), CodexRunnerError> {
+    let project_id = translation::get_translation_task(&store, &task_id)?.project_id;
+    let project_operation = crate::project_operations::Operation::acquire(&store, &project_id)?;
     let cancellation = Arc::new(AtomicBool::new(false));
     {
         let mut tasks = active_tasks()
@@ -685,6 +687,7 @@ fn spawn_worker(
     let spawn_result = thread::Builder::new()
         .name(format!("codex-translation-{task_id}"))
         .spawn(move || {
+            let _project_operation = project_operation;
             let result = run_task(&store, &worker_task_id, &runtime, timeout, &cancellation);
             if let Err(error) = result {
                 let _ = finish_with_error(&store, &worker_task_id, &error);
@@ -712,6 +715,8 @@ fn spawn_explanation_worker(
     runtime: RuntimeIdentity,
     timeout: Duration,
 ) -> Result<(), CodexRunnerError> {
+    let project_id = understanding::get_explanation_task(&store, &task_id)?.project_id;
+    let project_operation = crate::project_operations::Operation::acquire(&store, &project_id)?;
     let cancellation = Arc::new(AtomicBool::new(false));
     {
         let mut tasks = active_tasks()
@@ -727,6 +732,7 @@ fn spawn_explanation_worker(
     let spawn_result = thread::Builder::new()
         .name(format!("codex-explanation-{task_id}"))
         .spawn(move || {
+            let _project_operation = project_operation;
             let result =
                 run_explanation_task(&store, &worker_task_id, &runtime, timeout, &cancellation);
             if let Err(error) = result {
@@ -755,6 +761,8 @@ fn spawn_learning_worker(
     runtime: RuntimeIdentity,
     timeout: Duration,
 ) -> Result<(), CodexRunnerError> {
+    let project_id = learning::get_learning_task(&store, &task_id)?.project_id;
+    let project_operation = crate::project_operations::Operation::acquire(&store, &project_id)?;
     let cancellation = Arc::new(AtomicBool::new(false));
     {
         let mut tasks = active_tasks()
@@ -770,6 +778,7 @@ fn spawn_learning_worker(
     let spawn_result = thread::Builder::new()
         .name(format!("codex-learning-{task_id}"))
         .spawn(move || {
+            let _project_operation = project_operation;
             let result =
                 run_learning_task(&store, &worker_task_id, &runtime, timeout, &cancellation);
             if let Err(error) = result {

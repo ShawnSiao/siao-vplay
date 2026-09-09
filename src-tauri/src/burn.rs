@@ -321,6 +321,7 @@ pub fn spawn_subtitle_burn_job(
     job_id: String,
 ) -> Result<(), SubtitleBurnError> {
     let job = load_stored_job(&store, &job_id)?;
+    let project_operation = crate::project_operations::Operation::acquire(&store, &job.public.project_id)?;
     if job.public.status != "queued" {
         return Err(SubtitleBurnError::InvalidJobState(job.public.status));
     }
@@ -341,6 +342,7 @@ pub fn spawn_subtitle_burn_job(
     let spawn_result = thread::Builder::new()
         .name(format!("subtitle-burn-{job_id}"))
         .spawn(move || {
+            let _project_operation = project_operation;
             let _resources = resources;
             let result = run_job(&store, &worker_job_id, &cancellation);
             if let Err(error) = result {

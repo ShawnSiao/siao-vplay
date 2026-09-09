@@ -93,3 +93,28 @@ fn cancelling_an_active_api_task_closes_http_and_acknowledges_without_a_result()
     assert!(finished.output_explanation_id.is_none());
     assert!(finished.execution.provider_request_id.is_none());
 }
+
+#[test]
+fn terminal_api_status_does_not_release_project_before_worker_exit() {
+    let fixture = understanding::test_fixture::Fixture::new();
+    let task = fixture.prepare_with_options(crate::summary::PromptSelection::default(), false);
+    fixture.store.connect().unwrap().execute("UPDATE explanation_tasks SET status = 'queued' WHERE id = ?1", [&task.id]).unwrap();
+    let service = mock_service(AiProviderId::Openai, AiProtocol::OpenaiResponses, "http://127.0.0.1:1");
+    let lease = task_persistence::claim_api(&fixture.store, AiTaskKind::Explanation, &task.id, &service, 1, false).unwrap();
+    let (release, wait) = mpsc::channel();
+    let (entered, seen) = mpsc::channel();
+    let (done, finished) = mpsc::channel();
+    spawn(lease, fixture.store.clone(), task.id.clone(), AiTaskKind::Explanation, move |store, id| {
+        store.connect()?.execute("UPDATE explanation_tasks SET status = 'cancelled' WHERE id = ?1", [id])?;
+        entered.send(()).unwrap();
+        wait.recv_timeout(Duration::from_secs(10)).unwrap();
+        done.send(()).unwrap();
+        Ok(())
+    });
+    seen.recv_timeout(Duration::from_secs(10)).unwrap();
+    let deletion = fixture.store.delete_project(&fixture.project_id);
+    release.send(()).unwrap();
+    finished.recv_timeout(Duration::from_secs(10)).unwrap();
+    assert!(deletion.is_err(), "terminal task status must not authorize deletion while worker owns the project");
+    assert!(fixture.store.get_project(&fixture.project_id).is_ok());
+}

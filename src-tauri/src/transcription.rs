@@ -1134,6 +1134,7 @@ pub fn spawn_transcription_job(
     job_id: String,
 ) -> Result<(), TranscriptionError> {
     let job = load_stored_job(&store, &job_id)?;
+    let project_operation = crate::project_operations::Operation::acquire(&store, &job.public.project_id)?;
     if job.public.status.as_str() != "queued" {
         return Err(TranscriptionError::InvalidJobState(job.public.status.as_str().to_owned()));
     }
@@ -1155,6 +1156,7 @@ pub fn spawn_transcription_job(
     let spawn_result = thread::Builder::new()
         .name(format!("transcription-{job_id}"))
         .spawn(move || {
+            let _project_operation = project_operation;
             let _resources = resources;
             let result = run_job(&store, &worker_job_id, &cancellation);
             if let Err(error) = result {

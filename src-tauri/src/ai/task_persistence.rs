@@ -54,7 +54,9 @@ pub fn claim_api(
     service_revision: u64,
     resume: bool,
 ) -> Result<ApiExecutionLease, AiTaskError> {
-    let lease = ApiExecutionLease::acquire(store, task_id)?;
+    let project_id: String = store.connect()?.query_row(
+        &format!("SELECT project_id FROM {} WHERE id = ?1", kind.table()), [task_id], |row| row.get(0))?;
+    let lease = ApiExecutionLease::acquire(store, task_id, &project_id)?;
     let expected = if resume {
         "status IN ('failed', 'cancelled', 'interrupted')"
     } else {
