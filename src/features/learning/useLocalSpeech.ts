@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { commandError } from "../../lib/desktop";
+import { readPreference } from "../../lib/preferenceRecord";
+import { savePreference } from "../../lib/preferenceNotice";
+import { speechPreference } from "./speechPreferences";
 import { listSpeechVoices, synthesizeSpeech } from "./speechDesktop";
 import type {
   SpeechPlaybackState,
@@ -25,10 +28,6 @@ export type LocalSpeechController = {
   speak: (text: string, language: string, sourceId: string) => Promise<void>;
   stop: () => void;
 };
-
-function preferenceKey(language: string): string {
-  return `siaovplay:speech-voice:${language.toLowerCase()}`;
-}
 
 export function useLocalSpeech({
   language,
@@ -88,7 +87,7 @@ export function useLocalSpeech({
     [language, voices],
   );
   const preferredId = useMemo(
-    () => preferences[language] ?? window.localStorage.getItem(preferenceKey(language)),
+    () => preferences[language.toLowerCase()] ?? readPreference(speechPreference(language)),
     [language, preferences],
   );
   const selectedVoice = preferredVoice(voices, language, preferredId);
@@ -98,8 +97,8 @@ export function useLocalSpeech({
     : null;
 
   const setSelectedVoiceId = useCallback((voiceId: string) => {
-    window.localStorage.setItem(preferenceKey(language), voiceId);
-    setPreferences((current) => ({ ...current, [language]: voiceId }));
+    setPreferences((current) => ({ ...current, [language.toLowerCase()]: voiceId }));
+    savePreference(speechPreference(language), voiceId);
   }, [language]);
 
   const speak = useCallback(async (
@@ -107,9 +106,8 @@ export function useLocalSpeech({
     requestedLanguage: string,
     sourceId: string,
   ) => {
-    const voice = preferredVoice(voices, requestedLanguage, window.localStorage.getItem(
-      preferenceKey(requestedLanguage),
-    ));
+    const voice = preferredVoice(voices, requestedLanguage,
+      preferences[requestedLanguage.toLowerCase()] ?? readPreference(speechPreference(requestedLanguage)));
     if (!voice) {
       setError(`未安装${speechPackLabel(requestedLanguage)}声音。请先安装对应的 Windows 语音包。`);
       return;
@@ -158,7 +156,7 @@ export function useLocalSpeech({
         setError(commandError(cause).message);
       }
     }
-  }, [onBeforeSpeak, releaseAudio, voices]);
+  }, [onBeforeSpeak, preferences, releaseAudio, voices]);
 
   return {
     voices,

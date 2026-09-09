@@ -55,9 +55,7 @@ describe("PlayerDrawer reading-first shell", () => {
     expect(
       screen.getByRole("button", { name: "紧凑" }),
     ).toHaveAttribute("aria-pressed", "true");
-    expect(window.localStorage.getItem("siaovplay-drawer-density")).toBe(
-      "compact",
-    );
+    expect(JSON.parse(window.localStorage.getItem("siaovplay-preferences.drawer-density")!)).toEqual({version: 1, value: "compact"});
 
     view.unmount();
     render(

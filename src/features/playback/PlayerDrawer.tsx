@@ -1,4 +1,6 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { readPreference, type PreferenceRecord } from "../../lib/preferenceRecord";
+import { savePreference } from "../../lib/preferenceNotice";
+import { useState, type ReactNode } from "react";
 import "./PlayerDrawer.css";
 
 import type { ShellDrawerTab } from "../shell/useShellController";
@@ -31,15 +33,14 @@ const drawerTabs: ReadonlyArray<{
   { id: "transcript", label: "逐字稿", description: "完整字幕" },
 ];
 
-function readDensity(): DrawerDensity {
-  try {
-    return window.localStorage.getItem(densityStorageKey) === "compact"
-      ? "compact"
-      : "comfortable";
-  } catch {
-    return "comfortable";
-  }
-}
+const densityPreference: PreferenceRecord<DrawerDensity> = {
+  key: "siaovplay-preferences.drawer-density",
+  fallback: "comfortable",
+  decode: (value) => value === "compact" || value === "comfortable" ? value : undefined,
+  legacy: (storage) => storage.getItem(densityStorageKey),
+};
+
+function readDensity(): DrawerDensity { return readPreference(densityPreference); }
 
 export function PlayerDrawer({
   hidden = false,
@@ -55,13 +56,6 @@ export function PlayerDrawer({
   const [density, setDensity] = useState<DrawerDensity>(readDensity);
   const tabs = useTabNavigation(activeTab, onSelectTab);
 
-  useEffect(() => {
-    try {
-      window.localStorage.setItem(densityStorageKey, density);
-    } catch {
-      // The drawer remains usable when local storage is unavailable.
-    }
-  }, [density]);
 
   return (
     <aside
@@ -114,7 +108,7 @@ export function PlayerDrawer({
           <summary>阅读设置</summary>
           <div className="player-drawer-density" role="group" aria-label="切换阅读密度">
             {(["comfortable", "compact"] as const).map((value) => (
-              <button key={value} aria-pressed={density === value} type="button" onClick={() => setDensity(value)}>
+              <button key={value} aria-pressed={density === value} type="button" onClick={() => { setDensity(value); savePreference(densityPreference, value); }}>
                 {value === "comfortable" ? "舒适" : "紧凑"}
               </button>
             ))}

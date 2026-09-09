@@ -133,18 +133,13 @@ describe("subtitle display preferences", () => {
       quickToolbar: "always",
       frameSize: { widthRatio: null, minHeightRatio: null },
     });
-    expect(
-      JSON.parse(
-        window.localStorage.getItem(
-          "siaovplay-subtitle-display-preferences-v3",
-        ) ?? "null",
-      ),
-    ).toMatchObject({
-      frameSize: { widthRatio: null, minHeightRatio: null },
-    });
+    expect(window.localStorage.getItem("siaovplay-subtitle-display-preferences-v3")).toBeNull();
+    expect(window.localStorage.getItem("siaovplay-preferences.subtitle-display")).toBeNull();
+    saveSubtitleDisplayPreferences(readSubtitleDisplayPreferences());
+    expect(JSON.parse(window.localStorage.getItem("siaovplay-preferences.subtitle-display")!)).toMatchObject({version: 1, value: {textSize: "large"}});
   });
 
-  it("migrates a valid v1 preference into the v3 key", () => {
+  it("reads valid v1 preferences without writing on mount", () => {
     window.localStorage.setItem(
       "siaovplay-subtitle-follow-preferences-v1",
       JSON.stringify({
@@ -164,13 +159,8 @@ describe("subtitle display preferences", () => {
       quickToolbar: "auto",
       frameSize: { widthRatio: null, minHeightRatio: null },
     });
-    expect(
-      JSON.parse(
-        window.localStorage.getItem(
-          "siaovplay-subtitle-display-preferences-v3",
-        ) ?? "null",
-      ),
-    ).toMatchObject({ textSize: "medium", quickToolbar: "auto" });
+    expect(window.localStorage.getItem("siaovplay-subtitle-display-preferences-v3")).toBeNull();
+    expect(window.localStorage.getItem("siaovplay-preferences.subtitle-display")).toBeNull();
   });
 
   it.each([

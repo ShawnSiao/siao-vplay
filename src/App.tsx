@@ -11,6 +11,7 @@ import { useLibrarySearchOpening } from "./features/library/useLibrarySearchOpen
 import { SummaryActivityMenu } from "./features/summary/SummaryActivityMenu";
 import { Dialog } from "./components/Dialog";
 import { AppToast, type ToastNotice } from "./components/AppToast";
+import { usePreferenceNotices } from "./components/usePreferenceNotices";
 import { LibraryFolderImportDialog } from "./components/LibraryFolderImportDialog";
 import { LibraryRecoveryDialog } from "./components/LibraryRecoveryDialog";
 import { LibraryScreen } from "./components/LibraryScreen";
@@ -154,6 +155,7 @@ export default function App() {
   const [deleteCandidate, setDeleteCandidate] = useState<Project | null>(null);
   const [busyMessage, setBusyMessage] = useState<string | null>(null);
   const [toast, setToast] = useState<ToastNotice | null>(null);
+  usePreferenceNotices(setToast);
   const { localResourcesOpen, pendingResourceAction, openLocalResources, closeLocalResources, requestCapability } =
     useCapabilityPreparation({ isDesktopApp, localResourceStatus, refreshLocalResources, setToast });
   const settingsNavigation = useSettingsNavigation(openLocalResources);

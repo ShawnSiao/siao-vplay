@@ -35,6 +35,7 @@ function deferred<T>() {
 
 describe("local speech playback controller", () => {
   beforeEach(() => {
+    vi.restoreAllMocks();
     latestController = null;
     window.localStorage.clear();
     speechMocks.listSpeechVoices.mockReset().mockResolvedValue([
@@ -49,6 +50,30 @@ describe("local speech playback controller", () => {
     });
     URL.createObjectURL = vi.fn(() => "blob:speech");
     URL.revokeObjectURL = vi.fn();
+  });
+
+  it("uses the session voice even when preference storage rejects writes", async () => {
+    speechMocks.listSpeechVoices.mockResolvedValue([
+      { id: "voice-en", displayName: "English", language: "en-US" },
+      { id: "voice-alt", displayName: "Alternative", language: "en-US" },
+    ]);
+    speechMocks.synthesizeSpeech.mockResolvedValue({ bytes: [1], mimeType: "audio/wav" });
+    render(<Harness onPause={vi.fn()} />);
+    await waitFor(() => expect(latestController?.loading).toBe(false));
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("quota"); });
+    act(() => latestController?.setSelectedVoiceId("voice-alt"));
+    expect(latestController?.selectedVoiceId).toBe("voice-alt");
+    fireEvent.click(screen.getByRole("button", { name: "first" }));
+    await waitFor(() => expect(speechMocks.synthesizeSpeech).toHaveBeenCalledWith({
+      text: "first", language: "en-US", voiceId: "voice-alt",
+    }));
+  });
+
+  it("loads voices when preference reads are denied", async () => {
+    vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => { throw new Error("denied"); });
+    render(<Harness onPause={vi.fn()} />);
+    await waitFor(() => expect(latestController?.loading).toBe(false));
+    expect(latestController?.selectedVoiceId).toBe("voice-en");
   });
 
   it("pauses video and discards an older synthesis when clicks overlap", async () => {

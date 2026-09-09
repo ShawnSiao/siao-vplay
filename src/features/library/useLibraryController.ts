@@ -47,7 +47,7 @@ import {
 } from "./libraryGateway";
 import {
   emptySectionPages,
-  librarySectionStorageKey,
+  saveLibrarySection,
   reduceSectionPages,
   removeUnclassifiedProject,
   sectionsFromHome,
@@ -874,7 +874,7 @@ export function useLibraryController() {
 
   const setSection = useCallback((section: LibrarySection) => {
     collectionRequestSequence.current += 1;
-    window.localStorage.setItem(librarySectionStorageKey, section);
+    saveLibrarySection(section);
     dispatch({ type: "set_section", section });
   }, []);
   const setSearchQuery = useCallback((query: string) => {

@@ -1,3 +1,5 @@
+import { readPreference, type PreferenceRecord } from "../../lib/preferenceRecord";
+import { savePreference } from "../../lib/preferenceNotice";
 import type {
   LibraryHome,
   LibraryMediaSection,
@@ -87,19 +89,20 @@ export function emptySectionPages(): LibrarySectionPages {
   };
 }
 
+const sectionPreference: PreferenceRecord<LibrarySection> = {
+  key: "siaovplay-preferences.library-section",
+  fallback: "home",
+  decode: (value) => value === "home" || value === "series" || value === "folders" ||
+    value === "watch_later" || value === "unclassified" ? value : undefined,
+  legacy: (storage) => storage.getItem(librarySectionStorageKey),
+};
+
 export function storedLibrarySection(): LibrarySection {
-  const fallback: LibrarySection = "home";
-  if (typeof window === "undefined") {
-    return fallback;
-  }
-  const value = window.localStorage.getItem(librarySectionStorageKey);
-  return value === "home" ||
-    value === "series" ||
-    value === "folders" ||
-    value === "watch_later" ||
-    value === "unclassified"
-    ? value
-    : fallback;
+  return readPreference(sectionPreference);
+}
+
+export function saveLibrarySection(section: LibrarySection) {
+  return savePreference(sectionPreference, section);
 }
 
 export function sectionsFromHome(

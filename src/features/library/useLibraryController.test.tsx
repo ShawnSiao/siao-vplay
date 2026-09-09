@@ -13,6 +13,7 @@ import type {
 } from "../../types";
 import {
   collection,
+  deferred,
   importedDetail,
   libraryHome,
   mediaSummary,
@@ -56,13 +57,6 @@ vi.mock("./libraryGateway", async (importOriginal) => ({
 
 import { useLibraryController } from "./useLibraryController";
 
-function deferred<T>() {
-  let resolve!: (value: T) => void;
-  const promise = new Promise<T>((next) => {
-    resolve = next;
-  });
-  return { promise, resolve };
-}
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -118,7 +112,12 @@ describe("useLibraryController", () => {
     expect(result.current.state.section).toBe("home");
 
     act(() => result.current.setSection("folders"));
-    expect(window.localStorage.getItem("siaovplay-library-section")).toBe("folders");
+    expect(JSON.parse(window.localStorage.getItem("siaovplay-preferences.library-section")!)).toEqual({ version: 1, value: "folders" });
+    const write = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("quota"); });
+    try {
+      act(() => result.current.setSection("series"));
+      expect(result.current.state.section).toBe("series");
+    } finally { write.mockRestore(); }
   });
 
   it("ignores a late home response after a newer refresh completes", async () => {
