@@ -1,6 +1,23 @@
 use crate::library::{LibraryMediaSection, ListLibrarySectionInput};
 
 #[test]
+fn home_counts_and_previews_share_a_snapshot_during_deletion() {
+    let fixture = Fixture::new();
+    let project = fixture.project("home-snapshot.mp4");
+    let home = fixture.service.get_home_with_checkpoint(|| {
+        assert!(fixture.service.store.delete_project(&project.id).unwrap().deleted);
+    }).unwrap();
+    assert_eq!(home.total_project_count, 1);
+    assert_eq!(home.unclassified_count, 1);
+    assert_eq!(home.unclassified.len(), 1, "home count and previews must share a snapshot");
+    assert_eq!(home.recently_added[0].project_id, project.id);
+    let current = fixture.service.get_home().unwrap();
+    assert_eq!(current.total_project_count, 0);
+    assert!(current.unclassified.is_empty());
+    assert!(current.recently_added.is_empty());
+}
+
+#[test]
 fn section_items_and_count_share_a_snapshot_during_deletion() {
     let fixture = Fixture::new();
     let project = fixture.project("snapshot.mp4");

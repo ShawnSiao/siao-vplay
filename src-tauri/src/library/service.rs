@@ -6,16 +6,13 @@ use uuid::Uuid;
 use super::{
     AddProjectToCollectionInput, Collection, CollectionDetail, CollectionKind, CollectionSortMode,
     CreateCollectionInput, EpisodeNeighbors, LibraryCollectionDeletionResult, LibraryError,
-    LibraryHome, LibraryRootRevokeResult, LibraryRootStatus, MediaSummary, SearchResult,
+    LibraryRootRevokeResult, LibraryRootStatus, MediaSummary, SearchResult,
     UpdateCollectionInput,
     repository::{LibraryRepository, NewMembership},
 };
 
 const WATCH_LATER_KEY: &str = "watch_later";
 const WATCH_LATER_TITLE: &str = "稍后观看";
-const HOME_CONTINUE_LIMIT: i64 = 12;
-const HOME_UNCLASSIFIED_LIMIT: i64 = 24;
-const HOME_RECENTLY_ADDED_LIMIT: i64 = 5;
 const SEARCH_LIMIT: i64 = 50;
 const MAX_TITLE_CHARS: usize = 200;
 
@@ -27,24 +24,6 @@ pub(crate) struct LibraryService {
 impl LibraryService {
     pub(crate) fn new(store: ProjectStore) -> Self {
         Self { store }
-    }
-
-    pub(crate) fn get_home(&self) -> Result<LibraryHome, LibraryError> {
-        let connection = self.store.connect()?;
-        let repository = LibraryRepository::new(&connection);
-        let (total_project_count, collection_item_count, unclassified_count) =
-            repository.counts()?;
-        Ok(LibraryHome {
-            continue_watching: repository.list_continue_watching(HOME_CONTINUE_LIMIT)?,
-            continue_watching_count: repository.continue_watching_count()?,
-            collections: repository.list_collection_summaries()?,
-            folders: repository.list_roots()?,
-            unclassified: repository.list_unclassified(HOME_UNCLASSIFIED_LIMIT)?,
-            recently_added: repository.list_recently_added(HOME_RECENTLY_ADDED_LIMIT)?,
-            total_project_count,
-            collection_item_count,
-            unclassified_count,
-        })
     }
 
     pub(crate) fn search(&self, query: &str) -> Result<Vec<SearchResult>, LibraryError> {
