@@ -1,4 +1,5 @@
 mod activation;
+mod transaction_paths;
 mod removal;
 #[cfg(test)]
 mod recovery_tests;
@@ -353,6 +354,14 @@ pub(crate) fn installed_receipts(
     resource_id: &str,
 ) -> Result<Vec<ResourceReceipt>, LocalResourceError> {
     with_manager_read(|manager| manager.installed_receipts(resource_id))
+}
+
+pub(crate) fn install_resource(root: &Path, staged: &Path, receipt: ResourceReceipt) -> Result<(), LocalResourceError> {
+    with_manager_write(|manager| {
+        let configured = manager.configuration.as_ref().ok_or(LocalResourceError::ConfirmationRequired)?;
+        if configuration_root(configured) != root { return Err(LocalResourceError::InvalidReceipt("资源安装位置已改变，请重新准备".into())); }
+        activation::install(manager, receipt, staged)
+    })
 }
 
 pub(crate) fn deactivate_resource(

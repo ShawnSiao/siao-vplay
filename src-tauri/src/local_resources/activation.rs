@@ -1,3 +1,4 @@
+mod payload;
 mod prepare;
 use super::*;
 const JOURNAL: &str = "resource-activation.json";
@@ -10,6 +11,8 @@ struct Journal {
     previous_receipt: Option<String>,
     next_receipt: ResourceReceipt,
     committed: bool,
+    #[serde(default)]
+    payload: Option<payload::Payload>,
 }
 #[derive(PartialEq, Eq, Debug)]
 pub(super) enum Recovery {
@@ -26,7 +29,9 @@ fn journal_path(config: &Path) -> Result<PathBuf, LocalResourceError> {
     Ok(config.parent().ok_or_else(invalid)?.join(JOURNAL))
 }
 fn validate(journal: &Journal) -> Result<(), LocalResourceError> {
-    if journal.schema_version != 1 {
+    if !matches!(journal.schema_version, 1 | 2)
+        || (journal.schema_version == 1 && journal.payload.is_some())
+    {
         return Err(invalid());
     }
     validate_configuration(&journal.previous)?;
@@ -49,8 +54,12 @@ fn validate(journal: &Journal) -> Result<(), LocalResourceError> {
         let previous = serde_json::from_str(raw)?;
         validate_receipt(&previous, &receipt.resource_id, &receipt.version)?;
     }
+    if let Some(payload) = &journal.payload {
+        payload::validate(journal, payload)?;
+    }
     Ok(())
 }
+#[cfg(test)]
 fn receipt_path(journal: &Journal) -> PathBuf {
     configuration_root(&journal.previous)
         .join("receipts")
@@ -97,7 +106,14 @@ pub(super) fn recover(config: &Path) -> Result<Recovery, LocalResourceError> {
     if !committed && current != journal.previous {
         return Err(invalid());
     }
-    let target = receipt_path(&journal);
+    let target = transaction_paths::contained(
+        &configuration_root(&journal.previous),
+        &format!(
+            "receipts/{}/{}.json",
+            journal.next_receipt.resource_id, journal.next_receipt.version
+        ),
+    )?;
+    transaction_paths::check_record(&target)?;
     let current_receipt = match fs::read(&target) {
         Ok(bytes) => Some(serde_json::from_slice::<ResourceReceipt>(&bytes)?),
         Err(error) if error.kind() == io::ErrorKind::NotFound => None,
@@ -112,6 +128,9 @@ pub(super) fn recover(config: &Path) -> Result<Recovery, LocalResourceError> {
         receipt != &journal.next_receipt && Some(receipt) != previous_receipt.as_ref()
     }) {
         return Err(invalid());
+    }
+    if let Some(payload) = &journal.payload {
+        payload::recover(&journal, payload, committed)?;
     }
     if committed {
         if current_receipt
@@ -130,6 +149,11 @@ pub(super) fn recover(config: &Path) -> Result<Recovery, LocalResourceError> {
     }
     remove_regular(&target.with_extension("json.part"))?;
     remove_regular(&target.with_extension("json.bak"))?;
+    if committed {
+        if let Some(payload) = &journal.payload {
+            payload::finish(&journal, payload)?;
+        }
+    }
     clear(&path)?;
     Ok(if committed {
         Recovery::Committed
@@ -145,7 +169,22 @@ pub(super) fn activate(
 }
 fn activate_inner(
     manager: &mut LocalResourceManager,
+    receipt: ResourceReceipt,
+    after_configuration: impl FnOnce(&Path) -> Result<(), LocalResourceError>,
+) -> Result<(), LocalResourceError> {
+    execute(manager, receipt, None, after_configuration)
+}
+pub(super) fn install(
+    manager: &mut LocalResourceManager,
+    receipt: ResourceReceipt,
+    staged: &Path,
+) -> Result<(), LocalResourceError> {
+    execute(manager, receipt, Some(staged), |_| Ok(()))
+}
+fn execute(
+    manager: &mut LocalResourceManager,
     mut receipt: ResourceReceipt,
+    staged: Option<&Path>,
     after_configuration: impl FnOnce(&Path) -> Result<(), LocalResourceError>,
 ) -> Result<(), LocalResourceError> {
     if recover(&manager.config_path)? != Recovery::None {
@@ -162,10 +201,11 @@ fn activate_inner(
     validate_identifier(&receipt.resource_id, "资源 ID")?;
     validate_identifier(&receipt.version, "资源版本")?;
     receipt.activated_at_ms = Some(now_ms());
-    let target = configuration_root(&previous)
-        .join("receipts")
-        .join(&receipt.resource_id)
-        .join(format!("{}.json", receipt.version));
+    let target = transaction_paths::contained(
+        &configuration_root(&previous),
+        &format!("receipts/{}/{}.json", receipt.resource_id, receipt.version),
+    )?;
+    transaction_paths::check_record(&target)?;
     let existing: Option<ResourceReceipt> = persistence::read_recovering(&target, |value| {
         validate_receipt(value, &receipt.resource_id, &receipt.version)
     })?;
@@ -178,18 +218,25 @@ fn activate_inner(
     next.active_resources
         .insert(receipt.resource_id.clone(), receipt.version.clone());
     let mut journal = Journal {
-        schema_version: 1,
+        schema_version: 2,
         previous,
         next,
         previous_receipt,
         next_receipt: receipt,
         committed: false,
+        payload: None,
     };
+    if let Some(staged) = staged {
+        journal.payload = Some(payload::prepare(&journal, staged)?);
+    }
     validate(&journal)?;
     let path = journal_path(&manager.config_path)?;
     prepare::prepare(&path, &journal)?;
     let mut configuration_committed = false;
     let operation = (|| -> Result<(), LocalResourceError> {
+        if let Some(payload) = &journal.payload {
+            payload::apply(&journal, payload)?;
+        }
         persist_json(&target, &journal.next_receipt)?;
         persist_json(&manager.config_path, &journal.next)?;
         configuration_committed = true;

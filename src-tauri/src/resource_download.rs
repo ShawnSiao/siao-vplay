@@ -349,6 +349,7 @@ pub fn cancel_task(task_id: &str) -> Result<ResourceDownloadTask, ResourceDownlo
             Ok(())
         });
     }
+    local_resources::recover_changes_for_use()?;
     let (partial_path, staging_path) = task_paths(task_id)?;
     remove_file_if_exists(&partial_path)?;
     remove_directory_if_exists(&staging_path)?;
@@ -695,7 +696,8 @@ fn execute_task(task_id: &str, control: &DownloadControl, app: Option<&AppHandle
         {
             let _ = remove_file_if_exists(partial_path);
         }
-        if let Some((_, staging_path)) = paths.as_ref() {
+        if !local_resources::resource_change_pending().unwrap_or(true)
+            && let Some((_, staging_path)) = paths.as_ref() {
             let _ = remove_directory_if_exists(staging_path);
         }
         let code = error.code().to_owned();
@@ -718,6 +720,7 @@ fn execute_task_inner(
 ) -> Result<(), ResourceDownloadError> {
     let task = task_snapshot(task_id)?;
     let _maintenance = crate::resource_leases::maintain_resource(&task.resource_id)?;
+    local_resources::recover_changes_for_use()?;
     let resource = local_resources::resource_definition(&task.resource_id)?;
     if resource.version != task.version {
         return Err(ResourceDownloadError::Integrity(format!(
@@ -1352,21 +1355,6 @@ pub(crate) fn activate_staged_resource(
     files: Vec<ReceiptFile>,
 ) -> Result<(), ResourceDownloadError> {
     let install_relative_path = install_relative_path(resource);
-    let destination = join_safe_relative(root, &install_relative_path)?;
-    let destination_parent = destination
-        .parent()
-        .ok_or_else(|| ResourceDownloadError::Integrity("资源安装目录没有父目录".to_owned()))?;
-    fs::create_dir_all(destination_parent)?;
-    let backup = destination_parent.join(format!(".backup-{}", Uuid::new_v4()));
-    if destination.exists() {
-        fs::rename(&destination, &backup)?;
-    }
-    if let Err(error) = fs::rename(staged_payload, &destination) {
-        if backup.exists() && !destination.exists() {
-            let _ = fs::rename(&backup, &destination);
-        }
-        return Err(error.into());
-    }
     let receipt = ResourceReceipt {
         schema_version: 1,
         resource_id: resource.id.clone(),
@@ -1377,14 +1365,7 @@ pub(crate) fn activate_staged_resource(
         health_status: "passed".to_owned(),
         activated_at_ms: None,
     };
-    if let Err(error) = local_resources::activate_resource(receipt) {
-        let _ = remove_directory_if_exists(&destination);
-        if backup.exists() {
-            let _ = fs::rename(&backup, &destination);
-        }
-        return Err(error.into());
-    }
-    remove_directory_if_exists(&backup)?;
+    local_resources::install_resource(root, staged_payload, receipt)?;
     Ok(())
 }
 
@@ -2414,5 +2395,23 @@ mod tests {
             assert!(Instant::now() < deadline, "resource preparation timed out");
             thread::sleep(Duration::from_millis(250));
         }
+    }
+}
+
+#[cfg(test)]
+mod activation_preflight_tests {
+    use super::*;
+    #[test]
+    fn invalid_entrypoint_definition_preserves_both_old_and_staged_payloads() {
+        let root = tempfile::tempdir().unwrap();
+        let mut resource = local_resources::resource_definition("ffmpeg-cpu").unwrap();
+        resource.entrypoints.clear(); resource.artifact = None;
+        let destination = root.path().join(install_relative_path(&resource));
+        let staged = root.path().join("staging/test/payload");
+        fs::create_dir_all(&destination).unwrap(); fs::write(destination.join("old"), b"old").unwrap();
+        fs::create_dir_all(&staged).unwrap(); fs::write(staged.join("new"), b"new").unwrap();
+        assert!(activate_staged_resource(root.path(), &resource, &staged, Vec::new()).is_err());
+        assert_eq!(fs::read(destination.join("old")).unwrap(), b"old");
+        assert_eq!(fs::read(staged.join("new")).unwrap(), b"new");
     }
 }

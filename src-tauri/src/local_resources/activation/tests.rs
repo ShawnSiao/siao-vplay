@@ -37,6 +37,7 @@ pub(super) fn setup(version: &str) -> (TempDir, LocalResourceManager, Journal) {
         previous_receipt,
         next_receipt,
         committed: false,
+        payload: None,
     };
     (root, manager, journal)
 }
@@ -150,7 +151,7 @@ fn invalid_journal_preserves_all_files() {
         if change_root {
             journal.next.resource_root.push_str("-other");
         } else {
-            journal.schema_version = 2;
+            journal.schema_version = 3;
         }
         save(&manager, &journal);
         let path = journal_path(&manager.config_path).unwrap();

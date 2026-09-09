@@ -1,4 +1,5 @@
 mod files;
+use super::transaction_paths as paths_io;
 use super::*;
 const JOURNAL: &str = "resource-removal.json";
 
@@ -76,9 +77,9 @@ fn validate(journal: &Journal) -> Result<(), LocalResourceError> {
 }
 fn paths(journal: &Journal) -> Result<(PathBuf, PathBuf, PathBuf), LocalResourceError> {
     let root = configuration_root(&journal.previous);
-    let install = files::contained(&root, &journal.receipt.install_relative_path)?;
-    let stage = files::contained(&root, &format!("staging/removal-{}", journal.staging_id))?;
-    let receipt = files::contained(
+    let install = paths_io::contained(&root, &journal.receipt.install_relative_path)?;
+    let stage = paths_io::contained(&root, &format!("staging/removal-{}", journal.staging_id))?;
+    let receipt = paths_io::contained(
         &root,
         &format!(
             "receipts/{}/{}.json",
@@ -94,7 +95,7 @@ pub(super) fn pending(config: &Path) -> Result<bool, LocalResourceError> {
         path.with_extension("json.bak"),
         path.with_extension("json.part"),
     ] {
-        if files::metadata(&candidate)?.is_some() {
+        if paths_io::metadata(&candidate)?.is_some() {
             return Ok(true);
         }
     }
@@ -111,7 +112,7 @@ pub(super) fn recover(config: &Path) -> Result<bool, LocalResourceError> {
         return Err(invalid());
     }
     let (install, stage, receipt) = paths(&journal)?;
-    files::check_record(&receipt)?;
+    paths_io::check_record(&receipt)?;
     let receipt_raw = match fs::read_to_string(&receipt) {
         Ok(raw) => Some(raw),
         Err(error) if error.kind() == io::ErrorKind::NotFound => None,
@@ -124,14 +125,14 @@ pub(super) fn recover(config: &Path) -> Result<bool, LocalResourceError> {
     {
         return Err(invalid());
     }
-    let installed = files::directory(&install)?;
-    let staged = files::directory(&stage)?;
+    let installed = paths_io::directory(&install)?;
+    let staged = paths_io::directory(&stage)?;
     if committed {
         if installed || (staged && !journal.had_payload) {
             return Err(invalid());
         }
         if staged {
-            files::check_tree(&stage)?;
+            paths_io::check_tree(&stage)?;
         }
         persistence::remove_record(&receipt)?;
         if staged {
@@ -187,11 +188,11 @@ pub(super) fn remove_inactive(
             "不能删除活动版本 {resource_id}@{version}"
         )));
     }
-    let target = files::contained(
+    let target = paths_io::contained(
         &configuration_root(configuration),
         &format!("receipts/{resource_id}/{version}.json"),
     )?;
-    files::check_record(&target)?;
+    paths_io::check_record(&target)?;
     let receipt = persistence::read_recovering(&target, |receipt| {
         validate_receipt(receipt, resource_id, version)
     })?;
@@ -223,13 +224,13 @@ fn execute(
         committed: false,
     };
     let (install, stage, target) = paths(&journal)?;
-    files::check_record(&target)?;
+    paths_io::check_record(&target)?;
     journal.receipt_raw = fs::read_to_string(&target)?;
-    journal.had_payload = files::directory(&install)?;
+    journal.had_payload = paths_io::directory(&install)?;
     if journal.had_payload {
-        files::check_tree(&install)?;
+        paths_io::check_tree(&install)?;
     }
-    if files::metadata(&stage)?.is_some() {
+    if paths_io::metadata(&stage)?.is_some() {
         return Err(invalid());
     }
     validate(&journal)?;

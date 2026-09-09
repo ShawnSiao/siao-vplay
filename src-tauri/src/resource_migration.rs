@@ -656,7 +656,9 @@ fn adopt_candidate(
     if let Err(error) =
         resource_download::activate_staged_resource(root, &resource, &staged_payload, files)
     {
-        let _ = fs::remove_dir_all(&staging_root);
+        if !local_resources::resource_change_pending().unwrap_or(true) {
+            let _ = fs::remove_dir_all(&staging_root);
+        }
         return Err(error.into());
     }
     let _ = fs::remove_dir_all(&staging_root);
