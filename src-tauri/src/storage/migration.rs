@@ -227,8 +227,8 @@ impl StorageManager {
                 Ok(StorageMigrationStatus::RestartRequired)
             }
             StorageArea::RemoteMedia | StorageArea::MediaCache => {
-                self.persist_migration_receipt(task, verified, &cancelled)?;
-                self.commit_destination(current_database, task)?;
+                let receipt = self.persist_migration_receipt(task, verified, &cancelled)?;
+                self.commit_destination(current_database, task, receipt)?;
                 Ok(StorageMigrationStatus::Completed)
             }
         }

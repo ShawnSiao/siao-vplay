@@ -41,7 +41,7 @@ fn fixture_for(area: StorageArea, mode: StorageMigrationMode) -> Fixture {
         persist_task(&runtime.path, &task).unwrap();
         runtime.task = Some(task.clone());
     }
-    let intent = CommitIntent { version: 1, database: dunce::canonicalize(store.database_path()).unwrap(), revision: 1, task };
+    let intent = CommitIntent { version: 1, database: dunce::canonicalize(store.database_path()).unwrap(), revision: 1, task, receipt: None };
     Fixture { _directory: directory, root, store, manager, intent, original_locator }
 }
 
@@ -100,7 +100,7 @@ fn rejected_database_transaction_preserves_references_and_releases_intent() {
     let f = fixture();
     let connection = Connection::open(&f.intent.database).unwrap();
     connection.execute_batch("CREATE TRIGGER reject_migration BEFORE UPDATE OF locator ON media_sources BEGIN SELECT RAISE(ABORT, 'fixture write failure'); END;").unwrap();
-    assert!(f.manager.commit_destination(&f.intent.database, &f.intent.task).is_err());
+    assert!(f.manager.commit_destination(&f.intent.database, &f.intent.task, receipt_tests::reference(&f)).is_err());
     assert_eq!(f.manager.get_settings().unwrap().revision, 1);
     assert!(f.manager.read_state().unwrap().settings.pending_migration_commit.is_none());
     let locator: String = connection.query_row("SELECT locator FROM media_sources", [], |row| row.get(0)).unwrap();
@@ -143,7 +143,7 @@ fn mismatched_marker_or_revision_never_overwrites_settings() {
 fn cancellation_before_commit_preserves_database_and_config() {
     let f = fixture();
     f.manager.cancel_migration(&f.intent.task.id).unwrap();
-    assert!(matches!(f.manager.commit_destination(&f.intent.database, &f.intent.task), Err(StorageError::MigrationCancelled)));
+    assert!(matches!(f.manager.commit_destination(&f.intent.database, &f.intent.task, receipt_tests::reference(&f)), Err(StorageError::MigrationCancelled)));
     assert_eq!(f.manager.get_settings().unwrap().revision, 1);
     let connection = Connection::open(&f.intent.database).unwrap();
     let locator: String = connection.query_row("SELECT locator FROM media_sources", [], |row| row.get(0)).unwrap();
@@ -190,3 +190,6 @@ fn cache_copy_and_rebuild_recover_each_commit_boundary() {
         }
     }
 }
+
+#[path = "migration_commit_receipt_tests.rs"]
+mod receipt_tests;

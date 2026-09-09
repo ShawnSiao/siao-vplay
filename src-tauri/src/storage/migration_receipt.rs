@@ -73,7 +73,7 @@ struct Receipt {
 
 fn invalid() -> StorageError {
     StorageError::MigrationIntegrity(
-        "迁移校验记录缺失、无效或版本不受支持；请检查记录版本或恢复原记录后重试，存储位置未切换"
+        "迁移校验记录缺失、无效或版本不受支持；请检查记录版本或恢复原记录后重试，存储切换已暂停"
             .to_owned(),
     )
 }
@@ -202,17 +202,27 @@ pub(crate) struct ReceiptReference {
     sha256: String,
 }
 
-pub(super) fn verify_pending(
-    bootstrap: &Path,
+pub(super) fn validate_reference(
     reference: &ReceiptReference,
-    destination: &Path,
+    task_id: &str,
 ) -> Result<(), StorageError> {
     if reference.version != 1
+        || reference.task_id != task_id
         || reference.task_id.len() != 36
         || uuid::Uuid::parse_str(&reference.task_id).is_err()
+        || reference.sha256.len() != 64
+        || !reference
+            .sha256
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit())
     {
         return Err(invalid());
     }
+    Ok(())
+}
+
+fn read_bound(bootstrap: &Path, reference: &ReceiptReference) -> Result<Receipt, StorageError> {
+    validate_reference(reference, &reference.task_id)?;
     let path = bootstrap.join(format!(
         "storage-migration.{}.receipt.json",
         reference.task_id
@@ -226,21 +236,45 @@ pub(super) fn verify_pending(
         return Err(invalid());
     }
     let receipt: Receipt = serde_json::from_slice(&bytes).map_err(|_| invalid())?;
-    if receipt.schema_version != 1
-        || receipt.task_id != reference.task_id
-        || receipt.area != StorageArea::AppData
+    if receipt.schema_version != 1 || receipt.task_id != reference.task_id {
+        return Err(invalid());
+    }
+    Ok(receipt)
+}
+
+pub(super) fn verify_pending(
+    bootstrap: &Path,
+    reference: &ReceiptReference,
+    destination: &Path,
+) -> Result<(), StorageError> {
+    let receipt = read_bound(bootstrap, reference)?;
+    if receipt.area != StorageArea::AppData
         || receipt.mode != StorageMigrationMode::Copy
         || Path::new(&receipt.destination_root) != destination
     {
         return Err(invalid());
     }
     validate_content(&receipt)?;
-    let root = dunce::canonicalize(destination)?;
+    verify_files(&receipt)
+}
+
+pub(super) fn verify_task(
+    bootstrap: &Path,
+    reference: &ReceiptReference,
+    task: &StorageMigrationTask,
+) -> Result<(), StorageError> {
+    let receipt = read_bound(bootstrap, reference)?;
+    validate(&receipt, task)?;
+    verify_files(&receipt)
+}
+
+fn verify_files(receipt: &Receipt) -> Result<(), StorageError> {
+    let root = dunce::canonicalize(&receipt.destination_root)?;
     let cancelled = AtomicBool::new(false);
     for file in &receipt.files {
         let failure = || {
             StorageError::MigrationIntegrity(format!(
-                "待切换文件校验失败：{}；请检查文件或恢复原文件后重试，存储位置未切换",
+                "待切换文件校验失败：{}；请检查文件或恢复原文件后重试，存储切换已暂停",
                 file.relative
             ))
         };
