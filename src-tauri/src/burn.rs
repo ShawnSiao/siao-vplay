@@ -1,3 +1,5 @@
+mod contract;
+pub use contract::SubtitleBurnJob;
 mod jobs;
 use jobs::{run_job};
 
@@ -106,6 +108,7 @@ impl SubtitleBurnError {
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub enum SubtitleBurnMode {
     Translation,
     Bilingual,
@@ -153,29 +156,6 @@ pub struct StartSubtitleBurnInput {
 #[serde(rename_all = "camelCase")]
 pub struct SubtitleBurnJobInput {
     pub job_id: String,
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SubtitleBurnJob {
-    pub id: String,
-    pub project_id: String,
-    pub status: String,
-    pub stage: String,
-    pub progress: f64,
-    pub mode: SubtitleBurnMode,
-    pub source_version_id: Option<String>,
-    pub translation_version_id: String,
-    pub output_path: Option<String>,
-    pub manifest_path: Option<String>,
-    pub output_sha256: Option<String>,
-    pub runtime_version: String,
-    pub error_code: Option<String>,
-    pub error_message: Option<String>,
-    pub created_at_ms: i64,
-    pub updated_at_ms: i64,
-    pub started_at_ms: Option<i64>,
-    pub completed_at_ms: Option<i64>,
 }
 
 #[derive(Clone, Debug)]

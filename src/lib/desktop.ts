@@ -1,3 +1,4 @@
+export { startSubtitleBurn, getSubtitleBurnJob, listSubtitleBurnJobs, cancelSubtitleBurnJob, resumeSubtitleBurnJob } from "./burnGateway";
 export { commandError } from "./commandError";
 export { prepareExplanationTask, getExplanationTask, listExplanationTasks, readExplanationPrompt, openExplanationMaterials, getExplanation, listExplanations, importExplanationResult, startCodexExplanationTask, cancelExplanationTask, resumeCodexExplanationTask } from "./explanationGateway";
 export { prepareLearningTask, getLearningTask, listLearningTasks, readLearningPrompt, importLearningResult, startCodexLearningTask, cancelLearningTask, resumeCodexLearningTask } from "./learningGateway";
@@ -43,9 +44,6 @@ import type {
   OldResourceVersionCleanupResult,
   UnusedResourceCleanupPlan,
   UnusedResourceCleanupResult,
-  SubtitleBurnJob,
-  SubtitleBurnMode,
-  SubtitleBurnStyle,
   SubtitleExport,
   SubtitleExportFormat,
   SubtitleExportMode,
@@ -868,57 +866,6 @@ export async function exportSubtitles(
       destinationDirectory,
       confirmVersionSelection: true,
     },
-  });
-}
-
-export async function startSubtitleBurn(
-  projectId: string,
-  mode: SubtitleBurnMode,
-  sourceVersionId: string | null,
-  translationVersionId: string,
-  destinationDirectory: string,
-  style: SubtitleBurnStyle,
-): Promise<SubtitleBurnJob> {
-  return invoke<SubtitleBurnJob>("start_subtitle_burn", {
-    input: {
-      projectId,
-      mode,
-      sourceVersionId,
-      translationVersionId,
-      destinationDirectory,
-      style,
-      confirmVersionSelection: true,
-    },
-  });
-}
-
-export async function getSubtitleBurnJob(
-  jobId: string,
-): Promise<SubtitleBurnJob> {
-  return invoke<SubtitleBurnJob>("get_subtitle_burn_job", {
-    input: { jobId },
-  });
-}
-
-export async function listSubtitleBurnJobs(
-  projectId: string,
-): Promise<SubtitleBurnJob[]> {
-  return invoke<SubtitleBurnJob[]>("list_subtitle_burn_jobs", { projectId });
-}
-
-export async function cancelSubtitleBurnJob(
-  jobId: string,
-): Promise<SubtitleBurnJob> {
-  return invoke<SubtitleBurnJob>("cancel_subtitle_burn_job", {
-    input: { jobId },
-  });
-}
-
-export async function resumeSubtitleBurnJob(
-  jobId: string,
-): Promise<SubtitleBurnJob> {
-  return invoke<SubtitleBurnJob>("resume_subtitle_burn_job", {
-    input: { jobId },
   });
 }
 

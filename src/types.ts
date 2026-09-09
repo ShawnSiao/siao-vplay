@@ -931,37 +931,9 @@ export type SubtitleExport = {
   exportedAtMs: number;
 };
 
-export type SubtitleBurnMode = "translation" | "bilingual";
+export type { SubtitleBurnMode, SubtitleBurnJob } from "./generated/subtitle-burn-job";
 
 export type SubtitleBurnStyle = {
   textSize: "small" | "medium" | "large";
   positionY: number;
-};
-
-export type SubtitleBurnJob = {
-  id: string;
-  projectId: string;
-  status:
-    | "queued"
-    | "running"
-    | "validating"
-    | "completed"
-    | "failed"
-    | "cancelled"
-    | "interrupted";
-  stage: string;
-  progress: number;
-  mode: SubtitleBurnMode;
-  sourceVersionId: string | null;
-  translationVersionId: string;
-  outputPath: string | null;
-  manifestPath: string | null;
-  outputSha256: string | null;
-  runtimeVersion: string;
-  errorCode: string | null;
-  errorMessage: string | null;
-  createdAtMs: number;
-  updatedAtMs: number;
-  startedAtMs: number | null;
-  completedAtMs: number | null;
 };
