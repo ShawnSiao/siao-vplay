@@ -1,3 +1,4 @@
+import { useLibraryFolderScan } from "./useLibraryFolderScan";
 import { useLibrarySearch, type LibrarySearchAction } from "./useLibrarySearch";
 import { useLibraryCollectionPaging, type CollectionReadAction } from "./useLibraryCollectionPaging";
 import { useLibraryWatchActions, type WatchAction } from "./useLibraryWatchActions";
@@ -29,7 +30,6 @@ import {
   applyLibraryRescan,
   applyLibraryRootRebuild,
   applyLibraryRootRelocation,
-  cancelLibraryScan,
   confirmLibraryImport,
   createCollection,
   deleteCollection,
@@ -38,10 +38,8 @@ import {
   inspectLibraryRescan,
   inspectLibraryRootRebuild,
   inspectLibraryRootRelocation,
-  listenLibraryScanProgress,
   removeProjectFromCollection,
   revokeLibraryRoot,
-  scanLibraryFolder,
   toCollectionSummary,
   updateCollection,
 } from "./libraryGateway";
@@ -59,7 +57,6 @@ import {
 import { useLibrarySectionPaging } from "./useLibrarySectionPaging";
 import {
   draftCandidateItems,
-  draftItems,
   type LibraryImportDraftItem,
 } from "./libraryImportDraft";
 
@@ -711,32 +708,7 @@ export function useLibraryController() {
   const [state, dispatch] = useReducer(libraryReducer, initialState());
   const homeRequestSequence = useRef(0);
   const collectionRequestSequence = useRef(0);
-  const scanRequestSequence = useRef(0);
   const recoveryRequestSequence = useRef(0);
-  const activeScanIdRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    let active = true;
-    let stopListening: (() => void) | null = null;
-    void listenLibraryScanProgress((progress) => {
-      if (active && activeScanIdRef.current === progress.scanId) {
-        dispatch({ type: "scan_progress", progress });
-      }
-    }).then((unlisten) => {
-      if (active) {
-        stopListening = unlisten;
-      } else {
-        unlisten();
-      }
-    }).catch(() => {
-      // Progress events are supplemental; the scan command still returns its
-      // authoritative preview when the event channel is unavailable.
-    });
-    return () => {
-      active = false;
-      stopListening?.();
-    };
-  }, []);
 
   const refresh = useCallback(async () => {
     const sequence = homeRequestSequence.current + 1;
@@ -869,51 +841,7 @@ export function useLibraryController() {
     [loadCollection, state.currentCollection?.summary.id],
   );
 
-  const startFolderScan = useCallback(async (rootPath: string) => {
-    const sequence = scanRequestSequence.current + 1;
-    scanRequestSequence.current = sequence;
-    const scanId = crypto.randomUUID();
-    activeScanIdRef.current = scanId;
-    dispatch({ type: "scan_started", scanId, rootPath });
-    try {
-      const preview = await scanLibraryFolder({ scanId, rootPath });
-      if (scanRequestSequence.current === sequence) {
-        activeScanIdRef.current = null;
-        dispatch({ type: "scan_preview", preview, items: draftItems(preview) });
-      }
-      return preview;
-    } catch (error) {
-      if (scanRequestSequence.current === sequence) {
-        activeScanIdRef.current = null;
-        dispatch({ type: "scan_failed", message: commandError(error).message });
-      }
-      return null;
-    }
-  }, []);
-
-  const closeFolderImport = useCallback(() => {
-    const scanId = activeScanIdRef.current;
-    scanRequestSequence.current += 1;
-    activeScanIdRef.current = null;
-    dispatch({ type: "scan_closed" });
-    if (scanId) {
-      void cancelLibraryScan(scanId).catch(() => undefined);
-    }
-  }, []);
-
-  const cancelFolderScan = useCallback(async () => {
-    const scanId = activeScanIdRef.current;
-    scanRequestSequence.current += 1;
-    activeScanIdRef.current = null;
-    dispatch({ type: "scan_closed" });
-    if (scanId) {
-      try {
-        await cancelLibraryScan(scanId);
-      } catch {
-        // The scan may have completed between the click and the cancel command.
-      }
-    }
-  }, []);
+  const { startFolderScan, closeFolderImport, cancelFolderScan } = useLibraryFolderScan(dispatch);
 
   const setFolderImportTitle = useCallback((title: string) => {
     dispatch({ type: "scan_title_changed", title });
