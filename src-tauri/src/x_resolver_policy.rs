@@ -6,6 +6,7 @@ const DEFAULT_RESOLVER_BASE: &str = "https://api.fxtwitter.com/status/";
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct ResolverDisclosure {
     pub receiver: String,
     pub resolver_base: String,

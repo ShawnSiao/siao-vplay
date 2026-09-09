@@ -321,17 +321,7 @@ export type { DeleteProjectResult } from "./generated/delete-project-result";
 
 export type { RemoteMediaKind, RemoteMediaPreview } from "./generated/remote-media-preview";
 
-export type YouTubeMediaPreview = {
-  originalUrl: string;
-  webpageUrl: string;
-  videoId: string;
-  title: string;
-  durationSeconds: number;
-  fileSizeBytes: number | null;
-  importerVersion: string;
-  importerSha256: string;
-  previewToken: string;
-};
+export type { YouTubeMediaPreview } from "./generated/public-video-preview";
 
 export type DesktopCommandError = {
   code: string;

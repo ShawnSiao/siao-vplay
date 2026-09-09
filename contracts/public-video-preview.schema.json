@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "durationSeconds": {
+      "format": "double",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "number"
+    },
+    "fileSizeBytes": {
+      "format": "uint64",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "importerSha256": {
+      "type": "string"
+    },
+    "importerVersion": {
+      "type": "string"
+    },
+    "originalUrl": {
+      "type": "string"
+    },
+    "previewToken": {
+      "type": "string"
+    },
+    "title": {
+      "type": "string"
+    },
+    "videoId": {
+      "type": "string"
+    },
+    "webpageUrl": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "originalUrl",
+    "webpageUrl",
+    "videoId",
+    "title",
+    "durationSeconds",
+    "fileSizeBytes",
+    "importerVersion",
+    "importerSha256",
+    "previewToken"
+  ],
+  "title": "YouTubeMediaPreview",
+  "type": "object"
+}

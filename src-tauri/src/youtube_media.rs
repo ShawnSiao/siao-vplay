@@ -113,12 +113,15 @@ pub struct CancelYouTubeImportInput {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct YouTubeMediaPreview {
     pub original_url: String,
     pub webpage_url: String,
     pub video_id: String,
     pub title: String,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_i64)))]
     pub duration_seconds: f64,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub file_size_bytes: Option<u64>,
     pub importer_version: String,
     pub importer_sha256: String,

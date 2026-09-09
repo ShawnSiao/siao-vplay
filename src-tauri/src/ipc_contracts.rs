@@ -58,6 +58,8 @@ fn committed_schemas_match_rust() {
     check_schema("remote-media-preview", &serialized_schema::<crate::remote_media::RemoteMediaPreview>());
     check_schema("explanation-evidence", &serialized_schema::<crate::understanding_evidence::ExplanationEvidence>());
     check_schema("analysis-prompt-template", &serialized_schema::<crate::summary::AnalysisPromptTemplate>());
+    check_schema("public-video-preview", &serialized_schema::<crate::youtube_media::YouTubeMediaPreview>());
+    check_schema("resolver-disclosure", &serialized_schema::<crate::x_resolver_policy::ResolverDisclosure>());
     check_schema("speech-voice", &serialized_schema::<crate::speech::SpeechVoice>());
     check_schema("speech-audio", &serialized_schema::<crate::speech::SpeechAudio>());
     check_schema("subtitle-export", &serialized_schema::<crate::delivery::SubtitleExport>());
