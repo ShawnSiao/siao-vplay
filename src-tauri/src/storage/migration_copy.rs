@@ -350,3 +350,7 @@ mod tests {
         assert_eq!(fs::read(source.join("source.mp4")).unwrap(), b"source");
     }
 }
+
+#[cfg(all(test, windows))]
+#[path = "migration_link_tests.rs"]
+mod link_tests;
