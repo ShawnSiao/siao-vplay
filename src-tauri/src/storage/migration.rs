@@ -261,14 +261,17 @@ impl StorageManager {
 
     fn apply_destination(&self, area: StorageArea, destination: &Path) -> Result<(), StorageError> {
         let mut state = self.write_state()?;
+        let mut next = state.settings.clone();
         let value = Some(path_string(destination));
         match area {
-            StorageArea::AppData => state.settings.pending_app_data_root = value,
-            StorageArea::RemoteMedia => state.settings.remote_media_root = value,
-            StorageArea::MediaCache => state.settings.media_cache_root = value,
+            StorageArea::AppData => next.pending_app_data_root = value,
+            StorageArea::RemoteMedia => next.remote_media_root = value,
+            StorageArea::MediaCache => next.media_cache_root = value,
         }
-        state.settings.revision = state.settings.revision.saturating_add(1);
-        persist_settings(&state.settings_path, &state.settings)
+        next.revision = next.revision.saturating_add(1);
+        persist_settings(&state.settings_path, &next)?;
+        state.settings = next;
+        Ok(())
     }
 
     fn update_progress(&self, bytes: u64, files: usize) -> Result<(), StorageError> {

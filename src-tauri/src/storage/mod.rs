@@ -100,3 +100,6 @@ mod migration_write_tests;
 
 #[cfg(test)]
 mod migration_recovery_tests;
+
+#[cfg(test)]
+mod migration_destination_tests;
