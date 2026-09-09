@@ -11,13 +11,14 @@ fn append(hash: &mut Sha256, value: impl Serialize) -> Result<(), LibraryError> 
 
 // The caller owns the read transaction. Bind list identity, labels and ordering;
 // aggregate progress and filesystem availability remain current read-time values.
-pub(super) fn collections(connection: &Connection, root_linked: bool) -> Result<(String, i64), LibraryError> {
+pub(super) fn collections(connection: &Connection, root_linked: bool, query: &str) -> Result<(String, i64), LibraryError> {
     let mut hash = Sha256::new();
-    append(&mut hash, ("collection-overview-v1", root_linked))?;
+    append(&mut hash, ("collection-overview-v2", root_linked, query))?;
     let mut statement = connection.prepare("SELECT id, title, root_id, last_opened_at_ms, updated_at_ms
         FROM collections WHERE system_key IS NULL AND (root_id IS NOT NULL) = ?1
+        AND instr(lower(title), lower(?2)) > 0
         ORDER BY COALESCE(last_opened_at_ms, 0) DESC, updated_at_ms DESC, title COLLATE NOCASE, id")?;
-    let mut rows = statement.query(params![root_linked])?;
+    let mut rows = statement.query(params![root_linked, query])?;
     let mut count = 0;
     while let Some(row) = rows.next()? {
         append(&mut hash, (row.get::<_, String>(0)?, row.get::<_, String>(1)?, row.get::<_, Option<String>>(2)?,

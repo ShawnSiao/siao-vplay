@@ -2,7 +2,7 @@
 "use strict";
 export const validate = validate20;
 export default validate20;
-const schema31 = {"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"expectedSnapshotToken":{"pattern":"^[a-f0-9]{64}$","type":["string","null"]},"offset":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"rootLinked":{"type":"boolean"}},"required":["rootLinked","offset","expectedSnapshotToken"],"title":"CollectionOverviewInput","type":"object"};
+const schema31 = {"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"expectedSnapshotToken":{"pattern":"^[a-f0-9]{64}$","type":["string","null"]},"offset":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"query":{"default":"","type":"string"},"rootLinked":{"type":"boolean"}},"required":["rootLinked","query","offset","expectedSnapshotToken"],"title":"CollectionOverviewInput","type":"object"};
 const pattern4 = new RegExp("^[a-f0-9]{64}$", "u");
 
 function validate20(data, {instancePath="", parentData, parentDataProperty, rootData=data, dynamicAnchors={}}={}){
@@ -18,7 +18,7 @@ evaluated0.items = undefined;
 if(errors === 0){
 if(data && typeof data == "object" && !Array.isArray(data)){
 let missing0;
-if((((data.rootLinked === undefined) && (missing0 = "rootLinked")) || ((data.offset === undefined) && (missing0 = "offset"))) || ((data.expectedSnapshotToken === undefined) && (missing0 = "expectedSnapshotToken"))){
+if(((((data.rootLinked === undefined) && (missing0 = "rootLinked")) || ((data.query === undefined) && (missing0 = "query"))) || ((data.offset === undefined) && (missing0 = "offset"))) || ((data.expectedSnapshotToken === undefined) && (missing0 = "expectedSnapshotToken"))){
 validate20.errors = [{instancePath,schemaPath:"#/required",keyword:"required",params:{missingProperty: missing0},message:"must have required property '"+missing0+"'"}];
 return false;
 }
@@ -71,16 +71,29 @@ else {
 var valid0 = true;
 }
 if(valid0){
-if(data.rootLinked !== undefined){
+if(data.query !== undefined){
 const _errs5 = errors;
-if(typeof data.rootLinked !== "boolean"){
-validate20.errors = [{instancePath:instancePath+"/rootLinked",schemaPath:"#/properties/rootLinked/type",keyword:"type",params:{type: "boolean"},message:"must be boolean"}];
+if(typeof data.query !== "string"){
+validate20.errors = [{instancePath:instancePath+"/query",schemaPath:"#/properties/query/type",keyword:"type",params:{type: "string"},message:"must be string"}];
 return false;
 }
 var valid0 = _errs5 === errors;
 }
 else {
 var valid0 = true;
+}
+if(valid0){
+if(data.rootLinked !== undefined){
+const _errs7 = errors;
+if(typeof data.rootLinked !== "boolean"){
+validate20.errors = [{instancePath:instancePath+"/rootLinked",schemaPath:"#/properties/rootLinked/type",keyword:"type",params:{type: "boolean"},message:"must be boolean"}];
+return false;
+}
+var valid0 = _errs7 === errors;
+}
+else {
+var valid0 = true;
+}
 }
 }
 }
@@ -94,4 +107,4 @@ return false;
 validate20.errors = vErrors;
 return errors === 0;
 }
-validate20.evaluated = {"props":{"expectedSnapshotToken":true,"offset":true,"rootLinked":true},"dynamicProps":false,"dynamicItems":false};
+validate20.evaluated = {"props":{"expectedSnapshotToken":true,"offset":true,"query":true,"rootLinked":true},"dynamicProps":false,"dynamicItems":false};

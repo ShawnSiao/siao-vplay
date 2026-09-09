@@ -12,6 +12,7 @@ export interface CollectionOverviewPage {
   items: CollectionSummary[];
   nextOffset: number | null;
   offset: number;
+  query: string;
   rootLinked: boolean;
   scope: OverviewScope;
   snapshotToken: string;

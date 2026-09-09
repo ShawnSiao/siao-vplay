@@ -5,9 +5,12 @@ use super::{CollectionSummary, LibraryError, LibraryRootSummary, LibraryRootStat
 
 impl LibraryRepository<'_> {
     pub(crate) fn list_collection_summary_window(&self, limit: i64, offset: i64, root_linked: Option<bool>) -> Result<Vec<CollectionSummary>, LibraryError> {
+        self.search_collection_summary_window(limit, offset, root_linked, "")
+    }
+    pub(crate) fn search_collection_summary_window(&self, limit: i64, offset: i64, root_linked: Option<bool>, query: &str) -> Result<Vec<CollectionSummary>, LibraryError> {
         validate_window(limit, offset)?;
         let mut statement = self.connection.prepare(include_str!("collection_summary_window.sql"))?;
-        statement.query_and_then(params![limit, offset, root_linked], map_collection_summary)?.collect()
+        statement.query_and_then(params![limit, offset, root_linked, query], map_collection_summary)?.collect()
     }
     pub(crate) fn list_root_window(&self, limit: i64, offset: i64) -> Result<Vec<LibraryRootSummary>, LibraryError> {
         validate_window(limit, offset)?;

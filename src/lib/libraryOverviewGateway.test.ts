@@ -8,18 +8,35 @@ const input = { offset: 0, expectedSnapshotToken: null };
 const cursor = { offset: 0, totalCount: 1, nextOffset: null, snapshotToken: token };
 const collection = { ...importedDetail.summary, rootId: null, systemKey: null };
 const root = { id: "root", path: "W:\\fixture", displayName: "Folder", availability: "offline", status: "orphaned", itemCount: 0, lastScannedAtMs: null };
-const collections = { ...cursor, scope: "collections", rootLinked: false, items: [collection] };
+const collections = { ...cursor, scope: "collections", rootLinked: false, query: "", items: [collection] };
 const roots = { ...cursor, scope: "roots", items: [root] };
 beforeEach(() => mock.invoke.mockReset());
+it("rejects a page belonging to a different title search", async () => {
+  mock.invoke.mockResolvedValue({ ...collections, query: "old" });
+  const searched = { ...input, rootLinked: false, query: "new" };
+  await expect(readCollectionOverview(searched)).rejects.toThrow();
+});
+it("preserves literal query and bound snapshot on a search continuation", async () => {
+  const searched = { offset: 24, expectedSnapshotToken: token, rootLinked: false, query: "%_\\课程" };
+  const page = { ...collections, offset: 24, totalCount: 25, query: searched.query };
+  mock.invoke.mockResolvedValue(page);
+  await expect(readCollectionOverview(searched)).resolves.toEqual(page);
+  expect(mock.invoke).toHaveBeenCalledWith("list_collection_overview", { input: searched });
+});
+it("accepts an empty search result", async () => {
+  const page = { ...collections, query: "missing", totalCount: 0, items: [] };
+  mock.invoke.mockResolvedValue(page);
+  await expect(readCollectionOverview({ ...input, rootLinked: false, query: "missing" })).resolves.toEqual(page);
+});
 it("accepts matching collection and root pages", async () => {
   mock.invoke.mockResolvedValueOnce(collections).mockResolvedValueOnce(roots);
-  await expect(readCollectionOverview({ ...input, rootLinked: false })).resolves.toEqual(collections);
+  await expect(readCollectionOverview({ ...input, query: "", rootLinked: false })).resolves.toEqual(collections);
   await expect(readRootOverview(input)).resolves.toEqual(roots);
 });
 it("accepts the folder collection scope with linked roots", async () => {
   const page = { ...collections, rootLinked: true, items: [{ ...collection, rootId: "root" }] };
   mock.invoke.mockResolvedValue(page);
-  await expect(readCollectionOverview({ ...input, rootLinked: true })).resolves.toEqual(page);
+  await expect(readCollectionOverview({ ...input, query: "", rootLinked: true })).resolves.toEqual(page);
 });
 it.each([
   { ...collections, scope: "roots" }, { ...collections, rootLinked: true },
@@ -32,7 +49,7 @@ it.each([
   { ...collections, items: Array.from({ length: 25 }, (_, i) => ({ ...collection, id: `c-${i}` })), totalCount: 25 },
 ])("rejects invalid collection scope, rows or cursor", async value => {
   mock.invoke.mockResolvedValue(value);
-  await expect(readCollectionOverview({ ...input, rootLinked: false })).rejects.toThrow();
+  await expect(readCollectionOverview({ ...input, query: "", rootLinked: false })).rejects.toThrow();
 });
 it.each([
   { ...roots, scope: "collections" }, { ...roots, snapshotToken: "b".repeat(64) },
@@ -43,7 +60,7 @@ it.each([
 });
 it("rejects invalid continuations before invoking native commands", async () => {
   await expect(readRootOverview({ offset: 24, expectedSnapshotToken: null })).rejects.toThrow();
-  await expect(readCollectionOverview({ rootLinked: false, offset: -1, expectedSnapshotToken: token })).rejects.toThrow();
+  await expect(readCollectionOverview({ query: "", rootLinked: false, offset: -1, expectedSnapshotToken: token })).rejects.toThrow();
   expect(mock.invoke).not.toHaveBeenCalled();
 });
 it("accepts the final continuation and sends the bound input unchanged", async () => {

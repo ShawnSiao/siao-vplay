@@ -77,7 +77,7 @@ fn committed_schemas_match_rust() {
     check_schema("collection-overview-input", &serialized_schema::<CollectionOverviewInput>());
     check_schema("overview-page-input", &serialized_schema::<OverviewPageInput>());
     let mut collection_page = serialized_schema::<CollectionOverviewPage>();
-    collection_page["examples"] = serde_json::json!([CollectionOverviewPage { scope: OverviewScope::Collections, root_linked: false,
+    collection_page["examples"] = serde_json::json!([CollectionOverviewPage { scope: OverviewScope::Collections, root_linked: false, query: String::new(),
         page: OverviewPage { offset: 0, snapshot_token: "a".repeat(64), total_count: 0, next_offset: None, items: Vec::new() } }]);
     check_schema("collection-overview-page", &collection_page);
     let mut root_page = serialized_schema::<RootOverviewPage>();

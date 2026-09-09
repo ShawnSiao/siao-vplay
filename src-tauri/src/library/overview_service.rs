@@ -24,13 +24,13 @@ impl LibraryService {
         validate(&input.page)?;
         let mut connection = self.store.connect()?;
         let transaction = connection.transaction()?;
-        let (snapshot_token, total_count) = overview_snapshot::collections(&transaction, input.root_linked)?;
+        let (snapshot_token, total_count) = overview_snapshot::collections(&transaction, input.root_linked, &input.query)?;
         check_snapshot(&input.page, &snapshot_token)?;
         checkpoint();
-        let items = LibraryRepository::new(&transaction).list_collection_summary_window(OVERVIEW_PAGE_LIMIT, input.page.offset, Some(input.root_linked))?;
+        let items = LibraryRepository::new(&transaction).search_collection_summary_window(OVERVIEW_PAGE_LIMIT, input.page.offset, Some(input.root_linked), &input.query)?;
         let loaded = input.page.offset + items.len() as i64;
         transaction.commit()?;
-        Ok(CollectionOverviewPage { scope: OverviewScope::Collections, root_linked: input.root_linked, page: OverviewPage {
+        Ok(CollectionOverviewPage { scope: OverviewScope::Collections, root_linked: input.root_linked, query: input.query, page: OverviewPage {
             items, offset: input.page.offset, total_count, snapshot_token, next_offset: (loaded < total_count).then_some(loaded),
         } })
     }

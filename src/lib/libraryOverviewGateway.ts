@@ -19,7 +19,7 @@ export async function readCollectionOverview(input: CollectionOverviewInput): Pr
   ]);
   if (!validateInput(input) || (input.offset > 0 && input.expectedSnapshotToken === null)) throw invalid();
   const page: unknown = await invoke("list_collection_overview", { input });
-  if (!validatePage(page) || page.scope !== "collections" || page.rootLinked !== input.rootLinked
+  if (!validatePage(page) || page.scope !== "collections" || page.rootLinked !== input.rootLinked || page.query !== input.query
     || page.items.some(item => item.systemKey !== null || (item.rootId !== null) !== input.rootLinked)) throw invalid();
   checkCursor(page, input);
   return page;

@@ -2,7 +2,7 @@
 "use strict";
 export const validate = validate20;
 export default validate20;
-const schema31 = {"$defs":{"CollectionKind":{"enum":["series","folder","manual"],"type":"string"},"CollectionSortMode":{"enum":["episode","natural","manual","added_at"],"type":"string"},"CollectionSummary":{"properties":{"autoPlayNext":{"type":"boolean"},"createdAtMs":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"id":{"type":"string"},"itemCount":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"kind":{"$ref":"#/$defs/CollectionKind"},"lastOpenedAtMs":{"maximum":9007199254740991,"minimum":0,"type":["integer","null"]},"posterPath":{"type":["string","null"]},"rootId":{"type":["string","null"]},"seasonCount":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"sortMode":{"$ref":"#/$defs/CollectionSortMode"},"systemKey":{"anyOf":[{"$ref":"#/$defs/CollectionSystemKey"},{"type":"null"}]},"title":{"type":"string"},"totalDurationMs":{"maximum":9007199254740991,"minimum":0,"type":["integer","null"]},"updatedAtMs":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"watchedCount":{"maximum":9007199254740991,"minimum":0,"type":"integer"}},"required":["id","kind","title","rootId","systemKey","posterPath","sortMode","autoPlayNext","lastOpenedAtMs","createdAtMs","updatedAtMs","itemCount","seasonCount","watchedCount","totalDurationMs"],"type":"object"},"CollectionSystemKey":{"enum":["watch_later"],"type":"string"},"OverviewScope":{"enum":["collections","roots"],"type":"string"}},"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"items":{"items":{"$ref":"#/$defs/CollectionSummary"},"maxItems":24,"type":"array"},"nextOffset":{"maximum":9007199254740991,"minimum":0,"type":["integer","null"]},"offset":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"rootLinked":{"type":"boolean"},"scope":{"$ref":"#/$defs/OverviewScope"},"snapshotToken":{"pattern":"^[a-f0-9]{64}$","type":"string"},"totalCount":{"maximum":9007199254740991,"minimum":0,"type":"integer"}},"required":["scope","rootLinked","offset","snapshotToken","totalCount","nextOffset","items"],"title":"CollectionOverviewPage","type":"object"};
+const schema31 = {"$defs":{"CollectionKind":{"enum":["series","folder","manual"],"type":"string"},"CollectionSortMode":{"enum":["episode","natural","manual","added_at"],"type":"string"},"CollectionSummary":{"properties":{"autoPlayNext":{"type":"boolean"},"createdAtMs":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"id":{"type":"string"},"itemCount":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"kind":{"$ref":"#/$defs/CollectionKind"},"lastOpenedAtMs":{"maximum":9007199254740991,"minimum":0,"type":["integer","null"]},"posterPath":{"type":["string","null"]},"rootId":{"type":["string","null"]},"seasonCount":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"sortMode":{"$ref":"#/$defs/CollectionSortMode"},"systemKey":{"anyOf":[{"$ref":"#/$defs/CollectionSystemKey"},{"type":"null"}]},"title":{"type":"string"},"totalDurationMs":{"maximum":9007199254740991,"minimum":0,"type":["integer","null"]},"updatedAtMs":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"watchedCount":{"maximum":9007199254740991,"minimum":0,"type":"integer"}},"required":["id","kind","title","rootId","systemKey","posterPath","sortMode","autoPlayNext","lastOpenedAtMs","createdAtMs","updatedAtMs","itemCount","seasonCount","watchedCount","totalDurationMs"],"type":"object"},"CollectionSystemKey":{"enum":["watch_later"],"type":"string"},"OverviewScope":{"enum":["collections","roots"],"type":"string"}},"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"items":{"items":{"$ref":"#/$defs/CollectionSummary"},"maxItems":24,"type":"array"},"nextOffset":{"maximum":9007199254740991,"minimum":0,"type":["integer","null"]},"offset":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"query":{"type":"string"},"rootLinked":{"type":"boolean"},"scope":{"$ref":"#/$defs/OverviewScope"},"snapshotToken":{"pattern":"^[a-f0-9]{64}$","type":"string"},"totalCount":{"maximum":9007199254740991,"minimum":0,"type":"integer"}},"required":["scope","rootLinked","query","offset","snapshotToken","totalCount","nextOffset","items"],"title":"CollectionOverviewPage","type":"object"};
 const schema36 = {"enum":["collections","roots"],"type":"string"};
 const schema32 = {"properties":{"autoPlayNext":{"type":"boolean"},"createdAtMs":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"id":{"type":"string"},"itemCount":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"kind":{"$ref":"#/$defs/CollectionKind"},"lastOpenedAtMs":{"maximum":9007199254740991,"minimum":0,"type":["integer","null"]},"posterPath":{"type":["string","null"]},"rootId":{"type":["string","null"]},"seasonCount":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"sortMode":{"$ref":"#/$defs/CollectionSortMode"},"systemKey":{"anyOf":[{"$ref":"#/$defs/CollectionSystemKey"},{"type":"null"}]},"title":{"type":"string"},"totalDurationMs":{"maximum":9007199254740991,"minimum":0,"type":["integer","null"]},"updatedAtMs":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"watchedCount":{"maximum":9007199254740991,"minimum":0,"type":"integer"}},"required":["id","kind","title","rootId","systemKey","posterPath","sortMode","autoPlayNext","lastOpenedAtMs","createdAtMs","updatedAtMs","itemCount","seasonCount","watchedCount","totalDurationMs"],"type":"object"};
 const schema33 = {"enum":["series","folder","manual"],"type":"string"};
@@ -422,7 +422,7 @@ evaluated0.items = undefined;
 if(errors === 0){
 if(data && typeof data == "object" && !Array.isArray(data)){
 let missing0;
-if((((((((data.scope === undefined) && (missing0 = "scope")) || ((data.rootLinked === undefined) && (missing0 = "rootLinked"))) || ((data.offset === undefined) && (missing0 = "offset"))) || ((data.snapshotToken === undefined) && (missing0 = "snapshotToken"))) || ((data.totalCount === undefined) && (missing0 = "totalCount"))) || ((data.nextOffset === undefined) && (missing0 = "nextOffset"))) || ((data.items === undefined) && (missing0 = "items"))){
+if(((((((((data.scope === undefined) && (missing0 = "scope")) || ((data.rootLinked === undefined) && (missing0 = "rootLinked"))) || ((data.query === undefined) && (missing0 = "query"))) || ((data.offset === undefined) && (missing0 = "offset"))) || ((data.snapshotToken === undefined) && (missing0 = "snapshotToken"))) || ((data.totalCount === undefined) && (missing0 = "totalCount"))) || ((data.nextOffset === undefined) && (missing0 = "nextOffset"))) || ((data.items === undefined) && (missing0 = "items"))){
 validate20.errors = [{instancePath,schemaPath:"#/required",keyword:"required",params:{missingProperty: missing0},message:"must have required property '"+missing0+"'"}];
 return false;
 }
@@ -517,10 +517,10 @@ else {
 var valid0 = true;
 }
 if(valid0){
-if(data.rootLinked !== undefined){
+if(data.query !== undefined){
 const _errs8 = errors;
-if(typeof data.rootLinked !== "boolean"){
-validate20.errors = [{instancePath:instancePath+"/rootLinked",schemaPath:"#/properties/rootLinked/type",keyword:"type",params:{type: "boolean"},message:"must be boolean"}];
+if(typeof data.query !== "string"){
+validate20.errors = [{instancePath:instancePath+"/query",schemaPath:"#/properties/query/type",keyword:"type",params:{type: "string"},message:"must be string"}];
 return false;
 }
 var valid0 = _errs8 === errors;
@@ -529,15 +529,10 @@ else {
 var valid0 = true;
 }
 if(valid0){
-if(data.scope !== undefined){
-let data5 = data.scope;
+if(data.rootLinked !== undefined){
 const _errs10 = errors;
-if(typeof data5 !== "string"){
-validate20.errors = [{instancePath:instancePath+"/scope",schemaPath:"#/$defs/OverviewScope/type",keyword:"type",params:{type: "string"},message:"must be string"}];
-return false;
-}
-if(!((data5 === "collections") || (data5 === "roots"))){
-validate20.errors = [{instancePath:instancePath+"/scope",schemaPath:"#/$defs/OverviewScope/enum",keyword:"enum",params:{allowedValues: schema36.enum},message:"must be equal to one of the allowed values"}];
+if(typeof data.rootLinked !== "boolean"){
+validate20.errors = [{instancePath:instancePath+"/rootLinked",schemaPath:"#/properties/rootLinked/type",keyword:"type",params:{type: "boolean"},message:"must be boolean"}];
 return false;
 }
 var valid0 = _errs10 === errors;
@@ -546,12 +541,29 @@ else {
 var valid0 = true;
 }
 if(valid0){
+if(data.scope !== undefined){
+let data6 = data.scope;
+const _errs12 = errors;
+if(typeof data6 !== "string"){
+validate20.errors = [{instancePath:instancePath+"/scope",schemaPath:"#/$defs/OverviewScope/type",keyword:"type",params:{type: "string"},message:"must be string"}];
+return false;
+}
+if(!((data6 === "collections") || (data6 === "roots"))){
+validate20.errors = [{instancePath:instancePath+"/scope",schemaPath:"#/$defs/OverviewScope/enum",keyword:"enum",params:{allowedValues: schema36.enum},message:"must be equal to one of the allowed values"}];
+return false;
+}
+var valid0 = _errs12 === errors;
+}
+else {
+var valid0 = true;
+}
+if(valid0){
 if(data.snapshotToken !== undefined){
-let data6 = data.snapshotToken;
-const _errs13 = errors;
-if(errors === _errs13){
-if(typeof data6 === "string"){
-if(!pattern4.test(data6)){
+let data7 = data.snapshotToken;
+const _errs15 = errors;
+if(errors === _errs15){
+if(typeof data7 === "string"){
+if(!pattern4.test(data7)){
 validate20.errors = [{instancePath:instancePath+"/snapshotToken",schemaPath:"#/properties/snapshotToken/pattern",keyword:"pattern",params:{pattern: "^[a-f0-9]{64}$"},message:"must match pattern \""+"^[a-f0-9]{64}$"+"\""}];
 return false;
 }
@@ -561,37 +573,38 @@ validate20.errors = [{instancePath:instancePath+"/snapshotToken",schemaPath:"#/p
 return false;
 }
 }
-var valid0 = _errs13 === errors;
+var valid0 = _errs15 === errors;
 }
 else {
 var valid0 = true;
 }
 if(valid0){
 if(data.totalCount !== undefined){
-let data7 = data.totalCount;
-const _errs15 = errors;
-if(!(((typeof data7 == "number") && (!(data7 % 1) && !isNaN(data7))) && (isFinite(data7)))){
+let data8 = data.totalCount;
+const _errs17 = errors;
+if(!(((typeof data8 == "number") && (!(data8 % 1) && !isNaN(data8))) && (isFinite(data8)))){
 validate20.errors = [{instancePath:instancePath+"/totalCount",schemaPath:"#/properties/totalCount/type",keyword:"type",params:{type: "integer"},message:"must be integer"}];
 return false;
 }
-if(errors === _errs15){
-if((typeof data7 == "number") && (isFinite(data7))){
-if(data7 > 9007199254740991 || isNaN(data7)){
+if(errors === _errs17){
+if((typeof data8 == "number") && (isFinite(data8))){
+if(data8 > 9007199254740991 || isNaN(data8)){
 validate20.errors = [{instancePath:instancePath+"/totalCount",schemaPath:"#/properties/totalCount/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"}];
 return false;
 }
 else {
-if(data7 < 0 || isNaN(data7)){
+if(data8 < 0 || isNaN(data8)){
 validate20.errors = [{instancePath:instancePath+"/totalCount",schemaPath:"#/properties/totalCount/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"}];
 return false;
 }
 }
 }
 }
-var valid0 = _errs15 === errors;
+var valid0 = _errs17 === errors;
 }
 else {
 var valid0 = true;
+}
 }
 }
 }
@@ -609,4 +622,4 @@ return false;
 validate20.errors = vErrors;
 return errors === 0;
 }
-validate20.evaluated = {"props":{"items":true,"nextOffset":true,"offset":true,"rootLinked":true,"scope":true,"snapshotToken":true,"totalCount":true},"dynamicProps":false,"dynamicItems":false};
+validate20.evaluated = {"props":{"items":true,"nextOffset":true,"offset":true,"query":true,"rootLinked":true,"scope":true,"snapshotToken":true,"totalCount":true},"dynamicProps":false,"dynamicItems":false};

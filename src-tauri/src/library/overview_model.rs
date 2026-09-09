@@ -16,6 +16,8 @@ pub(crate) struct OverviewPageInput {
 #[serde(rename_all = "camelCase")]
 pub(crate) struct CollectionOverviewInput {
     pub root_linked: bool,
+    #[serde(default)]
+    pub query: String,
     #[serde(flatten)]
     pub page: OverviewPageInput,
 }
@@ -47,6 +49,7 @@ pub(crate) struct OverviewPage<T> {
 pub(crate) struct CollectionOverviewPage {
     pub scope: OverviewScope,
     pub root_linked: bool,
+    pub query: String,
     #[serde(flatten)]
     pub page: OverviewPage<CollectionSummary>,
 }

@@ -14,12 +14,17 @@
       "minimum": 0,
       "type": "integer"
     },
+    "query": {
+      "default": "",
+      "type": "string"
+    },
     "rootLinked": {
       "type": "boolean"
     }
   },
   "required": [
     "rootLinked",
+    "query",
     "offset",
     "expectedSnapshotToken"
   ],

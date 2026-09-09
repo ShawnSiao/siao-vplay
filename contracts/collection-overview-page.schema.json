@@ -144,6 +144,7 @@
       "items": [],
       "nextOffset": null,
       "offset": 0,
+      "query": "",
       "rootLinked": false,
       "scope": "collections",
       "snapshotToken": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -173,6 +174,9 @@
       "minimum": 0,
       "type": "integer"
     },
+    "query": {
+      "type": "string"
+    },
     "rootLinked": {
       "type": "boolean"
     },
@@ -193,6 +197,7 @@
   "required": [
     "scope",
     "rootLinked",
+    "query",
     "offset",
     "snapshotToken",
     "totalCount",
