@@ -126,3 +126,30 @@ test("slow migration polling is serial and stops at cancellation", async ({ page
   await page.waitForTimeout(600);
   expect(await page.evaluate(() => (window as unknown as { migrationReads: number }).migrationReads)).toBe(1);
 });
+
+
+test("cancel acknowledgement stays pending until migration worker stops", async ({ page }) => {
+  await page.addInitScript(({ settings, migration }) => {
+    const state = window as unknown as { cancelCalls: number; finishMigration?: () => void; __TAURI_INTERNALS__: unknown };
+    state.cancelCalls = 0;
+    const running = { ...migration, status: "running" };
+    state.__TAURI_INTERNALS__ = { invoke: async (command: string) => {
+      if (command === "get_ai_service_settings") return { schemaVersion: 1, revision: 0, providerCatalog: { schemaVersion: 1, providers: [] }, services: [], defaultServiceId: null };
+      if (command === "get_current_storage_migration") return running;
+      if (command === "get_storage_settings") return settings;
+      if (command === "cancel_storage_migration") { state.cancelCalls++; return running; }
+      if (command === "get_storage_migration") return state.cancelCalls ? new Promise(resolve => { state.finishMigration = () => resolve({ ...migration, status: "cancelled" }); }) : running;
+      throw new Error(`Unexpected fixture IPC: ${command}`);
+    } };
+  }, { settings: storageSettingsFixture, migration: storageMigrationFixture });
+  await page.goto("/e2e/runtime.html?environment");
+  await page.getByRole("tab", { name: "存储", exact: true }).click();
+  await page.getByRole("button", { name: "查看迁移", exact: true }).click();
+  await page.getByRole("button", { name: "取消迁移", exact: true }).click();
+  await expect(page.getByRole("button", { name: "正在停止迁移…", exact: true })).toBeDisabled();
+  await page.waitForFunction(() => typeof (window as unknown as { finishMigration?: () => void }).finishMigration === "function");
+  expect(await page.evaluate(() => (window as unknown as { cancelCalls: number }).cancelCalls)).toBe(1);
+  await page.evaluate(() => (window as unknown as { finishMigration: () => void }).finishMigration());
+  await expect(page.getByRole("button", { name: "正在停止迁移…", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "继续迁移", exact: true })).toBeEnabled();
+});

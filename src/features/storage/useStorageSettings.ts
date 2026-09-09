@@ -1,3 +1,4 @@
+import { useStorageMigrationCancellation } from "./useStorageMigrationCancellation";
 import { useStorageMigrationPolling } from "./useStorageMigrationPolling";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -11,7 +12,6 @@ import type {
   StorageMigrationTask,
 } from "./types";
 import {
-  cancelStorageMigration,
   chooseStorageDirectory,
   clearPlaybackCache,
   getCurrentStorageMigration,
@@ -229,17 +229,7 @@ export function useStorageSettings(
     }
   }, [migration, previewMode]);
 
-  const cancel = useCallback(async () => {
-    if (!migration || previewMode) return;
-    setOperation("cancelling");
-    try {
-      setMigration(await cancelStorageMigration(migration.id));
-    } catch (cause) {
-      setError(message(cause));
-    } finally {
-      setOperation(null);
-    }
-  }, [migration, previewMode]);
+  const cancellation = useStorageMigrationCancellation(migration, previewMode, setMigration, cause => setError(message(cause)));
 
   const clearCache = useCallback(async () => {
     setOperation("clearing");
@@ -266,9 +256,9 @@ export function useStorageSettings(
   }, [previewMode]);
 
   return {
-    settings, subtitleDirectory, reportDirectory, migration, operation, error,
+    settings, subtitleDirectory, reportDirectory, migration, operation: cancellation.cancelling ? "cancelling" as const : operation, error,
     setSubtitleDirectory, setReportDirectory, chooseDefault, saveDefaults, prepare,
-    start: () => runTask(false), resume: () => runTask(true), cancel, clearCache,
+    start: () => runTask(false), resume: () => runTask(true), cancel: cancellation.cancel, clearCache,
     openLocation,
     chooseMigrationDirectory: () => previewMode ? Promise.resolve("W:\\SiaoVPlay\\Storage") : chooseStorageDirectory("选择空的迁移目标文件夹"),
     restart: () => previewMode ? Promise.resolve() : restartAfterStorageMigration(),

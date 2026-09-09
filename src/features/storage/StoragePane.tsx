@@ -122,7 +122,7 @@ function MigrationDialog({
           <button className="button text" type="button" disabled={active} onClick={onClose}>{terminal ? "稍后处理" : "关闭"}</button>
           {!task ? <button className="button primary" type="button" disabled={!destination || controller.operation !== null} onClick={() => void inspect()}>检查迁移条件</button> : null}
           {task?.status === "prepared" ? <button className="button primary" type="button" disabled={controller.operation !== null} onClick={() => void controller.start()}>开始迁移</button> : null}
-          {active ? <button className="button danger" type="button" disabled={controller.operation === "cancelling"} onClick={() => void controller.cancel()}>取消迁移</button> : null}
+          {active ? <button className="button danger" type="button" disabled={controller.operation === "cancelling"} onClick={() => void controller.cancel()}>{controller.operation === "cancelling" ? "正在停止迁移…" : "取消迁移"}</button> : null}
           {resumable ? <button className="button primary" type="button" disabled={controller.operation !== null} onClick={() => void controller.resume()}>继续迁移</button> : null}
           {task?.status === "restart_required" ? <button className="button primary" type="button" onClick={() => void controller.restart()}>重启并切换</button> : null}
         </footer>

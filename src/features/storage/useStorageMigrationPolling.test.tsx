@@ -45,3 +45,50 @@ it("continues polling after a failed read", async () => {
   expect(result.current.migration?.status).toBe("completed");
   expect(gateway.getStorageMigration).toHaveBeenCalledTimes(2);
 });
+
+it("keeps cancellation pending until the worker reports a terminal state", async () => {
+  gateway.cancelStorageMigration.mockResolvedValue(task);
+  gateway.getStorageMigration.mockResolvedValue({ ...task, status: "cancelled" });
+  const { result } = await controller();
+  await act(() => result.current.cancel());
+  expect(result.current.operation).toBe("cancelling");
+  await act(() => result.current.cancel());
+  expect(gateway.cancelStorageMigration).toHaveBeenCalledTimes(1);
+  await act(() => vi.advanceTimersByTimeAsync(500));
+  expect(result.current.migration?.status).toBe("cancelled");
+  expect(result.current.operation).toBeNull();
+});
+it("does not let a late cancel acknowledgement overwrite a completed task", async () => {
+  let finish!: (value: typeof task) => void;
+  gateway.cancelStorageMigration.mockReturnValue(new Promise(resolve => { finish = resolve; }));
+  gateway.getStorageMigration.mockResolvedValue({ ...task, status: "completed" });
+  const { result } = await controller();
+  let cancellation!: Promise<void>;
+  act(() => { cancellation = result.current.cancel(); });
+  await act(() => vi.advanceTimersByTimeAsync(500));
+  await act(async () => { finish(task); await cancellation; });
+  expect(result.current.migration?.status).toBe("completed");
+});
+
+it("allows another cancellation attempt after a failed request", async () => {
+  gateway.cancelStorageMigration.mockRejectedValueOnce(new Error("取消请求失败")).mockResolvedValue(task);
+  const { result } = await controller();
+  await act(() => result.current.cancel());
+  expect(result.current.error).toContain("取消请求失败");
+  expect(result.current.operation).toBeNull();
+  await act(() => result.current.cancel());
+  expect(result.current.operation).toBe("cancelling");
+  expect(gateway.cancelStorageMigration).toHaveBeenCalledTimes(2);
+});
+it("ignores a cancellation acknowledgement after switching migration tasks", async () => {
+  let finish!: (value: typeof task) => void;
+  gateway.cancelStorageMigration.mockReturnValue(new Promise(resolve => { finish = resolve; }));
+  const { result } = await controller();
+  let cancellation!: Promise<void>;
+  act(() => { cancellation = result.current.cancel(); });
+  gateway.getCurrentStorageMigration.mockResolvedValue({ ...task, id: "another" });
+  await act(() => result.current.reload());
+  await act(async () => { finish(task); await cancellation; });
+  expect(result.current.migration?.id).toBe("another");
+  expect(result.current.operation).toBeNull();
+});
