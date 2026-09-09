@@ -50,6 +50,7 @@ fn committed_schemas_match_rust() {
     check_transcription_schema();
     check_subtitle_body_schema();
     check_translation_schemas();
+    check_schema("subtitle-burn-input", &serialized_schema::<crate::burn::StartSubtitleBurnInput>());
     check_schema("subtitle-burn-job", &serialized_schema::<crate::burn::SubtitleBurnJob>());
     check_schema("explanation-task", &serialized_schema::<crate::understanding::ExplanationTask>());
     check_schema("explanation", &serialized_schema::<crate::understanding::Explanation>());

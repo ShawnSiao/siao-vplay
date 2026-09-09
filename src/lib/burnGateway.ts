@@ -1,3 +1,4 @@
+import { parseBurnRequest } from "./burnRequest";
 import { invoke } from "@tauri-apps/api/core";
 import { parseSubtitleBurnJob, parseSubtitleBurnJobs } from "./burnContract";
 import type { SubtitleBurnJob, SubtitleBurnMode, SubtitleBurnStyle } from "../types";
@@ -10,17 +11,10 @@ export async function startSubtitleBurn(
   destinationDirectory: string,
   style: SubtitleBurnStyle,
 ): Promise<SubtitleBurnJob> {
-  return parseSubtitleBurnJob(await invoke<unknown>("start_subtitle_burn", {
-    input: {
-      projectId,
-      mode,
-      sourceVersionId,
-      translationVersionId,
-      destinationDirectory,
-      style,
-      confirmVersionSelection: true,
-    },
-  }), { projectId, mode, sourceVersionId: mode === "bilingual" ? sourceVersionId : null, translationVersionId });
+  const input = parseBurnRequest({ projectId, mode, sourceVersionId, translationVersionId,
+    destinationDirectory, style, confirmVersionSelection: true });
+  return parseSubtitleBurnJob(await invoke<unknown>("start_subtitle_burn", { input }),
+    { projectId, mode, sourceVersionId: mode === "bilingual" ? sourceVersionId : null, translationVersionId });
 }
 
 export async function getSubtitleBurnJob(

@@ -18,7 +18,7 @@ it("rejects duplicate and wrong-project history", async () => {
 });
 it.each([{ projectId: "other" }, { translationVersionId: "other" }, { mode: "bilingual", sourceVersionId: "source" }])("rejects a start result with a different selection %j", async patch => {
   invoke.mockResolvedValue({ ...job, ...patch });
-  await expect(startSubtitleBurn(job.projectId, "translation", null, "translation", "W:\\fixture", { textSize: "medium", positionY: 90 })).rejects.toThrow();
+  await expect(startSubtitleBurn(job.projectId, "translation", null, "translation", "W:\\fixture", { textSize: "medium", positionY: 0.9 })).rejects.toThrow();
 });
 
 it.each(["queued", "running", "validating", "completed", "failed", "cancelled", "interrupted"] as const)("accepts supported state %s in both modes", async status => {
@@ -34,16 +34,29 @@ it.each([{ mode: "bilingual", sourceVersionId: null }, { status: "completed" }, 
 it("keeps the selected versions, style and confirmation at start", async () => {
   const value = { ...job, mode: "bilingual", sourceVersionId: "source" };
   invoke.mockResolvedValue(value);
-  const style = { textSize: "medium" as const, positionY: 90 };
+  const style = { textSize: "medium" as const, positionY: 0.9 };
   await expect(startSubtitleBurn(job.projectId, "bilingual", "source", "translation", "fixture", style)).resolves.toEqual(value);
   expect(invoke).toHaveBeenCalledWith("start_subtitle_burn", { input: { projectId: job.projectId, mode: "bilingual", sourceVersionId: "source",
     translationVersionId: "translation", destinationDirectory: "fixture", style, confirmVersionSelection: true } });
 });
 it("rejects an unrelated source version from bilingual preparation", async () => {
   invoke.mockResolvedValue({ ...job, mode: "bilingual", sourceVersionId: "other" });
-  await expect(startSubtitleBurn(job.projectId, "bilingual", "source", "translation", "fixture", { textSize: "medium", positionY: 90 })).rejects.toThrow();
+  await expect(startSubtitleBurn(job.projectId, "bilingual", "source", "translation", "fixture", { textSize: "medium", positionY: 0.9 })).rejects.toThrow();
 });
 it("accepts an empty history but rejects a non-list response", async () => {
   invoke.mockResolvedValue([]); await expect(listSubtitleBurnJobs(job.projectId)).resolves.toEqual([]);
   invoke.mockResolvedValue(null); await expect(listSubtitleBurnJobs(job.projectId)).rejects.toThrow();
+});
+
+it.each([-1, 1.01, NaN, Infinity])("rejects invalid style position %s before IPC", async positionY => {
+  invoke.mockResolvedValue(job);
+  await expect(startSubtitleBurn(job.projectId, "translation", null, "translation", "fixture", { textSize: "medium", positionY })).rejects.toThrow();
+  expect(invoke).not.toHaveBeenCalled();
+});
+it.each([0, 3, 4])("rejects blank required input at index %s before IPC", async index => {
+  invoke.mockResolvedValue(job);
+  const args: Parameters<typeof startSubtitleBurn> = [job.projectId, "translation", null, "translation", "fixture", { textSize: "medium", positionY: 0.9 }];
+  args[index] = " " as never;
+  await expect(startSubtitleBurn(...args)).rejects.toThrow();
+  expect(invoke).not.toHaveBeenCalled();
 });

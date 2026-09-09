@@ -142,6 +142,7 @@ impl SubtitleBurnMode {
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct StartSubtitleBurnInput {
     pub project_id: String,
     pub mode: SubtitleBurnMode,
