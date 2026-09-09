@@ -33,7 +33,9 @@ export async function listLearningTasks(
 }
 
 export async function readLearningPrompt(taskId: string): Promise<string> {
-  return invoke<string>("read_learning_prompt", { taskId });
+  const value = await invoke<unknown>("read_learning_prompt", { taskId });
+  if (typeof value !== "string") throw new Error("提示词读取结果无效，请重新读取。");
+  return value;
 }
 
 export async function importLearningResult(

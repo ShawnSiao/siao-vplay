@@ -35,9 +35,11 @@ export async function listTranslationTasks(
 }
 
 export async function readTranslationPrompt(taskId: string): Promise<string> {
-  return invoke<string>("read_translation_prompt", {
+  const value = await invoke<unknown>("read_translation_prompt", {
     input: { taskId },
   });
+  if (typeof value !== "string") throw new Error("提示词读取结果无效，请重新读取。");
+  return value;
 }
 
 export async function importTranslationResult(

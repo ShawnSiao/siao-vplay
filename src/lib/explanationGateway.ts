@@ -26,13 +26,17 @@ export async function listExplanationTasks(
 }
 
 export async function readExplanationPrompt(taskId: string): Promise<string> {
-  return invoke<string>("read_explanation_prompt", { taskId });
+  const value = await invoke<unknown>("read_explanation_prompt", { taskId });
+  if (typeof value !== "string") throw new Error("提示词读取结果无效，请重新读取。");
+  return value;
 }
 
 export async function openExplanationMaterials(
   taskId: string,
 ): Promise<boolean> {
-  return invoke<boolean>("open_explanation_materials", { taskId });
+  const value = await invoke<unknown>("open_explanation_materials", { taskId });
+  if (typeof value !== "boolean") throw new Error("打开材料目录的结果尚未确认，请检查目录窗口。");
+  return value;
 }
 
 export async function getExplanation(

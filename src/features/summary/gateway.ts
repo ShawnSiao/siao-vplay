@@ -57,6 +57,8 @@ export async function exportVideoSummary(
   return parseSummaryExport(value, summaryId, directory);
 }
 
-export function openSummaryMaterials(taskId: string): Promise<boolean> {
-  return invoke("open_summary_materials", { input: { taskId } });
+export async function openSummaryMaterials(taskId: string): Promise<boolean> {
+  const value = await invoke<unknown>("open_summary_materials", { input: { taskId } });
+  if (typeof value !== "boolean") throw new Error("打开材料目录的结果尚未确认，请检查目录窗口。");
+  return value;
 }
