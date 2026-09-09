@@ -1,5 +1,6 @@
+import { useTranscriptionResult } from "../features/transcription/useTranscriptionResult";
 import { useTaskPolling, taskPollingIntervals } from "../features/ai-tasks/useTaskPolling";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 
 import {
   cancelTranscriptionJob,
@@ -145,7 +146,6 @@ export function TranscriptionPanel({
   localResourceStatus,
   onPrepareResources,
 }: TranscriptionPanelProps) {
-  const reportedVersionRef = useRef<string | null>(null);
   const [runtimeStatus, setRuntimeStatus] =
     useState<TranscriptionRuntimeStatus | null>(null);
   const [runtimeCheckedKey, setRuntimeCheckedKey] = useState<string | null>(null);
@@ -224,25 +224,7 @@ export function TranscriptionPanel({
   });
   const taskError = error ?? (job && activeStatuses.has(job.status) && pollFailure?.jobId === job.id && pollFailure.projectId === projectId ? pollFailure.message : null);
 
-  useEffect(() => {
-    const versionId = job?.subtitleVersionId;
-    if (
-      job?.status !== "completed" ||
-      !versionId ||
-      reportedVersionRef.current === versionId
-    ) {
-      return;
-    }
-    reportedVersionRef.current = versionId;
-    void getSubtitleVersion(projectId, versionId)
-      .then((version) => {
-        onVersionReady(version);
-      })
-      .catch((cause: unknown) => {
-        reportedVersionRef.current = null;
-        setError(userFacingError(cause));
-      });
-  }, [job, onVersionReady, projectId]);
+  const completion = useTranscriptionResult({ projectId, job, read: getSubtitleVersion, onResult: onVersionReady });
 
   const modelKind = modelKindForProfile(profileId);
   const selectedModel = runtimeStatus?.models.find(
@@ -386,8 +368,11 @@ export function TranscriptionPanel({
         ) : null}
         {job.status === "completed" ? (
           <div className="notice transcription-success">
-            <strong>已生成原文字幕草稿</strong>
-            <p>字幕已经过时间轴检查，可回到播放器抽查内容。</p>
+            <strong>{completion.loading ? "正在读取生成的原文字幕" : completion.error ? "原文字幕已生成，读取尚未完成" : "已生成原文字幕草稿"}</strong>
+            {completion.error ? <>
+              <p role="alert">{userFacingError(completion.error)}</p>
+              <button className="button quiet" type="button" onClick={completion.retry}>重新读取字幕</button>
+            </> : <p>{completion.loading ? "读取完成后可回到播放器抽查内容。" : "字幕已经过时间轴检查，可回到播放器抽查内容。"}</p>}
           </div>
         ) : null}
         {canResume ? (

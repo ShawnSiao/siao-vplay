@@ -1,3 +1,4 @@
+import { createPlayerSubtitleFixtures } from "../src/e2e/playerSubtitleFixtures";
 import { join } from "node:path";
 import { expect, test } from "@playwright/test";
 for (const mode of ["runtime", "history"]) test(`transcription recovers ${mode} without starting a task`, async ({ page }) => {
@@ -63,4 +64,26 @@ test("transcription polling resumes after a failed read and keeps cancellation v
   await expect(page.getByRole("button", { name: "重新开始" })).toBeVisible();
   await page.clock.runFor(4000);
   expect(await page.evaluate(() => (window as unknown as { polls: number }).polls)).toBe(2);
+});
+
+test("completed transcription retries only subtitle reading", async ({ page }) => {
+  const version = createPlayerSubtitleFixtures("project").originalSubtitle;
+  await page.addInitScript(version => {
+    const state = window as unknown as { reads: number; starts: number; __TAURI_INTERNALS__: unknown };
+    state.reads = 0; state.starts = 0;
+    const job = { id: "job", projectId: "project", status: "completed", stage: "completed", progress: 1, languageCode: "en", modelKind: "small", runtimeBackend: "cpu", runtimeVersion: "1", subtitleVersionId: version.id, errorCode: null, errorMessage: null, createdAtMs: 1, updatedAtMs: 2, startedAtMs: 1, completedAtMs: 2 };
+    state.__TAURI_INTERNALS__ = { invoke: async (command: string) => {
+      if (command === "get_transcription_runtime_status") return { available: false, preferredBackend: null, runtimes: [], models: [] };
+      if (command === "list_transcription_jobs") return [job];
+      if (command === "get_subtitle_version") { if (++state.reads === 1) throw new Error("字幕读取失败"); return version; }
+      if (command === "start_transcription") state.starts++;
+      throw new Error(`Unexpected fixture IPC: ${command}`);
+    } };
+  }, version);
+  await page.goto("/e2e/runtime.html?transcription");
+  await expect(page.getByText("字幕读取失败")).toBeVisible();
+  await page.getByRole("button", { name: "重新读取字幕" }).click();
+  await expect(page.getByText("已生成原文字幕草稿")).toBeVisible();
+  await expect(page.getByText("字幕读取失败")).toHaveCount(0);
+  expect(await page.evaluate(() => [(window as unknown as { reads: number }).reads, (window as unknown as { starts: number }).starts])).toEqual([2, 0]);
 });

@@ -1,3 +1,4 @@
+import { createPlayerSubtitleFixtures } from "../e2e/playerSubtitleFixtures";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -256,4 +257,59 @@ it("does not hide a cancellation failure when polling succeeds", async () => {
   expect(await screen.findByText("取消请求失败")).toBeInTheDocument();
   await waitFor(() => expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "60"), { timeout: 2500 });
   expect(screen.getByText("取消请求失败")).toBeInTheDocument();
+});
+
+const output = createPlayerSubtitleFixtures("project").originalSubtitle;
+const completedJob: TranscriptionJob = { ...savedJob, status: "completed", stage: "completed", subtitleVersionId: output.id };
+it("retries only the completed subtitle read after failure", async () => {
+  desktopMocks.listTranscriptionJobs.mockResolvedValue([completedJob]);
+  desktopMocks.getSubtitleVersion.mockRejectedValueOnce(new Error("字幕读取失败")).mockResolvedValue(output);
+  render(<TranscriptionPanel {...props} />);
+  expect(await screen.findByText("字幕读取失败")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "重新读取字幕" }));
+  await waitFor(() => expect(props.onVersionReady).toHaveBeenCalledWith(output));
+  expect(desktopMocks.getSubtitleVersion).toHaveBeenCalledTimes(2);
+  expect(desktopMocks.startTranscription).not.toHaveBeenCalled();
+  expect(screen.queryByText("字幕读取失败")).not.toBeInTheDocument();
+});
+it("ignores a completed subtitle read after unmount", async () => {
+  desktopMocks.listTranscriptionJobs.mockResolvedValue([completedJob]);
+  let finish!: (value: typeof output) => void;
+  desktopMocks.getSubtitleVersion.mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+  const { unmount } = render(<TranscriptionPanel {...props} />);
+  await waitFor(() => expect(finish).toBeTypeOf("function"));
+  unmount();
+  await act(async () => finish(output));
+  expect(props.onVersionReady).not.toHaveBeenCalled();
+});
+it.each([{ id: "another" }, { projectId: "another" }, { role: "translation" }])("does not apply an unrelated transcription output %j", async patch => {
+  desktopMocks.listTranscriptionJobs.mockResolvedValue([completedJob]);
+  desktopMocks.getSubtitleVersion.mockResolvedValue({ ...output, ...patch });
+  render(<TranscriptionPanel {...props} />);
+  expect(await screen.findByText("生成的字幕与当前任务不匹配，未采用结果。")).toBeInTheDocument();
+  expect(props.onVersionReady).not.toHaveBeenCalled();
+});
+
+it("drops the old project's result after switching videos", async () => {
+  desktopMocks.listTranscriptionJobs.mockResolvedValueOnce([completedJob]).mockResolvedValue([]);
+  let finish!: (value: typeof output) => void;
+  desktopMocks.getSubtitleVersion.mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+  const { rerender } = render(<TranscriptionPanel {...props} />);
+  await waitFor(() => expect(finish).toBeTypeOf("function"));
+  rerender(<TranscriptionPanel {...props} projectId="other" />);
+  await act(async () => finish(output));
+  expect(props.onVersionReady).not.toHaveBeenCalled();
+});
+it("uses the latest completion callback without repeating a pending read", async () => {
+  desktopMocks.listTranscriptionJobs.mockResolvedValue([completedJob]);
+  let finish!: (value: typeof output) => void;
+  desktopMocks.getSubtitleVersion.mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+  const { rerender } = render(<TranscriptionPanel {...props} />);
+  await waitFor(() => expect(finish).toBeTypeOf("function"));
+  const onVersionReady = vi.fn();
+  rerender(<TranscriptionPanel {...props} onVersionReady={onVersionReady} />);
+  await act(async () => finish(output));
+  expect(onVersionReady).toHaveBeenCalledWith(output);
+  expect(props.onVersionReady).not.toHaveBeenCalled();
+  expect(desktopMocks.getSubtitleVersion).toHaveBeenCalledTimes(1);
 });
