@@ -1,3 +1,4 @@
+import { findLearningHistory } from "../features/learning/learningHistory";
 import { requireLearningResult } from "../features/learning/learningResult";
 import { AiTaskDispatchConfirm } from "../features/ai-tasks/AiTaskDispatchConfirm";
 import { executeLearningDispatch, previewTaskDispatch, type TaskDispatchPreview } from "../features/ai-tasks/taskDispatch";
@@ -195,16 +196,9 @@ function LearningPanelSession({
           if (!active) return;
           restoreLearningContext(restored);
           setSelectedText(savedDraft.draft.selectedText);
-          setEntry(nextEntries.find((item) => item.sourceSegmentId === restored.sourceSegment?.id && item.selectedText === savedDraft.draft?.selectedText) ?? null);
+          setEntry(findLearningHistory(nextEntries, restored, savedDraft.draft.selectedText));
         } else {
-          setEntry(
-            nextEntries.find(
-              (item) =>
-                initialContext.sourceSegment !== null &&
-                item.sourceSegmentId === initialContext.sourceSegment.id &&
-                item.selectedText === initialContext.sourceSegment.text,
-            ) ?? null,
-          );
+          setEntry(findLearningHistory(nextEntries, initialContext, initialContext.sourceSegment?.text ?? ""));
         }
       })
       .catch((cause: unknown) => {
@@ -325,13 +319,7 @@ function LearningPanelSession({
     setSelectedText(value);
     setTask(null);
     setDispatch(null);
-    setEntry(
-      entries.find(
-        (item) =>
-          item.sourceSegmentId === sourceSegment?.id &&
-          item.selectedText === value,
-      ) ?? null,
-    );
+    setEntry(findLearningHistory(entries, learningContext.context, value));
     setPrompt(null);
     setPromptExpanded(false);
     setResultPath(null);
