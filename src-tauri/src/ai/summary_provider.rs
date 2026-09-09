@@ -1,5 +1,3 @@
-use std::time::Duration;
-
 use serde_json::Value;
 
 use super::{
@@ -37,6 +35,7 @@ pub(crate) fn generate(
     store: &crate::store::ProjectStore,
     task_id: &str,
 ) -> Result<ProviderOutput, ProviderFailure> {
+    let policy = super::transport_policy::load()?;
     let cancelled = super::task_cancellation::for_task(store, task_id);
     if cancelled()? {
         return Err(super::AiError::Cancelled.into());
@@ -64,7 +63,7 @@ pub(crate) fn generate(
             schema: input.schema,
             image_data_urls: input.image_data_urls,
             max_output_tokens: input.max_output_tokens,
-            timeout: Duration::from_secs(180),
+            timeout: policy.summary_timeout(),
             cancellation: Some(cancelled),
         },
     )

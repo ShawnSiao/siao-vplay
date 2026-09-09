@@ -9,11 +9,12 @@ const MAX_RESPONSE_BYTES: usize = 16 * 1024 * 1024;
 
 pub(super) fn client(input: &GenerationInput) -> Result<Client, ProviderFailure> {
     check(input.cancellation.as_ref())?;
+    let policy = crate::ai::transport_policy::load()?;
     network::build_async_client(
         Client::builder()
             .redirect(reqwest::redirect::Policy::none())
             .user_agent(format!("SiaoVPlay/{}", env!("CARGO_PKG_VERSION")))
-            .connect_timeout(input.timeout.min(Duration::from_secs(30)))
+            .connect_timeout(policy.connect_timeout(input.timeout))
             .timeout(input.timeout)
             .pool_max_idle_per_host(0),
     )

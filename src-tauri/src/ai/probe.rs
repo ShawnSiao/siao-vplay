@@ -95,7 +95,7 @@ pub fn test_service(input: AiServiceProbeInput) -> Result<AiServiceTestResult, A
         Err(failure) if may_fallback_to_generation(&failure) && selected_model_id.is_some() => {
             let output = providers::generate(
                 &service,
-                &connection_test_input(selected_model_id.as_deref().unwrap_or_default()),
+                &connection_test_input(selected_model_id.as_deref().unwrap_or_default())?,
             )
             .map_err(command_error)?;
             validate_connection_output(&output.output_text)?;
@@ -142,8 +142,9 @@ fn may_fallback_to_generation(failure: &ProviderFailure) -> bool {
     )
 }
 
-fn connection_test_input(model_id: &str) -> GenerationInput {
-    GenerationInput {
+fn connection_test_input(model_id: &str) -> Result<GenerationInput, AiError> {
+    let policy = super::transport_policy::load()?;
+    Ok(GenerationInput {
         model_id: model_id.to_owned(),
         system: "这是连接测试。不要使用任何外部材料。".to_owned(),
         prompt: "返回 JSON：{\"ok\":true}".to_owned(),
@@ -155,10 +156,10 @@ fn connection_test_input(model_id: &str) -> GenerationInput {
             "additionalProperties": false
         }),
         image_data_urls: Vec::new(),
-        max_output_tokens: 256,
-        timeout: std::time::Duration::from_secs(90),
+        max_output_tokens: policy.probe_max_output_tokens,
+        timeout: policy.probe_timeout(),
         cancellation: None,
-    }
+    })
 }
 
 fn validate_connection_output(output: &str) -> Result<(), AiError> {

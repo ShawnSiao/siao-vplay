@@ -108,14 +108,15 @@ pub fn model_supports_vision(service: &ResolvedAiService, model_id: &str) -> boo
 }
 
 pub(super) fn client() -> Result<Client, ProviderFailure> {
-    client_with_timeout(Duration::from_secs(90))
+    client_with_timeout(super::transport_policy::load()?.model_list_timeout())
 }
 
 fn client_with_timeout(timeout: Duration) -> Result<Client, ProviderFailure> {
+    let policy = super::transport_policy::load()?;
     let builder = Client::builder()
         .redirect(reqwest::redirect::Policy::none())
         .user_agent(format!("SiaoVPlay/{}", env!("CARGO_PKG_VERSION")))
-        .connect_timeout(timeout.min(Duration::from_secs(30)))
+        .connect_timeout(policy.connect_timeout(timeout))
         .timeout(timeout);
     network::build_client(builder).map_err(|_| ProviderFailure::from(AiError::ProviderUnavailable))
 }
