@@ -1,3 +1,4 @@
+import { parseExecutionPreview } from "./executionPreviewContract";
 import validateServiceSettings from "../../generated/ai-service-settings.validator.mjs";
 import validateServiceTest from "../../generated/ai-service-test-result.validator.mjs";
 import validateNetworkSettings from "../../generated/network-settings.validator.mjs";
@@ -93,13 +94,16 @@ export async function setNetworkSettings(
   }));
 }
 
-export function previewAiExecution(
+export async function previewAiExecution(
   execution: AiExecutionTarget,
   authorization: AiMaterialAuthorization,
 ): Promise<AiExecutionPreview> {
-  return invoke("preview_ai_execution", {
-    input: { execution, authorization },
+  const target = { ...execution };
+  const materials = { ...authorization };
+  const result = await invoke<unknown>("preview_ai_execution", {
+    input: { execution: target, authorization: materials },
   });
+  return parseExecutionPreview(result, target, materials);
 }
 
 export function commandMessage(cause: unknown): string {

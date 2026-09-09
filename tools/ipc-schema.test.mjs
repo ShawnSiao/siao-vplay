@@ -2,6 +2,12 @@ import { strict as assert } from "node:assert";
 import { test } from "node:test";
 import { prepareRuntimeSchema } from "./ipc-schema.mjs";
 
+test("preserves nullable integer types while requiring numeric bounds", () => {
+  const field = { type: ["integer", "null"], format: "uint64", minimum: 0, maximum: Number.MAX_SAFE_INTEGER };
+  assert.deepEqual(prepareRuntimeSchema(field), { type: ["integer", "null"], minimum: 0, maximum: Number.MAX_SAFE_INTEGER });
+  assert.throws(() => prepareRuntimeSchema({ ...field, type: ["integer", "string"] }), /safe integer bounds/);
+});
+
 test("normalizes explicitly bounded unsigned wire integers", () => {
   for (const format of ["uint32", "uint64"]) {
     assert.deepEqual(prepareRuntimeSchema({ type: "integer", format, minimum: 0, maximum: Number.MAX_SAFE_INTEGER }),

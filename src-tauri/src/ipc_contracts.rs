@@ -47,6 +47,17 @@ fn committed_schemas_match_rust() {
     ]);
     check_schema("network-settings", &network);
     check_ai_service_schemas();
+    use crate::ai::types::{AiExecutionKind, AiExecutionPreview};
+    let mut preview = serialized_schema::<AiExecutionPreview>();
+    preview["examples"] = serde_json::json!([
+        AiExecutionPreview { execution_kind: AiExecutionKind::Codex, service_config_id: None, provider_id: None,
+            display_name: "本机 Codex".into(), model_id: None, subtitles: true, current_question: true,
+            frames_requested: false, frames_effective: false, service_revision: None },
+        AiExecutionPreview { execution_kind: AiExecutionKind::Api, service_config_id: Some("service".into()), provider_id: Some(crate::ai::types::AiProviderId::Openai),
+            display_name: "Test".into(), model_id: Some("model".into()), subtitles: true, current_question: true,
+            frames_requested: false, frames_effective: false, service_revision: Some(7) },
+    ]);
+    check_schema("ai-execution-preview", &preview);
 }
 
 fn serialized_schema<T: schemars::JsonSchema>() -> serde_json::Value {

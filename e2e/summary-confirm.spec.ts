@@ -16,7 +16,7 @@ test("summary sends only after the actual material snapshot is confirmed", async
         case "get_ai_service_settings": return { schemaVersion: 1, revision: 0, providerCatalog: { schemaVersion: 1, providers: [] }, services: [], defaultServiceId: null };
         case "list_summary_tasks": case "list_video_summaries": return [];
         case "list_analysis_prompt_templates": return [];
-        case "preview_ai_execution": return { executionKind: "codex", subtitles: true, framesEffective: false };
+        case "preview_ai_execution": return { executionKind: "codex", serviceConfigId: null, providerId: null, displayName: "本机 Codex", modelId: null, subtitles: true, currentQuestion: true, framesRequested: false, framesEffective: false, serviceRevision: null };
         case "prepare_summary_task": return { ...task, status: "prepared" };
         case "preview_summary_dispatch": return preview;
         case "start_summary_task": case "resume_summary_task": state.summarySends.push(args); return task;

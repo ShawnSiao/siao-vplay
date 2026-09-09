@@ -1,0 +1,116 @@
+{
+  "$defs": {
+    "AiExecutionKind": {
+      "enum": [
+        "manual",
+        "codex",
+        "api"
+      ],
+      "type": "string"
+    },
+    "AiProviderId": {
+      "enum": [
+        "openai",
+        "anthropic",
+        "gemini",
+        "deepseek",
+        "kimi",
+        "glm",
+        "custom"
+      ],
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "examples": [
+    {
+      "currentQuestion": true,
+      "displayName": "本机 Codex",
+      "executionKind": "codex",
+      "framesEffective": false,
+      "framesRequested": false,
+      "modelId": null,
+      "providerId": null,
+      "serviceConfigId": null,
+      "serviceRevision": null,
+      "subtitles": true
+    },
+    {
+      "currentQuestion": true,
+      "displayName": "Test",
+      "executionKind": "api",
+      "framesEffective": false,
+      "framesRequested": false,
+      "modelId": "model",
+      "providerId": "openai",
+      "serviceConfigId": "service",
+      "serviceRevision": 7,
+      "subtitles": true
+    }
+  ],
+  "properties": {
+    "currentQuestion": {
+      "type": "boolean"
+    },
+    "displayName": {
+      "type": "string"
+    },
+    "executionKind": {
+      "$ref": "#/$defs/AiExecutionKind"
+    },
+    "framesEffective": {
+      "type": "boolean"
+    },
+    "framesRequested": {
+      "type": "boolean"
+    },
+    "modelId": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "providerId": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/AiProviderId"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "serviceConfigId": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "serviceRevision": {
+      "format": "uint64",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "subtitles": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "executionKind",
+    "serviceConfigId",
+    "providerId",
+    "displayName",
+    "modelId",
+    "subtitles",
+    "currentQuestion",
+    "framesRequested",
+    "framesEffective",
+    "serviceRevision"
+  ],
+  "title": "AiExecutionPreview",
+  "type": "object"
+}

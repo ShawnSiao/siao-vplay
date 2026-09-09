@@ -36,15 +36,4 @@ export type AiMaterialAuthorization = {
   serviceRevision: number | null;
 };
 
-export type AiExecutionPreview = {
-  executionKind: "manual" | "codex" | "api";
-  serviceConfigId: string | null;
-  providerId: AiProviderId | null;
-  displayName: string;
-  modelId: string | null;
-  subtitles: boolean;
-  currentQuestion: boolean;
-  framesRequested: boolean;
-  framesEffective: boolean;
-  serviceRevision: number | null;
-};
+export type { AiExecutionPreview } from "../../generated/ai-execution-preview";

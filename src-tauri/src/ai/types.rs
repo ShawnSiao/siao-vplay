@@ -292,9 +292,15 @@ pub struct PreviewAiExecutionInput {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
+pub enum AiExecutionKind { Manual, Codex, Api }
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct AiExecutionPreview {
-    pub execution_kind: String,
+    pub execution_kind: AiExecutionKind,
     pub service_config_id: Option<String>,
     pub provider_id: Option<AiProviderId>,
     pub display_name: String,
@@ -303,5 +309,6 @@ pub struct AiExecutionPreview {
     pub current_question: bool,
     pub frames_requested: bool,
     pub frames_effective: bool,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub service_revision: Option<u64>,
 }

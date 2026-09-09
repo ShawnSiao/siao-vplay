@@ -5,7 +5,7 @@ use super::{
     error::{AiCommandError, AiError},
     providers::{self, GenerationInput, ProviderFailure},
     types::{
-        AiExecutionPreview, AiExecutionTarget, AiModelInfo, AiModelList, AiServiceCapabilities,
+        AiExecutionKind, AiExecutionPreview, AiExecutionTarget, AiModelInfo, AiModelList, AiServiceCapabilities,
         AiServiceProbeInput, AiServiceTestResult, ConnectionState, PreviewAiExecutionInput,
     },
 };
@@ -18,8 +18,8 @@ pub fn preview_execution(
         input.authorization.current_question,
     )?;
     match &input.execution {
-        AiExecutionTarget::Manual => Ok(local_preview("manual", "手动方式", input)),
-        AiExecutionTarget::Codex => Ok(local_preview("codex", "本机 Codex", input)),
+        AiExecutionTarget::Manual => Ok(local_preview(AiExecutionKind::Manual, "手动方式", input)),
+        AiExecutionTarget::Codex => Ok(local_preview(AiExecutionKind::Codex, "本机 Codex", input)),
         AiExecutionTarget::Api { model_id, .. } => {
             let service = connection::resolve_execution(
                 &input.execution,
@@ -30,7 +30,7 @@ pub fn preview_execution(
             let frames_effective =
                 input.authorization.frames && providers::model_supports_vision(&service, model_id);
             Ok(AiExecutionPreview {
-                execution_kind: "api".to_owned(),
+                execution_kind: AiExecutionKind::Api,
                 service_config_id: service.service_config_id,
                 provider_id: Some(service.provider_id),
                 display_name: configured.display_name,
@@ -46,12 +46,12 @@ pub fn preview_execution(
 }
 
 fn local_preview(
-    kind: &str,
+    kind: AiExecutionKind,
     display_name: &str,
     input: PreviewAiExecutionInput,
 ) -> AiExecutionPreview {
     AiExecutionPreview {
-        execution_kind: kind.to_owned(),
+        execution_kind: kind,
         service_config_id: None,
         provider_id: None,
         display_name: display_name.to_owned(),

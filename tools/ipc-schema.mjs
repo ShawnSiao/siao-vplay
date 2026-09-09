@@ -3,7 +3,8 @@
 function normalizeIntegerFormats(value) {
   if (!value || typeof value !== "object") return;
   if (["int64", "uint64", "uint32"].includes(value.format)) {
-    if (value.type !== "integer" || !Number.isSafeInteger(value.minimum) || !Number.isSafeInteger(value.maximum) || value.minimum > value.maximum || (value.format.startsWith("uint") && value.minimum < 0)) {
+    const integerType = value.type === "integer" || (Array.isArray(value.type) && value.type.length === 2 && value.type.includes("integer") && value.type.includes("null"));
+    if (!integerType || !Number.isSafeInteger(value.minimum) || !Number.isSafeInteger(value.maximum) || value.minimum > value.maximum || (value.format.startsWith("uint") && value.minimum < 0)) {
       throw new Error("IPC integer requires explicit JavaScript-safe integer bounds");
     }
     delete value.format;
