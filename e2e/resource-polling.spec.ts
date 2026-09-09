@@ -13,7 +13,7 @@ for (const { multiple, failedNetwork } of [{ multiple: false, failedNetwork: fal
       if (command === "plugin:event|listen" || command === "plugin:event|unlisten") return 1;
       if (command === "get_local_resource_catalog") return { schemaVersion: 1, productId: "siaovplay", updatedAt: "2026-09-09", packageProfile: "app-only",
         bundlePolicy: { maximumExceptionBytes: 20000000, allowlistedResourceIds: [] }, capabilities: [], profiles: [], resources: [] };
-      if (command === "get_local_resource_status") return { configured: true, selectedParent: null, resourceRoot: null, rootState: "ready",
+      if (command === "get_local_resource_status") return { snapshotRevision: 1, configured: true, selectedParent: null, resourceRoot: null, rootState: "ready",
         freeSpaceBytes: null, preferredProfile: "standard", capabilities: [] };
       if (command === "get_local_resource_network_status" && failedNetwork) throw new Error("fixture network state unavailable");
       if (command === "get_local_resource_network_status") return { mode: "direct", proxySource: "direct", proxyAddress: null };

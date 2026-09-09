@@ -243,6 +243,7 @@ export function PlayerHarness() {
         startupMediaPath: null,
       }}
       localResourceStatus={{
+        snapshotRevision: 1,
         configured: true,
         selectedParent: "W:\\SiaoVPlay",
         resourceRoot: "W:\\SiaoVPlay\\LocalResources",

@@ -69,6 +69,7 @@ export const catalog: LocalResourceCatalog = {
 };
 
 export const setupStatus: LocalResourceStatus = {
+  snapshotRevision: 1,
   configured: false,
   selectedParent: null,
   resourceRoot: null,
@@ -120,6 +121,7 @@ export function makeController(
     }),
     confirmLocation: vi.fn().mockResolvedValue({
       ...setupStatus,
+      snapshotRevision: 1,
       configured: true,
       resourceRoot: "W:\\SiaoVPlay\\SiaoVPlay",
       rootState: "ready",

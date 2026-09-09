@@ -127,6 +127,7 @@ describe("LocalResourcesDialog", () => {
     const controller = makeController({
       status: {
         ...setupStatus,
+        snapshotRevision: 1,
         configured: true,
         resourceRoot: "W:\\SiaoVPlay\\SiaoVPlay",
         rootState: "ready",
@@ -175,6 +176,7 @@ describe("LocalResourcesDialog", () => {
   it("supports verified adoption, copy-before-switch moves, and unavailable-root recovery", async () => {
     const readyStatus: LocalResourceStatus = {
       ...setupStatus,
+      snapshotRevision: 1,
       configured: true,
       selectedParent: "W:\\SiaoVPlay",
       resourceRoot: "W:\\SiaoVPlay\\SiaoVPlay",
@@ -263,6 +265,7 @@ describe("LocalResourcesDialog", () => {
         controller={makeController({
           status: {
             ...setupStatus,
+            snapshotRevision: 1,
             configured: true,
             resourceRoot: "W:\\SiaoVPlay\\SiaoVPlay",
             rootState: "root_unavailable",
@@ -376,6 +379,7 @@ describe("LocalResourcesDialog", () => {
     };
     const transcriptionStatus: LocalResourceStatus = {
       ...setupStatus,
+      snapshotRevision: 1,
       configured: true,
       resourceRoot: "W:\\SiaoVPlay\\SiaoVPlay",
       rootState: "ready",
@@ -433,6 +437,7 @@ describe("LocalResourcesDialog", () => {
   it("keeps versions, hashes, sources, and repair actions inside advanced diagnostics", () => {
     const readyStatus: LocalResourceStatus = {
       ...setupStatus,
+      snapshotRevision: 1,
       configured: true,
       resourceRoot: "W:\\SiaoVPlay\\SiaoVPlay",
       rootState: "ready",
@@ -469,6 +474,7 @@ describe("LocalResourcesDialog", () => {
   it("shows Windows proxy status and allows a simple custom override", async () => {
     const readyStatus: LocalResourceStatus = {
       ...setupStatus,
+      snapshotRevision: 1,
       configured: true,
       resourceRoot: "W:\\SiaoVPlay\\SiaoVPlay",
       rootState: "ready",
@@ -504,6 +510,7 @@ describe("LocalResourcesDialog", () => {
   it("loads version history, supports safe update and rollback, and copies a redacted summary", async () => {
     const readyStatus: LocalResourceStatus = {
       ...setupStatus,
+      snapshotRevision: 1,
       configured: true,
       resourceRoot: "W:\\SiaoVPlay\\SiaoVPlay",
       rootState: "ready",

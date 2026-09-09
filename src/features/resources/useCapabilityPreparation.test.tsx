@@ -4,6 +4,7 @@ import type { LocalResourceStatus } from "../../types";
 import { useCapabilityPreparation } from "./useCapabilityPreparation";
 
 const status = (ready = false): LocalResourceStatus => ({
+  snapshotRevision: 1,
   configured: true, selectedParent: null, resourceRoot: null, rootState: "ready",
   freeSpaceBytes: null, preferredProfile: "fast",
   capabilities: [{ id: "basic_media", title: "媒体", state: ready ? "ready" : "not_ready", requiredResourceIds: [], missingResourceIds: [] }],

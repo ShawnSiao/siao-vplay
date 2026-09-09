@@ -5,12 +5,13 @@ import { createResourceTaskFixture } from "../../test-fixtures/resourceTask";
 import type { ResourceDownloadTask, ResourceDownloadSnapshot } from "../../types";
 import { useResourcePolling } from "./useResourcePolling";
 import { useLocalResources } from "./useLocalResources";
-const mocks = vi.hoisted(() => ({ list: vi.fn(), status: vi.fn(), listen: vi.fn(), network: vi.fn() }));
+const mocks = vi.hoisted(() => ({ list: vi.fn(), status: vi.fn(), listen: vi.fn(), network: vi.fn(), profile: vi.fn() }));
 vi.mock("../../lib/desktop", async importOriginal => ({
   ...await importOriginal<typeof import("../../lib/desktop")>(),
   getLocalResourceCatalog: async () => catalog,
   getLocalResourceNetworkStatus: mocks.network,
   getLocalResourceStatus: mocks.status,
+  setLocalResourceProfile: mocks.profile,
   listResourceDownloadTasks: mocks.list,
   listenResourceDownloadTasks: mocks.listen,
 }));
@@ -22,7 +23,7 @@ function deferred() {
   return { promise, resolve, reject };
 }
 beforeEach(() => {
-  vi.useFakeTimers(); mocks.network.mockReset(); mocks.network.mockResolvedValue({ mode: "direct", proxySource: "direct", proxyAddress: null }); mocks.list.mockReset(); mocks.status.mockReset(); mocks.listen.mockReset();
+  vi.useFakeTimers(); mocks.profile.mockReset(); mocks.network.mockReset(); mocks.network.mockResolvedValue({ mode: "direct", proxySource: "direct", proxyAddress: null }); mocks.list.mockReset(); mocks.status.mockReset(); mocks.listen.mockReset();
   mocks.list.mockResolvedValue({ generation: 1, tasks: [task] }); mocks.status.mockResolvedValue(setupStatus); mocks.listen.mockResolvedValue(vi.fn());
 });
 afterEach(() => { vi.useRealTimers(); });
@@ -118,4 +119,29 @@ it("keeps resources available but never fabricates direct networking after a fai
   await act(async () => { await view.result.current.refresh(); });
   expect(view.result.current.networkStatus?.proxySource).toBe("environment");
   expect(view.result.current.error).toBeNull(); view.unmount();
+});
+
+it("does not overwrite a selected profile with an older refresh response", async () => {
+  const view = await setup();
+  let resolve!: (value: typeof setupStatus) => void;
+  mocks.status.mockReturnValueOnce(new Promise(done => { resolve = done; }));
+  let refreshing!: Promise<unknown>;
+  act(() => { refreshing = view.result.current.refresh(); });
+  const selected = { ...setupStatus, snapshotRevision: 3, preferredProfile: "fast" };
+  mocks.profile.mockResolvedValue(selected);
+  await act(async () => { await view.result.current.selectProfile("fast"); });
+  await act(async () => { resolve({ ...setupStatus, snapshotRevision: 2 }); await refreshing; });
+  expect(view.result.current.status).toEqual(selected);
+  expect(await refreshing).toEqual(selected); view.unmount();
+});
+it("ignores a lower status revision returned by a later-finishing refresh", async () => {
+  const view = await setup();
+  let resolve!: (value: typeof setupStatus) => void;
+  mocks.status.mockReturnValueOnce(new Promise(done => { resolve = done; }));
+  let first!: Promise<unknown>; act(() => { first = view.result.current.refresh(); });
+  const newer = { ...setupStatus, snapshotRevision: 4, resourceRoot: "W:\\NewRoot", rootState: "ready" as const };
+  mocks.status.mockResolvedValue(newer);
+  await act(async () => { await view.result.current.refresh(); });
+  await act(async () => { resolve({ ...setupStatus, snapshotRevision: 2 }); await first; });
+  expect(view.result.current.status).toEqual(newer); view.unmount();
 });

@@ -2,7 +2,7 @@
 "use strict";
 export const validate = validate20;
 export default validate20;
-const schema31 = {"$defs":{"LocalResourceCapabilityState":{"enum":["setup_required","not_ready","preparing","ready","repair_required","root_unavailable","update_available"],"type":"string"},"LocalResourceCapabilityStatus":{"properties":{"id":{"type":"string"},"missingResourceIds":{"items":{"type":"string"},"type":"array"},"requiredResourceIds":{"items":{"type":"string"},"type":"array"},"state":{"$ref":"#/$defs/LocalResourceCapabilityState"},"title":{"type":"string"}},"required":["id","title","state","requiredResourceIds","missingResourceIds"],"type":"object"},"LocalResourceRootState":{"enum":["setup_required","ready","root_unavailable","repair_required"],"type":"string"}},"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"capabilities":{"items":{"$ref":"#/$defs/LocalResourceCapabilityStatus"},"type":"array"},"configured":{"type":"boolean"},"freeSpaceBytes":{"maximum":9007199254740991,"minimum":0,"type":["integer","null"]},"preferredProfile":{"type":"string"},"resourceRoot":{"type":["string","null"]},"rootState":{"$ref":"#/$defs/LocalResourceRootState"},"selectedParent":{"type":["string","null"]}},"required":["configured","selectedParent","resourceRoot","rootState","freeSpaceBytes","preferredProfile","capabilities"],"title":"LocalResourceStatus","type":"object"};
+const schema31 = {"$defs":{"LocalResourceCapabilityState":{"enum":["setup_required","not_ready","preparing","ready","repair_required","root_unavailable","update_available"],"type":"string"},"LocalResourceCapabilityStatus":{"properties":{"id":{"type":"string"},"missingResourceIds":{"items":{"type":"string"},"type":"array"},"requiredResourceIds":{"items":{"type":"string"},"type":"array"},"state":{"$ref":"#/$defs/LocalResourceCapabilityState"},"title":{"type":"string"}},"required":["id","title","state","requiredResourceIds","missingResourceIds"],"type":"object"},"LocalResourceRootState":{"enum":["setup_required","ready","root_unavailable","repair_required"],"type":"string"}},"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"capabilities":{"items":{"$ref":"#/$defs/LocalResourceCapabilityStatus"},"type":"array"},"configured":{"type":"boolean"},"freeSpaceBytes":{"maximum":9007199254740991,"minimum":0,"type":["integer","null"]},"preferredProfile":{"type":"string"},"resourceRoot":{"type":["string","null"]},"rootState":{"$ref":"#/$defs/LocalResourceRootState"},"selectedParent":{"type":["string","null"]},"snapshotRevision":{"description":"Orders snapshots within one backend process; not stored in user configuration.","maximum":9007199254740991,"minimum":0,"type":"integer"}},"required":["snapshotRevision","configured","selectedParent","resourceRoot","rootState","freeSpaceBytes","preferredProfile","capabilities"],"title":"LocalResourceStatus","type":"object"};
 const schema34 = {"enum":["setup_required","ready","root_unavailable","repair_required"],"type":"string"};
 const schema32 = {"properties":{"id":{"type":"string"},"missingResourceIds":{"items":{"type":"string"},"type":"array"},"requiredResourceIds":{"items":{"type":"string"},"type":"array"},"state":{"$ref":"#/$defs/LocalResourceCapabilityState"},"title":{"type":"string"}},"required":["id","title","state","requiredResourceIds","missingResourceIds"],"type":"object"};
 const schema33 = {"enum":["setup_required","not_ready","preparing","ready","repair_required","root_unavailable","update_available"],"type":"string"};
@@ -155,7 +155,7 @@ evaluated0.items = undefined;
 if(errors === 0){
 if(data && typeof data == "object" && !Array.isArray(data)){
 let missing0;
-if((((((((data.configured === undefined) && (missing0 = "configured")) || ((data.selectedParent === undefined) && (missing0 = "selectedParent"))) || ((data.resourceRoot === undefined) && (missing0 = "resourceRoot"))) || ((data.rootState === undefined) && (missing0 = "rootState"))) || ((data.freeSpaceBytes === undefined) && (missing0 = "freeSpaceBytes"))) || ((data.preferredProfile === undefined) && (missing0 = "preferredProfile"))) || ((data.capabilities === undefined) && (missing0 = "capabilities"))){
+if(((((((((data.snapshotRevision === undefined) && (missing0 = "snapshotRevision")) || ((data.configured === undefined) && (missing0 = "configured"))) || ((data.selectedParent === undefined) && (missing0 = "selectedParent"))) || ((data.resourceRoot === undefined) && (missing0 = "resourceRoot"))) || ((data.rootState === undefined) && (missing0 = "rootState"))) || ((data.freeSpaceBytes === undefined) && (missing0 = "freeSpaceBytes"))) || ((data.preferredProfile === undefined) && (missing0 = "preferredProfile"))) || ((data.capabilities === undefined) && (missing0 = "capabilities"))){
 validate20.errors = [{instancePath,schemaPath:"#/required",keyword:"required",params:{missingProperty: missing0},message:"must have required property '"+missing0+"'"}];
 return false;
 }
@@ -283,6 +283,34 @@ var valid0 = _errs15 === errors;
 else {
 var valid0 = true;
 }
+if(valid0){
+if(data.snapshotRevision !== undefined){
+let data8 = data.snapshotRevision;
+const _errs17 = errors;
+if(!(((typeof data8 == "number") && (!(data8 % 1) && !isNaN(data8))) && (isFinite(data8)))){
+validate20.errors = [{instancePath:instancePath+"/snapshotRevision",schemaPath:"#/properties/snapshotRevision/type",keyword:"type",params:{type: "integer"},message:"must be integer"}];
+return false;
+}
+if(errors === _errs17){
+if((typeof data8 == "number") && (isFinite(data8))){
+if(data8 > 9007199254740991 || isNaN(data8)){
+validate20.errors = [{instancePath:instancePath+"/snapshotRevision",schemaPath:"#/properties/snapshotRevision/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"}];
+return false;
+}
+else {
+if(data8 < 0 || isNaN(data8)){
+validate20.errors = [{instancePath:instancePath+"/snapshotRevision",schemaPath:"#/properties/snapshotRevision/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"}];
+return false;
+}
+}
+}
+}
+var valid0 = _errs17 === errors;
+}
+else {
+var valid0 = true;
+}
+}
 }
 }
 }
@@ -299,4 +327,4 @@ return false;
 validate20.errors = vErrors;
 return errors === 0;
 }
-validate20.evaluated = {"props":{"capabilities":true,"configured":true,"freeSpaceBytes":true,"preferredProfile":true,"resourceRoot":true,"rootState":true,"selectedParent":true},"dynamicProps":false,"dynamicItems":false};
+validate20.evaluated = {"props":{"capabilities":true,"configured":true,"freeSpaceBytes":true,"preferredProfile":true,"resourceRoot":true,"rootState":true,"selectedParent":true,"snapshotRevision":true},"dynamicProps":false,"dynamicItems":false};

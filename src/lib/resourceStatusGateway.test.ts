@@ -55,3 +55,8 @@ it("passes configuration confirmation and validates the selected profile", async
   mocks.invoke.mockResolvedValue({ ...setupStatus, preferredProfile: "fast" });
   await expect(setLocalResourceProfile("fast")).resolves.toHaveProperty("preferredProfile", "fast");
 });
+
+it.each([undefined, -1, 1.5, Number.MAX_SAFE_INTEGER + 1])("rejects invalid status sequence %s", async snapshotRevision => {
+  mocks.invoke.mockResolvedValue({ ...setupStatus, snapshotRevision });
+  await expect(getLocalResourceStatus()).rejects.toThrow();
+});

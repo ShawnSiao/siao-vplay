@@ -354,6 +354,7 @@ const localResourceCatalog: LocalResourceCatalog = {
 };
 
 const readyLocalResourceStatus: LocalResourceStatus = {
+  snapshotRevision: 1,
   configured: true,
   selectedParent: "W:\\SiaoVPlay",
   resourceRoot: "W:\\SiaoVPlay\\LocalResources",
@@ -390,6 +391,7 @@ const readyLocalResourceStatus: LocalResourceStatus = {
 };
 
 const setupRequiredLocalResourceStatus: LocalResourceStatus = {
+  snapshotRevision: 1,
   configured: false,
   selectedParent: null,
   resourceRoot: null,

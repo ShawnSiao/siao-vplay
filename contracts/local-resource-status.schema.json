@@ -92,9 +92,17 @@
         "string",
         "null"
       ]
+    },
+    "snapshotRevision": {
+      "description": "Orders snapshots within one backend process; not stored in user configuration.",
+      "format": "uint64",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
     }
   },
   "required": [
+    "snapshotRevision",
     "configured",
     "selectedParent",
     "resourceRoot",

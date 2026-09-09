@@ -44,6 +44,7 @@ const catalog: LocalResourceCatalog = {
   })),
 };
 const status: LocalResourceStatus = {
+  snapshotRevision: 1,
   configured: true,
   selectedParent: "W:\\SiaoVPlay",
   resourceRoot: "W:\\SiaoVPlay\\SiaoVPlay",

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useResourceStatusState } from "./useResourceStatusState";
 import { useResourceMove } from "./useResourceMove";
 import { useResourceTaskState, type ResourceTaskMetric } from "./useResourceTaskState";
 export type { ResourceTaskMetric } from "./useResourceTaskState";
@@ -122,7 +123,7 @@ export type LocalResourcesController = {
 
 export function useLocalResources(): LocalResourcesController {
   const [catalog, setCatalog] = useState<LocalResourceCatalog | null>(null);
-  const [status, setStatus] = useState<LocalResourceStatus | null>(null);
+  const { status, setStatus } = useResourceStatusState();
   const { tasks, taskMetrics, mergeTask, adoptSnapshot } = useResourceTaskState();
   const [networkStatus, setNetworkStatus] = useState<ResourceNetworkStatus | null>(null);
   const [loading, setLoading] = useState(true);
@@ -161,14 +162,14 @@ export function useLocalResources(): LocalResourcesController {
       if (nextNetworkStatus.ok) setError(null);
       else captureError(nextNetworkStatus.cause);
       initializedRef.current = true;
-      return nextStatus;
+      return setStatus(nextStatus);
     } catch (cause) {
       captureError(cause);
       throw cause;
     } finally {
       setLoading(false);
     }
-  }, [captureError, adoptSnapshot]);
+  }, [captureError, adoptSnapshot, setStatus]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -207,7 +208,7 @@ export function useLocalResources(): LocalResourcesController {
       active = false;
       unlisten?.();
     };
-  }, [captureError, mergeTask]);
+  }, [captureError, mergeTask, setStatus]);
 
   useResourcePolling({
     enabled: tasks.some((task) => activeTaskStates.has(task.state)),
@@ -264,7 +265,7 @@ export function useLocalResources(): LocalResourcesController {
         const nextStatus = await configureLocalResourceRoot(parentPath, true);
         setStatus(nextStatus);
         setError(null);
-        return nextStatus;
+        return setStatus(nextStatus);
       } catch (cause) {
         captureError(cause);
         throw cause;
@@ -319,7 +320,7 @@ export function useLocalResources(): LocalResourcesController {
         setStatus(nextStatus);
         adoptSnapshot(await listResourceDownloadTasks());
         setError(null);
-        return nextStatus;
+        return setStatus(nextStatus);
       } catch (cause) {
         captureError(cause);
         throw cause;
@@ -335,7 +336,7 @@ export function useLocalResources(): LocalResourcesController {
         setStatus(nextStatus);
         adoptSnapshot(await listResourceDownloadTasks());
         setError(null);
-        return nextStatus;
+        return setStatus(nextStatus);
       } catch (cause) {
         captureError(cause);
         throw cause;
@@ -424,7 +425,7 @@ export function useLocalResources(): LocalResourcesController {
         const nextStatus = await setLocalResourceProfile(profileId);
         setStatus(nextStatus);
         setError(null);
-        return nextStatus;
+        return setStatus(nextStatus);
       } catch (cause) {
         captureError(cause);
         throw cause;

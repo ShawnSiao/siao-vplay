@@ -12,6 +12,10 @@ export interface LocalResourceStatus {
   resourceRoot: string | null;
   rootState: LocalResourceRootState;
   selectedParent: string | null;
+  /**
+   * Orders snapshots within one backend process; not stored in user configuration.
+   */
+  snapshotRevision: number;
   [k: string]: unknown;
 }
 export interface LocalResourceCapabilityStatus {

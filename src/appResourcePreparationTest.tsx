@@ -15,7 +15,8 @@ export async function verifyDismissedResourceAction({ desktopMocks, readyLocalRe
       ...readyLocalResourceStatus,
       capabilities: readyLocalResourceStatus.capabilities.map(capability => ({ ...capability, state: "not_ready", missingResourceIds: ["ffmpeg-cpu"] })),
     };
-    desktopMocks.getLocalResourceStatus.mockImplementation(async () => currentStatus);
+    let snapshotRevision = 0;
+    desktopMocks.getLocalResourceStatus.mockImplementation(async () => ({ ...currentStatus, snapshotRevision: ++snapshotRevision }));
     desktopMocks.chooseLocalVideo.mockResolvedValue(project.mediaSource.locator);
     render(<App />);
     await screen.findByText("本地功能按需准备");
@@ -47,8 +48,9 @@ export async function verifySelectedResourceResume({ desktopMocks, readyLocalRes
       })),
     };
     let currentResourceStatus = basicNotReady;
+    let snapshotRevision = 0;
     desktopMocks.getLocalResourceStatus.mockImplementation(
-      async () => currentResourceStatus,
+      async () => ({ ...currentResourceStatus, snapshotRevision: ++snapshotRevision }),
     );
     desktopMocks.chooseLocalVideo.mockResolvedValue(project.mediaSource.locator);
     desktopMocks.prepareLocalCapability.mockImplementation(

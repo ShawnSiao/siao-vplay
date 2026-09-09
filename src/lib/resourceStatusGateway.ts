@@ -2,11 +2,13 @@ import { invoke } from "@tauri-apps/api/core";
 import type { LocalResourceStatus, ResourceNetworkStatus } from "../types";
 import { parseLocalResourceStatus, parseResourceNetworkStatus } from "./resourceStatusContract";
 import { browserResourceCapabilities } from "./resourceBrowserCapabilities";
+let browserSnapshotRevision = 0;
 const isDesktopApp = "__TAURI_INTERNALS__" in window;
 
 export async function getLocalResourceStatus(): Promise<LocalResourceStatus> {
   if (!isDesktopApp) {
     return {
+      snapshotRevision: ++browserSnapshotRevision,
       configured: false,
       selectedParent: null,
       resourceRoot: null,

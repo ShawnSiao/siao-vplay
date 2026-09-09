@@ -606,9 +606,11 @@ impl LocalResourceManager {
     }
 
     fn status(&self) -> Result<LocalResourceStatus, LocalResourceError> {
+        let snapshot_revision = status_contract::next_snapshot_revision()?;
         let catalog = catalog()?;
         let Some(configuration) = self.configuration.as_ref() else {
             return Ok(LocalResourceStatus {
+                snapshot_revision,
                 configured: false,
                 selected_parent: None,
                 resource_root: None,
@@ -650,6 +652,7 @@ impl LocalResourceManager {
             |resource_id| self.resource_update_available(resource_id),
         );
         Ok(LocalResourceStatus {
+            snapshot_revision,
             configured: true,
             selected_parent: Some(configuration.selected_parent.clone()),
             resource_root: Some(configuration.resource_root.clone()),
