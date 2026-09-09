@@ -7,10 +7,7 @@ function emit(tab: EnvironmentSettingsTab): void {
 }
 
 export function openEnvironmentSettings(tab: EnvironmentSettingsTab): void {
-  const trigger = document.querySelector<HTMLButtonElement>(".environment-navigation-trigger");
-  trigger?.click();
   emit(tab);
-  window.setTimeout(() => emit(tab), 0);
 }
 
 export function listenEnvironmentSettings(

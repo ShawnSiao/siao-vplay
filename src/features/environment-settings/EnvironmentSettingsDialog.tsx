@@ -8,6 +8,7 @@ import { AiServiceEditor } from "./AiServiceEditor";
 import { AiServiceList } from "./AiServiceList";
 import { LocalCodexDetail } from "./LocalCodexDetail";
 import { LocalFeaturesPane } from "./LocalFeaturesPane";
+import type { EnvironmentSettingsTab } from "./events";
 import { listenEnvironmentSettings } from "./events";
 import { codexSelectionId } from "./serviceSelection";
 import { useEnvironmentSettings } from "./useEnvironmentSettings";
@@ -18,6 +19,8 @@ import "./environment-settings-content.css";
 import "./local-features-v3.css";
 
 type EnvironmentSettingsDialogProps = {
+  selectedTab?: EnvironmentSettingsTab;
+  onTabChange?: (tab: EnvironmentSettingsTab) => void;
   localResources: LocalResourcesController;
   firstRun: boolean;
   pendingAction: PendingResourceAction | null;
@@ -28,6 +31,8 @@ type EnvironmentSettingsDialogProps = {
 };
 
 export function EnvironmentSettingsDialog({
+  selectedTab,
+  onTabChange,
   localResources,
   firstRun,
   pendingAction,
@@ -36,7 +41,9 @@ export function EnvironmentSettingsDialog({
   onDismissFirstRun,
   onNotice,
 }: EnvironmentSettingsDialogProps) {
-  const [tab, setTab] = useState<"local" | "ai" | "storage">("local");
+  const [localTab, setLocalTab] = useState<EnvironmentSettingsTab>("local");
+  const tab = selectedTab ?? localTab;
+  const setTab = onTabChange ?? setLocalTab;
   const tabs = useTabNavigation(tab, setTab);
   const [codexRefreshKey, setCodexRefreshKey] = useState(0);
   const controller = useEnvironmentSettings(true, previewMode);
@@ -51,7 +58,7 @@ export function EnvironmentSettingsDialog({
   }, [controller.dirtySelectionIds, controller.operation, onClose, storage.operation]);
   const dialogRef = useModalFocus(requestClose);
 
-  useEffect(() => listenEnvironmentSettings(setTab), []);
+  useEffect(() => selectedTab === undefined ? listenEnvironmentSettings(setLocalTab) : undefined, [selectedTab]);
 
   const configured = controller.service?.credentialState === "stored";
   const canSave = Boolean(

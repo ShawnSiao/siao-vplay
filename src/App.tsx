@@ -1,3 +1,4 @@
+import { useSettingsNavigation } from "./features/environment-settings/useSettingsNavigation";
 import { useTrackedTranscription } from "./features/playback/useTrackedTranscription";
 import { posterCandidates } from "./features/library/posterCandidates";
 import { SubtitleHistoryLoader } from "./features/subtitle-revision/SubtitleHistoryLoader";
@@ -148,6 +149,7 @@ export default function App() {
   const [toast, setToast] = useState<ToastNotice | null>(null);
   const { localResourcesOpen, pendingResourceAction, openLocalResources, closeLocalResources, requestCapability } =
     useCapabilityPreparation({ isDesktopApp, localResourceStatus, refreshLocalResources, setToast });
+  const settingsNavigation = useSettingsNavigation(openLocalResources);
   const episodeNavigation = useEpisodeNavigation(
     episodeContext,
     activeProject?.id ?? null,
@@ -732,7 +734,7 @@ export default function App() {
         }}
         onReviseSubtitles={() => setRevisionDialogOpen(true)}
         onDeliverSubtitles={() => setDeliveryDialogOpen(true)}
-        onOpenSettings={openLocalResources}
+        onOpenSettings={settingsNavigation.openDefault}
       >
         {screen === "library" ? (
           <LibraryScreen
@@ -840,6 +842,8 @@ export default function App() {
 
       {localResourcesOpen ? (
         <EnvironmentSettingsDialog
+          selectedTab={pendingResourceAction ? undefined : settingsNavigation.tab}
+          onTabChange={pendingResourceAction ? undefined : settingsNavigation.setTab}
           localResources={localResources}
           firstRun={false}
           pendingAction={pendingResourceAction}

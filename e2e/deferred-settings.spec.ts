@@ -38,6 +38,7 @@ test("closing during load does not reopen settings when the module arrives", asy
     const trigger = page.getByRole("button", { name: "设置", exact: true });
     await trigger.click();
     await expect(page.getByRole("status")).toContainText("正在打开");
+    await page.evaluate(() => window.dispatchEvent(new CustomEvent("siaovplay:open-environment-settings", { detail: { tab: "storage" } })));
     await page.keyboard.press("Escape");
     await expect(page.getByRole("dialog")).toHaveCount(0);
     await expect(trigger).toBeFocused();
@@ -47,7 +48,25 @@ test("closing during load does not reopen settings when the module arrives", asy
     await expect(page.getByRole("dialog")).toHaveCount(0);
     await trigger.click();
     await expect(page.getByRole("tab", { name: "AI 服务", exact: true })).toBeVisible();
+    await expect(page.getByRole("tab", { name: "本地功能", exact: true })).toHaveAttribute("aria-selected", "true");
     await page.getByRole("button", { name: "关闭设置", exact: true }).click();
     await expect(trigger).toBeFocused();
+  } finally { release(); }
+});
+
+
+test("requested settings tab survives deferred module loading", async ({ page }) => {
+  let release!: () => void;
+  const held = new Promise<void>(resolve => { release = resolve; });
+  await page.route(/\/assets\/EnvironmentSettingsDialog-[^/]+\.js$/, async route => {
+    await held; await route.continue();
+  });
+  try {
+    await page.goto("/");
+    await page.getByRole("button", { name: "设置", exact: true }).click();
+    await expect(page.getByRole("status")).toContainText("正在打开");
+    await page.evaluate(() => window.dispatchEvent(new CustomEvent("siaovplay:open-environment-settings", { detail: { tab: "storage" } })));
+    release();
+    await expect(page.getByRole("tab", { name: "存储", exact: true })).toHaveAttribute("aria-selected", "true");
   } finally { release(); }
 });
