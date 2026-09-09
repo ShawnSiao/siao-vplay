@@ -218,3 +218,6 @@ fn running_migration_is_recovered_as_interrupted() {
 
 #[path = "migration_receipt_tests.rs"]
 mod receipt_tests;
+
+#[path = "migration_receipt_recovery_tests.rs"]
+mod receipt_recovery_tests;

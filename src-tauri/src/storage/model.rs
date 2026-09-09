@@ -158,7 +158,7 @@ pub struct StorageSettingsView {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct StorageSettingsFile {
-    #[serde(default = "settings_version")]
+    #[serde(default = "legacy_settings_version")]
     pub version: u32,
     #[serde(default)]
     pub pending_migration_commit: Option<super::migration_commit::CommitIntent>,
@@ -168,6 +168,8 @@ pub(crate) struct StorageSettingsFile {
     pub active_app_data_root: Option<String>,
     #[serde(default)]
     pub pending_app_data_root: Option<String>,
+    #[serde(default)]
+    pub pending_app_data_receipt: Option<super::migration_receipt::ReceiptReference>,
     #[serde(default)]
     pub remote_media_root: Option<String>,
     #[serde(default)]
@@ -186,6 +188,7 @@ impl Default for StorageSettingsFile {
             revision: initial_revision(),
             active_app_data_root: None,
             pending_app_data_root: None,
+            pending_app_data_receipt: None,
             remote_media_root: None,
             media_cache_root: None,
             default_subtitle_export_directory: None,
@@ -195,9 +198,11 @@ impl Default for StorageSettingsFile {
 }
 
 pub(crate) const fn settings_version() -> u32 {
-    2
+    3
 }
 
 const fn initial_revision() -> u64 {
     1
 }
+
+const fn legacy_settings_version() -> u32 { 1 }

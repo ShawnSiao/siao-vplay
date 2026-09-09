@@ -4,7 +4,8 @@ use super::*;
 
 #[test]
 fn occupied_pending_root_does_not_promote_or_upgrade_bootstrap_settings() {
-    for version in [1, 2] {
+    // Zero denotes an unversioned legacy JSON fixture, not a supported version zero.
+    for version in [0, 1, 2] {
         let directory = tempfile::tempdir().unwrap();
         let bootstrap = directory.path().join("bootstrap");
         let destination = directory.path().join("destination");
@@ -16,6 +17,11 @@ fn occupied_pending_root_does_not_promote_or_upgrade_bootstrap_settings() {
         settings.pending_app_data_root = Some(destination.to_string_lossy().into_owned());
         let path = bootstrap.join("storage-settings.json");
         settings_io::persist_settings(&path, &settings).unwrap();
+        if version == 0 {
+            let mut legacy: serde_json::Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+            legacy.as_object_mut().unwrap().remove("version");
+            fs::write(&path, serde_json::to_vec(&legacy).unwrap()).unwrap();
+        }
         let original = fs::read(&path).unwrap();
         let owner = InstanceLock::acquire(&destination).unwrap();
         assert!(StorageManager::initialize_owned(&bootstrap, bootstrap.clone(), None).is_err());
@@ -27,7 +33,7 @@ fn occupied_pending_root_does_not_promote_or_upgrade_bootstrap_settings() {
         assert_eq!(manager.app_data_root().unwrap(), destination);
         assert_eq!(manager.get_settings().unwrap().revision, 2);
         assert!(manager.get_settings().unwrap().pending_app_data_root.is_none());
-        assert_eq!(manager.read_state().unwrap().settings.version, 2);
+        assert_eq!(manager.read_state().unwrap().settings.version, model::settings_version());
     }
 }
 
@@ -58,6 +64,7 @@ fn failed_target_verification_releases_owner_and_preserves_settings() {
     let database = destination.join("projects/siaovplay.db");
     fs::write(&database, b"invalid database fixture").unwrap();
     let mut settings = model::StorageSettingsFile::default();
+    settings.version = 2; // Exercise the legacy SQLite check, not a missing new receipt.
     settings.pending_app_data_root = Some(destination.to_string_lossy().into_owned());
     let path = bootstrap.join("storage-settings.json");
     settings_io::persist_settings(&path, &settings).unwrap();

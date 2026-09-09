@@ -221,9 +221,9 @@ impl StorageManager {
                     &destination,
                 )?;
                 verified.push(super::migration_receipt::VerifiedFile::database(&destination, &cancelled)?);
-                self.persist_migration_receipt(task, verified, &cancelled)?;
+                let receipt = self.persist_migration_receipt(task, verified, &cancelled)?;
                 self.update_progress(task.bytes_to_copy, task.file_count)?;
-                self.commit_app_data_destination(task)?;
+                self.commit_app_data_destination(task, receipt)?;
                 Ok(StorageMigrationStatus::RestartRequired)
             }
             StorageArea::RemoteMedia | StorageArea::MediaCache => {
@@ -234,7 +234,7 @@ impl StorageManager {
         }
     }
 
-    fn persist_migration_receipt(&self, task: &StorageMigrationTask, files: Vec<super::migration_receipt::VerifiedFile>, cancelled: &AtomicBool) -> Result<(), StorageError> {
+    fn persist_migration_receipt(&self, task: &StorageMigrationTask, files: Vec<super::migration_receipt::VerifiedFile>, cancelled: &AtomicBool) -> Result<super::migration_receipt::ReceiptReference, StorageError> {
         let bootstrap = self.read_state()?.settings_path.parent().map(Path::to_path_buf)
             .ok_or_else(|| StorageError::InvalidPath("启动配置目录缺失".to_owned()))?;
         super::migration_receipt::persist(&bootstrap, task, files, cancelled)
@@ -260,7 +260,7 @@ impl StorageManager {
         }
     }
 
-    fn commit_app_data_destination(&self, task: &StorageMigrationTask) -> Result<(), StorageError> {
+    fn commit_app_data_destination(&self, task: &StorageMigrationTask, receipt: super::migration_receipt::ReceiptReference) -> Result<(), StorageError> {
         let runtime = self.migration.lock().map_err(|_| StorageError::StatePoisoned)?;
         if runtime.task.as_ref().is_none_or(|current| current.id != task.id
             || current.area != StorageArea::AppData || current.status != StorageMigrationStatus::Running
@@ -272,6 +272,7 @@ impl StorageManager {
         let mut state = self.write_state()?;
         let mut next = state.settings.clone();
         next.pending_app_data_root = Some(task.destination_root.clone());
+        next.pending_app_data_receipt = Some(receipt);
         next.revision = next.revision.saturating_add(1);
         persist_settings(&state.settings_path, &next)?;
         state.settings = next;

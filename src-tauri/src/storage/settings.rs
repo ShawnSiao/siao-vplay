@@ -67,9 +67,10 @@ impl StorageManager {
         fs::create_dir_all(bootstrap_directory)?;
         let settings_path = bootstrap_directory.join(SETTINGS_FILE_NAME);
         let mut settings = load_settings(&settings_path)?;
-        let upgrade_settings = settings.version == 1;
+        let legacy_pending = matches!(settings.version, 1 | 2);
+        let upgrade_settings = legacy_pending;
         if upgrade_settings {
-            if settings.pending_migration_commit.is_some() { return Err(super::migration_commit::pending_error()); }
+            if settings.version == 1 && settings.pending_migration_commit.is_some() { return Err(super::migration_commit::pending_error()); }
             settings.version = settings_version();
         }
         if settings.version != settings_version() {
@@ -101,7 +102,12 @@ impl StorageManager {
             None
         };
         // Do not publish the new root or upgrade its bootstrap config until ownership succeeds.
-        if pending_root.is_some() {
+        if let Some(root) = pending_root.as_deref() {
+            match settings.pending_app_data_receipt.as_ref() {
+                Some(receipt) => super::migration_receipt::verify_pending(bootstrap_directory, receipt, root)?,
+                None if legacy_pending => {},
+                None => return Err(StorageError::MigrationIntegrity("待切换的数据缺少校验记录，已保留原配置与数据".to_owned())),
+            }
             promote_pending_app_data_root(&settings_path, &mut settings)?;
             if settings.pending_app_data_root.is_some() {
                 return Err(StorageError::RootUnavailable("待切换的数据目录已不可用，未修改存储配置".to_owned()));
@@ -337,6 +343,7 @@ fn promote_pending_app_data_root(
     super::database::verify_database(&database)?;
     settings.active_app_data_root = Some(pending.to_owned());
     settings.pending_app_data_root = None;
+    settings.pending_app_data_receipt = None;
     settings.revision = settings.revision.saturating_add(1);
     persist_settings(settings_path, settings)
 }

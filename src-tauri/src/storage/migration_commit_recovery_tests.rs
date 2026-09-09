@@ -160,7 +160,7 @@ fn legacy_settings_upgrade_preserves_revision_and_sets_old_reader_gate() {
     let reopened = StorageManager::initialize(&f.root, f.root.clone(), None).unwrap();
     assert_eq!(reopened.get_settings().unwrap().revision, 17);
     let persisted: StorageSettingsFile = serde_json::from_slice(&fs::read(f.root.join("storage-settings.json")).unwrap()).unwrap();
-    assert_eq!(persisted.version, 2); // Previous reader only accepts version 1.
+    assert_eq!(persisted.version, super::super::model::settings_version()); // Prior readers reject the new settings version.
 }
 
 #[test]

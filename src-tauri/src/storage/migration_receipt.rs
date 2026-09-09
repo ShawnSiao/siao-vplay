@@ -3,6 +3,7 @@ use super::{
     migration_stream,
 };
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::{
     collections::HashSet,
     fs,
@@ -72,7 +73,8 @@ struct Receipt {
 
 fn invalid() -> StorageError {
     StorageError::MigrationIntegrity(
-        "迁移校验记录无效或版本不受支持，已保留原记录；存储位置未切换".to_owned(),
+        "迁移校验记录缺失、无效或版本不受支持；请检查记录版本或恢复原记录后重试，存储位置未切换"
+            .to_owned(),
     )
 }
 
@@ -86,6 +88,10 @@ fn validate(receipt: &Receipt, task: &StorageMigrationTask) -> Result<(), Storag
     {
         return Err(invalid());
     }
+    validate_content(receipt)
+}
+
+fn validate_content(receipt: &Receipt) -> Result<(), StorageError> {
     let mut paths = HashSet::new();
     let mut databases = 0;
     for file in &receipt.files {
@@ -107,10 +113,10 @@ fn validate(receipt: &Receipt, task: &StorageMigrationTask) -> Result<(), Storag
             databases += 1;
         }
     }
-    let expected = usize::from(task.area == StorageArea::AppData);
+    let expected = usize::from(receipt.area == StorageArea::AppData);
     if databases != expected
-        || (task.mode == StorageMigrationMode::Rebuild
-            && (task.area != StorageArea::MediaCache || !receipt.files.is_empty()))
+        || (receipt.mode == StorageMigrationMode::Rebuild
+            && (receipt.area != StorageArea::MediaCache || !receipt.files.is_empty()))
     {
         return Err(invalid());
     }
@@ -122,7 +128,7 @@ pub(super) fn persist(
     task: &StorageMigrationTask,
     files: Vec<VerifiedFile>,
     cancelled: &AtomicBool,
-) -> Result<(), StorageError> {
+) -> Result<ReceiptReference, StorageError> {
     migration_stream::check(cancelled)?;
     // Never interpret task identity as an arbitrary filename.
     if uuid::Uuid::parse_str(&task.id).is_err() || task.id.len() != 36 {
@@ -149,14 +155,17 @@ pub(super) fn persist(
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
         Err(error) => return Err(error.into()),
     }
-    write_atomic(&path, &receipt, cancelled)
+    let bytes = serde_json::to_vec(&receipt)?;
+    let reference = ReceiptReference {
+        version: 1,
+        task_id: task.id.clone(),
+        sha256: format!("{:x}", Sha256::digest(&bytes)),
+    };
+    write_atomic(&path, &bytes, cancelled)?;
+    Ok(reference)
 }
 
-fn write_atomic(
-    path: &Path,
-    receipt: &Receipt,
-    cancelled: &AtomicBool,
-) -> Result<(), StorageError> {
+fn write_atomic(path: &Path, bytes: &[u8], cancelled: &AtomicBool) -> Result<(), StorageError> {
     let temporary: PathBuf = path.with_file_name(format!(
         ".storage-receipt-{}.part",
         uuid::Uuid::new_v4().simple()
@@ -166,7 +175,7 @@ fn write_atomic(
         .create_new(true)
         .open(&temporary)?;
     let result = (|| {
-        serde_json::to_writer(&mut file, receipt)?;
+        file.write_all(bytes)?;
         migration_stream::check(cancelled)?;
         file.flush()?;
         file.sync_all()?;
@@ -184,3 +193,78 @@ fn write_atomic(
 #[cfg(test)]
 #[path = "migration_receipt_validation_tests.rs"]
 mod tests;
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct ReceiptReference {
+    version: u32,
+    task_id: String,
+    sha256: String,
+}
+
+pub(super) fn verify_pending(
+    bootstrap: &Path,
+    reference: &ReceiptReference,
+    destination: &Path,
+) -> Result<(), StorageError> {
+    if reference.version != 1
+        || reference.task_id.len() != 36
+        || uuid::Uuid::parse_str(&reference.task_id).is_err()
+    {
+        return Err(invalid());
+    }
+    let path = bootstrap.join(format!(
+        "storage-migration.{}.receipt.json",
+        reference.task_id
+    ));
+    let metadata = fs::symlink_metadata(&path).map_err(|_| invalid())?;
+    if !metadata.is_file() || metadata.is_symlink() {
+        return Err(invalid());
+    }
+    let bytes = fs::read(path).map_err(|_| invalid())?;
+    if format!("{:x}", Sha256::digest(&bytes)) != reference.sha256 {
+        return Err(invalid());
+    }
+    let receipt: Receipt = serde_json::from_slice(&bytes).map_err(|_| invalid())?;
+    if receipt.schema_version != 1
+        || receipt.task_id != reference.task_id
+        || receipt.area != StorageArea::AppData
+        || receipt.mode != StorageMigrationMode::Copy
+        || Path::new(&receipt.destination_root) != destination
+    {
+        return Err(invalid());
+    }
+    validate_content(&receipt)?;
+    let root = dunce::canonicalize(destination)?;
+    let cancelled = AtomicBool::new(false);
+    for file in &receipt.files {
+        let failure = || {
+            StorageError::MigrationIntegrity(format!(
+                "待切换文件校验失败：{}；请检查文件或恢复原文件后重试，存储位置未切换",
+                file.relative
+            ))
+        };
+        let mut path = root.clone();
+        // Reject links in every component before opening a recorded file.
+        for component in file.relative.split('/') {
+            path.push(component);
+            if fs::symlink_metadata(&path)
+                .map_err(|_| failure())?
+                .is_symlink()
+            {
+                return Err(failure());
+            }
+        }
+        let metadata = fs::metadata(&path).map_err(|_| failure())?;
+        if !metadata.is_file()
+            || metadata.len() != file.bytes
+            || !dunce::canonicalize(&path)
+                .map_err(|_| failure())?
+                .starts_with(&root)
+            || migration_copy::file_sha256(&path, &cancelled).map_err(|_| failure())? != file.sha256
+        {
+            return Err(failure());
+        }
+    }
+    Ok(())
+}

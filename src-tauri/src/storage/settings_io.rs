@@ -33,7 +33,7 @@ pub(super) fn load_settings(path: &Path) -> Result<StorageSettingsFile, StorageE
     }
     let Some(previous) = previous else { return Ok(StorageSettingsFile::default()); };
     let settings: StorageSettingsFile = serde_json::from_slice(&fs::read(&previous)?)?;
-    if settings.version != 1 && settings.version != settings_version() { return Err(StorageError::UnsupportedVersion(settings.version)); }
+    if !matches!(settings.version, 1 | 2) && settings.version != settings_version() { return Err(StorageError::UnsupportedVersion(settings.version)); }
     // Restore the committed legacy backup, never an unfinished .part candidate.
     // Keep legacy files for inspection; startup holds the bootstrap-directory owner lock.
     persist_settings(path, &settings)?;

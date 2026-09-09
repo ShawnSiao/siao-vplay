@@ -135,7 +135,14 @@ fn failed_publication_removes_only_the_temporary_record() {
         destination_root: task.destination_root.clone(),
         files: files(),
     };
-    assert!(write_atomic(&target, &receipt, &AtomicBool::new(false)).is_err());
+    assert!(
+        write_atomic(
+            &target,
+            &serde_json::to_vec(&receipt).unwrap(),
+            &AtomicBool::new(false)
+        )
+        .is_err()
+    );
     assert!(persist(directory.path(), &task, files(), &AtomicBool::new(false)).is_err());
     assert_eq!(fs::read(target.join("retain")).unwrap(), b"retain");
     assert_eq!(fs::read_dir(directory.path()).unwrap().count(), 1);
