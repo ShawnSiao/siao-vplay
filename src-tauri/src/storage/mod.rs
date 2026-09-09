@@ -2,6 +2,7 @@ pub mod commands;
 mod database;
 mod maintenance;
 mod migration;
+mod migration_commit;
 mod migration_copy;
 mod migration_state;
 mod model;
@@ -103,3 +104,6 @@ mod migration_recovery_tests;
 
 #[cfg(test)]
 mod migration_destination_tests;
+
+#[cfg(test)]
+mod migration_commit_tests;

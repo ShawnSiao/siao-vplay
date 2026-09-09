@@ -67,6 +67,11 @@ impl StorageManager {
         fs::create_dir_all(bootstrap_directory)?;
         let settings_path = bootstrap_directory.join(SETTINGS_FILE_NAME);
         let mut settings = load_settings(&settings_path)?;
+        if settings.version == 1 {
+            if settings.pending_migration_commit.is_some() { return Err(super::migration_commit::pending_error()); }
+            settings.version = settings_version();
+            persist_settings(&settings_path, &settings)?;
+        }
         if settings.version != settings_version() {
             return Err(StorageError::UnsupportedVersion(settings.version));
         }
@@ -87,7 +92,8 @@ impl StorageManager {
         } else {
             None
         };
-        let migration = load_migration_runtime(bootstrap_directory, &active_root)?;
+        let mut migration = load_migration_runtime(bootstrap_directory, &active_root)?;
+        super::migration_commit::recover(&settings_path, &mut settings, &active_root, &mut migration)?;
         Ok((
             Self {
                 state: Arc::new(RwLock::new(StorageState {
@@ -146,6 +152,7 @@ impl StorageManager {
     }
 
     pub fn get_settings(&self) -> Result<StorageSettingsView, StorageError> {
+        self.recover_migration_commit()?;
         let state = self.read_state()?;
         settings_view(&state)
     }
@@ -210,13 +217,17 @@ impl StorageManager {
     pub(crate) fn read_state(
         &self,
     ) -> Result<std::sync::RwLockReadGuard<'_, StorageState>, StorageError> {
-        self.state.read().map_err(|_| StorageError::StatePoisoned)
+        let state = self.state.read().map_err(|_| StorageError::StatePoisoned)?;
+        if state.settings.pending_migration_commit.is_some() { return Err(super::migration_commit::pending_error()); }
+        Ok(state)
     }
 
     pub(crate) fn write_state(
         &self,
     ) -> Result<std::sync::RwLockWriteGuard<'_, StorageState>, StorageError> {
-        self.state.write().map_err(|_| StorageError::StatePoisoned)
+        let state = self.state.write().map_err(|_| StorageError::StatePoisoned)?;
+        if state.settings.pending_migration_commit.is_some() { return Err(super::migration_commit::pending_error()); }
+        Ok(state)
     }
 }
 

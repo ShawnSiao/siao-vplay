@@ -26,6 +26,7 @@ impl StorageManager {
         &self,
         input: PrepareStorageMigrationInput,
     ) -> Result<StorageMigrationTask, StorageError> {
+        self.recover_migration_commit()?;
         if input.mode == StorageMigrationMode::Rebuild && input.area != StorageArea::MediaCache {
             return Err(StorageError::InvalidPath(
                 "只有播放缓存支持在新位置重新生成".to_owned(),
@@ -105,6 +106,7 @@ impl StorageManager {
         if !input.confirmed {
             return Err(StorageError::ConfirmationRequired);
         }
+        self.recover_migration_commit()?;
         let task = {
             let mut runtime = self
                 .migration
@@ -178,7 +180,7 @@ impl StorageManager {
 
     fn run_migration(&self, current_database: PathBuf, task: StorageMigrationTask) {
         let result = self.execute_migration(&current_database, &task);
-        let _ = self.finish_task(result);
+        let _ = self.finish_task(&task.id, result);
     }
 
     fn execute_migration(
@@ -218,28 +220,8 @@ impl StorageManager {
                 self.apply_destination(task.area, &destination)?;
                 Ok(StorageMigrationStatus::RestartRequired)
             }
-            StorageArea::RemoteMedia => {
-                database::rewrite_managed_paths(
-                    current_database,
-                    task.area,
-                    &source,
-                    &destination,
-                )?;
-                self.apply_destination(task.area, &destination)?;
-                Ok(StorageMigrationStatus::Completed)
-            }
-            StorageArea::MediaCache => {
-                if task.mode == StorageMigrationMode::Rebuild {
-                    database::clear_cache_references(current_database)?;
-                } else {
-                    database::rewrite_managed_paths(
-                        current_database,
-                        task.area,
-                        &source,
-                        &destination,
-                    )?;
-                }
-                self.apply_destination(task.area, &destination)?;
+            StorageArea::RemoteMedia | StorageArea::MediaCache => {
+                self.commit_destination(current_database, task)?;
                 Ok(StorageMigrationStatus::Completed)
             }
         }
@@ -300,6 +282,7 @@ impl StorageManager {
 
     fn finish_task(
         &self,
+        task_id: &str,
         result: Result<StorageMigrationStatus, StorageError>,
     ) -> Result<(), StorageError> {
         let mut runtime = self
@@ -310,6 +293,7 @@ impl StorageManager {
         let task = runtime
             .task
             .as_mut()
+            .filter(|task| task.id == task_id)
             .ok_or(StorageError::MigrationNotFound)?;
         match result {
             Ok(status) => task.status = status,

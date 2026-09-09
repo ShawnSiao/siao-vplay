@@ -160,6 +160,8 @@ pub struct StorageSettingsView {
 pub(crate) struct StorageSettingsFile {
     #[serde(default = "settings_version")]
     pub version: u32,
+    #[serde(default)]
+    pub pending_migration_commit: Option<super::migration_commit::CommitIntent>,
     #[serde(default = "initial_revision")]
     pub revision: u64,
     #[serde(default)]
@@ -180,6 +182,7 @@ impl Default for StorageSettingsFile {
     fn default() -> Self {
         Self {
             version: settings_version(),
+            pending_migration_commit: None,
             revision: initial_revision(),
             active_app_data_root: None,
             pending_app_data_root: None,
@@ -192,7 +195,7 @@ impl Default for StorageSettingsFile {
 }
 
 pub(crate) const fn settings_version() -> u32 {
-    1
+    2
 }
 
 const fn initial_revision() -> u64 {

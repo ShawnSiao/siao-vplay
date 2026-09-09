@@ -67,6 +67,12 @@ pub(crate) fn rewrite_managed_paths(
 ) -> Result<(), StorageError> {
     let mut connection = Connection::open(database)?;
     let transaction = connection.transaction()?;
+    rewrite_paths_in_transaction(&transaction, area, source, destination)?;
+    transaction.commit()?;
+    verify_database(database)
+}
+
+pub(super) fn rewrite_paths_in_transaction(connection: &Connection, area: StorageArea, source: &Path, destination: &Path) -> Result<(), StorageError> {
     let columns: &[(&str, &str, bool)] = match area {
         StorageArea::AppData => APP_PATH_COLUMNS,
         StorageArea::RemoteMedia => &[("media_sources", "locator", false)],
@@ -76,10 +82,9 @@ pub(crate) fn rewrite_managed_paths(
         ],
     };
     for (table, column, json) in columns {
-        rewrite_column(&transaction, table, column, *json, source, destination)?;
+        rewrite_column(connection, table, column, *json, source, destination)?;
     }
-    transaction.commit()?;
-    verify_database(database)
+    Ok(())
 }
 
 pub(crate) fn clear_cache_references(database: &Path) -> Result<(), StorageError> {
