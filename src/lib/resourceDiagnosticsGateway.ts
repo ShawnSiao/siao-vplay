@@ -11,6 +11,7 @@ export async function getLocalResourceDiagnostics() {
       !["setup_required", "ready", "root_unavailable", "repair_required"].includes(value.rootState) ||
       !unique(value.resources.map(resource => resource.id)) || !unique(value.tasks.map(task => task.id))) invalid();
   for (const resource of value.resources) {
+    if (!resource.versionsReadable && (resource.versions.length > 0 || resource.state !== "repair_required")) invalid();
     if (!["not_installed", "ready", "update_available", "repair_required"].includes(resource.state) ||
         !unique(resource.versions.map(version => version.version)) ||
         resource.versions.some(version => version.active !== (version.version === resource.activeVersion))) invalid();

@@ -53,9 +53,13 @@
             "$ref": "#/$defs/ResourceVersionDiagnostic"
           },
           "type": "array"
+        },
+        "versionsReadable": {
+          "type": "boolean"
         }
       },
       "required": [
+        "versionsReadable",
         "id",
         "catalogVersion",
         "activeVersion",

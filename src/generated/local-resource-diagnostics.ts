@@ -34,6 +34,7 @@ export interface ResourceDiagnosticItem {
   sourcePage: string;
   state: string;
   versions: ResourceVersionDiagnostic[];
+  versionsReadable: boolean;
   [k: string]: unknown;
 }
 export interface ResourceVersionDiagnostic {

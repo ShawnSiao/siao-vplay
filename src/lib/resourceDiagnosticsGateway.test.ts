@@ -6,6 +6,7 @@ beforeEach(() => mocks.invoke.mockReset());
 const version = { version: "1", active: true, installPath: "W:\\resources", fileCount: 1,
   installedBytes: 12, manifestSha256: "a".repeat(64), healthStatus: "ready", activatedAtMs: null, entrypointsAvailable: true };
 const resource = { id: "ffmpeg", catalogVersion: "1", activeVersion: "1", state: "ready", license: "LGPL",
+  versionsReadable: true,
   sourcePage: "https://example.test", artifactSha256: null, artifactUrl: null, healthCheck: "version", versions: [version] };
 const sample = { generatedAtMs: 1, catalogSource: "embedded", remoteCatalogEnabled: false,
   maintenance: { transactionState: "none", scanState: "complete", stagingReviewCount: 0, receiptRecoveryCopyCount: 0 }, remoteSignaturePolicy: "required", rootState: "ready", resourceRoot: "W:\\resources",
@@ -39,5 +40,21 @@ it("accepts repair-required snapshots whose active receipt is unavailable", asyn
 it("rejects an unrecognized maintenance state instead of hiding it", async () => {
   mocks.invoke.mockResolvedValue({ ...sample, maintenance: { transactionState: "unknown",
     scanState: "complete", stagingReviewCount: 0, receiptRecoveryCopyCount: 0 } });
+  await expect(getLocalResourceDiagnostics()).rejects.toThrow();
+});
+it("rejects an invalid version-read state", async () => {
+  mocks.invoke.mockResolvedValue({ ...sample, resources: [{ ...resource, versionsReadable: "unknown" }] });
+  await expect(getLocalResourceDiagnostics()).rejects.toThrow();
+});
+it("accepts an explicitly unavailable version inventory", async () => {
+  const value = { ...sample, resources: [{ ...resource, versionsReadable: false, versions: [], state: "repair_required" }] };
+  mocks.invoke.mockResolvedValue(value);
+  await expect(getLocalResourceDiagnostics()).resolves.toEqual(value);
+});
+it.each([
+  { ...resource, versionsReadable: false },
+  { ...resource, versionsReadable: false, versions: [] },
+])("rejects contradictory unavailable version inventory %#", async resource => {
+  mocks.invoke.mockResolvedValue({ ...sample, resources: [resource] });
   await expect(getLocalResourceDiagnostics()).rejects.toThrow();
 });

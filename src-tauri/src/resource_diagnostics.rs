@@ -1,3 +1,6 @@
+mod summary;
+#[cfg(test)]
+mod isolation_tests;
 mod maintenance;
 pub use maintenance::{rollback_resource, cleanup_old_versions};
 
@@ -80,6 +83,7 @@ pub struct LocalResourceDiagnostics {
 #[serde(rename_all = "camelCase")]
 #[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct ResourceDiagnosticItem {
+    pub versions_readable: bool,
     pub id: String,
     pub catalog_version: String,
     pub active_version: Option<String>,
@@ -195,12 +199,12 @@ pub fn diagnostics() -> Result<LocalResourceDiagnostics, ResourceDiagnosticsErro
             .as_ref()
             .and_then(|configuration| configuration.active_resources.get(&resource.id))
             .cloned();
-        let receipts = local_resources::installed_receipts(&resource.id)?;
-        let versions = receipts
-            .iter()
-            .map(|receipt| version_diagnostic(root.as_deref(), receipt, active_version.as_deref()))
-            .collect::<Result<Vec<_>, _>>()?;
-        let state = if active_version.is_none() {
+        let inspected = inspect_versions(&resource.id, root.as_deref(), active_version.as_deref());
+        let versions_readable = inspected.is_ok();
+        let versions = inspected.unwrap_or_default();
+        let state = if !versions_readable {
+            "repair_required"
+        } else if active_version.is_none() {
             "not_installed"
         } else if local_resources::resource_update_available(&resource.id)? {
             "update_available"
@@ -210,6 +214,7 @@ pub fn diagnostics() -> Result<LocalResourceDiagnostics, ResourceDiagnosticsErro
             "repair_required"
         };
         resources.push(ResourceDiagnosticItem {
+            versions_readable,
             id: resource.id.clone(),
             catalog_version: resource.version.clone(),
             active_version,
@@ -264,47 +269,16 @@ pub fn diagnostics() -> Result<LocalResourceDiagnostics, ResourceDiagnosticsErro
     })
 }
 
+fn inspect_versions(resource_id: &str, root: Option<&Path>, active: Option<&str>) -> Result<Vec<ResourceVersionDiagnostic>, ResourceDiagnosticsError> {
+    if root.is_some_and(|path| !path.is_dir()) {
+        return Err(LocalResourceError::RootUnavailable("资源目录不可访问".into()).into());
+    }
+    local_resources::installed_receipts(resource_id)?.iter()
+        .map(|receipt| version_diagnostic(root, receipt, active)).collect()
+}
+
 pub fn diagnostic_summary() -> Result<String, ResourceDiagnosticsError> {
-    let diagnostics = diagnostics()?;
-    let mut lines = vec![
-        "SiaoVPlay 本地资源诊断摘要".to_owned(),
-        format!("生成时间：{}", diagnostics.generated_at_ms),
-        format!(
-            "目录清单：{}；远程目录：{}；签名策略：{}",
-            diagnostics.catalog_source,
-            if diagnostics.remote_catalog_enabled {
-                "启用"
-            } else {
-                "未启用"
-            },
-            diagnostics.remote_signature_policy
-        ),
-        format!("资源位置状态：{}", diagnostics.root_state),
-        format!("字幕识别方式：{}", diagnostics.preferred_profile),
-        format!("资源变更与备份检查：{}", serde_json::to_string(&diagnostics.maintenance)?),
-    ];
-    for resource in diagnostics.resources {
-        lines.push(format!(
-            "资源 {}：状态 {}；当前版本 {}；目录版本 {}；已安装版本 {}",
-            resource.id,
-            resource.state,
-            resource.active_version.as_deref().unwrap_or("无"),
-            resource.catalog_version,
-            resource.versions.len()
-        ));
-    }
-    for task in diagnostics.tasks {
-        if let Some(message) = task.error_message {
-            lines.push(format!(
-                "任务 {} {}：{} {}",
-                task.resource_id,
-                task.state,
-                task.error_code.as_deref().unwrap_or("未分类"),
-                message
-            ));
-        }
-    }
-    Ok(lines.join("\n"))
+    summary::render(diagnostics()?)
 }
 
 pub fn third_party_notices() -> &'static str {

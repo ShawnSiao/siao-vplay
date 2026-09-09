@@ -1121,6 +1121,7 @@ export function LocalResourcesDialog({
                   <a href={resource.sourcePage} target="_blank" rel="noreferrer">
                     查看来源与许可说明
                   </a>
+                  {diagnostic?.versionsReadable === false ? <p role="status">版本检查未完成，安装记录或资源目录无法读取。已保留文件，请检查目录访问权限后重试。</p> : null}
                   {diagnostic?.versions.map((version) => (
                     <div className="local-resource-version" key={version.version}>
                       <div>

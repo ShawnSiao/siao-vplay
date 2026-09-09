@@ -540,7 +540,7 @@ describe("LocalResourcesDialog", () => {
             artifactSha256: "b".repeat(64),
             artifactUrl: "https://example.com/yt-dlp.exe",
             healthCheck: "yt-dlp-version",
-            versions: [
+            versionsReadable: true, versions: [
               {
                 version: "2026.05.01",
                 active: true,
