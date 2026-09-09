@@ -528,6 +528,7 @@ mod tests {
         }
     }
     include!("section_service_tests.rs");
+    include!("episode_page_tests.rs");
     include!("search_service_tests.rs");
     #[test]
     fn collection_crud_preserves_projects_and_updates_home_counts() {

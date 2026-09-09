@@ -13,6 +13,7 @@ mod preview_store;
 mod recovery_service;
 mod recovery_store;
 mod repository;
+mod episode_repository;
 mod scan_service;
 mod scanner;
 mod section_model;
