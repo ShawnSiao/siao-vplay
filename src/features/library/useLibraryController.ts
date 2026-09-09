@@ -1,3 +1,4 @@
+import { useLibraryRecoveryApply } from "./useLibraryRecoveryApply";
 import { useLibraryRecoveryPreview } from "./useLibraryRecoveryPreview";
 import { useLibraryFolderImport } from "./useLibraryFolderImport";
 import { useLibraryFolderScan } from "./useLibraryFolderScan";
@@ -17,7 +18,6 @@ import type {
   LibraryMediaSummary,
   LibraryRescanPreview,
   LibraryRescanResult,
-  ApplyLibraryRootRebuildInput,
   LibraryRootRebuildPreview,
   LibraryRootRebuildResult,
   LibraryRootRelocationPreview,
@@ -28,9 +28,6 @@ import type {
 } from "../../types";
 import {
   addProjectToCollection,
-  applyLibraryRescan,
-  applyLibraryRootRebuild,
-  applyLibraryRootRelocation,
   createCollection,
   deleteCollection,
   emptyLibraryHome,
@@ -907,92 +904,22 @@ export function useLibraryController() {
     [],
   );
 
-  const applyRescan = useCallback(async () => {
-    const snapshot = state.recovery;
-    if (!snapshot.rescanPreview || snapshot.stage !== "rescan_preview") {
-      return null;
-    }
-    dispatch({ type: "recovery_applying" });
-    try {
-      const result = await applyLibraryRescan({
-        previewToken: snapshot.rescanPreview.previewToken,
-        newItems: snapshot.newItems.map((item) => ({
-          candidateId: item.candidateId,
-          displayTitle: item.displayTitle,
-          seasonNumber: item.seasonNumber,
-          episodeNumber: item.episodeNumber,
-          absoluteOrder: item.absoluteOrder,
-          confirmed: item.confirmed,
-        })),
-        confirmMissing: snapshot.confirmMissing,
-        confirmChanged: snapshot.confirmChanged,
-        confirmFingerprintDuplicates: snapshot.confirmFingerprintDuplicates,
-      }, snapshot.rescanPreview);
-      dispatch({ type: "rescan_succeeded", result });
+  const { applyRescan, applyRebuild, applyRootRelocation } = useLibraryRecoveryApply(state.recovery, {
+    started: () => dispatch({ type: "recovery_applying" }),
+    rescanCommitted: async result => { dispatch({ type: "rescan_succeeded", result }); void refresh(); },
+    rebuildCommitted: async result => {
+      dispatch({ type: "rebuild_succeeded", result, episodes: [] });
+      await loadCollection(result.collection.summary.id, null, result.collection);
       void refresh();
-      return result;
-    } catch (error) {
-      dispatch({ type: "recovery_failed", message: commandError(error).message });
-      return null;
-    }
-  }, [refresh, state.recovery]);
+    },
+    relocationCommitted: async result => { dispatch({ type: "relocation_succeeded", result }); void refresh(); },
+    failed: message => dispatch({ type: "recovery_failed", message }),
+    refreshFailed: message => dispatch({ type: "failed", message }),
+  });
 
   const setRebuildCollectionTitle = useCallback((title: string) => {
     dispatch({ type: "rebuild_title_changed", title });
   }, []);
-
-  const applyRebuild = useCallback(async () => {
-    const snapshot = state.recovery;
-    if (!snapshot.rebuildPreview || snapshot.stage !== "rebuild_preview") {
-      return null;
-    }
-    const input: ApplyLibraryRootRebuildInput = {
-      previewToken: snapshot.rebuildPreview.previewToken,
-      collectionTitle: snapshot.rebuildCollectionTitle,
-      newItems: snapshot.newItems.map((item) => ({
-        candidateId: item.candidateId,
-        displayTitle: item.displayTitle,
-        seasonNumber: item.seasonNumber,
-        episodeNumber: item.episodeNumber,
-        absoluteOrder: item.absoluteOrder,
-        confirmed: item.confirmed,
-      })),
-      confirmMissing: snapshot.confirmMissing,
-      confirmChanged: snapshot.confirmChanged,
-      confirmUncertainMatches: snapshot.confirmUncertainMatches,
-      confirmFingerprintDuplicates: snapshot.confirmFingerprintDuplicates,
-    };
-    dispatch({ type: "recovery_applying" });
-    try {
-      const result = await applyLibraryRootRebuild(input, snapshot.rebuildPreview);
-      dispatch({ type: "rebuild_succeeded", result, episodes: [] });
-      await loadCollection(result.collection.summary.id, null, result.collection);
-      void refresh();
-      return result;
-    } catch (error) {
-      dispatch({ type: "recovery_failed", message: commandError(error).message });
-      return null;
-    }
-  }, [loadCollection, refresh, state.recovery]);
-
-  const applyRootRelocation = useCallback(async () => {
-    const snapshot = state.recovery;
-    if (!snapshot.relocationPreview || snapshot.stage !== "relocation_preview") {
-      return null;
-    }
-    dispatch({ type: "recovery_applying" });
-    try {
-      const result = await applyLibraryRootRelocation(
-        snapshot.relocationPreview,
-      );
-      dispatch({ type: "relocation_succeeded", result });
-      void refresh();
-      return result;
-    } catch (error) {
-      dispatch({ type: "recovery_failed", message: commandError(error).message });
-      return null;
-    }
-  }, [refresh, state.recovery]);
 
   const revokeRoot = useCallback(
     (rootId: string) =>
