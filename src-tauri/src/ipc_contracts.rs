@@ -73,6 +73,17 @@ fn committed_schemas_match_rust() {
     check_schema("library-rebuild-result", &serialized_schema::<crate::library::LibraryRootRebuildResult>());
     check_schema("library-home", &serialized_schema::<crate::library::LibraryHome>());
     check_schema("library-section-page", &serialized_schema::<crate::library::LibrarySectionPage>());
+    use crate::library::overview_model::{CollectionOverviewInput, CollectionOverviewPage, OverviewPageInput, RootOverviewPage, OverviewPage, OverviewScope};
+    check_schema("collection-overview-input", &serialized_schema::<CollectionOverviewInput>());
+    check_schema("overview-page-input", &serialized_schema::<OverviewPageInput>());
+    let mut collection_page = serialized_schema::<CollectionOverviewPage>();
+    collection_page["examples"] = serde_json::json!([CollectionOverviewPage { scope: OverviewScope::Collections, root_linked: false,
+        page: OverviewPage { offset: 0, snapshot_token: "a".repeat(64), total_count: 0, next_offset: None, items: Vec::new() } }]);
+    check_schema("collection-overview-page", &collection_page);
+    let mut root_page = serialized_schema::<RootOverviewPage>();
+    root_page["examples"] = serde_json::json!([RootOverviewPage { scope: OverviewScope::Roots,
+        page: OverviewPage { offset: 0, snapshot_token: "b".repeat(64), total_count: 0, next_offset: None, items: Vec::new() } }]);
+    check_schema("root-overview-page", &root_page);
     check_schema("subtitle-import-preview", &serialized_schema::<crate::subtitles::SubtitleImportPreview>());
     check_schema("embedded-subtitle-preview", &serialized_schema::<crate::subtitles::EmbeddedSubtitlePreview>());
     check_schema("project", &serialized_schema::<crate::domain::Project>());

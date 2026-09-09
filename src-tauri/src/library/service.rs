@@ -518,6 +518,7 @@ mod tests {
     include!("section_service_tests.rs");
     include!("section_snapshot_tests.rs");
     include!("overview_window_tests.rs");
+    include!("overview_page_tests.rs");
     include!("episode_page_tests.rs");
     include!("episode_neighbor_tests.rs");
     include!("episode_snapshot_tests.rs");

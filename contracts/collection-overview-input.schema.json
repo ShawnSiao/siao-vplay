@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "expectedSnapshotToken": {
+      "pattern": "^[a-f0-9]{64}$",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "offset": {
+      "format": "int64",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "rootLinked": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "rootLinked",
+    "offset",
+    "expectedSnapshotToken"
+  ],
+  "title": "CollectionOverviewInput",
+  "type": "object"
+}

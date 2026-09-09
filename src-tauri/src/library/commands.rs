@@ -377,7 +377,7 @@ pub(super) fn allow_media_posters(app: &AppHandle, media: &[MediaSummary]) -> Re
     Ok(())
 }
 
-fn allow_poster(app: &AppHandle, poster_path: &str) -> Result<(), CommandError> {
+pub(super) fn allow_poster(app: &AppHandle, poster_path: &str) -> Result<(), CommandError> {
     if !Path::new(poster_path).is_file() {
         return Ok(());
     }

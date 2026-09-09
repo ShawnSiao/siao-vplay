@@ -15,6 +15,8 @@ pub(crate) fn handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Sen
         crate::commands::cancel_youtube_import,
         crate::commands::list_projects,
         crate::library::commands::get_library_home,
+        crate::library::overview_commands::list_collection_overview,
+        crate::library::overview_commands::list_root_overview,
         crate::library::commands::list_library_section,
         crate::library::commands::search_library,
         crate::library::commands::create_collection,
