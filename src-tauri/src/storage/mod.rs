@@ -7,6 +7,7 @@ mod migration_commit;
 mod migration_copy;
 mod migration_stream;
 mod migration_scope;
+mod asset_policy;
 mod migration_state;
 mod model;
 mod paths;

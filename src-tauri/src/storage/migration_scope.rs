@@ -14,11 +14,12 @@ pub(super) fn scan(
     // after application data moves. Never copy its live engine profile.
     let exclude_browser =
         database.is_some() && dunce::canonicalize(source)? == dunce::canonicalize(bootstrap)?;
+    let retained = super::asset_policy::bootstrap_retained_names()?;
     migration_copy::scan_files_excluding(
         source,
         database,
         cancelled,
-        if exclude_browser { &["EBWebView"] } else { &[] },
+        if exclude_browser { &retained } else { &[] },
     )
 }
 
