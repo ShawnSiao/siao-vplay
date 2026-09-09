@@ -77,7 +77,7 @@ const diagnostics: LocalResourceDiagnostics = {
     artifactSha256: "a".repeat(64),
     artifactUrl: `https://example.com/${id}`,
     healthCheck: "sha256",
-    versionsReadable: true, versions: [],
+    versionsReadable: true, unverifiedReceiptCount: 0, versions: [],
   })),
   tasks: [],
 };

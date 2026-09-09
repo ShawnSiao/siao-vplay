@@ -43,45 +43,66 @@ pub(super) fn list(
     configuration: Option<&LocalResourceConfiguration>,
     resource_id: &str,
 ) -> Result<Vec<ResourceReceipt>, LocalResourceError> {
+    inventory(configuration, resource_id).map(|inventory| inventory.receipts)
+}
+
+#[derive(Default)]
+pub(crate) struct ReceiptInventory {
+    pub receipts: Vec<ResourceReceipt>,
+    pub unverified_count: usize,
+}
+
+pub(super) fn inventory(
+    configuration: Option<&LocalResourceConfiguration>,
+    resource_id: &str,
+) -> Result<ReceiptInventory, LocalResourceError> {
     validate_identifier(resource_id, "资源 ID")?;
     let Some(configuration) = configuration else {
-        return Ok(Vec::new());
+        return Ok(ReceiptInventory::default());
     };
     let root = configuration_root(configuration);
     if !root.is_dir() {
-        return Ok(Vec::new());
+        return Ok(ReceiptInventory::default());
     }
     let directory = transaction_paths::contained(&root, &format!("receipts/{resource_id}"))?;
-    if transaction_paths::metadata(&directory)?.is_none() {
-        return Ok(Vec::new());
-    }
+    let entries = if transaction_paths::metadata(&directory)?.is_some() {
+        Some(fs::read_dir(directory)?)
+    } else {
+        None
+    };
     let mut receipts = Vec::new();
-    for entry in fs::read_dir(directory)? {
+    let mut unverified_count = 0;
+    let mut active_primary_seen = false;
+    let active = configuration.active_resources.get(resource_id);
+    for entry in entries.into_iter().flatten() {
         let entry = entry?;
         let path = entry.path();
-        if !entry.file_type()?.is_file()
-            || path.extension().and_then(|value| value.to_str()) != Some("json")
-        {
+        if path.extension().and_then(|value| value.to_str()) != Some("json") {
             continue;
         }
         let Some(version) = path.file_stem().and_then(|value| value.to_str()) else {
+            unverified_count += 1;
             continue;
         };
-        if validate_identifier(version, "资源版本").is_err() {
+        active_primary_seen |= active.is_some_and(|active| active == version);
+        if !entry.file_type()?.is_file() || validate_identifier(version, "资源版本").is_err() {
+            unverified_count += 1;
             continue;
         }
         match candidate(configuration, resource_id, version, "json") {
             Ok(Some(receipt)) => receipts.push(receipt),
             Ok(None)
             | Err(LocalResourceError::Serialization(_))
-            | Err(LocalResourceError::InvalidReceipt(_)) => {}
+            | Err(LocalResourceError::InvalidReceipt(_)) => unverified_count += 1,
             Err(error) => return Err(error),
         }
     }
-    if let Some(active) = configuration.active_resources.get(resource_id) {
+    if let Some(active) = active {
         if !receipts.iter().any(|receipt| &receipt.version == active) {
-            if let Ok(receipt) = read(configuration, resource_id, active) {
-                receipts.push(receipt);
+            match read(configuration, resource_id, active) {
+                Ok(receipt) => receipts.push(receipt),
+                Err(_) if !active_primary_seen => unverified_count += 1,
+                Err(_) => {}
             }
         }
     }
@@ -92,5 +113,8 @@ pub(super) fn list(
             .cmp(&left.activated_at_ms.unwrap_or_default())
             .then(right.version.cmp(&left.version))
     });
-    Ok(receipts)
+    Ok(ReceiptInventory {
+        receipts,
+        unverified_count,
+    })
 }

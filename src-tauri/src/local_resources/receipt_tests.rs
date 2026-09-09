@@ -1,5 +1,39 @@
 use super::*;
 use tempfile::{TempDir, tempdir};
+
+#[test]
+fn inventory_counts_each_unavailable_active_receipt_once() {
+    for state in ["missing", "corrupt", "directory"] {
+        let (_root, manager, target) = setup();
+        fs::remove_file(&target).unwrap();
+        match state {
+            "corrupt" => fs::write(&target, b"broken").unwrap(),
+            "directory" => fs::create_dir(&target).unwrap(),
+            _ => {}
+        }
+        let inventory = receipts::inventory(manager.configuration.as_ref(), "ffmpeg-cpu").unwrap();
+        assert_eq!(inventory.unverified_count, 1, "{state}");
+        assert!(inventory.receipts.is_empty());
+        assert!(manager.installed_receipts("ffmpeg-cpu").unwrap().is_empty());
+    }
+}
+
+#[test]
+fn inventory_keeps_valid_active_backup_and_does_not_adopt_orphan_copies() {
+    let (_root, manager, target) = setup();
+    let bytes = fs::read(&target).unwrap();
+    let backup = target.with_extension("json.bak");
+    let orphan = target.parent().unwrap().join("2.json.part");
+    fs::rename(&target, &backup).unwrap();
+    fs::write(&orphan, &bytes).unwrap();
+    let inventory = receipts::inventory(manager.configuration.as_ref(), "ffmpeg-cpu").unwrap();
+    assert_eq!(inventory.unverified_count, 0);
+    assert_eq!(inventory.receipts.len(), 1);
+    assert_eq!(inventory.receipts[0].version, "1");
+    assert!(!target.exists());
+    assert_eq!(fs::read(backup).unwrap(), bytes);
+    assert_eq!(fs::read(orphan).unwrap(), bytes);
+}
 fn setup() -> (TempDir, LocalResourceManager, PathBuf) {
     let root = tempdir().unwrap();
     let mut manager = LocalResourceManager::load(root.path()).unwrap();

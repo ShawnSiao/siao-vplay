@@ -48,6 +48,12 @@
         "state": {
           "type": "string"
         },
+        "unverifiedReceiptCount": {
+          "format": "uint",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
         "versions": {
           "items": {
             "$ref": "#/$defs/ResourceVersionDiagnostic"
@@ -59,6 +65,7 @@
         }
       },
       "required": [
+        "unverifiedReceiptCount",
         "versionsReadable",
         "id",
         "catalogVersion",

@@ -2,7 +2,7 @@
 "use strict";
 export const validate = validate20;
 export default validate20;
-const schema31 = {"$defs":{"ResourceChangeState":{"enum":["none","activation_pending","removal_pending","conflicting","unavailable"],"type":"string"},"ResourceDiagnosticItem":{"properties":{"activeVersion":{"type":["string","null"]},"artifactSha256":{"type":["string","null"]},"artifactUrl":{"type":["string","null"]},"catalogVersion":{"type":"string"},"healthCheck":{"type":"string"},"id":{"type":"string"},"license":{"type":"string"},"sourcePage":{"type":"string"},"state":{"type":"string"},"versions":{"items":{"$ref":"#/$defs/ResourceVersionDiagnostic"},"type":"array"},"versionsReadable":{"type":"boolean"}},"required":["versionsReadable","id","catalogVersion","activeVersion","state","license","sourcePage","artifactSha256","artifactUrl","healthCheck","versions"],"type":"object"},"ResourceMaintenanceDiagnostics":{"properties":{"receiptRecoveryCopyCount":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"scanState":{"$ref":"#/$defs/ResourceMaintenanceScanState"},"stagingReviewCount":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"transactionState":{"$ref":"#/$defs/ResourceChangeState"}},"required":["transactionState","scanState","stagingReviewCount","receiptRecoveryCopyCount"],"type":"object"},"ResourceMaintenanceScanState":{"enum":["not_configured","complete","partial","root_unavailable"],"type":"string"},"ResourceTaskDiagnostic":{"properties":{"downloadedBytes":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"errorCode":{"type":["string","null"]},"errorMessage":{"type":["string","null"]},"id":{"type":"string"},"resourceId":{"type":"string"},"state":{"type":"string"},"totalBytes":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"version":{"type":"string"}},"required":["id","resourceId","version","state","downloadedBytes","totalBytes","errorCode","errorMessage"],"type":"object"},"ResourceVersionDiagnostic":{"properties":{"activatedAtMs":{"maximum":9007199254740991,"minimum":0,"type":["integer","null"]},"active":{"type":"boolean"},"entrypointsAvailable":{"type":"boolean"},"fileCount":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"healthStatus":{"type":"string"},"installPath":{"type":"string"},"installedBytes":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"manifestSha256":{"type":"string"},"version":{"type":"string"}},"required":["version","active","installPath","fileCount","installedBytes","manifestSha256","healthStatus","activatedAtMs","entrypointsAvailable"],"type":"object"}},"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"catalogSource":{"type":"string"},"generatedAtMs":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"maintenance":{"$ref":"#/$defs/ResourceMaintenanceDiagnostics"},"preferredProfile":{"type":"string"},"remoteCatalogEnabled":{"type":"boolean"},"remoteSignaturePolicy":{"type":"string"},"resourceRoot":{"type":["string","null"]},"resources":{"items":{"$ref":"#/$defs/ResourceDiagnosticItem"},"type":"array"},"rootState":{"type":"string"},"tasks":{"items":{"$ref":"#/$defs/ResourceTaskDiagnostic"},"type":"array"}},"required":["maintenance","generatedAtMs","catalogSource","remoteCatalogEnabled","remoteSignaturePolicy","rootState","resourceRoot","preferredProfile","resources","tasks"],"title":"LocalResourceDiagnostics","type":"object"};
+const schema31 = {"$defs":{"ResourceChangeState":{"enum":["none","activation_pending","removal_pending","conflicting","unavailable"],"type":"string"},"ResourceDiagnosticItem":{"properties":{"activeVersion":{"type":["string","null"]},"artifactSha256":{"type":["string","null"]},"artifactUrl":{"type":["string","null"]},"catalogVersion":{"type":"string"},"healthCheck":{"type":"string"},"id":{"type":"string"},"license":{"type":"string"},"sourcePage":{"type":"string"},"state":{"type":"string"},"unverifiedReceiptCount":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"versions":{"items":{"$ref":"#/$defs/ResourceVersionDiagnostic"},"type":"array"},"versionsReadable":{"type":"boolean"}},"required":["unverifiedReceiptCount","versionsReadable","id","catalogVersion","activeVersion","state","license","sourcePage","artifactSha256","artifactUrl","healthCheck","versions"],"type":"object"},"ResourceMaintenanceDiagnostics":{"properties":{"receiptRecoveryCopyCount":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"scanState":{"$ref":"#/$defs/ResourceMaintenanceScanState"},"stagingReviewCount":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"transactionState":{"$ref":"#/$defs/ResourceChangeState"}},"required":["transactionState","scanState","stagingReviewCount","receiptRecoveryCopyCount"],"type":"object"},"ResourceMaintenanceScanState":{"enum":["not_configured","complete","partial","root_unavailable"],"type":"string"},"ResourceTaskDiagnostic":{"properties":{"downloadedBytes":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"errorCode":{"type":["string","null"]},"errorMessage":{"type":["string","null"]},"id":{"type":"string"},"resourceId":{"type":"string"},"state":{"type":"string"},"totalBytes":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"version":{"type":"string"}},"required":["id","resourceId","version","state","downloadedBytes","totalBytes","errorCode","errorMessage"],"type":"object"},"ResourceVersionDiagnostic":{"properties":{"activatedAtMs":{"maximum":9007199254740991,"minimum":0,"type":["integer","null"]},"active":{"type":"boolean"},"entrypointsAvailable":{"type":"boolean"},"fileCount":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"healthStatus":{"type":"string"},"installPath":{"type":"string"},"installedBytes":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"manifestSha256":{"type":"string"},"version":{"type":"string"}},"required":["version","active","installPath","fileCount","installedBytes","manifestSha256","healthStatus","activatedAtMs","entrypointsAvailable"],"type":"object"}},"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"catalogSource":{"type":"string"},"generatedAtMs":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"maintenance":{"$ref":"#/$defs/ResourceMaintenanceDiagnostics"},"preferredProfile":{"type":"string"},"remoteCatalogEnabled":{"type":"boolean"},"remoteSignaturePolicy":{"type":"string"},"resourceRoot":{"type":["string","null"]},"resources":{"items":{"$ref":"#/$defs/ResourceDiagnosticItem"},"type":"array"},"rootState":{"type":"string"},"tasks":{"items":{"$ref":"#/$defs/ResourceTaskDiagnostic"},"type":"array"}},"required":["maintenance","generatedAtMs","catalogSource","remoteCatalogEnabled","remoteSignaturePolicy","rootState","resourceRoot","preferredProfile","resources","tasks"],"title":"LocalResourceDiagnostics","type":"object"};
 const schema37 = {"properties":{"downloadedBytes":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"errorCode":{"type":["string","null"]},"errorMessage":{"type":["string","null"]},"id":{"type":"string"},"resourceId":{"type":"string"},"state":{"type":"string"},"totalBytes":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"version":{"type":"string"}},"required":["id","resourceId","version","state","downloadedBytes","totalBytes","errorCode","errorMessage"],"type":"object"};
 const schema32 = {"properties":{"receiptRecoveryCopyCount":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"scanState":{"$ref":"#/$defs/ResourceMaintenanceScanState"},"stagingReviewCount":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"transactionState":{"$ref":"#/$defs/ResourceChangeState"}},"required":["transactionState","scanState","stagingReviewCount","receiptRecoveryCopyCount"],"type":"object"};
 const schema33 = {"enum":["not_configured","complete","partial","root_unavailable"],"type":"string"};
@@ -128,7 +128,7 @@ return errors === 0;
 }
 validate21.evaluated = {"props":{"receiptRecoveryCopyCount":true,"scanState":true,"stagingReviewCount":true,"transactionState":true},"dynamicProps":false,"dynamicItems":false};
 
-const schema35 = {"properties":{"activeVersion":{"type":["string","null"]},"artifactSha256":{"type":["string","null"]},"artifactUrl":{"type":["string","null"]},"catalogVersion":{"type":"string"},"healthCheck":{"type":"string"},"id":{"type":"string"},"license":{"type":"string"},"sourcePage":{"type":"string"},"state":{"type":"string"},"versions":{"items":{"$ref":"#/$defs/ResourceVersionDiagnostic"},"type":"array"},"versionsReadable":{"type":"boolean"}},"required":["versionsReadable","id","catalogVersion","activeVersion","state","license","sourcePage","artifactSha256","artifactUrl","healthCheck","versions"],"type":"object"};
+const schema35 = {"properties":{"activeVersion":{"type":["string","null"]},"artifactSha256":{"type":["string","null"]},"artifactUrl":{"type":["string","null"]},"catalogVersion":{"type":"string"},"healthCheck":{"type":"string"},"id":{"type":"string"},"license":{"type":"string"},"sourcePage":{"type":"string"},"state":{"type":"string"},"unverifiedReceiptCount":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"versions":{"items":{"$ref":"#/$defs/ResourceVersionDiagnostic"},"type":"array"},"versionsReadable":{"type":"boolean"}},"required":["unverifiedReceiptCount","versionsReadable","id","catalogVersion","activeVersion","state","license","sourcePage","artifactSha256","artifactUrl","healthCheck","versions"],"type":"object"};
 const schema36 = {"properties":{"activatedAtMs":{"maximum":9007199254740991,"minimum":0,"type":["integer","null"]},"active":{"type":"boolean"},"entrypointsAvailable":{"type":"boolean"},"fileCount":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"healthStatus":{"type":"string"},"installPath":{"type":"string"},"installedBytes":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"manifestSha256":{"type":"string"},"version":{"type":"string"}},"required":["version","active","installPath","fileCount","installedBytes","manifestSha256","healthStatus","activatedAtMs","entrypointsAvailable"],"type":"object"};
 
 function validate23(data, {instancePath="", parentData, parentDataProperty, rootData=data, dynamicAnchors={}}={}){
@@ -144,7 +144,7 @@ evaluated0.items = undefined;
 if(errors === 0){
 if(data && typeof data == "object" && !Array.isArray(data)){
 let missing0;
-if((((((((((((data.versionsReadable === undefined) && (missing0 = "versionsReadable")) || ((data.id === undefined) && (missing0 = "id"))) || ((data.catalogVersion === undefined) && (missing0 = "catalogVersion"))) || ((data.activeVersion === undefined) && (missing0 = "activeVersion"))) || ((data.state === undefined) && (missing0 = "state"))) || ((data.license === undefined) && (missing0 = "license"))) || ((data.sourcePage === undefined) && (missing0 = "sourcePage"))) || ((data.artifactSha256 === undefined) && (missing0 = "artifactSha256"))) || ((data.artifactUrl === undefined) && (missing0 = "artifactUrl"))) || ((data.healthCheck === undefined) && (missing0 = "healthCheck"))) || ((data.versions === undefined) && (missing0 = "versions"))){
+if(((((((((((((data.unverifiedReceiptCount === undefined) && (missing0 = "unverifiedReceiptCount")) || ((data.versionsReadable === undefined) && (missing0 = "versionsReadable"))) || ((data.id === undefined) && (missing0 = "id"))) || ((data.catalogVersion === undefined) && (missing0 = "catalogVersion"))) || ((data.activeVersion === undefined) && (missing0 = "activeVersion"))) || ((data.state === undefined) && (missing0 = "state"))) || ((data.license === undefined) && (missing0 = "license"))) || ((data.sourcePage === undefined) && (missing0 = "sourcePage"))) || ((data.artifactSha256 === undefined) && (missing0 = "artifactSha256"))) || ((data.artifactUrl === undefined) && (missing0 = "artifactUrl"))) || ((data.healthCheck === undefined) && (missing0 = "healthCheck"))) || ((data.versions === undefined) && (missing0 = "versions"))){
 validate23.errors = [{instancePath,schemaPath:"#/required",keyword:"required",params:{missingProperty: missing0},message:"must have required property '"+missing0+"'"}];
 return false;
 }
@@ -260,57 +260,72 @@ else {
 var valid0 = true;
 }
 if(valid0){
-if(data.versions !== undefined){
-let data9 = data.versions;
+if(data.unverifiedReceiptCount !== undefined){
+let data9 = data.unverifiedReceiptCount;
 const _errs19 = errors;
+if(!(((typeof data9 == "number") && (!(data9 % 1) && !isNaN(data9))) && (isFinite(data9)))){
+validate23.errors = [{instancePath:instancePath+"/unverifiedReceiptCount",schemaPath:"#/properties/unverifiedReceiptCount/type",keyword:"type",params:{type: "integer"},message:"must be integer"}];
+return false;
+}
 if(errors === _errs19){
-if(Array.isArray(data9)){
-var valid1 = true;
-const len0 = data9.length;
-for(let i0=0; i0<len0; i0++){
-let data10 = data9[i0];
+if((typeof data9 == "number") && (isFinite(data9))){
+if(data9 > 9007199254740991 || isNaN(data9)){
+validate23.errors = [{instancePath:instancePath+"/unverifiedReceiptCount",schemaPath:"#/properties/unverifiedReceiptCount/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"}];
+return false;
+}
+else {
+if(data9 < 0 || isNaN(data9)){
+validate23.errors = [{instancePath:instancePath+"/unverifiedReceiptCount",schemaPath:"#/properties/unverifiedReceiptCount/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"}];
+return false;
+}
+}
+}
+}
+var valid0 = _errs19 === errors;
+}
+else {
+var valid0 = true;
+}
+if(valid0){
+if(data.versions !== undefined){
+let data10 = data.versions;
 const _errs21 = errors;
-const _errs22 = errors;
-if(errors === _errs22){
-if(data10 && typeof data10 == "object" && !Array.isArray(data10)){
+if(errors === _errs21){
+if(Array.isArray(data10)){
+var valid1 = true;
+const len0 = data10.length;
+for(let i0=0; i0<len0; i0++){
+let data11 = data10[i0];
+const _errs23 = errors;
+const _errs24 = errors;
+if(errors === _errs24){
+if(data11 && typeof data11 == "object" && !Array.isArray(data11)){
 let missing1;
-if((((((((((data10.version === undefined) && (missing1 = "version")) || ((data10.active === undefined) && (missing1 = "active"))) || ((data10.installPath === undefined) && (missing1 = "installPath"))) || ((data10.fileCount === undefined) && (missing1 = "fileCount"))) || ((data10.installedBytes === undefined) && (missing1 = "installedBytes"))) || ((data10.manifestSha256 === undefined) && (missing1 = "manifestSha256"))) || ((data10.healthStatus === undefined) && (missing1 = "healthStatus"))) || ((data10.activatedAtMs === undefined) && (missing1 = "activatedAtMs"))) || ((data10.entrypointsAvailable === undefined) && (missing1 = "entrypointsAvailable"))){
+if((((((((((data11.version === undefined) && (missing1 = "version")) || ((data11.active === undefined) && (missing1 = "active"))) || ((data11.installPath === undefined) && (missing1 = "installPath"))) || ((data11.fileCount === undefined) && (missing1 = "fileCount"))) || ((data11.installedBytes === undefined) && (missing1 = "installedBytes"))) || ((data11.manifestSha256 === undefined) && (missing1 = "manifestSha256"))) || ((data11.healthStatus === undefined) && (missing1 = "healthStatus"))) || ((data11.activatedAtMs === undefined) && (missing1 = "activatedAtMs"))) || ((data11.entrypointsAvailable === undefined) && (missing1 = "entrypointsAvailable"))){
 validate23.errors = [{instancePath:instancePath+"/versions/" + i0,schemaPath:"#/$defs/ResourceVersionDiagnostic/required",keyword:"required",params:{missingProperty: missing1},message:"must have required property '"+missing1+"'"}];
 return false;
 }
 else {
-if(data10.activatedAtMs !== undefined){
-let data11 = data10.activatedAtMs;
-const _errs24 = errors;
-if((!(((typeof data11 == "number") && (!(data11 % 1) && !isNaN(data11))) && (isFinite(data11)))) && (data11 !== null)){
+if(data11.activatedAtMs !== undefined){
+let data12 = data11.activatedAtMs;
+const _errs26 = errors;
+if((!(((typeof data12 == "number") && (!(data12 % 1) && !isNaN(data12))) && (isFinite(data12)))) && (data12 !== null)){
 validate23.errors = [{instancePath:instancePath+"/versions/" + i0+"/activatedAtMs",schemaPath:"#/$defs/ResourceVersionDiagnostic/properties/activatedAtMs/type",keyword:"type",params:{type: schema36.properties.activatedAtMs.type},message:"must be integer,null"}];
 return false;
 }
-if(errors === _errs24){
-if((typeof data11 == "number") && (isFinite(data11))){
-if(data11 > 9007199254740991 || isNaN(data11)){
+if(errors === _errs26){
+if((typeof data12 == "number") && (isFinite(data12))){
+if(data12 > 9007199254740991 || isNaN(data12)){
 validate23.errors = [{instancePath:instancePath+"/versions/" + i0+"/activatedAtMs",schemaPath:"#/$defs/ResourceVersionDiagnostic/properties/activatedAtMs/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"}];
 return false;
 }
 else {
-if(data11 < 0 || isNaN(data11)){
+if(data12 < 0 || isNaN(data12)){
 validate23.errors = [{instancePath:instancePath+"/versions/" + i0+"/activatedAtMs",schemaPath:"#/$defs/ResourceVersionDiagnostic/properties/activatedAtMs/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"}];
 return false;
 }
 }
 }
-}
-var valid3 = _errs24 === errors;
-}
-else {
-var valid3 = true;
-}
-if(valid3){
-if(data10.active !== undefined){
-const _errs26 = errors;
-if(typeof data10.active !== "boolean"){
-validate23.errors = [{instancePath:instancePath+"/versions/" + i0+"/active",schemaPath:"#/$defs/ResourceVersionDiagnostic/properties/active/type",keyword:"type",params:{type: "boolean"},message:"must be boolean"}];
-return false;
 }
 var valid3 = _errs26 === errors;
 }
@@ -318,10 +333,10 @@ else {
 var valid3 = true;
 }
 if(valid3){
-if(data10.entrypointsAvailable !== undefined){
+if(data11.active !== undefined){
 const _errs28 = errors;
-if(typeof data10.entrypointsAvailable !== "boolean"){
-validate23.errors = [{instancePath:instancePath+"/versions/" + i0+"/entrypointsAvailable",schemaPath:"#/$defs/ResourceVersionDiagnostic/properties/entrypointsAvailable/type",keyword:"type",params:{type: "boolean"},message:"must be boolean"}];
+if(typeof data11.active !== "boolean"){
+validate23.errors = [{instancePath:instancePath+"/versions/" + i0+"/active",schemaPath:"#/$defs/ResourceVersionDiagnostic/properties/active/type",keyword:"type",params:{type: "boolean"},message:"must be boolean"}];
 return false;
 }
 var valid3 = _errs28 === errors;
@@ -330,26 +345,11 @@ else {
 var valid3 = true;
 }
 if(valid3){
-if(data10.fileCount !== undefined){
-let data14 = data10.fileCount;
+if(data11.entrypointsAvailable !== undefined){
 const _errs30 = errors;
-if(!(((typeof data14 == "number") && (!(data14 % 1) && !isNaN(data14))) && (isFinite(data14)))){
-validate23.errors = [{instancePath:instancePath+"/versions/" + i0+"/fileCount",schemaPath:"#/$defs/ResourceVersionDiagnostic/properties/fileCount/type",keyword:"type",params:{type: "integer"},message:"must be integer"}];
+if(typeof data11.entrypointsAvailable !== "boolean"){
+validate23.errors = [{instancePath:instancePath+"/versions/" + i0+"/entrypointsAvailable",schemaPath:"#/$defs/ResourceVersionDiagnostic/properties/entrypointsAvailable/type",keyword:"type",params:{type: "boolean"},message:"must be boolean"}];
 return false;
-}
-if(errors === _errs30){
-if((typeof data14 == "number") && (isFinite(data14))){
-if(data14 > 9007199254740991 || isNaN(data14)){
-validate23.errors = [{instancePath:instancePath+"/versions/" + i0+"/fileCount",schemaPath:"#/$defs/ResourceVersionDiagnostic/properties/fileCount/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"}];
-return false;
-}
-else {
-if(data14 < 0 || isNaN(data14)){
-validate23.errors = [{instancePath:instancePath+"/versions/" + i0+"/fileCount",schemaPath:"#/$defs/ResourceVersionDiagnostic/properties/fileCount/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"}];
-return false;
-}
-}
-}
 }
 var valid3 = _errs30 === errors;
 }
@@ -357,11 +357,26 @@ else {
 var valid3 = true;
 }
 if(valid3){
-if(data10.healthStatus !== undefined){
+if(data11.fileCount !== undefined){
+let data15 = data11.fileCount;
 const _errs32 = errors;
-if(typeof data10.healthStatus !== "string"){
-validate23.errors = [{instancePath:instancePath+"/versions/" + i0+"/healthStatus",schemaPath:"#/$defs/ResourceVersionDiagnostic/properties/healthStatus/type",keyword:"type",params:{type: "string"},message:"must be string"}];
+if(!(((typeof data15 == "number") && (!(data15 % 1) && !isNaN(data15))) && (isFinite(data15)))){
+validate23.errors = [{instancePath:instancePath+"/versions/" + i0+"/fileCount",schemaPath:"#/$defs/ResourceVersionDiagnostic/properties/fileCount/type",keyword:"type",params:{type: "integer"},message:"must be integer"}];
 return false;
+}
+if(errors === _errs32){
+if((typeof data15 == "number") && (isFinite(data15))){
+if(data15 > 9007199254740991 || isNaN(data15)){
+validate23.errors = [{instancePath:instancePath+"/versions/" + i0+"/fileCount",schemaPath:"#/$defs/ResourceVersionDiagnostic/properties/fileCount/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"}];
+return false;
+}
+else {
+if(data15 < 0 || isNaN(data15)){
+validate23.errors = [{instancePath:instancePath+"/versions/" + i0+"/fileCount",schemaPath:"#/$defs/ResourceVersionDiagnostic/properties/fileCount/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"}];
+return false;
+}
+}
+}
 }
 var valid3 = _errs32 === errors;
 }
@@ -369,10 +384,10 @@ else {
 var valid3 = true;
 }
 if(valid3){
-if(data10.installPath !== undefined){
+if(data11.healthStatus !== undefined){
 const _errs34 = errors;
-if(typeof data10.installPath !== "string"){
-validate23.errors = [{instancePath:instancePath+"/versions/" + i0+"/installPath",schemaPath:"#/$defs/ResourceVersionDiagnostic/properties/installPath/type",keyword:"type",params:{type: "string"},message:"must be string"}];
+if(typeof data11.healthStatus !== "string"){
+validate23.errors = [{instancePath:instancePath+"/versions/" + i0+"/healthStatus",schemaPath:"#/$defs/ResourceVersionDiagnostic/properties/healthStatus/type",keyword:"type",params:{type: "string"},message:"must be string"}];
 return false;
 }
 var valid3 = _errs34 === errors;
@@ -381,26 +396,11 @@ else {
 var valid3 = true;
 }
 if(valid3){
-if(data10.installedBytes !== undefined){
-let data17 = data10.installedBytes;
+if(data11.installPath !== undefined){
 const _errs36 = errors;
-if(!(((typeof data17 == "number") && (!(data17 % 1) && !isNaN(data17))) && (isFinite(data17)))){
-validate23.errors = [{instancePath:instancePath+"/versions/" + i0+"/installedBytes",schemaPath:"#/$defs/ResourceVersionDiagnostic/properties/installedBytes/type",keyword:"type",params:{type: "integer"},message:"must be integer"}];
+if(typeof data11.installPath !== "string"){
+validate23.errors = [{instancePath:instancePath+"/versions/" + i0+"/installPath",schemaPath:"#/$defs/ResourceVersionDiagnostic/properties/installPath/type",keyword:"type",params:{type: "string"},message:"must be string"}];
 return false;
-}
-if(errors === _errs36){
-if((typeof data17 == "number") && (isFinite(data17))){
-if(data17 > 9007199254740991 || isNaN(data17)){
-validate23.errors = [{instancePath:instancePath+"/versions/" + i0+"/installedBytes",schemaPath:"#/$defs/ResourceVersionDiagnostic/properties/installedBytes/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"}];
-return false;
-}
-else {
-if(data17 < 0 || isNaN(data17)){
-validate23.errors = [{instancePath:instancePath+"/versions/" + i0+"/installedBytes",schemaPath:"#/$defs/ResourceVersionDiagnostic/properties/installedBytes/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"}];
-return false;
-}
-}
-}
 }
 var valid3 = _errs36 === errors;
 }
@@ -408,11 +408,26 @@ else {
 var valid3 = true;
 }
 if(valid3){
-if(data10.manifestSha256 !== undefined){
+if(data11.installedBytes !== undefined){
+let data18 = data11.installedBytes;
 const _errs38 = errors;
-if(typeof data10.manifestSha256 !== "string"){
-validate23.errors = [{instancePath:instancePath+"/versions/" + i0+"/manifestSha256",schemaPath:"#/$defs/ResourceVersionDiagnostic/properties/manifestSha256/type",keyword:"type",params:{type: "string"},message:"must be string"}];
+if(!(((typeof data18 == "number") && (!(data18 % 1) && !isNaN(data18))) && (isFinite(data18)))){
+validate23.errors = [{instancePath:instancePath+"/versions/" + i0+"/installedBytes",schemaPath:"#/$defs/ResourceVersionDiagnostic/properties/installedBytes/type",keyword:"type",params:{type: "integer"},message:"must be integer"}];
 return false;
+}
+if(errors === _errs38){
+if((typeof data18 == "number") && (isFinite(data18))){
+if(data18 > 9007199254740991 || isNaN(data18)){
+validate23.errors = [{instancePath:instancePath+"/versions/" + i0+"/installedBytes",schemaPath:"#/$defs/ResourceVersionDiagnostic/properties/installedBytes/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"}];
+return false;
+}
+else {
+if(data18 < 0 || isNaN(data18)){
+validate23.errors = [{instancePath:instancePath+"/versions/" + i0+"/installedBytes",schemaPath:"#/$defs/ResourceVersionDiagnostic/properties/installedBytes/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"}];
+return false;
+}
+}
+}
 }
 var valid3 = _errs38 === errors;
 }
@@ -420,13 +435,25 @@ else {
 var valid3 = true;
 }
 if(valid3){
-if(data10.version !== undefined){
+if(data11.manifestSha256 !== undefined){
 const _errs40 = errors;
-if(typeof data10.version !== "string"){
-validate23.errors = [{instancePath:instancePath+"/versions/" + i0+"/version",schemaPath:"#/$defs/ResourceVersionDiagnostic/properties/version/type",keyword:"type",params:{type: "string"},message:"must be string"}];
+if(typeof data11.manifestSha256 !== "string"){
+validate23.errors = [{instancePath:instancePath+"/versions/" + i0+"/manifestSha256",schemaPath:"#/$defs/ResourceVersionDiagnostic/properties/manifestSha256/type",keyword:"type",params:{type: "string"},message:"must be string"}];
 return false;
 }
 var valid3 = _errs40 === errors;
+}
+else {
+var valid3 = true;
+}
+if(valid3){
+if(data11.version !== undefined){
+const _errs42 = errors;
+if(typeof data11.version !== "string"){
+validate23.errors = [{instancePath:instancePath+"/versions/" + i0+"/version",schemaPath:"#/$defs/ResourceVersionDiagnostic/properties/version/type",keyword:"type",params:{type: "string"},message:"must be string"}];
+return false;
+}
+var valid3 = _errs42 === errors;
 }
 else {
 var valid3 = true;
@@ -446,7 +473,7 @@ validate23.errors = [{instancePath:instancePath+"/versions/" + i0,schemaPath:"#/
 return false;
 }
 }
-var valid1 = _errs21 === errors;
+var valid1 = _errs23 === errors;
 if(!valid1){
 break;
 }
@@ -457,22 +484,23 @@ validate23.errors = [{instancePath:instancePath+"/versions",schemaPath:"#/proper
 return false;
 }
 }
-var valid0 = _errs19 === errors;
+var valid0 = _errs21 === errors;
 }
 else {
 var valid0 = true;
 }
 if(valid0){
 if(data.versionsReadable !== undefined){
-const _errs42 = errors;
+const _errs44 = errors;
 if(typeof data.versionsReadable !== "boolean"){
 validate23.errors = [{instancePath:instancePath+"/versionsReadable",schemaPath:"#/properties/versionsReadable/type",keyword:"type",params:{type: "boolean"},message:"must be boolean"}];
 return false;
 }
-var valid0 = _errs42 === errors;
+var valid0 = _errs44 === errors;
 }
 else {
 var valid0 = true;
+}
 }
 }
 }
@@ -494,7 +522,7 @@ return false;
 validate23.errors = vErrors;
 return errors === 0;
 }
-validate23.evaluated = {"props":{"activeVersion":true,"artifactSha256":true,"artifactUrl":true,"catalogVersion":true,"healthCheck":true,"id":true,"license":true,"sourcePage":true,"state":true,"versions":true,"versionsReadable":true},"dynamicProps":false,"dynamicItems":false};
+validate23.evaluated = {"props":{"activeVersion":true,"artifactSha256":true,"artifactUrl":true,"catalogVersion":true,"healthCheck":true,"id":true,"license":true,"sourcePage":true,"state":true,"unverifiedReceiptCount":true,"versions":true,"versionsReadable":true},"dynamicProps":false,"dynamicItems":false};
 
 
 function validate20(data, {instancePath="", parentData, parentDataProperty, rootData=data, dynamicAnchors={}}={}){

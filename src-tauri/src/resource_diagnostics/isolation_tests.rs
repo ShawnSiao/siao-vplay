@@ -68,6 +68,11 @@ fn unreadable_resource_does_not_hide_other_diagnostics() {
                     .any(|r| r["id"] != *id && r["versionsReadable"] == true)
             );
             assert!(diagnostic_summary().unwrap().contains("版本检查未完成"));
+            assert!(
+                diagnostic_summary()
+                    .unwrap()
+                    .contains("无法验证的安装记录 未知")
+            );
             assert_eq!(fs::read(blocked).unwrap(), b"preserve obstruction");
             assert_eq!(fs::read(journal).unwrap(), b"preserve unfinished record");
         },
@@ -112,6 +117,80 @@ fn copied_summary_omits_freeform_task_secrets_and_paths() {
             }
             assert!(text.contains("local_resource_download_failed"));
             assert!(text.contains("失败详情未包含在摘要中"));
+        },
+    );
+}
+
+#[test]
+fn rejected_receipts_are_visible_without_hiding_valid_versions() {
+    isolated(
+        "rejected_receipts_are_visible_without_hiding_valid_versions",
+        || {
+            let (_data, root) = setup();
+            let id = &local_resources::catalog().unwrap().resources[0].id;
+            let receipt = ResourceReceipt {
+                schema_version: 1,
+                resource_id: id.clone(),
+                version: "1".into(),
+                install_relative_path: format!("packages/{id}/1"),
+                entrypoints: [("tool".into(), "tool.exe".into())].into(),
+                files: Vec::new(),
+                health_status: "passed".into(),
+                activated_at_ms: None,
+            };
+            local_resources::activate_resource(receipt.clone()).unwrap();
+            let receipt = local_resources::active_receipt(id).unwrap().unwrap();
+            let folder = root.join("receipts").join(id);
+            let valid = serde_json::to_value(&receipt).unwrap();
+            let mut future = valid.clone();
+            future["schemaVersion"] = 2.into();
+            future["version"] = "3".into();
+            let mut foreign = valid.clone();
+            foreign["resourceId"] = "other".into();
+            foreign["version"] = "4".into();
+            let mut mismatch = valid.clone();
+            mismatch["version"] = "6".into();
+            let files = [
+                (folder.join("2.json"), b"broken json".to_vec()),
+                (folder.join("3.json"), serde_json::to_vec(&future).unwrap()),
+                (folder.join("4.json"), serde_json::to_vec(&foreign).unwrap()),
+                (
+                    folder.join("5.json"),
+                    serde_json::to_vec(&mismatch).unwrap(),
+                ),
+                (
+                    folder.join("7.json.bak"),
+                    serde_json::to_vec(&valid).unwrap(),
+                ),
+            ];
+            for (path, bytes) in &files {
+                fs::write(path, bytes).unwrap();
+            }
+            fs::create_dir(folder.join("6.json")).unwrap();
+            let wire = serde_json::to_value(diagnostics().unwrap()).unwrap();
+            let resource = wire["resources"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|resource| resource["id"] == *id)
+                .unwrap();
+            assert_eq!(resource["unverifiedReceiptCount"], 5);
+            assert_eq!(resource["versionsReadable"], true);
+            assert_eq!(resource["versions"].as_array().unwrap().len(), 1);
+            assert_eq!(
+                local_resources::installed_receipts(id).unwrap(),
+                vec![receipt]
+            );
+            assert!(
+                diagnostic_summary()
+                    .unwrap()
+                    .contains("无法验证的安装记录 5")
+            );
+            for (path, bytes) in files {
+                assert_eq!(fs::read(path).unwrap(), bytes);
+            }
+            assert!(folder.join("6.json").is_dir());
+            assert!(!folder.join("7.json").exists());
         },
     );
 }

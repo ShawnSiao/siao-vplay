@@ -25,7 +25,7 @@ pub(super) fn render(
     ];
     for resource in &diagnostics.resources {
         lines.push(format!(
-            "资源 {}：状态 {}；当前版本 {}；目录版本 {}；已安装版本 {}",
+            "资源 {}：状态 {}；当前版本 {}；目录版本 {}；已安装版本 {}；无法验证的安装记录 {}",
             resource.id,
             resource.state,
             resource.active_version.as_deref().unwrap_or("无"),
@@ -34,6 +34,11 @@ pub(super) fn render(
                 resource.versions.len().to_string()
             } else {
                 "未知（版本检查未完成）".into()
+            },
+            if resource.versions_readable {
+                resource.unverified_receipt_count.to_string()
+            } else {
+                "未知".into()
             }
         ));
     }

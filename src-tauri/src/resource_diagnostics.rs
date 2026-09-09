@@ -83,6 +83,8 @@ pub struct LocalResourceDiagnostics {
 #[serde(rename_all = "camelCase")]
 #[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct ResourceDiagnosticItem {
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
+    pub unverified_receipt_count: usize,
     pub versions_readable: bool,
     pub id: String,
     pub catalog_version: String,
@@ -201,7 +203,7 @@ pub fn diagnostics() -> Result<LocalResourceDiagnostics, ResourceDiagnosticsErro
             .cloned();
         let inspected = inspect_versions(&resource.id, root.as_deref(), active_version.as_deref());
         let versions_readable = inspected.is_ok();
-        let versions = inspected.unwrap_or_default();
+        let (versions, unverified_receipt_count) = inspected.unwrap_or_default();
         let state = if !versions_readable {
             "repair_required"
         } else if active_version.is_none() {
@@ -214,6 +216,7 @@ pub fn diagnostics() -> Result<LocalResourceDiagnostics, ResourceDiagnosticsErro
             "repair_required"
         };
         resources.push(ResourceDiagnosticItem {
+            unverified_receipt_count,
             versions_readable,
             id: resource.id.clone(),
             catalog_version: resource.version.clone(),
@@ -269,12 +272,14 @@ pub fn diagnostics() -> Result<LocalResourceDiagnostics, ResourceDiagnosticsErro
     })
 }
 
-fn inspect_versions(resource_id: &str, root: Option<&Path>, active: Option<&str>) -> Result<Vec<ResourceVersionDiagnostic>, ResourceDiagnosticsError> {
+fn inspect_versions(resource_id: &str, root: Option<&Path>, active: Option<&str>) -> Result<(Vec<ResourceVersionDiagnostic>, usize), ResourceDiagnosticsError> {
     if root.is_some_and(|path| !path.is_dir()) {
         return Err(LocalResourceError::RootUnavailable("资源目录不可访问".into()).into());
     }
-    local_resources::installed_receipts(resource_id)?.iter()
-        .map(|receipt| version_diagnostic(root, receipt, active)).collect()
+    let inventory = local_resources::receipt_inventory(resource_id)?;
+    let versions = inventory.receipts.iter().map(|receipt| version_diagnostic(root, receipt, active))
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok((versions, inventory.unverified_count))
 }
 
 pub fn diagnostic_summary() -> Result<String, ResourceDiagnosticsError> {

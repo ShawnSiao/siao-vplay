@@ -6,7 +6,7 @@ beforeEach(() => mocks.invoke.mockReset());
 const version = { version: "1", active: true, installPath: "W:\\resources", fileCount: 1,
   installedBytes: 12, manifestSha256: "a".repeat(64), healthStatus: "ready", activatedAtMs: null, entrypointsAvailable: true };
 const resource = { id: "ffmpeg", catalogVersion: "1", activeVersion: "1", state: "ready", license: "LGPL",
-  versionsReadable: true,
+  versionsReadable: true, unverifiedReceiptCount: 0,
   sourcePage: "https://example.test", artifactSha256: null, artifactUrl: null, healthCheck: "version", versions: [version] };
 const sample = { generatedAtMs: 1, catalogSource: "embedded", remoteCatalogEnabled: false,
   maintenance: { transactionState: "none", scanState: "complete", stagingReviewCount: 0, receiptRecoveryCopyCount: 0 }, remoteSignaturePolicy: "required", rootState: "ready", resourceRoot: "W:\\resources",
@@ -57,4 +57,13 @@ it.each([
 ])("rejects contradictory unavailable version inventory %#", async resource => {
   mocks.invoke.mockResolvedValue({ ...sample, resources: [resource] });
   await expect(getLocalResourceDiagnostics()).rejects.toThrow();
+});
+it("rejects an invalid rejected-receipt count", async () => {
+  mocks.invoke.mockResolvedValue({ ...sample, resources: [{ ...resource, unverifiedReceiptCount: -1 }] });
+  await expect(getLocalResourceDiagnostics()).rejects.toThrow();
+});
+it("retains valid versions while reporting unverified receipts", async () => {
+  const value = { ...sample, resources: [{ ...resource, unverifiedReceiptCount: 2 }] };
+  mocks.invoke.mockResolvedValue(value);
+  await expect(getLocalResourceDiagnostics()).resolves.toEqual(value);
 });

@@ -33,6 +33,7 @@ export interface ResourceDiagnosticItem {
   license: string;
   sourcePage: string;
   state: string;
+  unverifiedReceiptCount: number;
   versions: ResourceVersionDiagnostic[];
   versionsReadable: boolean;
   [k: string]: unknown;
