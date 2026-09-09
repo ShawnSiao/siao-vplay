@@ -33,3 +33,7 @@ pub(crate) fn maintain_all() -> io::Result<ResourceLease> {
 pub(crate) fn maintain_resource(id: &str) -> io::Result<ResourceLease> {
     registry().write(Scope::Resource(id.to_owned()))
 }
+
+pub(crate) fn maintain_policy() -> io::Result<ResourceLease> {
+    registry().write(Scope::Policy)
+}

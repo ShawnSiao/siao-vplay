@@ -34,6 +34,7 @@ mod resource_download;
 mod resource_migration;
 mod resource_usage;
 mod resource_leases;
+mod cleanup_confirmation;
 mod runtime;
 mod speech;
 mod storage;

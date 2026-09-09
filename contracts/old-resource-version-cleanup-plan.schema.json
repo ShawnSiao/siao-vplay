@@ -34,6 +34,10 @@
     "confirmationRequired": {
       "type": "boolean"
     },
+    "planFingerprint": {
+      "pattern": "^[a-f0-9]{64}$",
+      "type": "string"
+    },
     "protectedVersions": {
       "items": {
         "type": "string"
@@ -48,6 +52,7 @@
     }
   },
   "required": [
+    "planFingerprint",
     "candidates",
     "protectedVersions",
     "reclaimableBytes",

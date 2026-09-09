@@ -284,6 +284,7 @@ pub fn repair_configured_root(confirmed: bool) -> Result<LocalResourceStatus, Lo
 }
 
 pub fn set_preferred_profile(profile_id: &str) -> Result<LocalResourceStatus, LocalResourceError> {
+    let _maintenance = crate::resource_leases::maintain_policy()?;
     with_manager_write(|manager| manager.set_preferred_profile(profile_id))
 }
 

@@ -92,7 +92,7 @@ export type LocalResourcesController = {
   repairRoot: () => Promise<LocalResourceStatus>;
   reconnectRoot: () => Promise<LocalResourceStatus | null>;
   planCleanup: () => Promise<UnusedResourceCleanupPlan>;
-  cleanupUnused: () => Promise<UnusedResourceCleanupResult>;
+  cleanupUnused: (planFingerprint: string) => Promise<UnusedResourceCleanupResult>;
   loadDiagnostics: () => Promise<{
     diagnostics: LocalResourceDiagnostics;
     thirdPartyNotices: string;
@@ -104,7 +104,7 @@ export type LocalResourcesController = {
     version: string,
   ) => Promise<ResourceRollbackResult>;
   planOldVersionCleanup: () => Promise<OldResourceVersionCleanupPlan>;
-  cleanupOldVersions: () => Promise<OldResourceVersionCleanupResult>;
+  cleanupOldVersions: (planFingerprint: string) => Promise<OldResourceVersionCleanupResult>;
   selectProfile: (profileId: string) => Promise<LocalResourceStatus>;
   setProxy: (proxyUrl: string | null) => Promise<ResourceNetworkStatus>;
   prepareCapability: (
@@ -357,9 +357,9 @@ export function useLocalResources(): LocalResourcesController {
         throw cause;
       }
     },
-    cleanupUnused: async () => {
+    cleanupUnused: async (planFingerprint) => {
       try {
-        const result = await cleanupUnusedResources();
+        const result = await cleanupUnusedResources(planFingerprint);
         setStatus(await getLocalResourceStatus());
         setError(null);
         return result;
@@ -415,9 +415,9 @@ export function useLocalResources(): LocalResourcesController {
         throw cause;
       }
     },
-    cleanupOldVersions: async () => {
+    cleanupOldVersions: async (planFingerprint) => {
       try {
-        const result = await cleanupOldResourceVersions();
+        const result = await cleanupOldResourceVersions(planFingerprint);
         setStatus(await getLocalResourceStatus());
         setError(null);
         return result;

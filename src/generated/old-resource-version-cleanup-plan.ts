@@ -3,6 +3,7 @@
 export interface OldResourceVersionCleanupPlan {
   candidates: OldResourceVersionCandidate[];
   confirmationRequired: boolean;
+  planFingerprint: string;
   protectedVersions: string[];
   reclaimableBytes: number;
   [k: string]: unknown;

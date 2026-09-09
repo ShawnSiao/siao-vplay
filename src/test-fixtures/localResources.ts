@@ -138,6 +138,7 @@ export function makeController(
     repairRoot: vi.fn(),
     reconnectRoot: vi.fn().mockResolvedValue(null),
     planCleanup: vi.fn().mockResolvedValue({
+        planFingerprint: "a".repeat(64),
       resourceIds: [],
       reclaimableBytes: 0,
       confirmationRequired: true,
@@ -164,6 +165,7 @@ export function makeController(
     updateResource: vi.fn(),
     rollbackResource: vi.fn(),
     planOldVersionCleanup: vi.fn().mockResolvedValue({
+        planFingerprint: "a".repeat(64),
       candidates: [],
       protectedVersions: [],
       reclaimableBytes: 0,

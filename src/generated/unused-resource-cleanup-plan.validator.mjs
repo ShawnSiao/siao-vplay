@@ -2,7 +2,8 @@
 "use strict";
 export const validate = validate20;
 export default validate20;
-const schema31 = {"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"confirmationRequired":{"type":"boolean"},"reclaimableBytes":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"resourceIds":{"items":{"type":"string"},"type":"array"}},"required":["resourceIds","reclaimableBytes","confirmationRequired"],"title":"UnusedResourceCleanupPlan","type":"object"};
+const schema31 = {"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"confirmationRequired":{"type":"boolean"},"planFingerprint":{"pattern":"^[a-f0-9]{64}$","type":"string"},"reclaimableBytes":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"resourceIds":{"items":{"type":"string"},"type":"array"}},"required":["planFingerprint","resourceIds","reclaimableBytes","confirmationRequired"],"title":"UnusedResourceCleanupPlan","type":"object"};
+const pattern4 = new RegExp("^[a-f0-9]{64}$", "u");
 
 function validate20(data, {instancePath="", parentData, parentDataProperty, rootData=data, dynamicAnchors={}}={}){
 let vErrors = null;
@@ -17,7 +18,7 @@ evaluated0.items = undefined;
 if(errors === 0){
 if(data && typeof data == "object" && !Array.isArray(data)){
 let missing0;
-if((((data.resourceIds === undefined) && (missing0 = "resourceIds")) || ((data.reclaimableBytes === undefined) && (missing0 = "reclaimableBytes"))) || ((data.confirmationRequired === undefined) && (missing0 = "confirmationRequired"))){
+if(((((data.planFingerprint === undefined) && (missing0 = "planFingerprint")) || ((data.resourceIds === undefined) && (missing0 = "resourceIds"))) || ((data.reclaimableBytes === undefined) && (missing0 = "reclaimableBytes"))) || ((data.confirmationRequired === undefined) && (missing0 = "confirmationRequired"))){
 validate20.errors = [{instancePath,schemaPath:"#/required",keyword:"required",params:{missingProperty: missing0},message:"must have required property '"+missing0+"'"}];
 return false;
 }
@@ -34,25 +35,19 @@ else {
 var valid0 = true;
 }
 if(valid0){
-if(data.reclaimableBytes !== undefined){
-let data1 = data.reclaimableBytes;
+if(data.planFingerprint !== undefined){
+let data1 = data.planFingerprint;
 const _errs3 = errors;
-if(!(((typeof data1 == "number") && (!(data1 % 1) && !isNaN(data1))) && (isFinite(data1)))){
-validate20.errors = [{instancePath:instancePath+"/reclaimableBytes",schemaPath:"#/properties/reclaimableBytes/type",keyword:"type",params:{type: "integer"},message:"must be integer"}];
+if(errors === _errs3){
+if(typeof data1 === "string"){
+if(!pattern4.test(data1)){
+validate20.errors = [{instancePath:instancePath+"/planFingerprint",schemaPath:"#/properties/planFingerprint/pattern",keyword:"pattern",params:{pattern: "^[a-f0-9]{64}$"},message:"must match pattern \""+"^[a-f0-9]{64}$"+"\""}];
 return false;
 }
-if(errors === _errs3){
-if((typeof data1 == "number") && (isFinite(data1))){
-if(data1 > 9007199254740991 || isNaN(data1)){
-validate20.errors = [{instancePath:instancePath+"/reclaimableBytes",schemaPath:"#/properties/reclaimableBytes/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"}];
-return false;
 }
 else {
-if(data1 < 0 || isNaN(data1)){
-validate20.errors = [{instancePath:instancePath+"/reclaimableBytes",schemaPath:"#/properties/reclaimableBytes/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"}];
+validate20.errors = [{instancePath:instancePath+"/planFingerprint",schemaPath:"#/properties/planFingerprint/type",keyword:"type",params:{type: "string"},message:"must be string"}];
 return false;
-}
-}
 }
 }
 var valid0 = _errs3 === errors;
@@ -61,20 +56,47 @@ else {
 var valid0 = true;
 }
 if(valid0){
-if(data.resourceIds !== undefined){
-let data2 = data.resourceIds;
+if(data.reclaimableBytes !== undefined){
+let data2 = data.reclaimableBytes;
 const _errs5 = errors;
+if(!(((typeof data2 == "number") && (!(data2 % 1) && !isNaN(data2))) && (isFinite(data2)))){
+validate20.errors = [{instancePath:instancePath+"/reclaimableBytes",schemaPath:"#/properties/reclaimableBytes/type",keyword:"type",params:{type: "integer"},message:"must be integer"}];
+return false;
+}
 if(errors === _errs5){
-if(Array.isArray(data2)){
-var valid1 = true;
-const len0 = data2.length;
-for(let i0=0; i0<len0; i0++){
+if((typeof data2 == "number") && (isFinite(data2))){
+if(data2 > 9007199254740991 || isNaN(data2)){
+validate20.errors = [{instancePath:instancePath+"/reclaimableBytes",schemaPath:"#/properties/reclaimableBytes/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"}];
+return false;
+}
+else {
+if(data2 < 0 || isNaN(data2)){
+validate20.errors = [{instancePath:instancePath+"/reclaimableBytes",schemaPath:"#/properties/reclaimableBytes/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"}];
+return false;
+}
+}
+}
+}
+var valid0 = _errs5 === errors;
+}
+else {
+var valid0 = true;
+}
+if(valid0){
+if(data.resourceIds !== undefined){
+let data3 = data.resourceIds;
 const _errs7 = errors;
-if(typeof data2[i0] !== "string"){
+if(errors === _errs7){
+if(Array.isArray(data3)){
+var valid1 = true;
+const len0 = data3.length;
+for(let i0=0; i0<len0; i0++){
+const _errs9 = errors;
+if(typeof data3[i0] !== "string"){
 validate20.errors = [{instancePath:instancePath+"/resourceIds/" + i0,schemaPath:"#/properties/resourceIds/items/type",keyword:"type",params:{type: "string"},message:"must be string"}];
 return false;
 }
-var valid1 = _errs7 === errors;
+var valid1 = _errs9 === errors;
 if(!valid1){
 break;
 }
@@ -85,10 +107,11 @@ validate20.errors = [{instancePath:instancePath+"/resourceIds",schemaPath:"#/pro
 return false;
 }
 }
-var valid0 = _errs5 === errors;
+var valid0 = _errs7 === errors;
 }
 else {
 var valid0 = true;
+}
 }
 }
 }
@@ -102,4 +125,4 @@ return false;
 validate20.errors = vErrors;
 return errors === 0;
 }
-validate20.evaluated = {"props":{"confirmationRequired":true,"reclaimableBytes":true,"resourceIds":true},"dynamicProps":false,"dynamicItems":false};
+validate20.evaluated = {"props":{"confirmationRequired":true,"planFingerprint":true,"reclaimableBytes":true,"resourceIds":true},"dynamicProps":false,"dynamicItems":false};

@@ -180,6 +180,7 @@ pub struct ReconnectLocalResourceRootInput {
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CleanupUnusedResourcesInput {
+    pub plan_fingerprint: String,
     pub confirmed: bool,
 }
 
@@ -193,6 +194,8 @@ pub struct ConfirmLocalResourceOperationInput {
 #[serde(rename_all = "camelCase")]
 #[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct UnusedResourceCleanupPlan {
+    #[cfg_attr(test, schemars(regex(pattern = "^[a-f0-9]{64}$")))]
+    pub plan_fingerprint: String,
     pub resource_ids: Vec<String>,
     #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub reclaimable_bytes: u64,
@@ -321,6 +324,7 @@ pub fn plan_unused_resource_cleanup() -> Result<UnusedResourceCleanupPlan, Resou
         required.extend(local_resources::required_resource_ids(&capability.id)?);
     }
     let mut resource_ids = Vec::new();
+    let mut receipts = Vec::new();
     let mut reclaimable_bytes = 0_u64;
     for resource_id in configuration.active_resources.keys() {
         if required.contains(resource_id) {
@@ -329,22 +333,25 @@ pub fn plan_unused_resource_cleanup() -> Result<UnusedResourceCleanupPlan, Resou
         let Some(receipt) = local_resources::active_receipt(resource_id)? else {
             continue;
         };
-        reclaimable_bytes = reclaimable_bytes.saturating_add(
-            receipt
-                .files
-                .iter()
-                .fold(0_u64, |total, file| total.saturating_add(file.size)),
-        );
-        if root.join(&receipt.install_relative_path).is_dir() {
+        let install = resource_download::join_safe_relative(&root, &receipt.install_relative_path)?;
+        if let Some(bytes) = crate::cleanup_confirmation::candidate_bytes(&install, receipt.files.iter().map(|file| file.size)) {
+            reclaimable_bytes = reclaimable_bytes.saturating_add(bytes);
             resource_ids.push(resource_id.clone());
+            receipts.push(receipt);
         }
     }
     resource_ids.sort();
-    Ok(UnusedResourceCleanupPlan {
+    let mut plan = UnusedResourceCleanupPlan {
+        plan_fingerprint: String::new(),
         resource_ids,
         reclaimable_bytes,
         confirmation_required: true,
-    })
+    };
+    if local_resources::configuration_snapshot().as_ref() != Some(&configuration) {
+        return Err(ResourceMigrationError::Busy);
+    }
+    plan.plan_fingerprint = crate::cleanup_confirmation::fingerprint("unused", &configuration, &plan, &receipts)?;
+    Ok(plan)
 }
 
 

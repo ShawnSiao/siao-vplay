@@ -186,6 +186,7 @@ pub fn cleanup_unused_resources(
         return Err(ResourceMigrationError::Busy);
     }
     let plan = plan_unused_resource_cleanup()?;
+    crate::cleanup_confirmation::verify(&input.plan_fingerprint, &plan.plan_fingerprint)?;
     let mut removed = Vec::new();
     for resource_id in &plan.resource_ids {
         if resource_download::remove_resource(resource_id, true)?.removed {

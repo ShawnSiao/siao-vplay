@@ -4,6 +4,10 @@
     "confirmationRequired": {
       "type": "boolean"
     },
+    "planFingerprint": {
+      "pattern": "^[a-f0-9]{64}$",
+      "type": "string"
+    },
     "reclaimableBytes": {
       "format": "uint64",
       "maximum": 9007199254740991,
@@ -18,6 +22,7 @@
     }
   },
   "required": [
+    "planFingerprint",
     "resourceIds",
     "reclaimableBytes",
     "confirmationRequired"

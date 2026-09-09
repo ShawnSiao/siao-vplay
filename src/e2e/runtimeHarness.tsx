@@ -249,6 +249,7 @@ export function RuntimeHarness() {
       repairRoot: async () => status,
       reconnectRoot: async () => status,
       planCleanup: async () => ({
+        planFingerprint: "a".repeat(64),
         resourceIds: [],
         reclaimableBytes: 0,
         confirmationRequired: true,
@@ -317,6 +318,7 @@ export function RuntimeHarness() {
         activeVersion: version,
       }),
       planOldVersionCleanup: async () => ({
+        planFingerprint: "a".repeat(64),
         candidates: [],
         protectedVersions: [],
         reclaimableBytes: 0,

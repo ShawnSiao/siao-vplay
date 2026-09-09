@@ -12,8 +12,9 @@ export async function planUnusedResourceCleanup() {
   if (!validateUnusedPlan(value) || !ids(value.resourceIds) || !value.confirmationRequired) invalid();
   return value;
 }
-export async function cleanupUnusedResources() {
-  const value = await invoke<unknown>("cleanup_unused_resources", { input: { confirmed: true } });
+export async function cleanupUnusedResources(planFingerprint: string) {
+  if (!/^[a-f0-9]{64}$/.test(planFingerprint)) invalid();
+  const value = await invoke<unknown>("cleanup_unused_resources", { input: { confirmed: true, planFingerprint } });
   if (!validateUnusedResult(value) || !ids(value.removedResourceIds)) invalid();
   return value;
 }
@@ -39,8 +40,9 @@ export async function planOldResourceVersionCleanup() {
       !Number.isSafeInteger(bytes) || bytes !== value.reclaimableBytes) invalid();
   return value;
 }
-export async function cleanupOldResourceVersions() {
-  const value = await invoke<unknown>("cleanup_old_resource_versions", { input: { confirmed: true } });
+export async function cleanupOldResourceVersions(planFingerprint: string) {
+  if (!/^[a-f0-9]{64}$/.test(planFingerprint)) invalid();
+  const value = await invoke<unknown>("cleanup_old_resource_versions", { input: { confirmed: true, planFingerprint } });
   if (!validateOldResult(value) || !ids(value.removedVersions)) invalid();
   return value;
 }

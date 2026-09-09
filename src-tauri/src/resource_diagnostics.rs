@@ -137,6 +137,7 @@ pub struct ResourceRollbackResult {
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CleanupOldResourceVersionsInput {
+    pub plan_fingerprint: String,
     pub confirmed: bool,
 }
 
@@ -154,6 +155,8 @@ pub struct OldResourceVersionCandidate {
 #[serde(rename_all = "camelCase")]
 #[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct OldResourceVersionCleanupPlan {
+    #[cfg_attr(test, schemars(regex(pattern = "^[a-f0-9]{64}$")))]
+    pub plan_fingerprint: String,
     pub candidates: Vec<OldResourceVersionCandidate>,
     pub protected_versions: Vec<String>,
     #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
@@ -302,6 +305,7 @@ pub fn plan_old_version_cleanup() -> Result<OldResourceVersionCleanupPlan, Resou
     let configuration = local_resources::configuration_snapshot()
         .ok_or(LocalResourceError::ConfirmationRequired)?;
     let mut candidates = Vec::new();
+    let mut reviewed_receipts = Vec::new();
     let mut protected_versions = Vec::new();
     for resource in &local_resources::catalog()?.resources {
         let active = configuration.active_resources.get(&resource.id);
@@ -309,6 +313,7 @@ pub fn plan_old_version_cleanup() -> Result<OldResourceVersionCleanupPlan, Resou
         let (cleanup, protected) = select_cleanup_versions(&resource.id, &receipts, active, 1);
         candidates.extend(cleanup);
         protected_versions.extend(protected);
+        reviewed_receipts.extend(receipts);
     }
     candidates.sort_by(|left, right| {
         left.resource_id
@@ -320,12 +325,18 @@ pub fn plan_old_version_cleanup() -> Result<OldResourceVersionCleanupPlan, Resou
     let reclaimable_bytes = candidates.iter().fold(0_u64, |total, candidate| {
         total.saturating_add(candidate.reclaimable_bytes)
     });
-    Ok(OldResourceVersionCleanupPlan {
+    let mut plan = OldResourceVersionCleanupPlan {
+        plan_fingerprint: String::new(),
         candidates,
         protected_versions,
         reclaimable_bytes,
         confirmation_required: true,
-    })
+    };
+    if local_resources::configuration_snapshot().as_ref() != Some(&configuration) {
+        return Err(ResourceDiagnosticsError::Busy("all".to_owned()));
+    }
+    plan.plan_fingerprint = crate::cleanup_confirmation::fingerprint("old-versions", &configuration, &plan, &reviewed_receipts)?;
+    Ok(plan)
 }
 
 

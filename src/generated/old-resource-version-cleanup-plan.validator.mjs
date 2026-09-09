@@ -2,8 +2,9 @@
 "use strict";
 export const validate = validate20;
 export default validate20;
-const schema31 = {"$defs":{"OldResourceVersionCandidate":{"properties":{"reclaimableBytes":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"resourceId":{"type":"string"},"version":{"type":"string"}},"required":["resourceId","version","reclaimableBytes"],"type":"object"}},"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"candidates":{"items":{"$ref":"#/$defs/OldResourceVersionCandidate"},"type":"array"},"confirmationRequired":{"type":"boolean"},"protectedVersions":{"items":{"type":"string"},"type":"array"},"reclaimableBytes":{"maximum":9007199254740991,"minimum":0,"type":"integer"}},"required":["candidates","protectedVersions","reclaimableBytes","confirmationRequired"],"title":"OldResourceVersionCleanupPlan","type":"object"};
+const schema31 = {"$defs":{"OldResourceVersionCandidate":{"properties":{"reclaimableBytes":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"resourceId":{"type":"string"},"version":{"type":"string"}},"required":["resourceId","version","reclaimableBytes"],"type":"object"}},"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"candidates":{"items":{"$ref":"#/$defs/OldResourceVersionCandidate"},"type":"array"},"confirmationRequired":{"type":"boolean"},"planFingerprint":{"pattern":"^[a-f0-9]{64}$","type":"string"},"protectedVersions":{"items":{"type":"string"},"type":"array"},"reclaimableBytes":{"maximum":9007199254740991,"minimum":0,"type":"integer"}},"required":["planFingerprint","candidates","protectedVersions","reclaimableBytes","confirmationRequired"],"title":"OldResourceVersionCleanupPlan","type":"object"};
 const schema32 = {"properties":{"reclaimableBytes":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"resourceId":{"type":"string"},"version":{"type":"string"}},"required":["resourceId","version","reclaimableBytes"],"type":"object"};
+const pattern4 = new RegExp("^[a-f0-9]{64}$", "u");
 
 function validate20(data, {instancePath="", parentData, parentDataProperty, rootData=data, dynamicAnchors={}}={}){
 let vErrors = null;
@@ -18,7 +19,7 @@ evaluated0.items = undefined;
 if(errors === 0){
 if(data && typeof data == "object" && !Array.isArray(data)){
 let missing0;
-if(((((data.candidates === undefined) && (missing0 = "candidates")) || ((data.protectedVersions === undefined) && (missing0 = "protectedVersions"))) || ((data.reclaimableBytes === undefined) && (missing0 = "reclaimableBytes"))) || ((data.confirmationRequired === undefined) && (missing0 = "confirmationRequired"))){
+if((((((data.planFingerprint === undefined) && (missing0 = "planFingerprint")) || ((data.candidates === undefined) && (missing0 = "candidates"))) || ((data.protectedVersions === undefined) && (missing0 = "protectedVersions"))) || ((data.reclaimableBytes === undefined) && (missing0 = "reclaimableBytes"))) || ((data.confirmationRequired === undefined) && (missing0 = "confirmationRequired"))){
 validate20.errors = [{instancePath,schemaPath:"#/required",keyword:"required",params:{missingProperty: missing0},message:"must have required property '"+missing0+"'"}];
 return false;
 }
@@ -130,20 +131,41 @@ else {
 var valid0 = true;
 }
 if(valid0){
-if(data.protectedVersions !== undefined){
-let data6 = data.protectedVersions;
+if(data.planFingerprint !== undefined){
+let data6 = data.planFingerprint;
 const _errs14 = errors;
 if(errors === _errs14){
-if(Array.isArray(data6)){
-var valid4 = true;
-const len1 = data6.length;
-for(let i1=0; i1<len1; i1++){
+if(typeof data6 === "string"){
+if(!pattern4.test(data6)){
+validate20.errors = [{instancePath:instancePath+"/planFingerprint",schemaPath:"#/properties/planFingerprint/pattern",keyword:"pattern",params:{pattern: "^[a-f0-9]{64}$"},message:"must match pattern \""+"^[a-f0-9]{64}$"+"\""}];
+return false;
+}
+}
+else {
+validate20.errors = [{instancePath:instancePath+"/planFingerprint",schemaPath:"#/properties/planFingerprint/type",keyword:"type",params:{type: "string"},message:"must be string"}];
+return false;
+}
+}
+var valid0 = _errs14 === errors;
+}
+else {
+var valid0 = true;
+}
+if(valid0){
+if(data.protectedVersions !== undefined){
+let data7 = data.protectedVersions;
 const _errs16 = errors;
-if(typeof data6[i1] !== "string"){
+if(errors === _errs16){
+if(Array.isArray(data7)){
+var valid4 = true;
+const len1 = data7.length;
+for(let i1=0; i1<len1; i1++){
+const _errs18 = errors;
+if(typeof data7[i1] !== "string"){
 validate20.errors = [{instancePath:instancePath+"/protectedVersions/" + i1,schemaPath:"#/properties/protectedVersions/items/type",keyword:"type",params:{type: "string"},message:"must be string"}];
 return false;
 }
-var valid4 = _errs16 === errors;
+var valid4 = _errs18 === errors;
 if(!valid4){
 break;
 }
@@ -154,37 +176,38 @@ validate20.errors = [{instancePath:instancePath+"/protectedVersions",schemaPath:
 return false;
 }
 }
-var valid0 = _errs14 === errors;
+var valid0 = _errs16 === errors;
 }
 else {
 var valid0 = true;
 }
 if(valid0){
 if(data.reclaimableBytes !== undefined){
-let data8 = data.reclaimableBytes;
-const _errs18 = errors;
-if(!(((typeof data8 == "number") && (!(data8 % 1) && !isNaN(data8))) && (isFinite(data8)))){
+let data9 = data.reclaimableBytes;
+const _errs20 = errors;
+if(!(((typeof data9 == "number") && (!(data9 % 1) && !isNaN(data9))) && (isFinite(data9)))){
 validate20.errors = [{instancePath:instancePath+"/reclaimableBytes",schemaPath:"#/properties/reclaimableBytes/type",keyword:"type",params:{type: "integer"},message:"must be integer"}];
 return false;
 }
-if(errors === _errs18){
-if((typeof data8 == "number") && (isFinite(data8))){
-if(data8 > 9007199254740991 || isNaN(data8)){
+if(errors === _errs20){
+if((typeof data9 == "number") && (isFinite(data9))){
+if(data9 > 9007199254740991 || isNaN(data9)){
 validate20.errors = [{instancePath:instancePath+"/reclaimableBytes",schemaPath:"#/properties/reclaimableBytes/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"}];
 return false;
 }
 else {
-if(data8 < 0 || isNaN(data8)){
+if(data9 < 0 || isNaN(data9)){
 validate20.errors = [{instancePath:instancePath+"/reclaimableBytes",schemaPath:"#/properties/reclaimableBytes/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"}];
 return false;
 }
 }
 }
 }
-var valid0 = _errs18 === errors;
+var valid0 = _errs20 === errors;
 }
 else {
 var valid0 = true;
+}
 }
 }
 }
@@ -199,4 +222,4 @@ return false;
 validate20.errors = vErrors;
 return errors === 0;
 }
-validate20.evaluated = {"props":{"candidates":true,"confirmationRequired":true,"protectedVersions":true,"reclaimableBytes":true},"dynamicProps":false,"dynamicItems":false};
+validate20.evaluated = {"props":{"candidates":true,"confirmationRequired":true,"planFingerprint":true,"protectedVersions":true,"reclaimableBytes":true},"dynamicProps":false,"dynamicItems":false};

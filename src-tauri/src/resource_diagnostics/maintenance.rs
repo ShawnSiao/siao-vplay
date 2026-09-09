@@ -63,6 +63,7 @@ pub fn cleanup_old_versions(
         .ok_or(LocalResourceError::ConfirmationRequired)?;
     let root = PathBuf::from(&configuration.resource_root);
     let plan = plan_old_version_cleanup()?;
+    crate::cleanup_confirmation::verify(&input.plan_fingerprint, &plan.plan_fingerprint)?;
     let mut removed_versions = Vec::new();
     let mut reclaimed_bytes = 0_u64;
     for candidate in plan.candidates {

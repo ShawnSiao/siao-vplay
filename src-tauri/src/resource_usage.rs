@@ -8,18 +8,21 @@ use std::{
 #[derive(Clone, Debug)]
 pub(crate) enum Scope {
     All,
+    Policy,
     Resource(String),
 }
 impl Scope {
     fn includes(&self, resources: &BTreeSet<String>) -> bool {
         match self {
             Self::All => true,
+            Self::Policy => false,
             Self::Resource(id) => resources.contains(id),
         }
     }
     fn overlaps(&self, other: &Self) -> bool {
         match (self, other) {
             (Self::Resource(a), Self::Resource(b)) => a == b,
+            (Self::Policy, Self::Resource(_)) | (Self::Resource(_), Self::Policy) => false,
             _ => true,
         }
     }
@@ -173,4 +176,20 @@ mod tests {
         // Nested maintenance calls on the same worker retain the outer guard.
         assert!(registry.write(Scope::Resource("ffmpeg".into())).is_ok());
     }
+    #[test]
+    fn policy_changes_coexist_with_consumers_but_not_global_maintenance() {
+        let registry = Arc::new(ResourceUsage::default());
+        let consumer = registry.read(version).unwrap();
+        let policy = registry.write(Scope::Policy).unwrap();
+        drop(consumer);
+        let other = registry.clone();
+        assert!(std::thread::spawn(move || other.write(Scope::All).is_err()).join().unwrap());
+        drop(policy);
+        let maintenance = registry.write(Scope::All).unwrap();
+        let other = registry.clone();
+        assert!(std::thread::spawn(move || other.write(Scope::Policy).is_err()).join().unwrap());
+        drop(maintenance);
+        assert!(registry.write(Scope::Policy).is_ok());
+    }
+
 }
