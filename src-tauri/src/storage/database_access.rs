@@ -2,7 +2,7 @@ use std::{collections::BTreeMap, io, ops::{Deref, DerefMut}, path::{Path, PathBu
 use rusqlite::Connection;
 
 #[derive(Debug, Default)]
-struct State { connections: usize, exclusive: bool }
+struct State { accesses: usize, exclusive: bool }
 #[derive(Debug, Default)]
 struct Gate(Mutex<State>);
 fn gate(path: &Path) -> io::Result<Arc<Gate>> {
@@ -29,29 +29,32 @@ pub(crate) fn exclusive(path: &Path) -> io::Result<Exclusive> {
     let gate = gate(path)?;
     {
         let mut state = gate.0.lock().map_err(|_| io::Error::other("数据库访问状态不可用"))?;
-        if state.exclusive || state.connections > 0 { return Err(busy()); }
+        if state.exclusive || state.accesses > 0 { return Err(busy()); }
         state.exclusive = true;
     }
     Ok(Exclusive(gate))
 }
-struct Reader(Arc<Gate>);
-impl Drop for Reader {
-    fn drop(&mut self) { self.0.0.lock().unwrap_or_else(|e| e.into_inner()).connections -= 1; }
+pub(crate) struct SharedAccess(Arc<Gate>);
+impl Drop for SharedAccess {
+    fn drop(&mut self) { self.0.0.lock().unwrap_or_else(|e| e.into_inner()).accesses -= 1; }
 }
 pub(crate) struct GuardedConnection {
     connection: Connection,
-    _reader: Reader,
+    _reader: SharedAccess,
 }
 impl Deref for GuardedConnection { type Target = Connection; fn deref(&self) -> &Connection { &self.connection } }
 impl DerefMut for GuardedConnection { fn deref_mut(&mut self) -> &mut Connection { &mut self.connection } }
-pub(crate) fn connect(path: &Path) -> Result<GuardedConnection, crate::store::StoreError> {
+pub(crate) fn shared(path: &Path) -> io::Result<SharedAccess> {
     let gate = gate(path)?;
     {
         let mut state = gate.0.lock().map_err(|_| io::Error::other("数据库访问状态不可用"))?;
-        if state.exclusive { return Err(busy().into()); }
-        state.connections += 1;
+        if state.exclusive { return Err(busy()); }
+        state.accesses += 1;
     }
-    let reader = Reader(gate);
+    Ok(SharedAccess(gate))
+}
+pub(crate) fn connect(path: &Path) -> Result<GuardedConnection, crate::store::StoreError> {
+    let reader = shared(path)?;
     let connection = Connection::open(path)?;
     Ok(GuardedConnection { connection, _reader: reader })
 }

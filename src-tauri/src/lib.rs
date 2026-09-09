@@ -395,3 +395,6 @@ mod tests;
 
 #[cfg(test)]
 mod ipc_contracts;
+
+#[cfg(test)]
+mod task_material_migration_tests;

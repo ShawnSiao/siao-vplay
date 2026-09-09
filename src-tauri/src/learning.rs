@@ -266,6 +266,7 @@ pub fn prepare_learning_task(
     store: &ProjectStore,
     input: PrepareLearningTaskInput,
 ) -> Result<LearningTask, LearningError> {
+    let _data_access = crate::storage::database_access::shared(store.database_path())?;
     let (status, stage, receiver_label) = match input.handoff_kind.trim() {
         "manual" => (
             "awaiting_external_result",
