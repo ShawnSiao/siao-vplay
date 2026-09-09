@@ -3,7 +3,8 @@ import type { Project } from "../generated/project";
 import validate from "../generated/project.validator.mjs";
 
 type ProjectCommand = "get_project" | "open_local_project" | "create_local_project" | "import_remote_media_url"
-  | "mark_project_opened" | "ensure_project_poster" | "update_playback_state" | "relink_project_media";
+  | "mark_project_opened" | "ensure_project_poster" | "update_playback_state" | "relink_project_media"
+  | "import_youtube_url" | "set_project_watched";
 
 export async function invokeProject(command: ProjectCommand, args: Record<string, unknown>): Promise<Project> {
   const input = args.input;

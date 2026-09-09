@@ -1,3 +1,4 @@
+import { invokeProject } from "../../lib/projectGateway";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
@@ -162,7 +163,7 @@ export async function setWatchLater(
 }
 
 export async function setProjectWatched(projectId: string, watched: boolean): Promise<Project> {
-  return invoke<Project>("set_project_watched", { projectId, watched });
+  return invokeProject("set_project_watched", { projectId, watched });
 }
 
 export async function scanLibraryFolder(

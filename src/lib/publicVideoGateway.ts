@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { invokeProject } from "./projectGateway";
 import type { Project, YouTubeMediaPreview } from "../types";
 
 export async function inspectYouTubeUrl(
@@ -17,7 +18,7 @@ export async function importYouTubeUrl(
   operationId: string,
   authorizedResolverBase?: string | null,
 ): Promise<Project> {
-  return invoke<Project>("import_youtube_url", {
+  return invokeProject("import_youtube_url", {
     authorizedResolverBase,
     input: {
       url,
