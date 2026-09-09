@@ -13,7 +13,7 @@ for (const width of [480, 960, 1440]) {
         const host = window as unknown as { __TAURI_INTERNALS__: unknown };
         host.__TAURI_INTERNALS__ = { invoke: async (command: string) => {
           switch (command) {
-            case "get_ai_service_settings": return { services: [], defaultServiceId: null };
+            case "get_ai_service_settings": return { schemaVersion: 1, revision: 0, providerCatalog: { schemaVersion: 1, providers: [] }, services: [], defaultServiceId: null };
             case "get_codex_runtime_status": return { available: false };
             case "list_summary_tasks": return state === "loading" ? new Promise(() => {}) : state === "failed" ? [task] : [];
             case "list_video_summaries": return state === "long" ? [summary] : [];

@@ -1,3 +1,5 @@
+import validateServiceSettings from "../../generated/ai-service-settings.validator.mjs";
+import validateServiceTest from "../../generated/ai-service-test-result.validator.mjs";
 import validateNetworkSettings from "../../generated/network-settings.validator.mjs";
 import validateModelList from "../../generated/ai-model-list.validator.mjs";
 import { invoke } from "@tauri-apps/api/core";
@@ -14,15 +16,20 @@ import type {
   NetworkSettings,
 } from "./types";
 
-export function getAiServiceSettings(): Promise<AiServiceSettings> {
-  return invoke("get_ai_service_settings");
+function parseServiceSettings(value: unknown): AiServiceSettings {
+  if (!validateServiceSettings(value)) throw new Error("AI 服务设置格式无效");
+  return value;
 }
 
-export function saveAiService(
+export async function getAiServiceSettings(): Promise<AiServiceSettings> {
+  return parseServiceSettings(await invoke<unknown>("get_ai_service_settings"));
+}
+
+export async function saveAiService(
   expectedRevision: number,
   draft: AiServiceDraft,
 ): Promise<AiServiceSettings> {
-  return invoke("save_ai_service", {
+  return parseServiceSettings(await invoke<unknown>("save_ai_service", {
     input: {
       expectedRevision,
       id: draft.id,
@@ -33,23 +40,23 @@ export function saveAiService(
       modelId: draft.modelId || null,
       apiKey: draft.apiKey || null,
     },
-  });
+  }));
 }
 
-export function deleteAiService(
+export async function deleteAiService(
   expectedRevision: number,
   id: string,
 ): Promise<AiServiceSettings> {
-  return invoke("delete_ai_service", { input: { expectedRevision, id } });
+  return parseServiceSettings(await invoke<unknown>("delete_ai_service", { input: { expectedRevision, id } }));
 }
 
-export function setDefaultAiService(
+export async function setDefaultAiService(
   expectedRevision: number,
   id: string | null,
 ): Promise<AiServiceSettings> {
-  return invoke("set_default_ai_service", {
+  return parseServiceSettings(await invoke<unknown>("set_default_ai_service", {
     input: { expectedRevision, id },
-  });
+  }));
 }
 
 export async function listAiServiceModels(
@@ -60,10 +67,12 @@ export async function listAiServiceModels(
   return result;
 }
 
-export function testAiService(
+export async function testAiService(
   input: AiServiceProbeInput,
 ): Promise<AiServiceTestResult> {
-  return invoke("test_ai_service", { input });
+  const result = await invoke<unknown>("test_ai_service", { input });
+  if (!validateServiceTest(result)) throw new Error("连接测试结果格式无效");
+  return result;
 }
 
 function parseNetworkSettings(value: unknown): NetworkSettings {

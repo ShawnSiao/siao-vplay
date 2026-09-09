@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub enum AiProviderId {
     Openai,
     Anthropic,
@@ -28,6 +29,7 @@ impl AiProviderId {
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub enum AiProtocol {
     OpenaiResponses,
     AnthropicMessages,
@@ -37,6 +39,7 @@ pub enum AiProtocol {
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct AiProviderCatalogEntry {
     pub id: AiProviderId,
     pub display_name: String,
@@ -51,13 +54,16 @@ pub struct AiProviderCatalogEntry {
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct AiProviderCatalog {
+    #[cfg_attr(test, schemars(range(min = 0, max = 4294967295_u64)))]
     pub schema_version: u32,
     pub providers: Vec<AiProviderCatalogEntry>,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub enum CredentialState {
     Missing,
     Stored,
@@ -65,6 +71,7 @@ pub enum CredentialState {
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub enum ConnectionState {
     Untested,
     Ready,
@@ -73,6 +80,7 @@ pub enum ConnectionState {
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct AiServiceCapabilities {
     pub understanding: bool,
     pub learning: bool,
@@ -94,6 +102,7 @@ pub(crate) struct AiServiceConfig {
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct AiServiceSummary {
     pub id: String,
     pub provider_id: AiProviderId,
@@ -105,13 +114,17 @@ pub struct AiServiceSummary {
     pub connection_state: ConnectionState,
     pub capabilities: AiServiceCapabilities,
     pub is_default: bool,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub revision: u64,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct AiServiceSettings {
+    #[cfg_attr(test, schemars(range(min = 0, max = 4294967295_u64)))]
     pub schema_version: u32,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub revision: u64,
     pub provider_catalog: AiProviderCatalog,
     pub services: Vec<AiServiceSummary>,
@@ -214,6 +227,7 @@ pub struct AiModelList {
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct AiServiceTestResult {
     pub state: ConnectionState,
     pub models: Vec<AiModelInfo>,

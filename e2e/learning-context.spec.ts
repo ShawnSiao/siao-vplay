@@ -9,7 +9,7 @@ test("playback advances without changing the learning draft or prepared context"
     state.__TAURI_INTERNALS__ = { invoke: async (command: string, args: unknown) => {
       switch (command) {
         case "get_codex_runtime_status": return { available: true, authenticated: true, supported: true };
-        case "get_ai_service_settings": return { services: [], defaultServiceId: null };
+        case "get_ai_service_settings": return { schemaVersion: 1, revision: 0, providerCatalog: { schemaVersion: 1, providers: [] }, services: [], defaultServiceId: null };
         case "list_learning_tasks": case "list_dictionary_entries": case "list_learning_cards": case "list_speech_voices": return [];
         case "prepare_learning_task": state.prepared.push(args); throw new Error("测试夹具：已检查材料参数，未创建任务");
         default: throw new Error(`Unexpected fixture IPC: ${command}`);
@@ -48,7 +48,7 @@ test("closing and switching the drawer preserves learning input and receiver", a
       invoke: async (command: string) => {
         switch (command) {
           case "get_codex_runtime_status": return { available: true, authenticated: true, supported: true };
-          case "get_ai_service_settings": return { services: [], defaultServiceId: null };
+          case "get_ai_service_settings": return { schemaVersion: 1, revision: 0, providerCatalog: { schemaVersion: 1, providers: [] }, services: [], defaultServiceId: null };
           case "list_learning_tasks": case "list_dictionary_entries": case "list_learning_cards": case "list_speech_voices": return [];
           default: throw new Error(`Unexpected fixture IPC: ${command}`);
         }

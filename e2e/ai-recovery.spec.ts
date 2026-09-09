@@ -16,7 +16,7 @@ for (const kind of ["explanation", "learning"] as const) {
       state.__TAURI_INTERNALS__ = { invoke: async (command: string, args: unknown) => {
         switch (command) {
           case "get_codex_runtime_status": return { available: true, authenticated: true, supported: true };
-          case "get_ai_service_settings": return { services: [], defaultServiceId: null };
+          case "get_ai_service_settings": return { schemaVersion: 1, revision: 0, providerCatalog: { schemaVersion: 1, providers: [] }, services: [], defaultServiceId: null };
           case "list_explanation_tasks": return kind === "explanation" ? [task] : [];
           case "list_learning_tasks": return kind === "learning" ? [task] : [];
           case "list_explanations": case "list_dictionary_entries": case "list_learning_cards": case "list_analysis_prompt_templates": case "list_speech_voices": return [];
@@ -49,7 +49,7 @@ test("completed understanding can retry a failed result read without sending aga
     state.__TAURI_INTERNALS__ = { invoke: async (command: string) => {
       switch (command) {
         case "get_codex_runtime_status": return { available: true, authenticated: true, supported: true };
-        case "get_ai_service_settings": return { services: [], defaultServiceId: null };
+        case "get_ai_service_settings": return { schemaVersion: 1, revision: 0, providerCatalog: { schemaVersion: 1, providers: [] }, services: [], defaultServiceId: null };
         case "list_explanation_tasks": return [{ ...task, status: "running" }];
         case "list_explanations": case "list_analysis_prompt_templates": return [];
         case "get_explanation_task": return { ...task, status: "completed", outputExplanationId: explanation.id };

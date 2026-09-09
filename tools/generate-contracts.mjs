@@ -16,7 +16,7 @@ if (write) {
   if (result.error) throw result.error;
   if (result.status !== 0) process.exit(result.status ?? 1);
 }
-const names = ["media-preparation-progress", "subtitle-version-metadata", "ai-model-list", "network-settings"];
+const names = ["media-preparation-progress", "subtitle-version-metadata", "ai-model-list", "network-settings", "ai-service-settings", "ai-service-test-result"];
 for (const name of names) {
   const schema = JSON.parse(await readFile(resolve(root, `contracts/${name}.schema.json`), "utf8"));
   const examples = schema.examples ?? [];

@@ -22,7 +22,7 @@ test("drawer puts content after one context row and tabs, with reading settings 
     (window as unknown as { __TAURI_INTERNALS__: unknown }).__TAURI_INTERNALS__ = {
       invoke: async (command: string) => {
         if (command === "get_codex_runtime_status") return { available: false };
-        if (command === "get_ai_service_settings") return { services: [], defaultServiceId: null };
+        if (command === "get_ai_service_settings") return { schemaVersion: 1, revision: 0, providerCatalog: { schemaVersion: 1, providers: [] }, services: [], defaultServiceId: null };
         if (["list_explanation_tasks", "list_explanations", "list_analysis_prompt_templates"].includes(command)) return [];
         throw new Error(`Unexpected fixture IPC: ${command}`);
       },

@@ -22,7 +22,7 @@ test("an API task remains cancellable after confirmation and displays acknowledg
     state.__TAURI_INTERNALS__ = { invoke: async (command: string, args: unknown) => {
       switch (command) {
         case "get_codex_runtime_status": return { available: false };
-        case "get_ai_service_settings": return { services: [], defaultServiceId: null };
+        case "get_ai_service_settings": return { schemaVersion: 1, revision: 0, providerCatalog: { schemaVersion: 1, providers: [] }, services: [], defaultServiceId: null };
         case "list_explanation_tasks": return [current];
         case "list_explanations": case "list_analysis_prompt_templates": return [];
         case "preview_ai_task_dispatch": return preview;
