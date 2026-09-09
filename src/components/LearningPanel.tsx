@@ -1,3 +1,4 @@
+import { useLearningPolling } from "../features/learning/useLearningPolling";
 import { findLearningHistory } from "../features/learning/learningHistory";
 import { requireLearningResult } from "../features/learning/learningResult";
 import { AiTaskDispatchConfirm } from "../features/ai-tasks/AiTaskDispatchConfirm";
@@ -243,34 +244,8 @@ function LearningPanelSession({
     };
   }, [prompt, task]);
 
-  useEffect(() => {
-    if (
-      !task ||
-      !["awaiting_external_result", "running", "validating"].includes(
-        task.status,
-      )
-    ) {
-      return;
-    }
-    let active = true;
-    const timer = window.setInterval(() => {
-      void getLearningTask(task.id)
-        .then((nextTask) => {
-          if (active) {
-            setTask(nextTask);
-          }
-        })
-        .catch((cause: unknown) => {
-          if (active) {
-            setError(commandError(cause).message);
-          }
-        });
-    }, 800);
-    return () => {
-      active = false;
-      window.clearInterval(timer);
-    };
-  }, [task]);
+  useLearningPolling({ projectId, task, read: getLearningTask, onTask: setTask,
+    onError: cause => setError(commandError(cause).message) });
 
   useEffect(() => {
     if (
