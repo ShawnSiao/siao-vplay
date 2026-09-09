@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 test("episode pagination preserves rows on failure and supports keyboard retry", async ({ page }) => {
-  await page.setViewportSize({ width: 960, height: 720 });
+  await page.setViewportSize({ width: 960, height: 640 });
   await page.goto("/e2e/player.html?episodePages=1");
   const video = page.getByLabel("视频画面，单击播放或暂停");
   await video.evaluate(element => element.setAttribute("data-pagination-mount", "stable"));
@@ -17,8 +17,8 @@ test("episode pagination preserves rows on failure and supports keyboard retry",
   await expect(rows).toHaveCount(1);
   const rowBox = await rows.first().boundingBox();
   const listBox = await drawer.getByLabel("当前季剧集").boundingBox();
-  expect(rowBox && listBox && rowBox.y + rowBox.height <= listBox.y + listBox.height + 1).toBeTruthy();
   await page.screenshot({ path: "designs/open-source-readiness/episode-pagination-error-960.png" });
+  expect(rowBox && listBox && rowBox.y + rowBox.height <= listBox.y + listBox.height + 1).toBeTruthy();
   await drawer.getByRole("button", { name: "重试加载更多" }).focus();
   await page.keyboard.press("Enter");
   await expect(rows).toHaveCount(2);

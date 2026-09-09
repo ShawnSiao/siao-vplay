@@ -24,22 +24,24 @@ export function useCollectionEpisodePages(collectionId: string | null, seasonNum
   const busy = useRef(false);
   const scope = enabled && collectionId ? JSON.stringify([collectionId, seasonNumber, sessionKey, attempt]) : null;
   const request = useCallback(async (base: Loaded | null) => {
-    if (!scope || !collectionId) { dispatch({ type: "reset" }); return; }
-    if (busy.current || (base && base.nextOffset === null)) return;
+    if (!scope || !collectionId) { dispatch({ type: "reset" }); return false; }
+    if (busy.current || (base && base.nextOffset === null)) return false;
     busy.current = true;
     const current = ++sequence.current;
     dispatch({ type: "start", scope, append: base !== null });
     try {
       const page = await listCollectionEpisodePage(collectionId, seasonNumber, base?.nextOffset ?? 0, base?.snapshotToken);
-      if (current !== sequence.current) return;
+      if (current !== sequence.current) return false;
       const items = [...(base?.items ?? []), ...page.items];
       if ((base && (page.totalCount !== base.totalCount || page.snapshotToken !== base.snapshotToken))
         || new Set(items.map(item => item.projectId)).size !== items.length) {
         throw new Error("合集已变化，请重新加载剧集");
       }
       dispatch({ type: "loaded", page: { items, totalCount: page.totalCount, nextOffset: page.nextOffset, snapshotToken: page.snapshotToken } });
+      return true;
     } catch (error) {
       if (current === sequence.current) dispatch({ type: "failed", error: commandError(error).message });
+      return false;
     } finally { if (current === sequence.current) busy.current = false; }
   }, [collectionId, seasonNumber, scope]);
   useEffect(() => {
@@ -51,7 +53,7 @@ export function useCollectionEpisodePages(collectionId: string | null, seasonNum
   return {
     items: visible.page?.items ?? [], totalCount: visible.page?.totalCount ?? 0,
     nextOffset: visible.page?.nextOffset ?? null, loading: visible.loading, error: visible.error,
-    loadMore: () => { if (visible.page) void request(visible.page); },
+    loadMore: () => visible.page ? request(visible.page) : Promise.resolve(false),
     reload: () => setAttempt(value => value + 1),
   };
 }

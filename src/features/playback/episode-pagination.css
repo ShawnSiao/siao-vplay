@@ -22,3 +22,26 @@
   flex-wrap: wrap;
   gap: 8px;
 }
+
+@media (max-height: 680px) {
+  .player-drawer .episode-drawer.has-pagination > header {
+    gap: 4px;
+    padding: 8px 16px;
+  }
+  .player-drawer .episode-drawer.has-pagination .episode-neighbor-actions {
+    padding: 6px 16px;
+  }
+  .player-drawer .episode-drawer.has-pagination .episode-neighbor-actions button {
+    min-height: 40px;
+  }
+  .player-drawer .episode-pagination {
+    gap: 6px;
+    padding: 8px 16px;
+  }
+  .player-drawer .episode-pagination-actions { gap: 6px; }
+  .player-drawer .episode-pagination-actions .button {
+    min-height: 34px;
+    padding: 6px 8px;
+    font-size: 12px;
+  }
+}

@@ -215,10 +215,12 @@ function UnderstandingResultPreview() {
 
 export function PlayerHarness() {
   const pagedEpisodes = new URLSearchParams(window.location.search).has("episodePages");
+  const countParam = new URLSearchParams(window.location.search).get("episodeCount");
+  const accumulatedCount = countParam === "1000" || countParam === "10000" ? Number(countParam) : 0;
   const [loadedMore, setLoadedMore] = useState(false);
   const [pageError, setPageError] = useState(false);
   const [pageAttempt, setPageAttempt] = useState(0);
-  const episodeItems = [episodeSummary(project.id, 1, "站台相遇"), episodeSummary(nextEpisode.projectId, 2, nextEpisode.displayTitle)]
+  const episodeItems = accumulatedCount ? Array.from({ length: accumulatedCount }, (_, index) => episodeSummary(index === 0 ? project.id : `episode-${index + 1}`, index + 1, `第 ${index + 1} 集`)) : [episodeSummary(project.id, 1, "站台相遇"), episodeSummary(nextEpisode.projectId, 2, nextEpisode.displayTitle)]
     .slice(0, pagedEpisodes && !loadedMore ? 1 : 2);
 
   const [drawerTab, setDrawerTab] = useState<ShellDrawerTab | null>(null);
@@ -308,16 +310,16 @@ export function PlayerHarness() {
         drawerTab={drawerTab}
         contextMenu={contextMenu}
         episodeNavigation={{
-          detail: collectionDetail,
+          detail: accumulatedCount ? { ...collectionDetail, summary: { ...collectionDetail.summary, itemCount: accumulatedCount } } : collectionDetail,
           episodes: episodeItems,
           neighbors: { previous: null, next: nextEpisode },
           loading: false,
           error: null,
         }}
         episodePagination={pagedEpisodes ? {
-          items: episodeItems, totalCount: 2, nextOffset: loadedMore ? null : 1, loading: false,
+          items: episodeItems, totalCount: accumulatedCount || 2, nextOffset: accumulatedCount || loadedMore ? null : 1, loading: false,
           error: pageError ? "读取暂时失败" : null,
-          loadMore: () => { if (pageAttempt === 0) { setPageError(true); setPageAttempt(1); } else { setLoadedMore(true); setPageError(false); } },
+          loadMore: async () => { if (pageAttempt === 0) { setPageError(true); setPageAttempt(1); return false; } else { setLoadedMore(true); setPageError(false); return true; } },
           reload: () => { setLoadedMore(false); setPageError(false); setPageAttempt(0); },
         } : undefined}
         onBack={() => undefined}
