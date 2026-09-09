@@ -94,3 +94,6 @@ impl StorageError {
         }
     }
 }
+
+#[cfg(test)]
+mod migration_write_tests;

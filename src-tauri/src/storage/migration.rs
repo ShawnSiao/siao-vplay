@@ -91,9 +91,9 @@ impl StorageManager {
         {
             return Err(StorageError::MigrationBusy);
         }
+        persist_task(&runtime.path, &task)?;
         runtime.cancelled.store(false, Ordering::Relaxed);
         runtime.task = Some(task.clone());
-        persist_task(&runtime.path, &task)?;
         Ok(task)
     }
 
@@ -111,10 +111,11 @@ impl StorageManager {
                 .lock()
                 .map_err(|_| StorageError::StatePoisoned)?;
             let path = runtime.path.clone();
-            let task = runtime
+            let mut task = runtime
                 .task
-                .as_mut()
+                .as_ref()
                 .filter(|task| task.id == input.task_id)
+                .cloned()
                 .ok_or(StorageError::MigrationNotFound)?;
             if task.status == StorageMigrationStatus::Running {
                 return Err(StorageError::MigrationBusy);
@@ -129,10 +130,10 @@ impl StorageManager {
             task.error_code = None;
             task.error_message = None;
             task.updated_at_ms = now_ms()?;
-            let result = task.clone();
-            persist_task(&path, task)?;
+            persist_task(&path, &task)?;
+            runtime.task = Some(task.clone());
             runtime.cancelled.store(false, Ordering::Relaxed);
-            result
+            task
         };
         let manager = self.clone();
         thread::spawn(move || manager.run_migration(database_path, task));
