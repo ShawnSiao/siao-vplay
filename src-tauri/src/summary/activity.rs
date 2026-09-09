@@ -17,7 +17,7 @@ pub struct SummaryActivity {
 }
 
 pub fn list(store: &ProjectStore) -> Result<Vec<SummaryActivity>, StoreError> {
-    list_on(&store.connect()?)
+    list_on(&*store.connect()?)
 }
 fn list_on(connection: &Connection) -> Result<Vec<SummaryActivity>, StoreError> {
     let mut query = connection.prepare(

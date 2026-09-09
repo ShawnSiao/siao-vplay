@@ -27,6 +27,7 @@ impl StorageManager {
         input: PrepareStorageMigrationInput,
     ) -> Result<StorageMigrationTask, StorageError> {
         self.recover_migration_commit()?;
+        if self.read_state()?.settings.pending_app_data_root.is_some() { return Err(StorageError::MigrationBusy); }
         if input.mode == StorageMigrationMode::Rebuild && input.area != StorageArea::MediaCache {
             return Err(StorageError::InvalidPath(
                 "只有播放缓存支持在新位置重新生成".to_owned(),
@@ -129,12 +130,14 @@ impl StorageManager {
                 return Ok(task.clone());
             }
             if runtime.users > 0 { return Err(StorageError::MigrationBusy); }
+            let database_owner = super::database_access::exclusive(&database_path)?;
             task.status = StorageMigrationStatus::Running;
             task.error_code = None;
             task.error_message = None;
             task.updated_at_ms = now_ms()?;
             persist_task(&path, &task)?;
             runtime.task = Some(task.clone());
+            runtime.database_owner = Some(database_owner);
             runtime.cancelled.store(false, Ordering::Relaxed);
             task
         };
@@ -311,7 +314,11 @@ impl StorageManager {
             }
         }
         task.updated_at_ms = now_ms()?;
-        persist_task(&path, task)
+        let keep_owner = task.status == StorageMigrationStatus::RestartRequired
+            || self.state.read().map_err(|_| StorageError::StatePoisoned)?.settings.pending_migration_commit.is_some();
+        let persisted = persist_task(&path, task);
+        if !keep_owner { runtime.database_owner = None; }
+        persisted
     }
 }
 

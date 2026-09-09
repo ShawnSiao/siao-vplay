@@ -710,8 +710,8 @@ impl ProjectStore {
         Self::load_media_artifact(&connection, artifact_id)
     }
 
-    pub(crate) fn connect(&self) -> Result<Connection, StoreError> {
-        let connection = Connection::open(&self.database_path)?;
+    pub(crate) fn connect(&self) -> Result<crate::storage::database_access::GuardedConnection, StoreError> {
+        let connection = crate::storage::database_access::connect(&self.database_path)?;
         crate::database_upgrade::check_version(&connection, CURRENT_SCHEMA_VERSION)?;
         connection.execute_batch(
             "PRAGMA foreign_keys = ON;

@@ -75,10 +75,16 @@ impl StorageManager {
         if settings.version != settings_version() {
             return Err(StorageError::UnsupportedVersion(settings.version));
         }
+        if environment_app_data_root.is_some() && settings.pending_app_data_root.is_some() {
+            return Err(StorageError::RootUnavailable("存在待切换的应用数据，请移除数据目录环境变量覆盖并完成切换后启动；原数据仍保留".to_owned()));
+        }
         let pending_root = if environment_app_data_root.is_none() {
             settings.pending_app_data_root.as_deref().map(PathBuf::from)
                 .filter(|root| root.is_dir() && root.join("projects/siaovplay.db").is_file())
         } else { None };
+        if environment_app_data_root.is_none() && settings.pending_app_data_root.is_some() && pending_root.is_none() {
+            return Err(StorageError::RootUnavailable("待切换的数据目录不可用，请重新连接目标磁盘后启动；原数据仍保留，未切换回旧库写入".to_owned()));
+        }
         let active_root = environment_app_data_root
             .clone()
             .or_else(|| pending_root.clone())
@@ -198,6 +204,7 @@ impl StorageManager {
             return Err(StorageError::MigrationBusy);
         }
         let mut state = self.write_state()?;
+        if state.settings.pending_app_data_root.is_some() { return Err(StorageError::MigrationBusy); }
         if input.expected_revision != state.settings.revision {
             return Err(StorageError::RevisionConflict {
                 expected: input.expected_revision,

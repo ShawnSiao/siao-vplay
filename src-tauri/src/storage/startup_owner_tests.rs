@@ -32,7 +32,7 @@ fn occupied_pending_root_does_not_promote_or_upgrade_bootstrap_settings() {
 }
 
 #[test]
-fn unavailable_pending_root_is_retained_without_creation_or_promotion() {
+fn unavailable_pending_root_refuses_start_without_creation_or_promotion() {
     let directory = tempfile::tempdir().unwrap();
     let bootstrap = directory.path().join("bootstrap");
     let unavailable = directory.path().join("disconnected");
@@ -42,8 +42,8 @@ fn unavailable_pending_root_is_retained_without_creation_or_promotion() {
     let path = bootstrap.join("storage-settings.json");
     settings_io::persist_settings(&path, &settings).unwrap();
     let before = fs::read(&path).unwrap();
-    let (manager, _) = StorageManager::initialize_owned(&bootstrap, bootstrap.clone(), None).unwrap();
-    assert_eq!(manager.app_data_root().unwrap(), bootstrap);
+    assert!(StorageManager::initialize_owned(&bootstrap, bootstrap.clone(), None).is_err());
+    assert!(StorageManager::initialize_owned(&bootstrap, bootstrap.clone(), Some(bootstrap.clone())).is_err());
     assert_eq!(fs::read(&path).unwrap(), before);
     assert!(!unavailable.exists());
 }

@@ -18,7 +18,7 @@ impl StorageManager {
         if runtime.task.as_ref().is_some_and(|task| task.status == StorageMigrationStatus::Running) {
             return Err(StorageError::MigrationBusy);
         }
-        drop(self.read_state()?); // Pending commit recovery must finish before a new user enters.
+        if self.read_state()?.settings.pending_app_data_root.is_some() { return Err(StorageError::MigrationBusy); }
         runtime.users += 1;
         Ok(StorageLease { _owner: Arc::new(Owner(self.migration.clone())) })
     }
@@ -26,7 +26,6 @@ impl StorageManager {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use crate::{store::ProjectStore, storage::*};
     use std::fs;
     #[test]

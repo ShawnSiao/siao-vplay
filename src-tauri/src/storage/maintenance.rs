@@ -35,6 +35,7 @@ pub(crate) fn clear_playback_cache(
     if migration.users > 0 || migration.task.as_ref().is_some_and(|task| task.status == super::StorageMigrationStatus::Running) {
         return Err(StorageError::MigrationBusy);
     }
+    let _database_owner = super::database_access::exclusive(database_path)?;
     database::ensure_idle(database_path)?;
     let root = storage.media_cache_root()?;
     let app_root = storage.app_data_root()?;

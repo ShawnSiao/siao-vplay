@@ -115,7 +115,7 @@ pub(super) fn recover(path: &Path, settings: &mut StorageSettingsFile, root: &Pa
     settled.pending_migration_commit = None;
     persist_settings(path, &settled)?;
     *settings = settled;
-    if let Some(completed) = completed_task { runtime.task = Some(completed); }
+    if let Some(completed) = completed_task { runtime.task = Some(completed); runtime.database_owner = None; }
     Ok(committed)
 }
 

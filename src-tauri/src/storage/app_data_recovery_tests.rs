@@ -23,6 +23,8 @@ fn promoted_app_data_finishes_missing_terminal_receipt() {
             thread::sleep(Duration::from_millis(10));
         }
         assert_eq!(receipt.status, StorageMigrationStatus::RestartRequired);
+        assert!(store.create_local_project(CreateLocalProjectInput { media_path: media.to_string_lossy().into_owned(), title: Some("late write".to_owned()) }).is_err());
+        assert!(manager.acquire_usage().is_err());
         receipt.status = missing_status;
         receipt.error_code = Some("old_failure".to_owned());
         receipt.error_message = Some("old failure".to_owned());
