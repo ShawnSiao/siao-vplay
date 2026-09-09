@@ -451,6 +451,7 @@ function libraryHomeFor(value: Project = project): LibraryHome {
   const media = mediaSummaryFor(value);
   return {
     continueWatching: value.playbackState.positionMs > 0 ? [media] : [],
+    continueWatchingCount: value.playbackState.positionMs > 0 ? 1 : 0,
     collections: [],
     folders: [],
     unclassified: [media],

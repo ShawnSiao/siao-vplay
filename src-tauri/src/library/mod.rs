@@ -16,6 +16,8 @@ mod section_repository;
 mod section_service;
 mod service;
 mod home_service;
+mod home_model;
+pub(crate) use home_model::LibraryHome;
 
 pub(crate) use error::LibraryError;
 pub(crate) use import_service::LibraryImportService;

@@ -56,6 +56,7 @@ const media: LibraryMediaSummary = {
 function home(overrides: Partial<LibraryHome> = {}): LibraryHome {
   return {
     continueWatching: [],
+    continueWatchingCount: 0,
     collections: [collection],
     folders: [],
     unclassified: [],

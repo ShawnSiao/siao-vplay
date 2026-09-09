@@ -1,4 +1,5 @@
 import { readLibrarySection } from "../../lib/libraryPageGateway";
+import { readLibraryHome } from "../../lib/libraryHomeGateway";
 import { invokeProject } from "../../lib/projectGateway";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
@@ -75,7 +76,7 @@ export async function getLibraryHome(): Promise<LibraryHome> {
   if (!isDesktopApp) {
     return emptyLibraryHome;
   }
-  return invoke<LibraryHome>("get_library_home");
+  return readLibraryHome();
 }
 
 export async function listLibrarySection(

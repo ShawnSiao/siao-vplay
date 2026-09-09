@@ -1,4 +1,3 @@
-import type { MediaSummary as LibraryMediaSummary } from "../generated/library-section-page";
 export type { MediaSummary as LibraryMediaSummary } from "../generated/library-section-page";
 export type CollectionKind = "series" | "folder" | "manual";
 export type CollectionSortMode = "episode" | "natural" | "manual" | "added_at";
@@ -43,17 +42,7 @@ export type LibraryRootSummary = {
 
 
 
-export type LibraryHome = {
-  continueWatching: LibraryMediaSummary[];
-  continueWatchingCount?: number;
-  collections: CollectionSummary[];
-  folders: LibraryRootSummary[];
-  unclassified: LibraryMediaSummary[];
-  recentlyAdded: LibraryMediaSummary[];
-  totalProjectCount: number;
-  collectionItemCount: number;
-  unclassifiedCount: number;
-};
+export type { LibraryHome } from "../generated/library-home";
 
 export type LibraryMediaSection =
   | "continue_watching"

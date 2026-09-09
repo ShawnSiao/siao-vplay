@@ -81,6 +81,7 @@ const unclassifiedItems = Array.from({ length: longListMode ? 20 : 12 }, (_, ind
 
 const libraryHome: LibraryHome = {
   continueWatching: [mediaSummary],
+  continueWatchingCount: 1,
   collections: [
     {
       id: "e2e-library-collection",

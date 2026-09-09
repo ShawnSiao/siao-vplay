@@ -1,8 +1,9 @@
-use super::{LibraryError, MediaSummary};
+use super::LibraryError;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub(crate) enum CollectionKind {
     Series,
     Folder,
@@ -30,6 +31,7 @@ impl CollectionKind {
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub(crate) enum CollectionSortMode {
     Episode,
     Natural,
@@ -95,45 +97,60 @@ impl ItemAvailability {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub(crate) struct Collection {
     pub id: String,
     pub kind: CollectionKind,
     pub title: String,
     pub root_id: Option<String>,
+    #[cfg_attr(test, schemars(with = "Option<super::home_model::CollectionSystemKey>"))]
     pub system_key: Option<String>,
     pub poster_path: Option<String>,
     pub sort_mode: CollectionSortMode,
     pub auto_play_next: bool,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub last_opened_at_ms: Option<i64>,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub created_at_ms: i64,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub updated_at_ms: i64,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub(crate) struct CollectionSummary {
     #[serde(flatten)]
     pub collection: Collection,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub item_count: i64,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub season_count: i64,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub watched_count: i64,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub total_duration_ms: Option<i64>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub(crate) struct LibraryRootSummary {
     pub id: String,
     pub path: String,
     pub display_name: String,
+    #[cfg_attr(test, schemars(with = "super::home_model::RootAvailability"))]
     pub availability: String,
     pub status: LibraryRootStatus,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub last_scanned_at_ms: Option<i64>,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub item_count: i64,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub(crate) enum LibraryRootStatus {
     Linked,
     Orphaned,
@@ -247,19 +264,6 @@ pub(crate) struct LibraryRootRevokeResult {
 }
 
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct LibraryHome {
-    pub continue_watching: Vec<MediaSummary>,
-    pub continue_watching_count: i64,
-    pub collections: Vec<CollectionSummary>,
-    pub folders: Vec<LibraryRootSummary>,
-    pub unclassified: Vec<MediaSummary>,
-    pub recently_added: Vec<MediaSummary>,
-    pub total_project_count: i64,
-    pub collection_item_count: i64,
-    pub unclassified_count: i64,
-}
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]

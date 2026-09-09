@@ -3,6 +3,7 @@ import type { LibraryHome } from "../types";
 
 export const emptyLibraryHome: LibraryHome = {
   continueWatching: [],
+  continueWatchingCount: 0,
   collections: [],
   folders: [],
   unclassified: [],

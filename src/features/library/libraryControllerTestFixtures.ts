@@ -9,6 +9,7 @@ import type {
 export function libraryHome(totalProjectCount: number): LibraryHome {
   return {
     continueWatching: [],
+    continueWatchingCount: 0,
     collections: [],
     folders: [],
     unclassified: [],
