@@ -132,7 +132,7 @@ export function makeController(
     }),
     chooseExistingResources: vi.fn().mockResolvedValue(null),
     adoptResources: vi.fn().mockResolvedValue({
-      adoptedResourceIds: [],
+      interruption: null, adoptedResourceIds: [],
       alreadyActiveResourceIds: [],
       rejectedResourceIds: [],
       reusableBytes: 0,

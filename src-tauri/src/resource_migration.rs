@@ -14,6 +14,7 @@ mod move_commit;
 mod move_staging;
 mod move_confirmation;
 mod adoption_confirmation;
+mod adoption_batch;
 pub use maintenance::{adopt_local_resources, move_resource_root, reconnect_resource_root, cleanup_unused_resources};
 
 use std::{

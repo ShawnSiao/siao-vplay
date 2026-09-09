@@ -1,7 +1,8 @@
 import { expect, test } from "@playwright/test";
-for (const kind of ["move", "adopt"] as const) test(`invalid ${kind} preview cannot be confirmed and can be inspected again`, async ({ page }) => {
+for (const kind of ["move", "adopt", "adopt-partial"] as const) test(`invalid ${kind} preview cannot be confirmed and can be inspected again`, async ({ page }) => {
   const errors: string[] = []; page.on("pageerror", error => errors.push(error.message));
-  await page.addInitScript(() => {
+  await page.addInitScript((mode) => {
+    const ids = mode === "adopt-partial" ? ["tool", "second", "third"] : ["tool"];
     let reads = 0;
     const state = window as unknown as { __TAURI_INTERNALS__: unknown; migrationWrites: number; moveArgs?: unknown }; state.migrationWrites = 0;
     state.__TAURI_INTERNALS__ = { transformCallback: () => 1, unregisterCallback: () => undefined,
@@ -15,12 +16,13 @@ for (const kind of ["move", "adopt"] as const) test(`invalid ${kind} preview can
         if (command === "get_local_resource_diagnostics") return { generatedAtMs: 1, catalogSource: "embedded", remoteCatalogEnabled: false, maintenance: { transactionState: "none", scanState: "complete", stagingReviewCount: 0, receiptRecoveryCopyCount: 0 }, remoteSignaturePolicy: "disabled", rootState: "ready", resourceRoot: "W:/old/SiaoVPlay", preferredProfile: "standard", resources: [], tasks: [] };
         if (command === "get_local_resource_third_party_notices") return "fixture";
         if (command === "plan_local_resource_move") return { planFingerprint: "a".repeat(64), previousRoot: "W:/old/SiaoVPlay", selectedParent: "W:/selected", resourceRoot: "W:/selected/SiaoVPlay", bytesToCopy: ++reads === 1 ? -1 : 10, fileCount: 1, freeSpaceBytes: null, crossVolume: false, destinationExists: false, confirmationRequired: true };
-        if (command === "inspect_local_resource_migration") return { planFingerprint: "a".repeat(64), resourceRoot: "W:/old/SiaoVPlay", sources: [{ kind: "selected_directory", path: "W:/selected" }], candidates: [{ sourceKind: "selected_directory", sourceRoot: "W:/selected", resourceId: "tool", resourcePath: "W:/selected/tool", state: "verified", reusableBytes: 10, message: null }], verifiedResourceIds: ["tool"], reusableBytes: ++reads === 1 ? 11 : 10, rejectedCount: 0 };
+        if (command === "inspect_local_resource_migration") return { planFingerprint: "a".repeat(64), resourceRoot: "W:/old/SiaoVPlay", sources: [{ kind: "selected_directory", path: "W:/selected" }], candidates: ids.map(resourceId => ({ sourceKind: "selected_directory", sourceRoot: "W:/selected", resourceId, resourcePath: "W:/selected/tool", state: "verified", reusableBytes: 10, message: null })), verifiedResourceIds: ids, reusableBytes: ids.length * 10 + (++reads === 1 ? 1 : 0), rejectedCount: 0 };
         if (command === "move_local_resource_root") { state.migrationWrites++; state.moveArgs = args; throw new Error("资源移动计划已变化，请重新检查保存位置并确认"); }
-        if (command === "adopt_local_resources") { state.migrationWrites++; state.moveArgs = args; throw new Error("资源接管计划已变化，请重新检查现有资源并确认"); }
+        if (command === "adopt_local_resources") { state.migrationWrites++; state.moveArgs = args;
+          if (mode === "adopt-partial") return { resourceRoot: "W:/old/SiaoVPlay", planFingerprint: "a".repeat(64), requestId: (args as { requestId: string }).requestId, adoptedResourceIds: ["tool"], alreadyActiveResourceIds: [], rejectedResourceIds: [], reusableBytes: 10, interruption: { resourceId: "second", message: "安装确认失败", unattemptedResourceIds: ["third"] } }; throw new Error("资源接管计划已变化，请重新检查现有资源并确认"); }
         throw new Error(`Unexpected IPC: ${command}`);
       } };
-  });
+  }, kind);
   await page.goto("/e2e/runtime.html?live=1");
   const advanced = page.getByText("高级维护：存储位置、迁移、修复和清理", { exact: true });
   await expect(advanced).toBeVisible();
@@ -52,6 +54,16 @@ for (const kind of ["move", "adopt"] as const) test(`invalid ${kind} preview can
     const args = await page.evaluate(() => (window as unknown as { moveArgs: { input: unknown; requestId: string } }).moveArgs);
     expect(args.input).toEqual({ resourceRoot: "W:/old/SiaoVPlay", sourcePath: "W:/selected", sourceKind: "selected_directory", confirmed: true, planFingerprint: "a".repeat(64) });
     expect(args.requestId).toMatch(/^[a-f0-9-]{36}$/);
+    await inspect.click(); await expect(confirm).toBeEnabled();
+  }
+  if (kind === "adopt-partial") {
+    await confirm.click();
+    const error = page.getByText(/接管中断：已确认 1 项；当前资源未确认完成，1 项尚未尝试/);
+    await expect(error).toBeVisible();
+    await expect(confirm).toHaveCount(0);
+    expect(await page.evaluate(() => (window as unknown as { migrationWrites: number }).migrationWrites)).toBe(1);
+    await error.scrollIntoViewIfNeeded();
+    await page.screenshot({ path: "designs/open-source-readiness/adoption-partial.png" });
     await inspect.click(); await expect(confirm).toBeEnabled();
   }
   expect(errors).toEqual([]);

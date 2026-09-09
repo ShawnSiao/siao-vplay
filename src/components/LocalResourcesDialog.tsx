@@ -1,3 +1,4 @@
+import { adoptionFeedback } from "../features/resources/adoptionFeedback";
 import { cleanupFeedback } from "../features/resources/cleanupFeedback";
 import { ResourceMaintenanceNotice } from "../features/resources/ResourceMaintenanceNotice";
 import { useMemo, useRef, useState } from "react";
@@ -243,12 +244,9 @@ export function LocalResourcesDialog({
       const confirmedPreview = migrationPreview;
       setMigrationPreview(null);
       const result = await controller.adoptResources(confirmedPreview);
-      if (result.rejectedResourceIds.length > 0) setLocalError(`有 ${result.rejectedResourceIds.length} 项资源未接管，请重新检查候选及资源状态。`);
-      onNotice(
-        result.rejectedResourceIds.length > 0 ? `已接管 ${result.adoptedResourceIds.length} 项资源，${result.rejectedResourceIds.length} 项未接管。` : result.adoptedResourceIds.length > 0
-          ? `已接管 ${result.adoptedResourceIds.length} 项本地功能资源，无需重复下载。`
-          : "没有需要接管的新资源。",
-      );
+      const feedback = adoptionFeedback(result);
+      if (feedback.error) setLocalError(feedback.error);
+      onNotice(feedback.notice);
     });
 
   const chooseMoveLocation = () =>

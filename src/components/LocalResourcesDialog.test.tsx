@@ -203,7 +203,7 @@ describe("LocalResourcesDialog", () => {
       },
     });
     const adoptResources = vi.fn().mockResolvedValue({
-      adoptedResourceIds: ["yt-dlp"],
+      interruption: null, adoptedResourceIds: ["yt-dlp"],
       alreadyActiveResourceIds: [],
       rejectedResourceIds: [],
       reusableBytes: 18_202_192,

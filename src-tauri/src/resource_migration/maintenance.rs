@@ -19,36 +19,19 @@ pub fn adopt_local_resources(
         return Err(LocalResourceError::RootUnavailable(path_string(&root)).into());
     }
     let rejected = preview.candidates.iter().filter(|candidate| candidate.state == "rejected");
-    let mut adopted = Vec::new();
-    let mut already_active = Vec::new();
-    let mut rejected_ids = rejected
-        .into_iter()
-        .map(|candidate| candidate.resource_id.clone())
-        .collect::<Vec<_>>();
-    let mut reusable_bytes = 0_u64;
+    let mut rejected_ids = rejected.map(|candidate| candidate.resource_id.clone()).collect::<Vec<_>>();
     let mut handled = BTreeSet::new();
-    for candidate in verified {
-        let resource_id = candidate.public.resource_id.clone();
-        if !handled.insert(resource_id.clone()) {
-            continue;
-        }
-        if local_resources::resource_is_ready(&resource_id)? {
-            already_active.push(resource_id);
-            continue;
-        }
-        match adopt_candidate(&root, &candidate) {
-            Ok(()) => {
-                reusable_bytes = reusable_bytes.saturating_add(candidate.public.reusable_bytes);
-                adopted.push(resource_id);
-            }
-            Err(_) => rejected_ids.push(resource_id),
-        }
-    }
+    let items = verified.iter().filter(|candidate| handled.insert(candidate.public.resource_id.clone()))
+        .map(|candidate| (candidate.public.resource_id.clone(), candidate.public.reusable_bytes, candidate)).collect::<Vec<_>>();
+    let outcome = adoption_batch::run(&items, |candidate| local_resources::resource_is_ready(&candidate.public.resource_id).map_err(Into::into), |candidate| adopt_candidate(&root, candidate))?;
+    let mut adopted = outcome.adopted; let mut already_active = outcome.active;
+    let reusable_bytes = outcome.bytes;
     adopted.sort();
     already_active.sort();
     rejected_ids.sort();
     rejected_ids.dedup();
     Ok(ResourceAdoptionResult {
+        interruption: outcome.interruption,
         resource_root: path_string(&root),
         plan_fingerprint: preview.plan_fingerprint,
         request_id: request_id.to_owned(),

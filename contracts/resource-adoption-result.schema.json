@@ -1,4 +1,28 @@
 {
+  "$defs": {
+    "ResourceAdoptionInterruption": {
+      "properties": {
+        "message": {
+          "type": "string"
+        },
+        "resourceId": {
+          "type": "string"
+        },
+        "unattemptedResourceIds": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "resourceId",
+        "message",
+        "unattemptedResourceIds"
+      ],
+      "type": "object"
+    }
+  },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "properties": {
     "adoptedResourceIds": {
@@ -12,6 +36,16 @@
         "type": "string"
       },
       "type": "array"
+    },
+    "interruption": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ResourceAdoptionInterruption"
+        },
+        {
+          "type": "null"
+        }
+      ]
     },
     "planFingerprint": {
       "pattern": "^[a-f0-9]{64}$",
@@ -37,6 +71,7 @@
     }
   },
   "required": [
+    "interruption",
     "resourceRoot",
     "requestId",
     "planFingerprint",

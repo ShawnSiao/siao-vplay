@@ -42,6 +42,7 @@ pub struct ResourceMigrationPreview {
 #[serde(rename_all = "camelCase")]
 #[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct ResourceAdoptionResult {
+    pub interruption: Option<ResourceAdoptionInterruption>,
     pub resource_root: String,
     pub request_id: String,
     #[cfg_attr(test, schemars(regex(pattern = "^[a-f0-9]{64}$")))]
@@ -88,4 +89,13 @@ pub struct LocalResourceMoveResult {
     pub verified_file_count: usize,
     pub cross_volume: bool,
     pub previous_root_retained: bool,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
+pub struct ResourceAdoptionInterruption {
+    pub resource_id: String,
+    pub message: String,
+    pub unattempted_resource_ids: Vec<String>,
 }

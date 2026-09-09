@@ -62,11 +62,13 @@ export async function adoptLocalResources(confirmedPreview: ResourceMigrationPre
   const { default: validate } = await import("../generated/resource-adoption-result.validator.mjs");
   if (!validate(value) || value.requestId !== requestId || value.planFingerprint !== preview.planFingerprint || value.resourceRoot !== preview.resourceRoot ||
       !unique([...value.adoptedResourceIds, ...value.alreadyActiveResourceIds]) || !unique(value.rejectedResourceIds)) invalid();
-  const known = new Set(preview.candidates.map(candidate => candidate.resourceId));
   const verified = new Set(preview.verifiedResourceIds);
-  const completed = [...value.adoptedResourceIds, ...value.alreadyActiveResourceIds];
-  if (completed.some(id => !verified.has(id)) || value.rejectedResourceIds.some(id => !known.has(id)) ||
-      preview.verifiedResourceIds.some(id => !completed.includes(id) && !value.rejectedResourceIds.includes(id))) invalid();
+  const rejected = new Set(preview.candidates.filter(candidate => candidate.state === "rejected").map(candidate => candidate.resourceId));
+  const unfinished = value.interruption ? [value.interruption.resourceId, ...value.interruption.unattemptedResourceIds] : [];
+  const accounted = [...value.adoptedResourceIds, ...value.alreadyActiveResourceIds, ...unfinished];
+  if (!unique(accounted) || accounted.length !== verified.size || accounted.some(id => !verified.has(id)) ||
+      (value.interruption && !nonblank(value.interruption.message)) || value.rejectedResourceIds.length !== rejected.size ||
+      value.rejectedResourceIds.some(id => !rejected.has(id))) invalid();
   const bytes = value.adoptedResourceIds.reduce((sum, id) => sum + (preview.candidates.find(candidate => candidate.resourceId === id && candidate.state === "verified")?.reusableBytes ?? 0), 0);
   if (!Number.isSafeInteger(bytes) || value.reusableBytes !== bytes) invalid();
   return value;
