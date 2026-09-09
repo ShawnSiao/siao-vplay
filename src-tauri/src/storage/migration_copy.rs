@@ -359,3 +359,8 @@ mod tests {
 #[cfg(all(test, windows))]
 #[path = "migration_link_tests.rs"]
 mod link_tests;
+
+
+pub(super) fn replace_bytes(destination: &Path, mut bytes: &[u8], cancelled: &AtomicBool) -> Result<(), StorageError> {
+    copy_reader(&mut bytes, destination, cancelled)
+}

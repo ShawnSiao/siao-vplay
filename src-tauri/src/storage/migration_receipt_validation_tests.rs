@@ -67,7 +67,7 @@ fn invalid_existing_records_are_never_replaced() {
     let base = value(directory.path(), &task);
     let mut variants = vec![];
     for (field, replacement) in [
-        ("schemaVersion", json!(2)),
+        ("schemaVersion", json!(3)),
         ("schemaVersion", Value::Null),
         ("taskId", json!(uuid::Uuid::new_v4().to_string())),
         ("sourceRoot", json!("other")),

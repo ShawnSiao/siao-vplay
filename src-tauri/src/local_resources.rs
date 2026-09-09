@@ -1,3 +1,5 @@
+mod data_relocation;
+pub(crate) use data_relocation::{ensure_ready_for_data_move, relocate_data_config};
 mod location_confirmation;
 pub use location_confirmation::configure as configure_confirmed_location;
 mod catalog_contract;

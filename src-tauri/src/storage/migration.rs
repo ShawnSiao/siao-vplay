@@ -212,6 +212,7 @@ impl StorageManager {
         }
         match task.area {
             StorageArea::AppData => {
+                super::migration_configuration::apply(&source, &destination, &mut verified, &cancelled)?;
                 let destination_database = destination.join("projects").join("siaovplay.db");
                 database::backup_database(&source_database, &destination_database, || cancelled.load(Ordering::Relaxed))?;
                 database::relocate_copied_paths(

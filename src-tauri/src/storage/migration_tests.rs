@@ -227,3 +227,6 @@ mod library_roundtrip_tests;
 
 #[path = "migration_area_reference_tests.rs"]
 mod area_reference_tests;
+
+#[path = "migration_configuration_tests.rs"]
+mod configuration_tests;

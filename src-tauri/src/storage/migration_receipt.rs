@@ -17,18 +17,27 @@ use std::{
 enum FileKind {
     CopiedFile,
     RewrittenDatabase,
+    RewrittenConfiguration,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub(super) struct VerifiedFile {
-    relative: String,
+    pub(super) relative: String,
     pub(super) bytes: u64,
     sha256: String,
     kind: FileKind,
 }
 
 impl VerifiedFile {
+    pub(super) fn refresh_configuration(&mut self, destination: &Path, cancelled: &AtomicBool) -> Result<(), StorageError> {
+        let path = destination.join(&self.relative);
+        self.sha256 = migration_copy::file_sha256(&path, cancelled)?;
+        self.bytes = fs::metadata(path)?.len();
+        self.kind = FileKind::RewrittenConfiguration;
+        Ok(())
+    }
+
     pub(super) fn copied(
         relative: &Path,
         target: &Path,
@@ -79,7 +88,7 @@ fn invalid() -> StorageError {
 }
 
 fn validate(receipt: &Receipt, task: &StorageMigrationTask) -> Result<(), StorageError> {
-    if receipt.schema_version != 1
+    if !matches!(receipt.schema_version, 1 | 2)
         || receipt.task_id != task.id
         || receipt.area != task.area
         || receipt.mode != task.mode
@@ -106,6 +115,9 @@ fn validate_content(receipt: &Receipt) -> Result<(), StorageError> {
         {
             return Err(invalid());
         }
+        if matches!(file.kind, FileKind::RewrittenConfiguration)
+            && (receipt.schema_version != 2 || receipt.area != StorageArea::AppData
+                || !matches!(file.relative.as_str(), "local-resources.json" | "runtime-settings.json")) { return Err(invalid()); }
         if matches!(file.kind, FileKind::RewrittenDatabase) {
             if file.relative != "projects/siaovplay.db" {
                 return Err(invalid());
@@ -135,8 +147,9 @@ pub(super) fn persist(
         return Err(invalid());
     }
     let path = bootstrap.join(format!("storage-migration.{}.receipt.json", task.id));
+    let schema_version = if files.iter().any(|file| matches!(file.kind, FileKind::RewrittenConfiguration)) { 2 } else { 1 };
     let receipt = Receipt {
-        schema_version: 1,
+        schema_version,
         task_id: task.id.clone(),
         area: task.area,
         mode: task.mode,
@@ -236,7 +249,7 @@ fn read_bound(bootstrap: &Path, reference: &ReceiptReference) -> Result<Receipt,
         return Err(invalid());
     }
     let receipt: Receipt = serde_json::from_slice(&bytes).map_err(|_| invalid())?;
-    if receipt.schema_version != 1 || receipt.task_id != reference.task_id {
+    if !matches!(receipt.schema_version, 1 | 2) || receipt.task_id != reference.task_id {
         return Err(invalid());
     }
     Ok(receipt)
