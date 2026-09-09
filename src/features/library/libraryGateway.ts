@@ -3,6 +3,7 @@ import { readLibraryHome } from "../../lib/libraryHomeGateway";
 import { readLibrarySearch } from "../../lib/librarySearchGateway";
 import { invokeCollectionDetail, invokeWatchLater } from "../../lib/collectionDetailGateway";
 import { invokeCollectionMutation, invokeCollectionDeletion } from "../../lib/collectionMutationGateway";
+import { readCollectionEpisodes } from "../../lib/collectionEpisodesGateway";
 import { invokeProject } from "../../lib/projectGateway";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
@@ -128,10 +129,7 @@ export async function listCollectionEpisodes(
   collectionId: string,
   seasonNumber: number | null,
 ): Promise<LibraryMediaSummary[]> {
-  return invoke<LibraryMediaSummary[]>("list_collection_episodes", {
-    collectionId,
-    seasonNumber,
-  });
+  return readCollectionEpisodes(collectionId, seasonNumber);
 }
 
 export async function addProjectToCollection(

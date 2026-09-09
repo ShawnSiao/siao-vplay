@@ -1,0 +1,158 @@
+{
+  "$defs": {
+    "ItemAvailability": {
+      "enum": [
+        "available",
+        "missing",
+        "root_offline",
+        "changed"
+      ],
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "absoluteOrder": {
+      "format": "int64",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "chineseTranslationAvailable": {
+      "type": "boolean"
+    },
+    "collectionId": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "collectionTitle": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "completedAtMs": {
+      "format": "int64",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "createdAtMs": {
+      "format": "int64",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "displayName": {
+      "type": "string"
+    },
+    "durationMs": {
+      "format": "int64",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "episodeNumber": {
+      "format": "int64",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "episodeTitle": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "itemAvailability": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ItemAvailability"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "lastOpenedAtMs": {
+      "format": "int64",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "mediaAvailable": {
+      "type": "boolean"
+    },
+    "mediaLocator": {
+      "type": "string"
+    },
+    "originalSubtitleAvailable": {
+      "type": "boolean"
+    },
+    "positionMs": {
+      "format": "int64",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "posterPath": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "projectId": {
+      "type": "string"
+    },
+    "projectTitle": {
+      "type": "string"
+    },
+    "seasonNumber": {
+      "format": "int64",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": [
+        "integer",
+        "null"
+      ]
+    }
+  },
+  "required": [
+    "projectId",
+    "projectTitle",
+    "displayName",
+    "mediaLocator",
+    "mediaAvailable",
+    "posterPath",
+    "positionMs",
+    "durationMs",
+    "completedAtMs",
+    "lastOpenedAtMs",
+    "createdAtMs",
+    "originalSubtitleAvailable",
+    "chineseTranslationAvailable",
+    "collectionId",
+    "collectionTitle",
+    "seasonNumber",
+    "episodeNumber",
+    "absoluteOrder",
+    "episodeTitle",
+    "itemAvailability"
+  ],
+  "title": "MediaSummary",
+  "type": "object"
+}
