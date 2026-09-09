@@ -1,0 +1,249 @@
+{
+  "$defs": {
+    "SubtitleCue": {
+      "properties": {
+        "confidence": {
+          "format": "double",
+          "maximum": 1,
+          "minimum": 0,
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "endMs": {
+          "format": "int64",
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": "integer"
+        },
+        "ordinal": {
+          "format": "uint",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "startMs": {
+          "format": "int64",
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": "integer"
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "ordinal",
+        "startMs",
+        "endMs",
+        "text",
+        "confidence"
+      ],
+      "type": "object"
+    },
+    "SubtitleFileFormat": {
+      "enum": [
+        "srt",
+        "vtt"
+      ],
+      "type": "string"
+    },
+    "SubtitleIssueCode": {
+      "enum": [
+        "empty_text",
+        "invalid_timing",
+        "out_of_order",
+        "out_of_bounds",
+        "overlap",
+        "long_gap",
+        "duration_too_short",
+        "duration_too_long",
+        "reading_speed_high"
+      ],
+      "type": "string"
+    },
+    "SubtitleIssueSeverity": {
+      "enum": [
+        "error",
+        "warning"
+      ],
+      "type": "string"
+    },
+    "SubtitlePreflightIssue": {
+      "properties": {
+        "code": {
+          "$ref": "#/$defs/SubtitleIssueCode"
+        },
+        "message": {
+          "type": "string"
+        },
+        "ordinal": {
+          "format": "uint",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "relatedOrdinal": {
+          "format": "uint",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "severity": {
+          "$ref": "#/$defs/SubtitleIssueSeverity"
+        }
+      },
+      "required": [
+        "code",
+        "severity",
+        "ordinal",
+        "relatedOrdinal",
+        "message"
+      ],
+      "type": "object"
+    },
+    "SubtitlePreflightReport": {
+      "properties": {
+        "coverageRatio": {
+          "format": "double",
+          "maximum": 1,
+          "minimum": 0,
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "errorCount": {
+          "format": "uint",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "firstStartMs": {
+          "format": "int64",
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "issues": {
+          "items": {
+            "$ref": "#/$defs/SubtitlePreflightIssue"
+          },
+          "type": "array"
+        },
+        "lastEndMs": {
+          "format": "int64",
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "mediaDurationMs": {
+          "format": "int64",
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "segmentCount": {
+          "format": "uint",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "status": {
+          "$ref": "#/$defs/SubtitlePreflightStatus"
+        },
+        "warningCount": {
+          "format": "uint",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "status",
+        "segmentCount",
+        "errorCount",
+        "warningCount",
+        "firstStartMs",
+        "lastEndMs",
+        "mediaDurationMs",
+        "coverageRatio",
+        "issues"
+      ],
+      "type": "object"
+    },
+    "SubtitlePreflightStatus": {
+      "enum": [
+        "ready",
+        "warning",
+        "blocked"
+      ],
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "canImport": {
+      "type": "boolean"
+    },
+    "cues": {
+      "items": {
+        "$ref": "#/$defs/SubtitleCue"
+      },
+      "type": "array"
+    },
+    "expectedMediaSha256": {
+      "type": "string"
+    },
+    "expectedProjectRevision": {
+      "format": "int64",
+      "maximum": 9007199254740991,
+      "minimum": 1,
+      "type": "integer"
+    },
+    "format": {
+      "$ref": "#/$defs/SubtitleFileFormat"
+    },
+    "languageCode": {
+      "type": "string"
+    },
+    "preflight": {
+      "$ref": "#/$defs/SubtitlePreflightReport"
+    },
+    "sourceLabel": {
+      "type": "string"
+    },
+    "sourceSha256": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "format",
+    "sourceLabel",
+    "sourceSha256",
+    "languageCode",
+    "expectedProjectRevision",
+    "expectedMediaSha256",
+    "cues",
+    "preflight",
+    "canImport"
+  ],
+  "title": "SubtitleImportPreview",
+  "type": "object"
+}

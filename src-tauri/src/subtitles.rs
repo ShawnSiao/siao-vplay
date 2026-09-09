@@ -74,6 +74,7 @@ impl From<rusqlite::Error> for SubtitleError {
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub enum SubtitleFileFormat {
     Srt,
     Vtt,
@@ -103,11 +104,16 @@ impl SubtitleFileFormat {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct SubtitleCue {
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub ordinal: usize,
+    #[cfg_attr(test, schemars(range(min = -9007199254740991_i64, max = 9007199254740991_i64)))]
     pub start_ms: i64,
+    #[cfg_attr(test, schemars(range(min = -9007199254740991_i64, max = 9007199254740991_i64)))]
     pub end_ms: i64,
     pub text: String,
+    #[cfg_attr(test, schemars(range(min = 0, max = 1)))]
     pub confidence: Option<f64>,
 }
 
@@ -180,11 +186,13 @@ pub struct SubtitlePreflightReport {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct SubtitleImportPreview {
     pub format: SubtitleFileFormat,
     pub source_label: String,
     pub source_sha256: String,
     pub language_code: String,
+    #[cfg_attr(test, schemars(range(min = 1, max = 9007199254740991_i64)))]
     pub expected_project_revision: i64,
     pub expected_media_sha256: String,
     pub cues: Vec<SubtitleCue>,
@@ -213,7 +221,9 @@ pub struct ImportSubtitleFileInput {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct EmbeddedSubtitlePreview {
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_i64)))]
     pub stream_index: i64,
     pub codec_name: String,
     pub embedded_language: Option<String>,

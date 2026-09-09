@@ -1,4 +1,5 @@
 import { parseSubtitleBody, parseSubtitleBodies } from "./subtitleBodyContract";
+import { parseSubtitlePreview, parseEmbeddedPreview } from "./subtitlePreviewContract";
 import { invoke } from "@tauri-apps/api/core";
 import type { EmbeddedSubtitlePreview, SubtitleGlobalReplacement, SubtitleImportPreview, SubtitleSegmentEdit, SubtitleVersion } from "../types";
 import { parseSubtitleMetadata, type SubtitleVersionMetadata } from "./subtitleMetadata";
@@ -8,9 +9,9 @@ export async function inspectSubtitleFile(
   subtitlePath: string,
   languageCode: string,
 ): Promise<SubtitleImportPreview> {
-  return invoke<SubtitleImportPreview>("inspect_subtitle_file", {
+  return parseSubtitlePreview(await invoke<unknown>("inspect_subtitle_file", {
     input: { projectId, subtitlePath, languageCode },
-  });
+  }), languageCode);
 }
 
 export async function importSubtitleFile(
@@ -94,9 +95,9 @@ export async function inspectEmbeddedSubtitle(
   streamIndex: number,
   languageCode: string,
 ): Promise<EmbeddedSubtitlePreview> {
-  return invoke<EmbeddedSubtitlePreview>("inspect_embedded_subtitle", {
+  return parseEmbeddedPreview(await invoke<unknown>("inspect_embedded_subtitle", {
     input: { projectId, streamIndex, languageCode },
-  });
+  }), streamIndex, languageCode);
 }
 
 export async function importEmbeddedSubtitle(

@@ -71,6 +71,8 @@ fn committed_schemas_match_rust() {
     check_schema("library-rebuild-result", &serialized_schema::<crate::library::LibraryRootRebuildResult>());
     check_schema("library-home", &serialized_schema::<crate::library::LibraryHome>());
     check_schema("library-section-page", &serialized_schema::<crate::library::LibrarySectionPage>());
+    check_schema("subtitle-import-preview", &serialized_schema::<crate::subtitles::SubtitleImportPreview>());
+    check_schema("embedded-subtitle-preview", &serialized_schema::<crate::subtitles::EmbeddedSubtitlePreview>());
     check_schema("project", &serialized_schema::<crate::domain::Project>());
     check_schema("media-preparation-result", &serialized_schema::<crate::media::MediaPreparation>());
     check_schema("delete-project-result", &serialized_schema::<crate::domain::DeleteProjectResult>());

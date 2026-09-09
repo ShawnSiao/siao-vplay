@@ -6,7 +6,6 @@ export interface PromptSelection {
 export type { ExplanationFrame, ExplanationTask, ExplanationMaterialSummary } from "./generated/explanation-task";
 export type { Explanation, ExplanationEntry } from "./generated/explanation";
 export type { ExplanationApplication } from "./generated/explanation-application";
-import type { SubtitlePreflightReport } from "./generated/subtitle-version";
 export type { SubtitleIssueSeverity, SubtitleIssueCode, SubtitlePreflightIssue, SubtitlePreflightReport, SubtitleWord, SubtitleSegment, SubtitleVersion } from "./generated/subtitle-version";
 import type {
   LibraryItemAvailability,
@@ -385,23 +384,8 @@ export type SubtitleCue = {
   confidence: number | null;
 };
 
-export type SubtitleImportPreview = {
-  format: SubtitleFileFormat;
-  sourceLabel: string;
-  sourceSha256: string;
-  languageCode: string;
-  expectedProjectRevision: number;
-  expectedMediaSha256: string;
-  cues: SubtitleCue[];
-  preflight: SubtitlePreflightReport;
-  canImport: boolean;
-};
-
-export type EmbeddedSubtitlePreview = SubtitleImportPreview & {
-  streamIndex: number;
-  codecName: string;
-  embeddedLanguage: string | null;
-};
+export type { SubtitleImportPreview } from "./generated/subtitle-import-preview";
+export type { EmbeddedSubtitlePreview } from "./generated/embedded-subtitle-preview";
 
 export type SubtitleSegmentEdit = {
   segmentId: string;
