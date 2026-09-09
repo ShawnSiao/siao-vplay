@@ -159,6 +159,7 @@ pub struct ReceiptFile {
 }
 
 struct LocalResourceManager {
+    storage: Option<crate::storage::StorageManager>,
     config_path: PathBuf,
     configuration: Option<LocalResourceConfiguration>,
 }
@@ -178,7 +179,16 @@ struct LegacyRuntimeSettings {
 static MANAGER: OnceLock<RwLock<LocalResourceManager>> = OnceLock::new();
 static CATALOG: OnceLock<Result<LocalResourceCatalog, String>> = OnceLock::new();
 
+#[cfg(test)]
 pub fn initialize(data_directory: &Path) -> Result<(), LocalResourceError> {
+    initialize_store(data_directory, None)
+}
+
+pub fn initialize_managed(data_directory: &Path, storage: crate::storage::StorageManager) -> Result<(), LocalResourceError> {
+    initialize_store(data_directory, Some(storage))
+}
+
+fn initialize_store(data_directory: &Path, storage: Option<crate::storage::StorageManager>) -> Result<(), LocalResourceError> {
     validate_catalog(catalog()?)?;
     let manager = LocalResourceManager::load(data_directory)?;
     let state = MANAGER.get_or_init(|| RwLock::new(manager));
@@ -186,6 +196,7 @@ pub fn initialize(data_directory: &Path) -> Result<(), LocalResourceError> {
         .write()
         .map_err(|_| io::Error::other("本地资源设置锁不可用"))?;
     *state = LocalResourceManager::load(data_directory)?;
+    state.storage = storage;
     Ok(())
 }
 
@@ -384,10 +395,7 @@ fn with_manager_write<T>(
     let mut state = state
         .write()
         .map_err(|_| io::Error::other("本地资源设置锁不可用"))?;
-    if recover_transactions(&state.config_path)? {
-        state.configuration = persistence::load_configuration(&state.config_path)?;
-    }
-    operation(&mut state)
+    state.mutate(operation)
 }
 
 fn recover_transactions(config: &Path) -> Result<bool, LocalResourceError> {
@@ -424,6 +432,7 @@ impl LocalResourceManager {
             persist_json(&config_path, configuration)?;
         }
         Ok(Self {
+            storage: None,
             config_path,
             configuration,
         })
@@ -1695,3 +1704,7 @@ mod tests {
         assert!(safe_relative_path("../outside.exe", "fixture").is_err());
     }
 }
+
+mod mutation;
+#[cfg(test)]
+mod migration_guard_tests;
