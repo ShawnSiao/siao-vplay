@@ -6,6 +6,7 @@ import { listSummaryActivity, type SummaryActivity } from "./activityGateway";
 export function useSummaryCompletionNotice(onNotice: (message: ToastNotice) => void) {
   const [activities, setActivities] = useState<SummaryActivity[]>([]);
   const [error, setError] = useState(false);
+  const [incomplete, setIncomplete] = useState(false);
   const onNoticeRef = useRef(onNotice);
   useEffect(() => { onNoticeRef.current = onNotice; }, [onNotice]);
   useEffect(() => {
@@ -13,14 +14,15 @@ export function useSummaryCompletionNotice(onNotice: (message: ToastNotice) => v
     let active = true;
     let polling = false;
     let initialized = false;
-    let seen = new Map<string, string>();
+    const seen = new Map<string, string>();
     const poll = async () => {
       if (polling) return;
       polling = true;
       try {
-        const tasks = await listSummaryActivity();
+        const snapshot = await listSummaryActivity();
+        const tasks = snapshot.activities;
         if (!active) return;
-        const fresh = tasks.filter((task) => seen.get(task.id) !== task.status &&
+        const fresh = tasks.filter((task) => seen.get(task.id) !== `${task.status}:${task.hasResult}` &&
           ((task.status === "completed" && task.hasResult) || task.status === "failed" || task.status === "interrupted"));
         if (initialized && fresh.length) {
           const failures = fresh.some((task) => task.status !== "completed");
@@ -30,9 +32,16 @@ export function useSummaryCompletionNotice(onNotice: (message: ToastNotice) => v
             tone: failures ? "warning" : "success",
           });
         }
-        seen = new Map(tasks.map((task) => [task.id, task.status]));
+        // Keep notification history across rejected rows, bounded to the activity window.
+        if (!snapshot.incomplete) seen.clear();
+        for (const task of tasks) {
+          seen.delete(task.id);
+          seen.set(task.id, `${task.status}:${task.hasResult}`);
+        }
+        while (seen.size > 100) seen.delete(seen.keys().next().value!);
         initialized = true;
         setActivities(tasks);
+        setIncomplete(snapshot.incomplete);
         setError(false);
       } catch { if (active) setError(true); }
       finally { polling = false; }
@@ -41,5 +50,5 @@ export function useSummaryCompletionNotice(onNotice: (message: ToastNotice) => v
     const timer = window.setInterval(() => { void poll(); }, 2000);
     return () => { active = false; window.clearInterval(timer); };
   }, []);
-  return { activities, error };
+  return { activities, error, incomplete };
 }

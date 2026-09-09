@@ -1,0 +1,53 @@
+{
+  "$defs": {
+    "TaskStatus": {
+      "enum": [
+        "prepared",
+        "awaiting_external_result",
+        "queued",
+        "running",
+        "paused",
+        "validating",
+        "completed",
+        "failed",
+        "cancelled",
+        "interrupted"
+      ],
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "hasResult": {
+      "type": "boolean"
+    },
+    "id": {
+      "type": "string"
+    },
+    "projectId": {
+      "type": "string"
+    },
+    "projectTitle": {
+      "type": "string"
+    },
+    "status": {
+      "$ref": "#/$defs/TaskStatus"
+    },
+    "updatedAtMs": {
+      "format": "int64",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "id",
+    "projectId",
+    "projectTitle",
+    "status",
+    "updatedAtMs",
+    "hasResult"
+  ],
+  "title": "SummaryActivity",
+  "type": "object"
+}

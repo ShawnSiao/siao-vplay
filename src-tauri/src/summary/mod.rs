@@ -1,6 +1,8 @@
 #[cfg(test)]
 mod wire_schema;
 mod activity;
+#[cfg(test)]
+pub(crate) use activity::SummaryActivity;
 pub mod commands;
 
 mod backup;

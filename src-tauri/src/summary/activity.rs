@@ -4,11 +4,14 @@ use serde::Serialize;
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct SummaryActivity {
     id: String,
     project_id: String,
     project_title: String,
+    #[cfg_attr(test, schemars(with = "super::wire_schema::TaskStatus"))]
     status: String,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_i64)))]
     updated_at_ms: i64,
     has_result: bool,
 }
@@ -19,7 +22,10 @@ pub fn list(store: &ProjectStore) -> Result<Vec<SummaryActivity>, StoreError> {
 fn list_on(connection: &Connection) -> Result<Vec<SummaryActivity>, StoreError> {
     let mut query = connection.prepare(
         "SELECT t.id, t.project_id, p.title, t.status, t.updated_at_ms,
-                t.output_summary_id IS NOT NULL
+                t.status = 'completed' AND EXISTS (
+                    SELECT 1 FROM video_summaries s WHERE s.id = t.output_summary_id
+                    AND s.task_id = t.id AND s.project_id = t.project_id
+                )
          FROM summary_tasks t JOIN projects p ON p.id = t.project_id
          ORDER BY t.updated_at_ms DESC, t.id DESC LIMIT 100",
     )?;
@@ -44,6 +50,7 @@ mod tests {
         let connection = Connection::open_in_memory().unwrap();
         connection.execute_batch("CREATE TABLE projects(id TEXT, title TEXT);
             CREATE TABLE summary_tasks(id TEXT, project_id TEXT, status TEXT, updated_at_ms INTEGER, output_summary_id TEXT, error_message TEXT);
+            CREATE TABLE video_summaries(id TEXT, task_id TEXT, project_id TEXT);
             INSERT INTO projects VALUES('a','视频 A'),('b','视频 B');").unwrap();
         for n in 0..110 {
             connection.execute("INSERT INTO summary_tasks VALUES(?1, ?2, ?3, ?4, NULL, 'private subtitle material')",
@@ -66,4 +73,21 @@ mod tests {
         let store = ProjectStore::open(directory.path().join("projects.sqlite3")).unwrap();
         assert!(list(&store).unwrap().is_empty());
     }
+    #[test]
+    fn result_flag_requires_a_matching_saved_summary() {
+        let connection = Connection::open_in_memory().unwrap();
+        connection.execute_batch("CREATE TABLE projects(id TEXT, title TEXT);
+            CREATE TABLE summary_tasks(id TEXT, project_id TEXT, status TEXT, updated_at_ms INTEGER, output_summary_id TEXT);
+            CREATE TABLE video_summaries(id TEXT, task_id TEXT, project_id TEXT);
+            INSERT INTO projects VALUES('project','视频');
+            INSERT INTO summary_tasks VALUES('task','project','completed',1,'missing');
+            INSERT INTO video_summaries VALUES('wrong-project','task','other'),('wrong-task','other','project'),('valid','task','project');").unwrap();
+        for output in ["missing", "wrong-project", "wrong-task", "valid"] {
+            connection.execute("UPDATE summary_tasks SET output_summary_id=?1", [output]).unwrap();
+            assert_eq!(list_on(&connection).unwrap()[0].has_result, output == "valid", "{output}");
+        }
+        connection.execute("UPDATE summary_tasks SET status='running'", []).unwrap();
+        assert!(!list_on(&connection).unwrap()[0].has_result);
+    }
+
 }
