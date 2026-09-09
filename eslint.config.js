@@ -7,6 +7,17 @@ import tseslint from "typescript-eslint";
 
 export default tseslint.config(
   {
+    files: ["src/features/library/useLibrarySearch.ts"],
+    rules: {
+      "no-restricted-imports": ["error", {
+        patterns: [{
+          group: ["**/useLibraryController", "**/useLibraryController.*", "**/components/**", "**/desktop", "**/desktop.*", "@tauri-apps/**"],
+          message: "Search lifecycle publishes narrow result actions; parent controller, UI and transport are outside its boundary."
+        }]
+      }]
+    }
+  },
+  {
     ignores: ["dist", "coverage", "src-tauri/target"],
   },
   {

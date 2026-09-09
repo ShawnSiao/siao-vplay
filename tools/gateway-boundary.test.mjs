@@ -2,6 +2,12 @@ import { ESLint } from "eslint";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 const eslint = new ESLint();
+test("library search lifecycle cannot import its parent controller, UI or transport", async () => {
+  for (const source of ["./useLibraryController", "../../components/LibraryScreen", "../../lib/desktop", "@tauri-apps/api/core"]) {
+    const [result] = await eslint.lintText(`import type { Value } from "${source}"; export type X = Value;`, { filePath: "src/features/library/useLibrarySearch.ts" });
+    assert.ok(result.messages.some(message => message.ruleId === "no-restricted-imports"), source);
+  }
+});
 test("IPC boundary rejects UI and facade dependencies", async () => {
   for (const source of ["../features/subtitle-revision/subtitleMetadata", "../components/Player", "./desktop", "react"]) {
     const [result] = await eslint.lintText(`import type { Value } from "${source}"; export type Test = Value;`, { filePath: "src/lib/testGateway.ts" });

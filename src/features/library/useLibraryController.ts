@@ -1,3 +1,4 @@
+import { useLibrarySearch, type LibrarySearchAction } from "./useLibrarySearch";
 import { useLibraryCollectionPaging, type CollectionReadAction } from "./useLibraryCollectionPaging";
 import { useLibraryWatchActions, type WatchAction } from "./useLibraryWatchActions";
 import { applyWatchedProject } from "./applyWatchedProject";
@@ -41,7 +42,6 @@ import {
   removeProjectFromCollection,
   revokeLibraryRoot,
   scanLibraryFolder,
-  searchLibrary,
   toCollectionSummary,
   updateCollection,
 } from "./libraryGateway";
@@ -163,8 +163,7 @@ type LibraryAction =
   | CollectionReadAction
   | { type: "close_collection" }
   | { type: "set_search_query"; query: string }
-  | { type: "search_started" }
-  | { type: "search_loaded"; results: LibrarySearchResult[] }
+  | LibrarySearchAction
   | { type: "mutation_started" }
   | { type: "mutation_finished" }
   | { type: "upsert_collection"; collection: LibraryCollection }
@@ -712,7 +711,6 @@ export function useLibraryController() {
   const [state, dispatch] = useReducer(libraryReducer, initialState());
   const homeRequestSequence = useRef(0);
   const collectionRequestSequence = useRef(0);
-  const searchRequestSequence = useRef(0);
   const scanRequestSequence = useRef(0);
   const recoveryRequestSequence = useRef(0);
   const activeScanIdRef = useRef<string | null>(null);
@@ -766,30 +764,7 @@ export function useLibraryController() {
     dispatch,
   );
 
-  useEffect(() => {
-    const query = state.searchQuery.trim();
-    const sequence = searchRequestSequence.current + 1;
-    searchRequestSequence.current = sequence;
-    if (!query) {
-      dispatch({ type: "search_loaded", results: [] });
-      return undefined;
-    }
-    dispatch({ type: "search_started" });
-    const timer = window.setTimeout(() => {
-      void searchLibrary(query)
-        .then((results) => {
-          if (searchRequestSequence.current === sequence) {
-            dispatch({ type: "search_loaded", results });
-          }
-        })
-        .catch((error: unknown) => {
-          if (searchRequestSequence.current === sequence) {
-            dispatch({ type: "failed", message: commandError(error).message });
-          }
-        });
-    }, 180);
-    return () => window.clearTimeout(timer);
-  }, [state.searchQuery]);
+  useLibrarySearch(state.searchQuery, dispatch);
 
   const { loadCollection, collectionPagination } = useLibraryCollectionPaging(state, dispatch, collectionRequestSequence);
 
