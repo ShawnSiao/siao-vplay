@@ -24,6 +24,7 @@ mod scanner;
 mod section_model;
 mod section_repository;
 mod section_service;
+mod section_snapshot;
 mod service;
 mod home_service;
 mod home_model;

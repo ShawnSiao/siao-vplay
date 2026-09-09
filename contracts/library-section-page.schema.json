@@ -9,6 +9,14 @@
       ],
       "type": "string"
     },
+    "LibraryMediaSection": {
+      "enum": [
+        "continue_watching",
+        "watch_later",
+        "unclassified"
+      ],
+      "type": "string"
+    },
     "MediaSummary": {
       "properties": {
         "absoluteOrder": {
@@ -161,6 +169,7 @@
       "items": {
         "$ref": "#/$defs/MediaSummary"
       },
+      "maxItems": 24,
       "type": "array"
     },
     "nextOffset": {
@@ -172,6 +181,19 @@
         "null"
       ]
     },
+    "offset": {
+      "format": "int64",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "section": {
+      "$ref": "#/$defs/LibraryMediaSection"
+    },
+    "snapshotToken": {
+      "pattern": "^[a-f0-9]{64}$",
+      "type": "string"
+    },
     "totalCount": {
       "format": "int64",
       "maximum": 9007199254740991,
@@ -180,6 +202,9 @@
     }
   },
   "required": [
+    "section",
+    "offset",
+    "snapshotToken",
     "items",
     "totalCount",
     "nextOffset"

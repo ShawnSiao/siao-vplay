@@ -95,11 +95,12 @@ export async function getLibraryHome(): Promise<LibraryHome> {
 export async function listLibrarySection(
   section: LibraryMediaSection,
   offset: number,
+  expectedSnapshotToken?: string,
 ): Promise<LibrarySectionPage> {
   if (!isDesktopApp) {
-    return { items: [], totalCount: 0, nextOffset: null };
+    return { items: [], totalCount: 0, nextOffset: null, section, offset, snapshotToken: "0".repeat(64) };
   }
-  const input: ListLibrarySectionInput = { section, offset };
+  const input: ListLibrarySectionInput = { section, offset, expectedSnapshotToken };
   return readLibrarySection(input);
 }
 

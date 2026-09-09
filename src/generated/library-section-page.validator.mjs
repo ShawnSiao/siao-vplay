@@ -2,7 +2,8 @@
 "use strict";
 export const validate = validate20;
 export default validate20;
-const schema31 = {"$defs":{"ItemAvailability":{"enum":["available","missing","root_offline","changed"],"type":"string"},"MediaSummary":{"properties":{"absoluteOrder":{"maximum":9007199254740991,"minimum":0,"type":["integer","null"]},"chineseTranslationAvailable":{"type":"boolean"},"collectionId":{"type":["string","null"]},"collectionTitle":{"type":["string","null"]},"completedAtMs":{"maximum":9007199254740991,"minimum":0,"type":["integer","null"]},"createdAtMs":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"displayName":{"type":"string"},"durationMs":{"maximum":9007199254740991,"minimum":0,"type":["integer","null"]},"episodeNumber":{"maximum":9007199254740991,"minimum":0,"type":["integer","null"]},"episodeTitle":{"type":["string","null"]},"itemAvailability":{"anyOf":[{"$ref":"#/$defs/ItemAvailability"},{"type":"null"}]},"lastOpenedAtMs":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"mediaAvailable":{"type":"boolean"},"mediaLocator":{"type":"string"},"originalSubtitleAvailable":{"type":"boolean"},"positionMs":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"posterPath":{"type":["string","null"]},"projectId":{"type":"string"},"projectTitle":{"type":"string"},"seasonNumber":{"maximum":9007199254740991,"minimum":0,"type":["integer","null"]}},"required":["projectId","projectTitle","displayName","mediaLocator","mediaAvailable","posterPath","positionMs","durationMs","completedAtMs","lastOpenedAtMs","createdAtMs","originalSubtitleAvailable","chineseTranslationAvailable","collectionId","collectionTitle","seasonNumber","episodeNumber","absoluteOrder","episodeTitle","itemAvailability"],"type":"object"}},"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"items":{"items":{"$ref":"#/$defs/MediaSummary"},"type":"array"},"nextOffset":{"maximum":9007199254740991,"minimum":0,"type":["integer","null"]},"totalCount":{"maximum":9007199254740991,"minimum":0,"type":"integer"}},"required":["items","totalCount","nextOffset"],"title":"LibrarySectionPage","type":"object"};
+const schema31 = {"$defs":{"ItemAvailability":{"enum":["available","missing","root_offline","changed"],"type":"string"},"LibraryMediaSection":{"enum":["continue_watching","watch_later","unclassified"],"type":"string"},"MediaSummary":{"properties":{"absoluteOrder":{"maximum":9007199254740991,"minimum":0,"type":["integer","null"]},"chineseTranslationAvailable":{"type":"boolean"},"collectionId":{"type":["string","null"]},"collectionTitle":{"type":["string","null"]},"completedAtMs":{"maximum":9007199254740991,"minimum":0,"type":["integer","null"]},"createdAtMs":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"displayName":{"type":"string"},"durationMs":{"maximum":9007199254740991,"minimum":0,"type":["integer","null"]},"episodeNumber":{"maximum":9007199254740991,"minimum":0,"type":["integer","null"]},"episodeTitle":{"type":["string","null"]},"itemAvailability":{"anyOf":[{"$ref":"#/$defs/ItemAvailability"},{"type":"null"}]},"lastOpenedAtMs":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"mediaAvailable":{"type":"boolean"},"mediaLocator":{"type":"string"},"originalSubtitleAvailable":{"type":"boolean"},"positionMs":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"posterPath":{"type":["string","null"]},"projectId":{"type":"string"},"projectTitle":{"type":"string"},"seasonNumber":{"maximum":9007199254740991,"minimum":0,"type":["integer","null"]}},"required":["projectId","projectTitle","displayName","mediaLocator","mediaAvailable","posterPath","positionMs","durationMs","completedAtMs","lastOpenedAtMs","createdAtMs","originalSubtitleAvailable","chineseTranslationAvailable","collectionId","collectionTitle","seasonNumber","episodeNumber","absoluteOrder","episodeTitle","itemAvailability"],"type":"object"}},"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"items":{"items":{"$ref":"#/$defs/MediaSummary"},"maxItems":24,"type":"array"},"nextOffset":{"maximum":9007199254740991,"minimum":0,"type":["integer","null"]},"offset":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"section":{"$ref":"#/$defs/LibraryMediaSection"},"snapshotToken":{"pattern":"^[a-f0-9]{64}$","type":"string"},"totalCount":{"maximum":9007199254740991,"minimum":0,"type":"integer"}},"required":["section","offset","snapshotToken","items","totalCount","nextOffset"],"title":"LibrarySectionPage","type":"object"};
+const schema34 = {"enum":["continue_watching","watch_later","unclassified"],"type":"string"};
 const schema32 = {"properties":{"absoluteOrder":{"maximum":9007199254740991,"minimum":0,"type":["integer","null"]},"chineseTranslationAvailable":{"type":"boolean"},"collectionId":{"type":["string","null"]},"collectionTitle":{"type":["string","null"]},"completedAtMs":{"maximum":9007199254740991,"minimum":0,"type":["integer","null"]},"createdAtMs":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"displayName":{"type":"string"},"durationMs":{"maximum":9007199254740991,"minimum":0,"type":["integer","null"]},"episodeNumber":{"maximum":9007199254740991,"minimum":0,"type":["integer","null"]},"episodeTitle":{"type":["string","null"]},"itemAvailability":{"anyOf":[{"$ref":"#/$defs/ItemAvailability"},{"type":"null"}]},"lastOpenedAtMs":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"mediaAvailable":{"type":"boolean"},"mediaLocator":{"type":"string"},"originalSubtitleAvailable":{"type":"boolean"},"positionMs":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"posterPath":{"type":["string","null"]},"projectId":{"type":"string"},"projectTitle":{"type":"string"},"seasonNumber":{"maximum":9007199254740991,"minimum":0,"type":["integer","null"]}},"required":["projectId","projectTitle","displayName","mediaLocator","mediaAvailable","posterPath","positionMs","durationMs","completedAtMs","lastOpenedAtMs","createdAtMs","originalSubtitleAvailable","chineseTranslationAvailable","collectionId","collectionTitle","seasonNumber","episodeNumber","absoluteOrder","episodeTitle","itemAvailability"],"type":"object"};
 const schema33 = {"enum":["available","missing","root_offline","changed"],"type":"string"};
 
@@ -476,6 +477,7 @@ return errors === 0;
 }
 validate21.evaluated = {"props":{"absoluteOrder":true,"chineseTranslationAvailable":true,"collectionId":true,"collectionTitle":true,"completedAtMs":true,"createdAtMs":true,"displayName":true,"durationMs":true,"episodeNumber":true,"episodeTitle":true,"itemAvailability":true,"lastOpenedAtMs":true,"mediaAvailable":true,"mediaLocator":true,"originalSubtitleAvailable":true,"positionMs":true,"posterPath":true,"projectId":true,"projectTitle":true,"seasonNumber":true},"dynamicProps":false,"dynamicItems":false};
 
+const pattern4 = new RegExp("^[a-f0-9]{64}$", "u");
 
 function validate20(data, {instancePath="", parentData, parentDataProperty, rootData=data, dynamicAnchors={}}={}){
 let vErrors = null;
@@ -490,7 +492,7 @@ evaluated0.items = undefined;
 if(errors === 0){
 if(data && typeof data == "object" && !Array.isArray(data)){
 let missing0;
-if((((data.items === undefined) && (missing0 = "items")) || ((data.totalCount === undefined) && (missing0 = "totalCount"))) || ((data.nextOffset === undefined) && (missing0 = "nextOffset"))){
+if(((((((data.section === undefined) && (missing0 = "section")) || ((data.offset === undefined) && (missing0 = "offset"))) || ((data.snapshotToken === undefined) && (missing0 = "snapshotToken"))) || ((data.items === undefined) && (missing0 = "items"))) || ((data.totalCount === undefined) && (missing0 = "totalCount"))) || ((data.nextOffset === undefined) && (missing0 = "nextOffset"))){
 validate20.errors = [{instancePath,schemaPath:"#/required",keyword:"required",params:{missingProperty: missing0},message:"must have required property '"+missing0+"'"}];
 return false;
 }
@@ -500,6 +502,11 @@ let data0 = data.items;
 const _errs1 = errors;
 if(errors === _errs1){
 if(Array.isArray(data0)){
+if(data0.length > 24){
+validate20.errors = [{instancePath:instancePath+"/items",schemaPath:"#/properties/items/maxItems",keyword:"maxItems",params:{limit: 24},message:"must NOT have more than 24 items"}];
+return false;
+}
+else {
 var valid1 = true;
 const len0 = data0.length;
 for(let i0=0; i0<len0; i0++){
@@ -511,6 +518,7 @@ errors = vErrors.length;
 var valid1 = _errs3 === errors;
 if(!valid1){
 break;
+}
 }
 }
 }
@@ -552,22 +560,22 @@ else {
 var valid0 = true;
 }
 if(valid0){
-if(data.totalCount !== undefined){
-let data3 = data.totalCount;
+if(data.offset !== undefined){
+let data3 = data.offset;
 const _errs6 = errors;
 if(!(((typeof data3 == "number") && (!(data3 % 1) && !isNaN(data3))) && (isFinite(data3)))){
-validate20.errors = [{instancePath:instancePath+"/totalCount",schemaPath:"#/properties/totalCount/type",keyword:"type",params:{type: "integer"},message:"must be integer"}];
+validate20.errors = [{instancePath:instancePath+"/offset",schemaPath:"#/properties/offset/type",keyword:"type",params:{type: "integer"},message:"must be integer"}];
 return false;
 }
 if(errors === _errs6){
 if((typeof data3 == "number") && (isFinite(data3))){
 if(data3 > 9007199254740991 || isNaN(data3)){
-validate20.errors = [{instancePath:instancePath+"/totalCount",schemaPath:"#/properties/totalCount/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"}];
+validate20.errors = [{instancePath:instancePath+"/offset",schemaPath:"#/properties/offset/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"}];
 return false;
 }
 else {
 if(data3 < 0 || isNaN(data3)){
-validate20.errors = [{instancePath:instancePath+"/totalCount",schemaPath:"#/properties/totalCount/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"}];
+validate20.errors = [{instancePath:instancePath+"/offset",schemaPath:"#/properties/offset/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"}];
 return false;
 }
 }
@@ -577,6 +585,74 @@ var valid0 = _errs6 === errors;
 }
 else {
 var valid0 = true;
+}
+if(valid0){
+if(data.section !== undefined){
+let data4 = data.section;
+const _errs8 = errors;
+if(typeof data4 !== "string"){
+validate20.errors = [{instancePath:instancePath+"/section",schemaPath:"#/$defs/LibraryMediaSection/type",keyword:"type",params:{type: "string"},message:"must be string"}];
+return false;
+}
+if(!(((data4 === "continue_watching") || (data4 === "watch_later")) || (data4 === "unclassified"))){
+validate20.errors = [{instancePath:instancePath+"/section",schemaPath:"#/$defs/LibraryMediaSection/enum",keyword:"enum",params:{allowedValues: schema34.enum},message:"must be equal to one of the allowed values"}];
+return false;
+}
+var valid0 = _errs8 === errors;
+}
+else {
+var valid0 = true;
+}
+if(valid0){
+if(data.snapshotToken !== undefined){
+let data5 = data.snapshotToken;
+const _errs11 = errors;
+if(errors === _errs11){
+if(typeof data5 === "string"){
+if(!pattern4.test(data5)){
+validate20.errors = [{instancePath:instancePath+"/snapshotToken",schemaPath:"#/properties/snapshotToken/pattern",keyword:"pattern",params:{pattern: "^[a-f0-9]{64}$"},message:"must match pattern \""+"^[a-f0-9]{64}$"+"\""}];
+return false;
+}
+}
+else {
+validate20.errors = [{instancePath:instancePath+"/snapshotToken",schemaPath:"#/properties/snapshotToken/type",keyword:"type",params:{type: "string"},message:"must be string"}];
+return false;
+}
+}
+var valid0 = _errs11 === errors;
+}
+else {
+var valid0 = true;
+}
+if(valid0){
+if(data.totalCount !== undefined){
+let data6 = data.totalCount;
+const _errs13 = errors;
+if(!(((typeof data6 == "number") && (!(data6 % 1) && !isNaN(data6))) && (isFinite(data6)))){
+validate20.errors = [{instancePath:instancePath+"/totalCount",schemaPath:"#/properties/totalCount/type",keyword:"type",params:{type: "integer"},message:"must be integer"}];
+return false;
+}
+if(errors === _errs13){
+if((typeof data6 == "number") && (isFinite(data6))){
+if(data6 > 9007199254740991 || isNaN(data6)){
+validate20.errors = [{instancePath:instancePath+"/totalCount",schemaPath:"#/properties/totalCount/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"}];
+return false;
+}
+else {
+if(data6 < 0 || isNaN(data6)){
+validate20.errors = [{instancePath:instancePath+"/totalCount",schemaPath:"#/properties/totalCount/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"}];
+return false;
+}
+}
+}
+}
+var valid0 = _errs13 === errors;
+}
+else {
+var valid0 = true;
+}
+}
+}
 }
 }
 }
@@ -590,4 +666,4 @@ return false;
 validate20.errors = vErrors;
 return errors === 0;
 }
-validate20.evaluated = {"props":{"items":true,"nextOffset":true,"totalCount":true},"dynamicProps":false,"dynamicItems":false};
+validate20.evaluated = {"props":{"items":true,"nextOffset":true,"offset":true,"section":true,"snapshotToken":true,"totalCount":true},"dynamicProps":false,"dynamicItems":false};

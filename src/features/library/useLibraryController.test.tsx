@@ -82,18 +82,18 @@ afterEach(() => {
 });
 
 describe("useLibraryController", () => {
-  it("restores a valid section and appends paged media without duplicates", async () => {
+  it("restores a valid section and appends snapshot-bound pages", async () => {
     window.localStorage.setItem("siaovplay-library-section", "watch_later");
     gatewayMocks.getLibraryHome.mockResolvedValue(libraryHome(0));
     gatewayMocks.listLibrarySection
       .mockResolvedValueOnce({
         items: [mediaSummary("first")],
-        totalCount: 2,
+        snapshotToken: "snapshot", totalCount: 2,
         nextOffset: 1,
       })
       .mockResolvedValueOnce({
-        items: [mediaSummary("first"), mediaSummary("second")],
-        totalCount: 2,
+        items: [mediaSummary("second")],
+        snapshotToken: "snapshot", totalCount: 2,
         nextOffset: null,
       });
     const { result } = renderHook(() => useLibraryController());

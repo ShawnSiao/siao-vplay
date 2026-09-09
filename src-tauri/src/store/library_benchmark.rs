@@ -76,7 +76,7 @@ fn benchmark_library_summary_reads() {
             service
                 .list_section(ListLibrarySectionInput {
                     section: LibraryMediaSection::Unclassified,
-                    offset: 0,
+                    offset: 0, expected_snapshot_token: None,
                 })
                 .unwrap()
         });

@@ -15,6 +15,7 @@ export type LibrarySectionPageState = {
   items: LibraryMediaSummary[];
   totalCount: number;
   nextOffset: number | null;
+  snapshotToken?: string;
   initialized: boolean;
   loading: boolean;
   loadingMore: boolean;
@@ -38,6 +39,7 @@ export type LibrarySectionAction =
       items: LibraryMediaSummary[];
       totalCount: number;
       nextOffset: number | null;
+      snapshotToken?: string;
       append: boolean;
     }
   | {
@@ -154,12 +156,14 @@ export function reduceSectionPages(
         },
       };
     case "section_page_loaded":
+      if (action.append && page.snapshotToken !== action.snapshotToken) return pages;
       return {
         ...pages,
         [action.section]: {
           items: action.append ? mergePageItems(page.items, action.items) : action.items,
           totalCount: action.totalCount,
           nextOffset: action.nextOffset,
+          snapshotToken: action.snapshotToken,
           initialized: true,
           loading: false,
           loadingMore: false,
@@ -185,6 +189,7 @@ export function reduceSectionPages(
         [action.section]: {
           ...page,
           items,
+          snapshotToken: undefined,
           totalCount: removed ? Math.max(0, page.totalCount - 1) : page.totalCount,
         },
       };
@@ -208,6 +213,7 @@ export function removeUnclassifiedProject(
       unclassified: {
         ...pages.unclassified,
         items: pages.unclassified.items.filter((item) => item.projectId !== projectId),
+        snapshotToken: undefined,
         totalCount: removed
           ? Math.max(0, pages.unclassified.totalCount - 1)
           : pages.unclassified.totalCount,

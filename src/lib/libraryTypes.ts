@@ -41,6 +41,7 @@ export type LibraryMediaSection =
 export type ListLibrarySectionInput = {
   section: LibraryMediaSection;
   offset: number;
+  expectedSnapshotToken?: string;
 };
 
 export type { LibrarySectionPage } from "../generated/library-section-page";

@@ -5,6 +5,7 @@ import {
   emptySectionPages,
   reduceSectionPages,
   removeUnclassifiedProject,
+  sectionsFromHome,
 } from "./librarySectionState";
 
 const media = {
@@ -24,6 +25,24 @@ const home = {
 } satisfies LibraryHome;
 
 describe("librarySectionState", () => {
+  it("invalidates a pending page when membership is removed locally", () => {
+    const pages = emptySectionPages();
+    pages.unclassified = { ...pages.unclassified, items: [media], totalCount: 2, snapshotToken: "old", initialized: true };
+    const removed = removeUnclassifiedProject(home, pages, media.projectId).pages;
+    const action = { type: "section_page_loaded" as const, section: "unclassified" as const,
+      items: [{ ...media, projectId: "stale" }], totalCount: 2, nextOffset: null, append: true, snapshotToken: "old" };
+    expect(reduceSectionPages(removed, action).unclassified.items).toEqual([]);
+    const generic = reduceSectionPages(pages, { type: "section_page_remove", section: "unclassified", projectId: media.projectId });
+    expect(reduceSectionPages(generic, action).unclassified.items).toEqual([]);
+  });
+  it("does not append a stale response after a home refresh replaces its snapshot", () => {
+    const pages = emptySectionPages();
+    pages.unclassified = { ...pages.unclassified, items: [media], snapshotToken: "old", initialized: true };
+    const refreshed = sectionsFromHome(pages, home);
+    const next = reduceSectionPages(refreshed, { type: "section_page_loaded", section: "unclassified",
+      items: [{ ...media, projectId: "stale" }], totalCount: 2, nextOffset: null, append: true, snapshotToken: "old" });
+    expect(next.unclassified.items).toEqual([media]);
+  });
   it("removes a successful classification from the unclassified page and count", () => {
     const pages = emptySectionPages();
     pages.unclassified = {

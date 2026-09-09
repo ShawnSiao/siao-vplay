@@ -1,10 +1,17 @@
 /* Generated from Rust IPC schema. Run npm run contracts:generate. */
 
 export type ItemAvailability = "available" | "missing" | "root_offline" | "changed";
+export type LibraryMediaSection = "continue_watching" | "watch_later" | "unclassified";
 
 export interface LibrarySectionPage {
+  /**
+   * @maxItems 24
+   */
   items: MediaSummary[];
   nextOffset: number | null;
+  offset: number;
+  section: LibraryMediaSection;
+  snapshotToken: string;
   totalCount: number;
   [k: string]: unknown;
 }

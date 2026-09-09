@@ -31,20 +31,29 @@ export function useLibrarySectionPaging(
   const loadSectionPage = useCallback(
     async (mediaSection: LibraryMediaSection, offset = 0) => {
       if (offset > 0 && activeRequests.current[mediaSection] !== undefined) return null;
+      const base = pages[mediaSection];
+      // Home previews are not continuation snapshots. Establish a full first page
+      // before using a cursor derived from a preview or refreshed home response.
+      if (offset > 0 && !base.snapshotToken) offset = 0;
       const sequence = requestSequences.current[mediaSection] + 1;
       requestSequences.current[mediaSection] = sequence;
       activeRequests.current[mediaSection] = sequence;
       const append = offset > 0;
       dispatch({ type: "section_page_started", section: mediaSection, append });
       try {
-        const page = await listLibrarySection(mediaSection, offset);
+        const page = await listLibrarySection(mediaSection, offset, append ? base.snapshotToken : undefined);
         if (requestSequences.current[mediaSection] === sequence) {
+          if (append && (page.snapshotToken !== base.snapshotToken || page.totalCount !== base.totalCount
+            || page.items.some(item => base.items.some(existing => existing.projectId === item.projectId)))) {
+            throw new Error("媒体列表已变化，请重新加载");
+          }
           dispatch({
             type: "section_page_loaded",
             section: mediaSection,
             items: page.items,
             totalCount: page.totalCount,
             nextOffset: page.nextOffset,
+            snapshotToken: page.snapshotToken,
             append,
           });
         }
@@ -62,7 +71,7 @@ export function useLibrarySectionPaging(
         if (activeRequests.current[mediaSection] === sequence) delete activeRequests.current[mediaSection];
       }
     },
-    [dispatch],
+    [dispatch, pages],
   );
 
   useEffect(() => {
