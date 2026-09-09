@@ -29,9 +29,19 @@ export function useExternalAgentResults({ enabled, reconcile, acknowledge, onUpd
         if (live.current && updates.length) {
           const identity = lifetime.current;
           const isActive = () => live.current && lifetime.current === identity;
-          await handler.current(updates, isActive);
-          if (isActive()) await acknowledge(updates);
-          if (isActive()) pending.current = null;
+          for (const update of updates) {
+            if (!isActive()) break;
+            try {
+              await handler.current([update], isActive);
+              if (isActive()) await acknowledge([update]);
+              if (isActive()) {
+                const remaining = pending.current?.filter(candidate => candidate !== update) ?? [];
+                pending.current = remaining.length ? remaining : null;
+              }
+            } catch {
+              // Retry only this item; independent results still get delivered and acknowledged.
+            }
+          }
         }
       } catch {
         // Keep at most one consumed batch until the active consumer succeeds.

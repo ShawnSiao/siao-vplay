@@ -137,3 +137,24 @@ it("does not discard delivery until acknowledgement succeeds", async () => {
     expect(reconcile).toHaveBeenCalledTimes(1);
   } finally { unmount(); vi.useRealTimers(); }
 });
+
+
+it.each(["consumer", "acknowledgement"])("delivers independent results despite a persistent %s failure", async (failure) => {
+  vi.useFakeTimers();
+  const independent = { ...updates[0], taskId: "independent", projectId: "other-video" };
+  const reconcile = vi.fn().mockResolvedValueOnce([...updates, independent]).mockResolvedValue([]);
+  const acknowledge = vi.fn(async (batch: ExternalAgentResultUpdate[]) => {
+    if (failure === "acknowledgement" && batch[0].taskId === "task") throw new Error("ack failed");
+  });
+  const handler = vi.fn(async (batch: ExternalAgentResultUpdate[]) => {
+    if (failure === "consumer" && batch.some(update => update.taskId === "task")) throw new Error("persistent read failure");
+  });
+  const { unmount } = renderHook(() => useExternalAgentResults({ enabled: true, reconcile, acknowledge, onUpdates: handler }));
+  try {
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    expect(acknowledge).toHaveBeenCalledWith([independent]);
+    await act(async () => { await vi.advanceTimersByTimeAsync(2_000); });
+    expect(acknowledge.mock.calls.filter(([batch]) => batch[0].taskId === "independent")).toHaveLength(1);
+    expect(handler.mock.calls.filter(([batch]) => batch[0].taskId === "task")).toHaveLength(3);
+  } finally { unmount(); vi.useRealTimers(); }
+});

@@ -25,3 +25,30 @@ test("App acknowledges an external completion only after delivery and retries a 
   await expect.poll(() => page.evaluate(() => (window as unknown as { delivered: boolean }).delivered)).toBe(true);
   expect(await page.evaluate(() => (window as unknown as { acknowledgements: number }).acknowledgements)).toBe(2);
 });
+
+
+test("one failed receipt does not block another completion in the App", async ({ page }) => {
+  await page.addInitScript(() => {
+    const state = window as unknown as { __TAURI_INTERNALS__: unknown; goodAcknowledged: boolean; badAttempts: number };
+    state.goodAcknowledged = false;
+    state.badAttempts = 0;
+    state.__TAURI_INTERNALS__ = { invoke: async (command: string, args?: { updates?: { taskId: string }[] }) => {
+      if (command === "reconcile_external_agent_results") return ["bad", "good"].map(taskId => ({
+        taskKind: "translation", taskId, projectId: "other-project", status: "completed", outputId: taskId, message: "已导入",
+      }));
+      if (command === "acknowledge_external_agent_results") {
+        if (args?.updates?.some(update => update.taskId === "bad")) {
+          state.badAttempts++;
+          throw new Error("persistent isolated acknowledgement failure");
+        }
+        state.goodAcknowledged = args?.updates?.[0]?.taskId === "good";
+        return null;
+      }
+      throw new Error("测试环境未提供此服务");
+    } };
+  });
+  await page.goto("/");
+  await expect.poll(() => page.evaluate(() => (window as unknown as { goodAcknowledged: boolean }).goodAcknowledged)).toBe(true);
+  await expect.poll(() => page.evaluate(() => (window as unknown as { badAttempts: number }).badAttempts)).toBeGreaterThanOrEqual(2);
+  await expect(page.getByText("后台结果已准备好", { exact: true })).toBeVisible();
+});
