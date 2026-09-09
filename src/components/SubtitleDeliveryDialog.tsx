@@ -1,3 +1,4 @@
+import { useBurnPolling } from "../features/subtitle-delivery/useBurnPolling";
 import type { SubtitleVersionMetadata } from "../features/subtitle-revision/subtitleMetadata";
 import { useEffect, useMemo, useState } from "react";
 
@@ -70,8 +71,9 @@ export function SubtitleDeliveryDialog({
   const [exported, setExported] = useState<SubtitleExport | null>(null);
   const [job, setJob] = useState<SubtitleBurnJob | null>(null);
   const [recentJob, setRecentJob] = useState<SubtitleBurnJob | null>(null);
-  const activeJobId =
-    job && activeStatuses.has(job.status) ? job.id : undefined;
+  const [pollFailure, setPollFailure] = useState<{ jobId: string; projectId: string; message: string } | null>(null);
+  const jobError = error ?? (pollFailure?.jobId === job?.id && pollFailure?.projectId === project.id && job && activeStatuses.has(job.status)
+    ? pollFailure.message : null);
 
   useEffect(() => {
     let active = true;
@@ -100,29 +102,9 @@ export function SubtitleDeliveryDialog({
     };
   }, [project.id]);
 
-  useEffect(() => {
-    if (!activeJobId) {
-      return undefined;
-    }
-    let active = true;
-    const timer = window.setInterval(() => {
-      void getSubtitleBurnJob(activeJobId)
-        .then((nextJob) => {
-          if (!active) return;
-          setJob(nextJob);
-          setRecentJob(nextJob);
-        })
-        .catch((caught: unknown) => {
-          if (active) {
-            setError(commandError(caught).message);
-          }
-        });
-    }, 500);
-    return () => {
-      active = false;
-      window.clearInterval(timer);
-    };
-  }, [activeJobId]);
+  useBurnPolling({ projectId: project.id, task: job, read: getSubtitleBurnJob,
+    onTask: nextJob => { setJob(nextJob); setRecentJob(nextJob); setPollFailure(null); },
+    onError: caught => { if (job) setPollFailure({ jobId: job.id, projectId: project.id, message: commandError(caught).message }); } });
 
   const needsSource = mode === "original" || mode === "bilingual";
   const needsTranslation = mode === "translation" || mode === "bilingual";
@@ -303,10 +285,10 @@ export function SubtitleDeliveryDialog({
               <p>{job.errorMessage}</p>
             </div>
           ) : null}
-          {error ? (
+          {jobError ? (
             <div className="notice danger delivery-error">
               <strong>操作失败</strong>
-              <p>{error}</p>
+              <p>{jobError}</p>
             </div>
           ) : null}
         </div>
