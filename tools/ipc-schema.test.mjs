@@ -9,7 +9,7 @@ test("preserves nullable integer types while requiring numeric bounds", () => {
 });
 
 test("normalizes explicitly bounded unsigned wire integers", () => {
-  for (const format of ["uint32", "uint64"]) {
+  for (const format of ["uint32", "uint64", "uint"]) {
     assert.deepEqual(prepareRuntimeSchema({ type: "integer", format, minimum: 0, maximum: Number.MAX_SAFE_INTEGER }),
       { type: "integer", minimum: 0, maximum: Number.MAX_SAFE_INTEGER });
     assert.throws(() => prepareRuntimeSchema({ type: "integer", format, minimum: 0 }), /safe integer bounds/);

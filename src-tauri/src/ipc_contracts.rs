@@ -69,6 +69,19 @@ fn committed_schemas_match_rust() {
             authorization: AiMaterialAuthorization { subtitles: true, current_question: true, frames: false, service_revision: Some(7) } },
     ]);
     check_schema("ai-execution-request", &request);
+    use crate::ai::dispatch::{TaskDispatchPreview, DispatchSubtitle, DispatchFrame, DispatchPrompt};
+    let mut dispatch = serialized_schema::<TaskDispatchPreview>();
+    dispatch["examples"] = serde_json::json!([TaskDispatchPreview {
+        task_id: "task".into(), task_kind: crate::verified_task_files::TaskDomain::Explanation,
+        confirmation_sha256: "a".repeat(64), execution: AiExecutionTarget::Codex,
+        authorization: AiMaterialAuthorization { subtitles: true, current_question: true, frames: true, service_revision: None },
+        receiver: "OpenAI（经本机 Codex）".into(), endpoint: None, model: "Codex 默认模型".into(),
+        subtitles: vec![DispatchSubtitle { version_id: "version".into(), version_number: 1, role: "original".into(), language: "ja".into() }],
+        subtitle_count: 1, playback_cutoff_ms: 1000, selected_text: None,
+        prompt: Some(DispatchPrompt { template: "模板".into(), requirements: "".into(), one_time_requirements: "".into() }),
+        frames: vec![DispatchFrame { id: "frame".into(), timestamp_ms: 900, sha256: "b".repeat(64) }],
+    }]);
+    check_schema("task-dispatch-preview", &dispatch);
 }
 
 fn serialized_schema<T: schemars::JsonSchema>() -> serde_json::Value {

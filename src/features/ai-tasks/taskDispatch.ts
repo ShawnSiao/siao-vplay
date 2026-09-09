@@ -1,35 +1,25 @@
+import validateDispatch from "../../generated/task-dispatch-preview.validator.mjs";
+import type { TaskDispatchPreview } from "../../generated/task-dispatch-preview";
+import { aiExecutionRequest } from "../../lib/aiExecutionRequest";
 import { invoke } from "@tauri-apps/api/core";
 import type { ExplanationTask, LearningTask } from "../../types";
-import type { AiExecutionTarget, AiMaterialAuthorization } from "../environment-settings/types";
 import { resumeExplanationTask, resumeLearningTask } from "./gateway";
 import {
   startCodexExplanationTask, resumeCodexExplanationTask,
   startCodexLearningTask, resumeCodexLearningTask,
 } from "../../lib/desktop";
 
-export type TaskDispatchPreview = {
-  taskId: string;
-  taskKind: "explanation" | "learning";
-  confirmationSha256: string;
-  execution: AiExecutionTarget;
-  authorization: AiMaterialAuthorization;
-  receiver: string;
-  endpoint: string | null;
-  model: string;
-  subtitles: Array<{ versionId: string; versionNumber: number; role: string; language: string }>;
-  subtitleCount: number;
-  playbackCutoffMs: number;
-  selectedText: string | null;
-  prompt: { template: string; requirements: string; oneTimeRequirements: string } | null;
-  frames: Array<{ id: string; timestampMs: number; sha256: string }>;
-};
+export type { TaskDispatchPreview } from "../../generated/task-dispatch-preview";
 
 const hash = (value: unknown) => typeof value === "string" && /^[0-9a-f]{64}$/.test(value);
 const text = (value: unknown) => typeof value === "string" && value.length > 0;
 const time = (value: number) => Number.isSafeInteger(value) && value >= 0;
 
 export async function previewTaskDispatch(taskKind: TaskDispatchPreview["taskKind"], taskId: string) {
-  const value = await invoke<TaskDispatchPreview>("preview_ai_task_dispatch", { input: { taskKind, taskId } });
+  const value = await invoke<unknown>("preview_ai_task_dispatch", { input: { taskKind, taskId } });
+  if (!validateDispatch(value)) throw new Error("发送清单无效，请重新准备材料。");
+  try { aiExecutionRequest(value.execution, value.authorization); }
+  catch { throw new Error("发送清单无效，请重新准备材料。"); }
   if (!value || value.taskId !== taskId || value.taskKind !== taskKind || !hash(value.confirmationSha256) ||
       !value.execution || !["api", "codex", "manual"].includes(value.execution.kind) ||
       (value.execution.kind === "api" && (!text(value.execution.serviceConfigId) || !text(value.execution.modelId))) ||

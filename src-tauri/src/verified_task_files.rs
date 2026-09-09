@@ -10,6 +10,7 @@ use std::{
 
 #[derive(Clone, Copy, Debug, serde::Deserialize, serde::Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub enum TaskDomain {
     Explanation,
     Learning,

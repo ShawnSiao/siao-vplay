@@ -21,8 +21,10 @@ pub struct PreviewTaskDispatchInput {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct DispatchSubtitle {
     pub version_id: String,
+    #[cfg_attr(test, schemars(range(min = 1, max = 9007199254740991_u64)))]
     pub version_number: i64,
     pub role: String,
     pub language: String,
@@ -30,14 +32,17 @@ pub struct DispatchSubtitle {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct DispatchFrame {
     pub id: String,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub timestamp_ms: i64,
     pub sha256: String,
 }
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct DispatchPrompt {
     pub template: String,
     pub requirements: String,
@@ -46,6 +51,7 @@ pub struct DispatchPrompt {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct TaskDispatchPreview {
     pub task_id: String,
     pub task_kind: TaskDomain,
@@ -56,7 +62,9 @@ pub struct TaskDispatchPreview {
     pub endpoint: Option<String>,
     pub model: String,
     pub subtitles: Vec<DispatchSubtitle>,
+    #[cfg_attr(test, schemars(range(min = 1, max = 9007199254740991_u64)))]
     pub subtitle_count: usize,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub playback_cutoff_ms: i64,
     pub selected_text: Option<String>,
     pub prompt: Option<DispatchPrompt>,
