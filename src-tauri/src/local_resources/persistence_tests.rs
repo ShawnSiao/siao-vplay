@@ -61,3 +61,28 @@ fn failed_new_version_activation_does_not_leave_a_committed_receipt() {
     fs::create_dir(manager.config_path.with_extension("json.part")).unwrap();
     assert!(manager.activate_receipt(receipt("2")).is_err()); assert!(!path.exists());
 }
+
+#[test]
+fn inactive_receipt_removal_clears_recovery_sidecars_even_without_primary() {
+    for primary in [true, false] {
+        let (_data, _parent, mut manager) = setup();
+        manager.activate_receipt(receipt("2")).unwrap();
+        let path = configuration_root(manager.configuration.as_ref().unwrap()).join("receipts/ffmpeg-cpu/1.json");
+        let bytes = fs::read(&path).unwrap();
+        for extension in ["json.bak", "json.part"] { fs::write(path.with_extension(extension), &bytes).unwrap(); }
+        if !primary { fs::remove_file(&path).unwrap(); }
+        assert!(manager.remove_inactive_receipt("ffmpeg-cpu", "1").unwrap());
+        for candidate in [&path, &path.with_extension("json.bak"), &path.with_extension("json.part")] { assert!(!candidate.exists(), "removed receipt must not remain recoverable: {}", candidate.display()); }
+    }
+}
+
+#[test]
+fn inactive_receipt_removal_rejects_non_file_sidecar_before_deleting_primary() {
+    let (_data, _parent, mut manager) = setup();
+    manager.activate_receipt(receipt("2")).unwrap();
+    let path = configuration_root(manager.configuration.as_ref().unwrap()).join("receipts/ffmpeg-cpu/1.json");
+    let before = fs::read(&path).unwrap();
+    fs::create_dir(path.with_extension("json.bak")).unwrap();
+    assert!(manager.remove_inactive_receipt("ffmpeg-cpu", "1").is_err());
+    assert_eq!(fs::read(&path).unwrap(), before);
+}

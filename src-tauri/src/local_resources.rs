@@ -917,11 +917,7 @@ impl LocalResourceManager {
             .join("receipts")
             .join(resource_id)
             .join(format!("{version}.json"));
-        if !path.is_file() {
-            return Ok(false);
-        }
-        fs::remove_file(path)?;
-        Ok(true)
+        persistence::remove_record(&path)
     }
 }
 

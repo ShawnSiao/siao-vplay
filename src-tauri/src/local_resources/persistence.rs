@@ -127,3 +127,33 @@ mod tests {
         assert!(!path.with_extension("json.bak").exists());
     }
 }
+
+// Call only while holding the manager write lock. Keep the primary until every
+// recovery copy has been removed, so interruption cannot resurrect a deletion.
+pub(super) fn remove_record(path: &Path) -> Result<bool, LocalResourceError> {
+    let candidates = [
+        path.with_extension("json.part"),
+        path.with_extension("json.bak"),
+        path.to_path_buf(),
+    ];
+    let mut existing = Vec::new();
+    for candidate in candidates {
+        match fs::symlink_metadata(&candidate) {
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error.into()),
+            Ok(metadata) if metadata.file_type().is_file() => existing.push(candidate),
+            Ok(_) => {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "资源记录或恢复副本不是普通文件，已停止删除",
+                )
+                .into());
+            }
+        }
+    }
+    let removed = !existing.is_empty();
+    for candidate in existing {
+        fs::remove_file(candidate)?;
+    }
+    Ok(removed)
+}
