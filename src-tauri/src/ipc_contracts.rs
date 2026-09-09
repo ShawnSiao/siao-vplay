@@ -25,6 +25,7 @@ fn committed_schemas_match_rust() {
         language_code: "en".into(), created_at_ms: 1, is_current: true, segment_count: 75,
     }]);
     check_schema("subtitle-version-metadata", &metadata);
+    check_schema("subtitle-metadata-page", &serialized_schema::<crate::subtitles::metadata_page::SubtitleMetadataPage>());
     use crate::ai::types::{AiModelInfo, AiModelList};
     let mut models = serde_json::to_value(schemars::schema_for!(AiModelList)).unwrap();
     models["examples"] = serde_json::json!([

@@ -53,6 +53,15 @@ pub(super) fn list_metadata_window(
     window: Option<(usize, usize)>,
 ) -> Result<Vec<SubtitleVersionMetadata>, SubtitleError> {
     store.get_project(project_id)?;
+    let connection = store.connect()?;
+    read_metadata_window(&connection, project_id, window)
+}
+
+pub(super) fn read_metadata_window(
+    connection: &rusqlite::Connection,
+    project_id: &str,
+    window: Option<(usize, usize)>,
+) -> Result<Vec<SubtitleVersionMetadata>, SubtitleError> {
     let (offset, limit) = match window {
         Some((offset, limit)) => (
             i64::try_from(offset).map_err(|_| SubtitleError::InvalidRevision("字幕历史分页位置无效".into()))?,
@@ -60,7 +69,6 @@ pub(super) fn list_metadata_window(
         ),
         None => (0, -1),
     };
-    let connection = store.connect()?;
     let mut statement = connection.prepare(include_str!("metadata_window.sql"))?;
     let rows = statement
         .query_map(params![project_id, limit, offset], |row| {

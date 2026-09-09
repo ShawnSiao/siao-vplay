@@ -1,6 +1,8 @@
 #[cfg(test)]
 mod wire_schema;
 pub(crate) mod metadata;
+pub(crate) mod metadata_page;
+mod metadata_snapshot;
 mod read;
 pub use read::{get_subtitle_version, list_current_subtitle_versions, list_subtitle_versions};
 
@@ -1773,6 +1775,7 @@ fn now_ms() -> Result<i64, StoreError> {
 #[cfg(test)]
 mod tests {
     mod read_tests;
+    mod metadata_page_tests;
     use std::{fs, process::Command};
 
     use crate::{domain::CreateLocalProjectInput, media};

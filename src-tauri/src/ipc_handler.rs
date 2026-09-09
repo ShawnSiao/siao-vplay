@@ -131,6 +131,7 @@ pub(crate) fn handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Sen
         crate::commands::list_subtitle_versions,
         crate::commands::get_subtitle_version,
         crate::subtitles::metadata::list_subtitle_version_metadata,
+        crate::subtitles::metadata_page::list_subtitle_metadata_page,
         crate::commands::revise_subtitle_version,
         crate::commands::restore_subtitle_version,
         crate::commands::inspect_embedded_subtitle,
