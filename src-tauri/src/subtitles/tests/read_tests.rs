@@ -1,6 +1,25 @@
 use super::*;
 
 #[test]
+fn current_metadata_uses_version_pointer_without_history_scan() {
+    let (_temp, store, project_id, _original) = create_store_with_subtitles();
+    let connection = store.connect().unwrap();
+    let query = metadata::metadata_query(true);
+    let plan = connection.prepare(&format!("EXPLAIN QUERY PLAN {query}")).unwrap()
+        .query_map(params![project_id, -1, 0, true], |row| row.get::<_, String>(3)).unwrap()
+        .collect::<Result<Vec<_>, _>>().unwrap();
+    assert!(!plan.iter().any(|step| step.contains("subtitle_versions_project_id")), "{plan:?}");
+    assert!(plan.iter().any(|step| step.contains("SEARCH v") && step.contains("(id=?)")), "{plan:?}");
+    let current = metadata::read_metadata_selection(&connection, &project_id, None, true).unwrap();
+    assert_eq!(current.len(), 1);
+    assert_eq!(current[0].id, _original.id);
+    assert!(current[0].is_current);
+    assert_eq!(current[0].segment_count, 2);
+    connection.execute("UPDATE subtitle_tracks SET current_version_id = NULL WHERE project_id = ?1", params![project_id]).unwrap();
+    assert!(metadata::read_metadata_selection(&connection, &project_id, None, true).unwrap().is_empty());
+}
+
+#[test]
 fn metadata_window_preserves_order_and_does_not_decode_other_rows() {
     let (_temp, store, project_id, original) = create_store_with_subtitles();
     let connection = store.connect().unwrap();
@@ -220,4 +239,5 @@ fn current_lookup_uses_current_pointer_not_history_index() {
             .unwrap()
             .is_empty()
     );
+    assert!(metadata::read_metadata_selection(&connection, &project_id, None, true).unwrap().is_empty());
 }

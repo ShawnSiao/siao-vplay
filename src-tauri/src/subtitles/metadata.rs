@@ -78,7 +78,7 @@ pub(super) fn read_metadata_selection(
         ),
         None => (0, -1),
     };
-    let mut statement = connection.prepare(include_str!("metadata_window.sql"))?;
+    let mut statement = connection.prepare(metadata_query(current_only))?;
     let rows = statement
         .query_map(params![project_id, limit, offset, current_only], |row| {
             Ok(SubtitleVersionMetadata {
@@ -97,6 +97,11 @@ pub(super) fn read_metadata_selection(
         })?
         .collect::<Result<Vec<_>, _>>()?;
     Ok(rows)
+}
+
+pub(super) fn metadata_query(current_only: bool) -> &'static str {
+    if current_only { include_str!("metadata_current.sql") }
+    else { include_str!("metadata_window.sql") }
 }
 
 #[tauri::command]
