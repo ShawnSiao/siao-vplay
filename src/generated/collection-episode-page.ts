@@ -11,6 +11,7 @@ export interface CollectionEpisodePage {
   nextOffset: number | null;
   offset: number;
   seasonNumber: number | null;
+  snapshotToken: string;
   totalCount: number;
   [k: string]: unknown;
 }

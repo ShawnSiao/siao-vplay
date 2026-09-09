@@ -4,7 +4,7 @@ vi.mock("@tauri-apps/api/core", () => mocks);
 import { readCollectionEpisodePage } from "./collectionEpisodePageGateway";
 import { mediaSummary } from "../features/library/libraryControllerTestFixtures";
 const item = { ...mediaSummary("p"), collectionId: "c", seasonNumber: 1 };
-const page = { collectionId: "c", seasonNumber: 1, offset: 0, items: [item], totalCount: 2, nextOffset: 1 };
+const page = { snapshotToken: "a".repeat(64), collectionId: "c", seasonNumber: 1, offset: 0, items: [item], totalCount: 2, nextOffset: 1 };
 beforeEach(() => { mocks.invoke.mockReset(); });
 it.each([{}, { ...page, collectionId: "other" }, { ...page, seasonNumber: 2 }, { ...page, offset: 1 },
   { ...page, nextOffset: 0 }, { ...page, nextOffset: null }, { ...page, totalCount: -1 },
@@ -17,7 +17,7 @@ it("preserves continuation and a now-empty page beyond the total", async () => {
   const empty = { ...page, offset: 24, items: [], totalCount: 0, nextOffset: null };
   mocks.invoke.mockResolvedValueOnce(page).mockResolvedValueOnce(empty);
   await expect(readCollectionEpisodePage("c", 1, 0)).resolves.toEqual(page);
-  await expect(readCollectionEpisodePage("c", 1, 24)).resolves.toEqual(empty);
+  await expect(readCollectionEpisodePage("c", 1, 24, page.snapshotToken)).resolves.toEqual(empty);
 });
 it("allows mixed seasons when no filter is requested", async () => {
   const all = { ...page, seasonNumber: null, items: [item, { ...item, projectId: "p2", seasonNumber: null }], nextOffset: null };
@@ -34,4 +34,18 @@ it("rejects a backend page exceeding the wire limit", async () => {
   mocks.invoke.mockResolvedValue({ ...page, totalCount: 25, nextOffset: null,
     items: Array.from({ length: 25 }, (_, index) => ({ ...item, projectId: `p${index}` })) });
   await expect(readCollectionEpisodePage("c", 1, 0)).rejects.toThrow();
+});
+it("rejects continuation from a different collection ordering snapshot", async () => {
+  mocks.invoke.mockResolvedValue(page);
+  await expect(readCollectionEpisodePage("c", 1, 0, "b".repeat(64))).rejects.toThrow();
+});
+it("requires a snapshot to continue and forwards a valid snapshot", async () => {
+  await expect(readCollectionEpisodePage("c", 1, 1)).rejects.toThrow();
+  expect(mocks.invoke).not.toHaveBeenCalled();
+  const next = { ...page, offset: 1, nextOffset: null };
+  mocks.invoke.mockResolvedValue(next);
+  await expect(readCollectionEpisodePage("c", 1, 1, page.snapshotToken)).resolves.toEqual(next);
+  expect(mocks.invoke).toHaveBeenCalledWith("list_collection_episode_page", {
+    input: { collectionId: "c", seasonNumber: 1, offset: 1, expectedSnapshotToken: page.snapshotToken },
+  });
 });

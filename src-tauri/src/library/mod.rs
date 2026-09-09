@@ -15,6 +15,7 @@ mod recovery_store;
 mod repository;
 mod episode_repository;
 mod episode_page;
+mod episode_snapshot;
 pub(crate) mod episode_commands;
 pub(crate) use episode_page::{CollectionEpisodePage, ListCollectionEpisodePageInput};
 mod scan_service;

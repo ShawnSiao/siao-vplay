@@ -191,6 +191,11 @@
         "null"
       ]
     },
+    "snapshotToken": {
+      "maxLength": 64,
+      "minLength": 64,
+      "type": "string"
+    },
     "totalCount": {
       "format": "int64",
       "maximum": 9007199254740991,
@@ -199,6 +204,7 @@
     }
   },
   "required": [
+    "snapshotToken",
     "collectionId",
     "seasonNumber",
     "offset",

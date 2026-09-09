@@ -88,4 +88,24 @@ fn benchmark_library_summary_reads() {
         });
         assert_eq!(legacy.len(), count as usize);
     }
+    let collection = service.create_collection(crate::library::CreateCollectionInput { title: "Synthetic large collection".into() }).unwrap();
+    store.connect().unwrap().execute(
+        "INSERT INTO collection_items (collection_id, project_id, season_number, episode_number,
+            absolute_order, display_title, availability, created_at_ms, updated_at_ms)
+         SELECT ?1, id, 1, ROW_NUMBER() OVER (ORDER BY title), ROW_NUMBER() OVER (ORDER BY title) - 1,
+            title, 'available', created_at_ms, updated_at_ms FROM projects",
+        [&collection.id],
+    ).unwrap();
+    let input = crate::library::ListCollectionEpisodePageInput { collection_id: collection.id, season_number: None,
+        offset: 0, expected_snapshot_token: None };
+    service.list_collection_episode_page(input.clone()).unwrap();
+    let first = measure("10000 collection first page with snapshot", || service.list_collection_episode_page(input.clone()).unwrap());
+    assert_eq!(first.items.len(), 24);
+    assert_eq!(first.total_count, 10_000);
+    let last_input = crate::library::ListCollectionEpisodePageInput { offset: 9_984,
+        expected_snapshot_token: Some(first.snapshot_token.clone()), ..input };
+    let last = measure("10000 collection last page with snapshot", || service.list_collection_episode_page(last_input.clone()).unwrap());
+    assert_eq!(last.items.len(), 16);
+    assert_eq!(last.next_offset, None);
+    assert_eq!(last.snapshot_token, first.snapshot_token);
 }

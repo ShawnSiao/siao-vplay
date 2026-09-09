@@ -4,7 +4,7 @@ fn collection_episode_page_count_and_rows_share_snapshot() {
     let collection = fixture.collection("snapshot");
     let project = fixture.project("page-snapshot.mp4");
     fixture.add(&collection, &project, 1, 1, 0);
-    let input = crate::library::ListCollectionEpisodePageInput { collection_id: collection.id.clone(), season_number: None, offset: 0 };
+    let input = crate::library::ListCollectionEpisodePageInput { collection_id: collection.id.clone(), season_number: None, offset: 0, expected_snapshot_token: None };
     let page = fixture.service.collection_episode_page_with_checkpoint(input.clone(), || {
         fixture.service.remove_project_from_collection(&collection.id, &project.id).unwrap();
     }).unwrap();
@@ -30,7 +30,7 @@ fn episode_windows_preserve_order_without_gaps_or_duplicates() {
         for season in [None, Some(1), Some(2), Some(99)] {
             let full = repository.list_collection_episodes(&collection.id, season).unwrap();
             let input = crate::library::ListCollectionEpisodePageInput {
-                collection_id: collection.id.clone(), season_number: season, offset: 0,
+                collection_id: collection.id.clone(), season_number: season, offset: 0, expected_snapshot_token: None,
             };
             let first = fixture.service.list_collection_episode_page(input.clone()).unwrap();
             assert_eq!(first.collection_id, collection.id);
@@ -39,7 +39,7 @@ fn episode_windows_preserve_order_without_gaps_or_duplicates() {
             assert_eq!(first.total_count, full.len() as i64);
             assert_eq!(first.items, full[..full.len().min(24)]);
             assert_eq!(first.next_offset, (full.len() > 24).then_some(24));
-            let end = fixture.service.list_collection_episode_page(crate::library::ListCollectionEpisodePageInput { offset: 24, ..input.clone() }).unwrap();
+            let end = fixture.service.list_collection_episode_page(crate::library::ListCollectionEpisodePageInput { offset: 24, expected_snapshot_token: Some(first.snapshot_token), ..input.clone() }).unwrap();
             assert_eq!(end.items, full[full.len().min(24)..]);
             assert_eq!(end.next_offset, None);
             assert!(fixture.service.list_collection_episode_page(crate::library::ListCollectionEpisodePageInput { offset: -1, ..input }).is_err());

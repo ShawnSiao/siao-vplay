@@ -49,7 +49,7 @@ cargo test --locked --release --lib --manifest-path src-tauri/Cargo.toml benchma
 
 ### 媒体库查询基准
 
-以下基准使用 1,000 / 10,000 条合成媒体记录和不可播放的占位文件，比较首页摘要、搜索、分页和旧全量项目读取。测试断言返回条数保持有界；不包含真实视频解码、前端首屏、内存或大型合集验收。
+以下基准使用 1,000 / 10,000 条合成媒体记录和不可播放的占位文件，比较首页摘要、搜索、分页和旧全量项目读取，并测量 10,000 条单合集的首尾页（包含顺序快照计算）。测试断言返回条数保持有界；不包含真实视频解码、前端首屏、内存或大型合集界面验收。
 
 ```powershell
 cargo test --locked --release --lib --manifest-path src-tauri/Cargo.toml benchmark_library_summary_reads -- --ignored --nocapture
