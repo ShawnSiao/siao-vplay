@@ -19,9 +19,11 @@ fn collection_episode_page_count_and_rows_share_snapshot() {
 fn episode_windows_preserve_order_without_gaps_or_duplicates() {
     let fixture = Fixture::new();
     let collection = fixture.collection("paged");
+    let mut project_ids = Vec::new();
     for index in 0..27 {
         let project = fixture.project(&format!("page-{index:02}.mp4"));
         fixture.add(&collection, &project, index % 2 + 1, index / 2 + 1, 27 - index);
+        project_ids.push(project.id);
     }
     let connection = fixture.service.store.connect().unwrap();
     let repository = LibraryRepository::new(&connection);
@@ -29,6 +31,11 @@ fn episode_windows_preserve_order_without_gaps_or_duplicates() {
         connection.execute("UPDATE collections SET sort_mode = ?1 WHERE id = ?2", rusqlite::params![sort_mode, collection.id]).unwrap();
         for season in [None, Some(1), Some(2), Some(99)] {
             let full = repository.list_collection_episodes(&collection.id, season).unwrap();
+            let mut expected: Vec<usize> = (0..27).filter(|index| season.is_none_or(|season| (*index as i64) % 2 + 1 == season)).collect();
+            if sort_mode == "manual" { expected.reverse(); }
+            else { expected.sort_by_key(|index| (index % 2, index / 2)); }
+            assert_eq!(full.iter().map(|item| &item.project_id).collect::<Vec<_>>(),
+                expected.iter().map(|index| &project_ids[*index]).collect::<Vec<_>>());
             let input = crate::library::ListCollectionEpisodePageInput {
                 collection_id: collection.id.clone(), season_number: season, offset: 0, expected_snapshot_token: None,
             };
