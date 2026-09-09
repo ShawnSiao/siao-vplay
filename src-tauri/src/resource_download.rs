@@ -1,4 +1,5 @@
 mod binding;
+use binding::task_paths;
 pub use binding::bind_configured_root;
 #[cfg(test)]
 mod binding_tests;
@@ -347,6 +348,8 @@ pub fn cancel_task(task_id: &str) -> Result<ResourceDownloadTask, ResourceDownlo
             Ok(())
         });
     }
+    let task = task_snapshot(task_id)?;
+    let _maintenance = crate::resource_leases::maintain_resource(&task.resource_id)?;
     local_resources::recover_changes_for_use()?;
     let (partial_path, staging_path) = task_paths(task_id)?;
     remove_file_if_exists(&partial_path)?;
@@ -1509,17 +1512,6 @@ fn task_snapshot(task_id: &str) -> Result<ResourceDownloadTask, ResourceDownload
             .cloned()
             .ok_or_else(|| ResourceDownloadError::TaskNotFound(task_id.to_owned()))
     })
-}
-
-fn task_paths(task_id: &str) -> Result<(PathBuf, PathBuf), ResourceDownloadError> {
-    Uuid::parse_str(task_id)
-        .map_err(|_| ResourceDownloadError::Integrity(format!("下载任务 ID 无效：{task_id}")))?;
-    task_snapshot(task_id)?;
-    let root = configured_available_root()?;
-    Ok((
-        root.join("downloads").join(format!("{task_id}.part")),
-        root.join("staging").join(task_id),
-    ))
 }
 
 fn validate_task_record(task: &ResourceDownloadTask) -> Result<(), ResourceDownloadError> {

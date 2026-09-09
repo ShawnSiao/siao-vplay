@@ -34,3 +34,25 @@ impl DownloadManager {
         }
     }
 }
+
+pub(super) fn task_paths(task_id: &str) -> Result<(PathBuf, PathBuf), ResourceDownloadError> {
+    Uuid::parse_str(task_id)
+        .map_err(|_| ResourceDownloadError::Integrity(format!("下载任务 ID 无效：{task_id}")))?;
+    // Never acquire the resource configuration lock while holding the task lock.
+    let configured = configured_available_root()?;
+    with_manager_read(|manager| {
+        let root = manager.ensure_root_available()?;
+        if root != configured {
+            return Err(ResourceDownloadError::BindingUnavailable(
+                "任务所属目录与当前保存位置不一致".into(),
+            ));
+        }
+        if !manager.tasks.contains_key(task_id) {
+            return Err(ResourceDownloadError::TaskNotFound(task_id.to_owned()));
+        }
+        Ok((
+            root.join("downloads").join(format!("{task_id}.part")),
+            root.join("staging").join(task_id),
+        ))
+    })
+}
