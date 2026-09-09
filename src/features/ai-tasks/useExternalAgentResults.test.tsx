@@ -72,3 +72,46 @@ it("serializes slow scans and resumes polling after an error", async () => {
     expect(handler).toHaveBeenCalledWith(updates, expect.any(Function));
   } finally { unmount(); vi.useRealTimers(); }
 });
+
+
+it("retries a consumed batch after the consumer fails without reconciling it again", async () => {
+  vi.useFakeTimers();
+  const reconcile = vi.fn().mockResolvedValueOnce(updates).mockResolvedValue([]);
+  const handler = vi.fn().mockRejectedValueOnce(new Error("refresh failed")).mockResolvedValue(undefined);
+  const { unmount } = renderHook(() => useExternalAgentResults({ enabled: true, reconcile, onUpdates: handler }));
+  try {
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    expect(handler).toHaveBeenCalledTimes(1);
+    await act(async () => { await vi.advanceTimersByTimeAsync(1_000); });
+    expect(handler).toHaveBeenCalledTimes(2);
+    expect(handler).toHaveBeenLastCalledWith(updates, expect.any(Function));
+    expect(reconcile).toHaveBeenCalledTimes(1);
+    await act(async () => { await vi.advanceTimersByTimeAsync(1_000); });
+    expect(reconcile).toHaveBeenCalledTimes(2);
+    expect(handler).toHaveBeenCalledTimes(2);
+  } finally { unmount(); vi.useRealTimers(); }
+});
+
+
+it("redelivers a batch whose asynchronous consumer was disabled before completion", async () => {
+  vi.useFakeTimers();
+  let finish!: () => void;
+  const reconcile = vi.fn().mockResolvedValueOnce(updates).mockResolvedValue([]);
+  const firstHandler = vi.fn(() => new Promise<void>(resolve => { finish = resolve; }));
+  const nextHandler = vi.fn(async () => undefined);
+  const { rerender, unmount } = renderHook(({ enabled, handler }) => useExternalAgentResults({ enabled, reconcile, onUpdates: handler }), {
+    initialProps: { enabled: true, handler: firstHandler },
+  });
+  try {
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    rerender({ enabled: false, handler: firstHandler });
+    await act(async () => { finish(); });
+    rerender({ enabled: true, handler: nextHandler });
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    expect(nextHandler).toHaveBeenCalledWith(updates, expect.any(Function));
+    expect(reconcile).toHaveBeenCalledTimes(1);
+    await act(async () => { await vi.advanceTimersByTimeAsync(1_000); });
+    expect(reconcile).toHaveBeenCalledTimes(2);
+    expect(nextHandler).toHaveBeenCalledTimes(1);
+  } finally { unmount(); vi.useRealTimers(); }
+});

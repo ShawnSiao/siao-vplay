@@ -4,12 +4,14 @@ import type { ExternalAgentResultUpdate } from "../../types";
 type Options = {
   enabled: boolean;
   reconcile: () => Promise<ExternalAgentResultUpdate[]>;
+  /** May be replayed after failure or an interrupted lifetime; consumers must be idempotent. */
   onUpdates: (updates: ExternalAgentResultUpdate[], isActive: () => boolean) => Promise<void> | void;
 };
 
 /** Reconciliation consumes results: changing the viewed video must not discard an in-flight batch. */
 export function useExternalAgentResults({ enabled, reconcile, onUpdates }: Options) {
   const scanning = useRef(false);
+  const pending = useRef<ExternalAgentResultUpdate[] | null>(null);
   const live = useRef(false);
   const lifetime = useRef(0);
   const handler = useRef(onUpdates);
@@ -21,13 +23,17 @@ export function useExternalAgentResults({ enabled, reconcile, onUpdates }: Optio
       if (scanning.current) return;
       scanning.current = true;
       try {
-        const updates = await reconcile();
+        const updates = pending.current ?? await reconcile();
+        pending.current = updates.length ? updates : null;
         if (live.current && updates.length) {
           const identity = lifetime.current;
-          await handler.current(updates, () => live.current && lifetime.current === identity);
+          const isActive = () => live.current && lifetime.current === identity;
+          await handler.current(updates, isActive);
+          if (isActive()) pending.current = null;
         }
       } catch {
-        // Explicit result import remains available if background reconciliation fails.
+        // Keep at most one consumed batch until the active consumer succeeds.
+        // This is an in-memory retry; transport/process recovery needs durable acknowledgement.
       } finally { scanning.current = false; }
     };
     void poll();
