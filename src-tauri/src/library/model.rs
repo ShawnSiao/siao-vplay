@@ -300,6 +300,7 @@ pub(crate) struct EpisodeNeighbors {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub(crate) enum SearchResultKind {
     Collection,
     Episode,
@@ -321,13 +322,16 @@ impl SearchResultKind {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub(crate) struct SearchResult {
     pub kind: SearchResultKind,
     pub title: String,
     pub subtitle: Option<String>,
     pub collection_id: Option<String>,
     pub project_id: Option<String>,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub season_number: Option<i64>,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub episode_number: Option<i64>,
 }
 

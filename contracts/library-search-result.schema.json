@@ -1,0 +1,68 @@
+{
+  "$defs": {
+    "SearchResultKind": {
+      "enum": [
+        "collection",
+        "episode",
+        "unclassified"
+      ],
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "collectionId": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "episodeNumber": {
+      "format": "int64",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "kind": {
+      "$ref": "#/$defs/SearchResultKind"
+    },
+    "projectId": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "seasonNumber": {
+      "format": "int64",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "subtitle": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "title": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "kind",
+    "title",
+    "subtitle",
+    "collectionId",
+    "projectId",
+    "seasonNumber",
+    "episodeNumber"
+  ],
+  "title": "SearchResult",
+  "type": "object"
+}

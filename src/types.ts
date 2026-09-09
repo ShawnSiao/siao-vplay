@@ -66,15 +66,7 @@ export type SubtitleDisplayMode = "original" | "translation" | "bilingual";
 
 export type { Project } from "./generated/project";
 
-export type LibrarySearchResult = {
-  kind: "collection" | "episode" | "unclassified";
-  title: string;
-  subtitle: string | null;
-  collectionId: string | null;
-  projectId: string | null;
-  seasonNumber: number | null;
-  episodeNumber: number | null;
-};
+export type { SearchResult as LibrarySearchResult } from "./generated/library-search-result";
 
 export type EpisodeRecognition =
   | "sxx_exx"

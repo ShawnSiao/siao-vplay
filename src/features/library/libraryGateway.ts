@@ -1,5 +1,6 @@
 import { readLibrarySection } from "../../lib/libraryPageGateway";
 import { readLibraryHome } from "../../lib/libraryHomeGateway";
+import { readLibrarySearch } from "../../lib/librarySearchGateway";
 import { invokeProject } from "../../lib/projectGateway";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
@@ -94,7 +95,7 @@ export async function searchLibrary(query: string): Promise<LibrarySearchResult[
   if (!isDesktopApp) {
     return [];
   }
-  return invoke<LibrarySearchResult[]>("search_library", { query });
+  return readLibrarySearch(query);
 }
 
 export async function createCollection(
