@@ -75,6 +75,30 @@ beforeEach(() => {
 });
 
 describe("useEpisodeNavigation", () => {
+  it("loads on demand and ignores a list completed after closing the drawer", async () => {
+    const context = { collectionId: detail.summary.id, seasonNumber: 1 };
+    let finish!: (items: LibraryMediaSummary[]) => void;
+    gatewayMocks.listCollectionEpisodes.mockReturnValueOnce(new Promise(resolve => { finish = resolve; }));
+    const { result, rerender } = renderHook(({ open }) => useEpisodeNavigation(context, "project", open), {
+      initialProps: { open: false },
+    });
+    await waitFor(() => expect(result.current.state.loading).toBe(false));
+    expect(gatewayMocks.listCollectionEpisodes).not.toHaveBeenCalled();
+    rerender({ open: true });
+    await waitFor(() => expect(gatewayMocks.listCollectionEpisodes).toHaveBeenCalledTimes(1));
+    rerender({ open: false });
+    await waitFor(() => expect(result.current.state.loading).toBe(false));
+    await act(async () => { finish([{ projectId: "late" }] as LibraryMediaSummary[]); });
+    expect(result.current.state.episodes).toEqual([]);
+    expect(result.current.state.neighbors).toEqual(neighbors);
+  });
+  it("does not read the whole season during ordinary playback", async () => {
+    const context = { collectionId: detail.summary.id, seasonNumber: 1 };
+    const { result } = renderHook(() => useEpisodeNavigation(context, "project"));
+    await waitFor(() => expect(result.current.state.loading).toBe(false));
+    expect(result.current.state.neighbors).toEqual(neighbors);
+    expect(gatewayMocks.listCollectionEpisodes).not.toHaveBeenCalled();
+  });
   it("ignores a late result from a previous project", async () => {
     const context = { collectionId: detail.summary.id, seasonNumber: 1 };
     let resolve!: (value: EpisodeNeighbors) => void;
@@ -108,7 +132,7 @@ describe("useEpisodeNavigation", () => {
       seasonNumber: 1,
     };
     const { result } = renderHook(() =>
-      useEpisodeNavigation(context, "50000000-0000-4000-8000-000000000003"),
+      useEpisodeNavigation(context, "50000000-0000-4000-8000-000000000003", true),
     );
 
     await waitFor(() => expect(result.current.state.loading).toBe(false));

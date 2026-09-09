@@ -158,6 +158,7 @@ export default function App() {
   const episodeNavigation = useEpisodeNavigation(
     episodeContext,
     activeProject?.id ?? null,
+    screen === "player" && shellController.state.drawerTab === "episodes",
   );
 
   const posterMedia = useMemo(() => posterCandidates(libraryState), [libraryState]);

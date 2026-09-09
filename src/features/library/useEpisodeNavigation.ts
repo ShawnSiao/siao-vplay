@@ -70,10 +70,11 @@ function reducer(state: OwnedState, action: Action): OwnedState {
 export function useEpisodeNavigation(
   context: EpisodePlaybackContext | null,
   projectId: string | null,
+  includeEpisodes = false,
 ) {
   const [state, dispatch] = useReducer(reducer, initialState);
   const requestSequence = useRef(0);
-  const scope = context && projectId ? JSON.stringify([context.collectionId, context.seasonNumber, projectId]) : null;
+  const scope = context && projectId ? JSON.stringify([context.collectionId, context.seasonNumber, projectId, includeEpisodes]) : null;
 
   const refresh = useCallback(async () => {
     const sequence = requestSequence.current + 1;
@@ -86,7 +87,7 @@ export function useEpisodeNavigation(
     try {
       const [detail, episodes, neighbors] = await Promise.all([
         getCollectionDetail(context.collectionId),
-        listCollectionEpisodes(context.collectionId, context.seasonNumber),
+        includeEpisodes ? listCollectionEpisodes(context.collectionId, context.seasonNumber) : Promise.resolve([]),
         getEpisodeNeighbors(context.collectionId, projectId),
       ]);
       if (requestSequence.current === sequence) {
@@ -97,7 +98,7 @@ export function useEpisodeNavigation(
         dispatch({ type: "failed", message: commandError(error).message });
       }
     }
-  }, [context, projectId, scope]);
+  }, [context, projectId, scope, includeEpisodes]);
 
   useEffect(() => {
     void refresh();
