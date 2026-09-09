@@ -424,36 +424,9 @@ export type { DictionaryEntry } from "./generated/dictionary-entry";
 
 export type { LearningApplication } from "./generated/learning-application";
 
-export type LearningCard = {
-  id: string;
-  projectId: string;
-  dictionaryEntryId: string | null;
-  sourceVersionId: string;
-  translationVersionId: string | null;
-  sourceSegmentId: string;
-  selectedText: string;
-  selectionKind: LearningSelectionKind;
-  pronunciation: string;
-  partOfSpeech: string;
-  contextualMeaning: string;
-  usageNote: string | null;
-  sourceSentence: string;
-  translatedSentence: string | null;
-  languageCode: string;
-  playbackPositionMs: number;
-  screenshotPath: string;
-  screenshotSha256: string;
-  screenshotAvailable: boolean;
-  createdAtMs: number;
-  updatedAtMs: number;
-};
+export type { LearningCard } from "./generated/learning-card";
 
-export type LearningCardsExport = {
-  directory: string;
-  jsonPath: string;
-  markdownPath: string;
-  cardCount: number;
-};
+export type { LearningCardsExport } from "./generated/learning-cards-export";
 
 
 

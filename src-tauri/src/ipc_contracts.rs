@@ -53,6 +53,8 @@ fn committed_schemas_match_rust() {
     check_schema("storage-migration-task", &serialized_schema::<crate::storage::StorageMigrationTask>());
     check_schema("storage-settings", &serialized_schema::<crate::storage::StorageSettingsView>());
     check_schema("save-storage-settings-input", &serialized_schema::<crate::storage::SaveStorageSettingsInput>());
+    check_schema("learning-card", &serialized_schema::<crate::learning::LearningCard>());
+    check_schema("learning-cards-export", &serialized_schema::<crate::learning::LearningCardsExport>());
     check_schema("subtitle-export", &serialized_schema::<crate::delivery::SubtitleExport>());
     check_schema("summary-export", &serialized_schema::<crate::summary::SummaryExport>());
     check_schema("library-search-result", &serialized_schema::<crate::library::SearchResult>());

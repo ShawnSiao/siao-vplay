@@ -162,6 +162,7 @@ pub struct ExportLearningCardsInput {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct LearningCard {
     pub id: String,
     pub project_id: String,
@@ -170,6 +171,7 @@ pub struct LearningCard {
     pub translation_version_id: Option<String>,
     pub source_segment_id: String,
     pub selected_text: String,
+    #[cfg_attr(test, schemars(with = "wire_schema::SelectionKind"))]
     pub selection_kind: String,
     pub pronunciation: String,
     pub part_of_speech: String,
@@ -178,20 +180,25 @@ pub struct LearningCard {
     pub source_sentence: String,
     pub translated_sentence: Option<String>,
     pub language_code: String,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_i64)))]
     pub playback_position_ms: i64,
     pub screenshot_path: String,
     pub screenshot_sha256: String,
     pub screenshot_available: bool,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_i64)))]
     pub created_at_ms: i64,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_i64)))]
     pub updated_at_ms: i64,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct LearningCardsExport {
     pub directory: String,
     pub json_path: String,
     pub markdown_path: String,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub card_count: usize,
 }
 

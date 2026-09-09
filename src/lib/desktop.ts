@@ -24,8 +24,6 @@ import { chooseConfiguredStorageDirectory } from "./storageDirectoryPicker";
 
 import type {
   ExternalAgentTaskKind,
-  LearningCard,
-  LearningCardsExport,
   Project,
   RemoteMediaPreview,
   RuntimeCatalog,
@@ -319,40 +317,7 @@ export async function openExternalResultDirectory(
   });
 }
 
-export async function createLearningCard(
-  projectId: string,
-  dictionaryEntryId: string,
-): Promise<LearningCard> {
-  return invoke<LearningCard>("create_learning_card", {
-    input: { projectId, dictionaryEntryId },
-  });
-}
-
-export async function getLearningCard(cardId: string): Promise<LearningCard> {
-  return invoke<LearningCard>("get_learning_card", { cardId });
-}
-
-export async function listLearningCards(
-  projectId: string,
-): Promise<LearningCard[]> {
-  return invoke<LearningCard[]>("list_learning_cards", { projectId });
-}
-
-export async function deleteLearningCard(
-  projectId: string,
-  cardId: string,
-): Promise<boolean> {
-  return invoke<boolean>("delete_learning_card", { projectId, cardId });
-}
-
-export async function exportLearningCards(
-  projectId: string,
-  destinationDirectory: string,
-): Promise<LearningCardsExport> {
-  return invoke<LearningCardsExport>("export_learning_cards", {
-    input: { projectId, destinationDirectory },
-  });
-}
+export { createLearningCard, getLearningCard, listLearningCards, deleteLearningCard, exportLearningCards } from "./learningCardGateway";
 
 export async function chooseSubtitleDeliveryDirectory(
   outputKind: "subtitle" | "video" = "subtitle",

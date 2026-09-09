@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "cardCount": {
+      "format": "uint",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "directory": {
+      "type": "string"
+    },
+    "jsonPath": {
+      "type": "string"
+    },
+    "markdownPath": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "directory",
+    "jsonPath",
+    "markdownPath",
+    "cardCount"
+  ],
+  "title": "LearningCardsExport",
+  "type": "object"
+}
