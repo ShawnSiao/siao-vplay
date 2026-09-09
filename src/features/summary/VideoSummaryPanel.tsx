@@ -110,7 +110,12 @@ export function VideoSummaryPanel({
     };
   }, [projectId, showError]);
 
-  useSummaryPolling({ projectId, task, read: getSummaryTask, onTask: setTask, onError: showError });
+  useSummaryPolling({ projectId, task, read: getSummaryTask, onTask: (next) => setTask((current) => {
+    if (!current || current.id !== next.id || current.projectId !== next.projectId ||
+      !["queued", "running", "validating"].includes(current.status)) return current;
+    if (current.cancelRequested && !next.cancelRequested && ["queued", "running", "validating"].includes(next.status)) return current;
+    return next;
+  }), onError: showError });
 
   const completion = useSummaryCompletion({ projectId, task, read: getVideoSummary, onResult: (value) => {
     setSummary(value);

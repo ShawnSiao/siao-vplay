@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { SubtitleVersion } from "../../types";
@@ -6,6 +6,7 @@ import { createSummaryFixtures } from "../../test-fixtures/summary";
 
 const gateway = vi.hoisted(() => ({
   getVideoSummary: vi.fn(),
+  getSummaryTask: vi.fn(),
   listSummaryTasks: vi.fn(),
   listVideoSummaries: vi.fn(),
   prepareSummaryTask: vi.fn(),
@@ -19,7 +20,6 @@ vi.mock("./gateway", () => ({
   ...gateway,
   chooseSummaryExportDirectory: vi.fn(),
   exportVideoSummary: vi.fn(),
-  getSummaryTask: vi.fn(),
   openSummaryMaterials: vi.fn(),
 }));
 vi.mock("../../lib/desktop", () => ({
@@ -136,4 +136,35 @@ it("retries a failed completed-result read without sending another task", async 
   expect(gateway.startSummaryTask).toHaveBeenCalledTimes(sends);
 });
 
+});
+
+it.each(["cancelled", "running"] as const)("preserves %s cancellation acknowledgement against a batched old poll", async (status) => {
+  const { task } = createSummaryFixtures();
+  let finishPoll!: (value: typeof task) => void;
+  let finishCancel!: (value: typeof task) => void;
+  gateway.listSummaryTasks.mockResolvedValue([task]);
+  gateway.listVideoSummaries.mockResolvedValue([]);
+  gateway.getSummaryTask.mockImplementation(() => new Promise(resolve => { finishPoll = resolve; }));
+  gateway.cancelSummaryTask.mockImplementation(() => new Promise(resolve => { finishCancel = resolve; }));
+  render(<VideoSummaryPanel projectId={task.projectId} playbackCutoffMs={1_000} durationMs={5_000}
+    sourceVersion={{ id: "subtitle-1" } as SubtitleVersion} translationVersion={null} onPrepareSubtitles={vi.fn()} />);
+  await waitFor(() => expect(finishPoll).toBeTypeOf("function"), { timeout: 2500 });
+  fireEvent.click(screen.getByRole("button", { name: "取消总结" }));
+  await act(async () => {
+    finishCancel({ ...task, status, stage: status === "cancelled" ? "cancelled" : "cancelling", cancelRequested: true });
+    await Promise.resolve();
+    finishPoll(task);
+    await Promise.resolve();
+  });
+  if (status === "cancelled") expect(screen.queryByRole("heading", { name: "正在分析视频内容" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "取消总结" })).not.toBeInTheDocument();
+  if (status === "cancelled") expect(screen.getByText(/已取消/)).toBeInTheDocument();
+  else {
+    expect(screen.getByRole("button", { name: "正在停止总结" })).toBeDisabled();
+    const previousPoll = finishPoll;
+    await waitFor(() => expect(finishPoll).not.toBe(previousPoll), { timeout: 2500 });
+    await act(async () => finishPoll({ ...task, status: "cancelled", stage: "cancelled", cancelRequested: true }));
+    expect(screen.getByText(/已取消/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "正在停止总结" })).not.toBeInTheDocument();
+  }
 });

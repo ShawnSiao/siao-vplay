@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 import { createSummaryFixtures } from "../src/test-fixtures/summary";
 import { summaryDispatchFixture } from "../src/test-fixtures/summaryDispatch";
 
-test("summary polling keeps one slow read and stops after completion", async ({ page }) => {
+for (const outcome of ["completed", "cancelled"] as const) test(`summary polling stops after ${outcome} despite an older read`, async ({ page }) => {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   const { task, summary } = createSummaryFixtures();
@@ -21,6 +21,7 @@ test("summary polling keeps one slow read and stops after completion", async ({ 
         case "preview_summary_dispatch": return preview;
         case "start_summary_task": case "resume_summary_task": state.summarySends.push(args); return task;
         case "get_video_summary": return summary;
+        case "cancel_summary_task": return { ...task, status: "cancelled", stage: "cancelled", cancelRequested: true };
         case "get_summary_task": state.polls++; return new Promise(resolve => { state.finish = () => resolve({ ...task, status: "completed", outputSummaryId: summary.id }); });
         default: throw new Error(`Unexpected fixture IPC: ${command}`);
       }
@@ -33,8 +34,16 @@ test("summary polling keeps one slow read and stops after completion", async ({ 
   await page.getByRole("button", { name: "确认发送并开始" }).click();
   await page.clock.runFor(4000);
   expect(await page.evaluate(() => (window as unknown as { polls: number }).polls)).toBe(1);
+  if (outcome === "cancelled") {
+    await page.getByRole("button", { name: "取消总结" }).click();
+    await expect(page.getByText(/已取消/)).toBeVisible();
+  }
   await page.evaluate(() => (window as unknown as { finish: () => void }).finish());
-  await expect(page.getByRole("heading", { name: summary.result.title })).toBeVisible();
+  if (outcome === "completed") await expect(page.getByRole("heading", { name: summary.result.title })).toBeVisible();
+  else {
+    await expect(page.getByText(/已取消/)).toBeVisible();
+    await expect(page.getByRole("heading", { name: summary.result.title })).toHaveCount(0);
+  }
   await page.clock.runFor(4000);
   expect(await page.evaluate(() => (window as unknown as { polls: number }).polls)).toBe(1);
   expect(errors).toEqual([]);
