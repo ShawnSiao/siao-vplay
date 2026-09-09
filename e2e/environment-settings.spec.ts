@@ -140,6 +140,9 @@ for (const viewport of [
     await expect(dialog.getByText("应用数据与数据库")).toBeVisible();
     await expect(dialog.getByText("URL 导入视频")).toBeVisible();
     await expect(dialog.getByText("播放缓存")).toBeVisible();
+    await dialog.getByRole("button", { name: "清理缓存", exact: true }).click();
+    await expect(dialog.getByText(/未登记文件会保留/)).toBeVisible();
+    await dialog.locator(".storage-inline-confirm").getByRole("button", { name: "取消", exact: true }).click();
     await expect(dialog.getByText("视频与分析报告")).toBeVisible();
     expect(await dialog.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
 

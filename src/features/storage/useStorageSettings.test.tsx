@@ -44,6 +44,26 @@ async function realController() {
   await waitFor(() => expect(hook.result.current.settings).not.toBeNull());
   return { ...hook, settings };
 }
+it("refreshes remaining cache-directory usage after selective cleanup", async () => {
+  const { result, settings } = await realController();
+  gateway.clearPlaybackCache.mockResolvedValue({ reclaimedBytes: 100 });
+  gateway.getStorageSettings.mockResolvedValue({ ...settings, mediaCacheUsedBytes: 123 });
+  await act(async () => result.current.setSubtitleDirectory("W:/draft"));
+  await act(() => result.current.clearCache());
+  expect(result.current.settings?.mediaCacheUsedBytes).toBe(123);
+  expect(result.current.subtitleDirectory).toBe("W:/draft");
+});
+it("keeps the last known usage and drafts when post-cleanup refresh fails", async () => {
+  const { result, settings } = await realController();
+  gateway.clearPlaybackCache.mockResolvedValue({ reclaimedBytes: 100 });
+  gateway.getStorageSettings.mockRejectedValue(new Error("占用信息读取失败"));
+  await act(async () => result.current.setSubtitleDirectory("W:/draft"));
+  await act(() => result.current.clearCache());
+  expect(result.current.settings?.mediaCacheUsedBytes).toBe(settings.mediaCacheUsedBytes);
+  expect(result.current.subtitleDirectory).toBe("W:/draft");
+  expect(result.current.error).toBe("占用信息读取失败");
+  expect(result.current.operation).toBeNull();
+});
 it("retains editable defaults after a failed save", async () => {
   const { result } = await realController();
   gateway.saveStorageSettings.mockRejectedValue(new Error("保存失败"));

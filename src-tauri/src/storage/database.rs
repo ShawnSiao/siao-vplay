@@ -96,15 +96,13 @@ pub(super) fn rewrite_paths_in_transaction(connection: &Connection, area: Storag
     Ok(())
 }
 
-pub(crate) fn clear_cache_references(database: &Path) -> Result<(), StorageError> {
-    let connection = Connection::open(database)?;
-    connection.execute_batch(
-        "BEGIN IMMEDIATE;
-         UPDATE media_sources SET poster_path = NULL;
-         DELETE FROM media_artifacts;
-         COMMIT;",
-    )?;
-    verify_database(database)
+pub(crate) fn clear_cache_references(database: &Path, path: &str) -> Result<(), StorageError> {
+    let mut connection = Connection::open(database)?;
+    let transaction = connection.transaction()?;
+    transaction.execute("UPDATE media_sources SET poster_path = NULL WHERE poster_path = ?1", [path])?;
+    transaction.execute("DELETE FROM media_artifacts WHERE kind = 'playback_proxy' AND path = ?1", [path])?;
+    transaction.commit()?;
+    Ok(())
 }
 
 pub(crate) fn ensure_idle(database: &Path) -> Result<(), StorageError> {

@@ -1,5 +1,6 @@
 pub mod commands;
 mod database;
+mod cache_inventory;
 mod maintenance;
 mod migration;
 mod migration_commit;

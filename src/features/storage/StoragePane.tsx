@@ -179,7 +179,7 @@ export function StoragePane({ controller }: StoragePaneProps) {
             </StorageRow>
           </div></section>
 
-          {confirmCacheClear ? <div className="storage-inline-confirm"><span>只删除代理视频与封面，原视频、字幕和项目记录不受影响。</span><button className="button text" type="button" onClick={() => setConfirmCacheClear(false)}>取消</button><button className="button danger" type="button" onClick={() => { setConfirmCacheClear(false); void controller.clearCache(); }}>确认清理</button></div> : null}
+          {confirmCacheClear ? <div className="storage-inline-confirm"><span>只删除当前缓存位置中应用登记的代理视频与封面，未登记文件会保留。原视频、字幕和项目记录不受影响。</span><button className="button text" type="button" onClick={() => setConfirmCacheClear(false)}>取消</button><button className="button danger" type="button" onClick={() => { setConfirmCacheClear(false); void controller.clearCache(); }}>确认清理</button></div> : null}
 
           <section className="storage-settings-section"><h3>默认导出位置</h3><div className="storage-settings-list">
             <StorageRow index={4} title="字幕" helper="SRT 或 WebVTT；导出时仍可临时改选" path={controller.subtitleDirectory ?? "每次询问"}>

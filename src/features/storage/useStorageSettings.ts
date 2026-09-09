@@ -235,9 +235,13 @@ export function useStorageSettings(
     setOperation("clearing");
     setError(null);
     try {
-      if (!previewMode) await clearPlaybackCache();
-      if (settings) applySettings({ ...settings, mediaCacheUsedBytes: 0 });
-      onNotice("播放缓存已清理，需要时会自动重新生成。");
+      if (previewMode) {
+        if (settings) applySettings({ ...settings, mediaCacheUsedBytes: 0 });
+      } else {
+        await clearPlaybackCache();
+        applySettings(await getStorageSettings());
+      }
+      onNotice("已清理应用登记的播放缓存，其他文件已保留；需要时会重新生成缓存。");
     } catch (cause) {
       setError(message(cause));
     } finally {

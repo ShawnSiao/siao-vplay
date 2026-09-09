@@ -1,12 +1,10 @@
 use std::{
-    fs,
     path::{Path, PathBuf},
     process::Command,
 };
 
 use super::{
     ClearPlaybackCacheResult, StorageError, StorageLocationKind, StorageManager, database,
-    paths::directory_size,
 };
 
 pub(crate) fn open_location(
@@ -46,25 +44,7 @@ pub(crate) fn clear_playback_cache(
             "播放缓存位置与应用数据根目录边界不安全".to_owned(),
         ));
     }
-    let reclaimed_bytes = directory_size(&root);
-    let entries = fs::read_dir(&root)?.collect::<Result<Vec<_>, _>>()?;
-    for entry in &entries {
-        let metadata = entry.metadata()?;
-        if metadata.is_symlink() {
-            return Err(StorageError::MigrationIntegrity(
-                "缓存位置包含不支持的符号链接".to_owned(),
-            ));
-        }
-    }
-    for entry in entries {
-        let metadata = entry.metadata()?;
-        if metadata.is_dir() {
-            fs::remove_dir_all(entry.path())?;
-        } else if metadata.is_file() {
-            fs::remove_file(entry.path())?;
-        }
-    }
-    database::clear_cache_references(database_path)?;
+    let reclaimed_bytes = super::cache_inventory::clear_recorded_cache(database_path, &root)?;
     Ok(ClearPlaybackCacheResult { reclaimed_bytes })
 }
 
