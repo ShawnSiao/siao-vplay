@@ -22,7 +22,6 @@ import { supportedVideoExtensions } from "./mediaFiles";
 import { chooseConfiguredStorageDirectory } from "./storageDirectoryPicker";
 
 import type {
-  DeleteProjectResult,
   ExternalAgentTaskKind,
   LearningCard,
   LearningCardsExport,
@@ -243,13 +242,7 @@ export async function relinkProjectMedia(
   });
 }
 
-export async function deleteProject(
-  projectId: string,
-): Promise<DeleteProjectResult> {
-  return invoke<DeleteProjectResult>("delete_project", { projectId });
-}
-
-
+export { deleteProject } from "./projectDeletionGateway";
 
 export { startTranscription, getTranscriptionJob, listTranscriptionJobs, cancelTranscriptionJob, resumeTranscriptionJob } from "./transcriptionGateway";
 

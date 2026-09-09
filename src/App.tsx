@@ -1,3 +1,4 @@
+import { ProjectCleanupNotice } from "./components/ProjectCleanupNotice";
 import { ExternalResultNotice } from "./components/ExternalResultNotice";
 import { useSettingsNavigation } from "./features/environment-settings/useSettingsNavigation";
 import { useTrackedTranscription } from "./features/playback/useTrackedTranscription";
@@ -120,6 +121,7 @@ export default function App() {
   const operationTokenRef = useRef(0);
   const openingIntent = useOpeningIntent();
   const [sessionId, setSessionId] = useState(0);
+  const [cleanupRevision, setCleanupRevision] = useState(0);
   const startupMediaHandledRef = useRef(false);
   const [appStatus, setAppStatus] = useState<AppStatus | null>(null);
   const [startupError, setStartupError] = useState<string | null>(null);
@@ -569,9 +571,12 @@ export default function App() {
     setBusyMessage("正在删除项目记录…");
     try {
       const result = await deleteProject(project.id);
+      setCleanupRevision(value => value + 1);
       setDeleteCandidate(null);
       setBusyMessage(null);
-      if (result.deleted && !result.sourceMediaDeleted) {
+      if (result.cleanupPending > 0) {
+        setToast("项目已删除，部分文件尚未清理，可在媒体库重试。");
+      } else if (result.deleted && !result.sourceMediaDeleted) {
         setToast(
           project.mediaSource.originUrl
             ? result.cachedMediaDeleted
@@ -742,6 +747,7 @@ export default function App() {
         onOpenSettings={settingsNavigation.openDefault}
       >
         {startupError ? <div className="notice danger" role="alert">{startupError}</div> : null}
+        {isDesktopApp && screen === "library" ? <ProjectCleanupNotice revision={cleanupRevision} /> : null}
         <ExternalResultNotice failure={externalResults.failure} slowPhase={externalResults.slowPhase} onRetry={externalResults.retry} />
         {screen === "library" ? (
           <LibraryScreen

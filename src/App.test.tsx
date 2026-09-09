@@ -1,3 +1,4 @@
+import { confirmProjectDeletion } from "./test/confirmProjectDeletion";
 import { verifyRejectedStartupStatus } from "./appStartupStatusTest";
 import { locationResult } from "./test-fixtures/resourceLocation";
 import { createLearningTaskFixture } from "./test-fixtures/learning";
@@ -160,6 +161,9 @@ const analysisGatewayMocks = vi.hoisted(() => ({
   saveAnalysisPromptTemplate: vi.fn(),
   deleteAnalysisPromptTemplate: vi.fn(),
 }));
+
+const cleanupMocks = vi.hoisted(() => ({ getPendingProjectCleanup: vi.fn() }));
+vi.mock("./lib/projectDeletionGateway", () => ({ getPendingProjectCleanup: cleanupMocks.getPendingProjectCleanup, deleteProject: desktopMocks.deleteProject }));
 
 vi.mock("./lib/desktop", () => ({
   ...desktopMocks,
@@ -755,6 +759,7 @@ const burnJob: SubtitleBurnJob = {
 };
 
 beforeEach(() => {
+  cleanupMocks.getPendingProjectCleanup.mockResolvedValue(null);
   analysisGatewayMocks.listAnalysisPromptTemplates.mockResolvedValue([
     {
       id: "builtin:understanding:balanced",
@@ -899,6 +904,7 @@ beforeEach(() => {
     deleted: true,
     sourceMediaDeleted: false,
     cachedMediaDeleted: false,
+    cleanupPending: 0,
   });
   desktopMocks.inspectSubtitleFile.mockResolvedValue(subtitlePreview);
   desktopMocks.importSubtitleFile.mockResolvedValue(subtitleVersion);
@@ -2456,29 +2462,22 @@ describe("App", () => {
     );
   });
 
-  it("states that deleting a project keeps the source video", async () => {
+  it.each([0, 1])("reports source preservation and pending cleanup (%s)", async (cleanupPending) => {
+    desktopMocks.deleteProject.mockImplementation(async () => {
+      cleanupMocks.getPendingProjectCleanup.mockResolvedValue(cleanupPending ? { projectId: project.id, pendingDirectories: cleanupPending } : null);
+      return { projectId: project.id, deleted: true, sourceMediaDeleted: false, cachedMediaDeleted: false, cleanupPending };
+    });
     libraryGatewayMocks.listLibrarySection.mockImplementation(async ({ section }) => ({
       items: section === "unclassified" ? [mediaSummaryFor()] : [],
       totalCount: section === "unclassified" ? 1 : 0,
       nextOffset: null,
     }));
     render(<App />);
-    fireEvent.click(await screen.findByRole("button", { name: "媒体库：未分类视频" }));
-    fireEvent.click(await screen.findByLabelText("雨站台 的更多操作"));
-    fireEvent.click(await screen.findByRole("menuitem", { name: "删除视频" }));
-
+    await confirmProjectDeletion(project.title, () => expect(desktopMocks.deleteProject).toHaveBeenCalledWith(project.id));
     expect(
-      await screen.findByRole("heading", { name: "删除这个本地项目？" }),
+      await screen.findByText(cleanupPending ? "项目已删除，部分文件尚未清理，可在媒体库重试。" : "项目已删除，源视频保持不变。"),
     ).toBeInTheDocument();
-    expect(screen.getByText("源视频不会被删除")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "删除项目" }));
-
-    await waitFor(() =>
-      expect(desktopMocks.deleteProject).toHaveBeenCalledWith(project.id),
-    );
-    expect(
-      await screen.findByText("项目已删除，源视频保持不变。"),
-    ).toBeInTheDocument();
+    if (cleanupPending) expect(await screen.findByRole("button", { name: "重试清理" })).toBeEnabled();
   });
 
   it("preflights and imports a local original subtitle", async () => {

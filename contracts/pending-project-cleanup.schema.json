@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "pendingDirectories": {
+      "format": "uint64",
+      "maximum": 9007199254740991,
+      "minimum": 1,
+      "type": "integer"
+    },
+    "projectId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "projectId",
+    "pendingDirectories"
+  ],
+  "title": "PendingProjectCleanup",
+  "type": "object"
+}

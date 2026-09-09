@@ -205,7 +205,7 @@ fn version_19_upgrade_preserves_assets_without_replaying_historical_completions(
         },
     )
     .unwrap();
-    fixture.store.connect().unwrap().execute_batch("DROP TABLE external_result_deliveries; DELETE FROM schema_migrations WHERE version=20;").unwrap();
+    fixture.store.connect().unwrap().execute_batch("DROP TABLE project_cleanup_receipts; DROP TABLE external_result_deliveries; DELETE FROM schema_migrations WHERE version>=20;").unwrap();
     let reopened = ProjectStore::open(fixture.store.database_path()).unwrap();
     assert!(
         super::reconcile_external_agent_results(&reopened, &Default::default())

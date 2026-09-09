@@ -1,4 +1,5 @@
 import { ActivityPreview } from "./ActivityPreview";
+import { ProjectCleanupNotice } from "../components/ProjectCleanupNotice";
 import { StrictMode, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { LibraryFolderImportDialog } from "../components/LibraryFolderImportDialog";
@@ -242,6 +243,7 @@ export function LibraryHarness() {
       onDeliverSubtitles={() => undefined}
       onOpenSettings={() => undefined}
     >
+      {new URLSearchParams(location.search).has("cleanup") ? <ProjectCleanupNotice revision={0} /> : null}
       <LibraryScreen
         home={visibleHome}
         section={section}

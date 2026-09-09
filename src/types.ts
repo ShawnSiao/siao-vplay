@@ -470,12 +470,7 @@ export type { OldResourceVersionCleanupPlan } from "./generated/old-resource-ver
 
 export type { OldResourceVersionCleanupResult } from "./generated/old-resource-version-cleanup-result";
 
-export type DeleteProjectResult = {
-  projectId: string;
-  deleted: boolean;
-  sourceMediaDeleted: false;
-  cachedMediaDeleted: boolean;
-};
+export type { DeleteProjectResult } from "./generated/delete-project-result";
 
 export type RemoteMediaKind = "direct_file" | "hls";
 

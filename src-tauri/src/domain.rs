@@ -126,11 +126,14 @@ pub struct UpdatePlaybackStateInput {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct DeleteProjectResult {
     pub project_id: String,
     pub deleted: bool,
     pub source_media_deleted: bool,
     pub cached_media_deleted: bool,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
+    pub cleanup_pending: u64,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]

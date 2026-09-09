@@ -53,6 +53,8 @@ fn committed_schemas_match_rust() {
     check_schema("storage-settings", &serialized_schema::<crate::storage::StorageSettingsView>());
     check_schema("save-storage-settings-input", &serialized_schema::<crate::storage::SaveStorageSettingsInput>());
     check_schema("summary-export", &serialized_schema::<crate::summary::SummaryExport>());
+    check_schema("delete-project-result", &serialized_schema::<crate::domain::DeleteProjectResult>());
+    check_schema("pending-project-cleanup", &serialized_schema::<crate::store::PendingProjectCleanup>());
     check_schema("summary-activity", &serialized_schema::<crate::summary::SummaryActivity>());
     check_schema("external-agent-result-update", &serialized_schema::<crate::external_handoff::ExternalAgentResultUpdate>());
     check_schema("app-status", &serialized_schema::<crate::AppStatus>());

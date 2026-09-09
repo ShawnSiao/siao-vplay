@@ -29,7 +29,7 @@ pub use model::{
     StorageLocationKind, StorageMigrationMode, StorageMigrationStatus, StorageMigrationTask,
     StorageMigrationTaskInput, StorageSettingsView,
 };
-pub(crate) use paths::remove_remote_project_directory;
+
 pub use settings::StorageManager;
 
 #[derive(Debug, Error)]

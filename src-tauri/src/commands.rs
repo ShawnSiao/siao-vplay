@@ -592,6 +592,13 @@ pub async fn delete_project(
 }
 
 #[tauri::command]
+pub async fn get_pending_project_cleanup(store: State<'_, ProjectStore>) -> Result<Option<crate::store::PendingProjectCleanup>, CommandError> {
+    let store = store.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || store.next_pending_project_cleanup().map_err(CommandError::from))
+        .await.map_err(CommandError::background_task_failed)?
+}
+
+#[tauri::command]
 pub fn get_media_runtime_status() -> MediaRuntimeStatus {
     media::media_runtime_status()
 }

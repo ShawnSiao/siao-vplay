@@ -240,7 +240,7 @@ pub fn run() {
             commands::update_playback_state,
             watch_state::set_project_watched,
             commands::relink_project_media,
-            commands::delete_project,
+            commands::delete_project, commands::get_pending_project_cleanup,
             commands::get_media_runtime_status,
             commands::get_local_resource_catalog,
             commands::get_local_resource_status,

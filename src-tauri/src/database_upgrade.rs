@@ -152,7 +152,7 @@ mod tests {
     }
     fn pending_upgrade() -> crate::understanding::test_fixture::Fixture {
         let fixture = crate::understanding::test_fixture::Fixture::new();
-        fixture.store.connect().unwrap().execute_batch("DROP TABLE external_result_deliveries; DELETE FROM schema_migrations WHERE version >= 19; ALTER TABLE subtitle_burn_jobs DROP COLUMN burn_style_json; UPDATE playback_states SET position_ms = 4200;").unwrap();
+        fixture.store.connect().unwrap().execute_batch("DROP TABLE project_cleanup_receipts; DROP TABLE external_result_deliveries; DELETE FROM schema_migrations WHERE version >= 19; ALTER TABLE subtitle_burn_jobs DROP COLUMN burn_style_json; UPDATE playback_states SET position_ms = 4200;").unwrap();
         fixture
     }
     #[test]

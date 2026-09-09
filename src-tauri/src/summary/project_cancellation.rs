@@ -22,6 +22,25 @@ pub(crate) fn cancel_project_tasks(store: &ProjectStore, project_id: &str) -> Re
 mod tests {
     use super::*;
     use crate::summary::{test_support, task_repository::SummaryTaskRepository};
+    #[cfg(windows)]
+    #[test]
+    fn project_cleanup_can_retry_locked_materials_after_reopen() {
+        use std::os::windows::fs::OpenOptionsExt;
+        let (_directory, store, task) = test_support::prepared_summary();
+        let materials = SummaryTaskRepository::new(&store).materials_directory(&task.id);
+        std::fs::create_dir_all(&materials).unwrap();
+        let sentinel = materials.join("locked.txt");
+        std::fs::write(&sentinel, b"pending cleanup").unwrap();
+        let lock = std::fs::OpenOptions::new().read(true).share_mode(1).open(&sentinel).unwrap();
+        let first = store.delete_project(&task.project_id);
+        assert!(sentinel.exists(), "fixture must reproduce deletion denial");
+        drop(lock);
+        let database = store.database_path().to_owned();
+        drop(store);
+        let reopened = ProjectStore::open(database).unwrap();
+        let retry = reopened.delete_project(&task.project_id);
+        assert!(!materials.exists(), "cleanup identity was lost: first={first:?}, retry={retry:?}");
+    }
     #[test]
     fn project_deletion_removes_only_its_summary_materials() {
         let (_directory, store, task) = test_support::prepared_summary();

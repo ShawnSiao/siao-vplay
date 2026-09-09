@@ -1,4 +1,6 @@
 mod local_projects;
+mod project_cleanup;
+pub use project_cleanup::PendingProjectCleanup;
 #[cfg(test)]
 mod library_benchmark;
 
@@ -19,7 +21,7 @@ use crate::domain::{
 };
 use crate::library::migration::{self as library_migration, MigrationError};
 
-const CURRENT_SCHEMA_VERSION: i64 = 20;
+const CURRENT_SCHEMA_VERSION: i64 = 21;
 
 #[derive(Clone, Debug)]
 pub(crate) struct RemoteImportProvenance {
@@ -647,78 +649,32 @@ impl ProjectStore {
             Err(StoreError::ProjectNotFound(_)) => None,
             Err(error) => return Err(error),
         };
-        let connection = self.connect()?;
-        let agent_task_ids = connection
-            .prepare(
-                "SELECT id FROM agent_tasks WHERE project_id = ?1
-                 UNION
-                 SELECT id FROM explanation_tasks WHERE project_id = ?1
-                 UNION
-                 SELECT id FROM learning_tasks WHERE project_id = ?1",
-            )?
-            .query_map(params![project_id], |row| row.get::<_, String>(0))?
-            .collect::<Result<Vec<_>, _>>()?;
-        let summary_task_ids = connection
-            .prepare("SELECT id FROM summary_tasks WHERE project_id = ?1")?
-            .query_map(params![project_id], |row| row.get::<_, String>(0))?
-            .collect::<Result<Vec<_>, _>>()?;
-        let changed =
-            connection.execute("DELETE FROM projects WHERE id = ?1", params![project_id])?;
-        let cached_media_deleted = if changed > 0 {
-            project
-                .as_ref()
-                .filter(|project| project.media_source.origin_url.is_some())
-                .is_some_and(|project| {
-                    crate::storage::remove_remote_project_directory(
-                        remote_media_root,
-                        &project.media_source.locator,
-                    )
-                })
-        } else {
-            false
-        };
-        if changed > 0 {
-            self.remove_task_materials("agent-tasks", &agent_task_ids);
-            self.remove_task_materials("summary-tasks", &summary_task_ids);
-            self.remove_learning_card_materials(project_id);
-            self.remove_subtitle_burn_materials(project_id);
+        let mut connection = self.connect()?;
+        let transaction = connection.transaction()?;
+        for (table, kind) in [("agent_tasks", "agent-tasks"), ("explanation_tasks", "agent-tasks"), ("learning_tasks", "agent-tasks"), ("summary_tasks", "summary-tasks")] {
+            let ids = transaction.prepare(&format!("SELECT id FROM {table} WHERE project_id = ?1"))?
+                .query_map([project_id], |row| row.get::<_, String>(0))?
+                .collect::<Result<Vec<_>, _>>()?;
+            for id in ids { project_cleanup::record(&transaction, project_id, kind, &id)?; }
         }
-
+        if project.is_some() {
+            for kind in ["learning-cards", "subtitle-burn-jobs"] {
+                project_cleanup::record(&transaction, project_id, kind, project_id)?;
+            }
+        }
+        if let Some(project) = project.as_ref().filter(|project| project.media_source.origin_url.is_some()) {
+            project_cleanup::record_remote(&transaction, project_id, remote_media_root, &project.media_source.locator)?;
+        }
+        let changed = transaction.execute("DELETE FROM projects WHERE id = ?1", params![project_id])?;
+        transaction.commit()?;
+        let (cleanup_pending, cached_media_deleted) = project_cleanup::retry_remote(&connection, self.data_directory(), remote_media_root, project_id)?;
         Ok(DeleteProjectResult {
             project_id: project_id.to_owned(),
             deleted: changed > 0,
             source_media_deleted: false,
             cached_media_deleted,
+            cleanup_pending,
         })
-    }
-
-    fn remove_task_materials(&self, directory: &str, task_ids: &[String]) {
-        let task_root = self.data_directory().join(directory);
-        for task_id in task_ids {
-            if Uuid::parse_str(task_id).is_ok() {
-                let _ = fs::remove_dir_all(task_root.join(task_id));
-            }
-        }
-    }
-
-    fn remove_learning_card_materials(&self, project_id: &str) {
-        if Uuid::parse_str(project_id).is_ok() {
-            let _ = fs::remove_dir_all(
-                self.data_directory()
-                    .join("learning-cards")
-                    .join(project_id),
-            );
-        }
-    }
-
-    fn remove_subtitle_burn_materials(&self, project_id: &str) {
-        if Uuid::parse_str(project_id).is_ok() {
-            let _ = fs::remove_dir_all(
-                self.data_directory()
-                    .join("subtitle-burn-jobs")
-                    .join(project_id),
-            );
-        }
     }
 
     fn get_media_artifact(&self, artifact_id: &str) -> Result<MediaArtifact, StoreError> {
@@ -931,6 +887,9 @@ impl ProjectStore {
         }
         if current_version < 20 {
             crate::external_result_delivery::migrate(connection, now_ms()?)?;
+        }
+        if current_version < 21 {
+            project_cleanup::migrate(connection, now_ms()?)?;
         }
         Ok(())
     }
@@ -2487,7 +2446,7 @@ mod tests {
         let cache_directory = temporary
             .path()
             .join("remote-media")
-            .join("authorized-import");
+            .join(Uuid::new_v4().to_string());
         fs::create_dir_all(&cache_directory).expect("cache directory should be created");
         let cached_media = cache_directory.join("source.mp4");
         fs::write(&cached_media, b"remote-media-copy").expect("cached media should be written");
