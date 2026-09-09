@@ -1,3 +1,4 @@
+import { requireLearningResult } from "../features/learning/learningResult";
 import { AiTaskDispatchConfirm } from "../features/ai-tasks/AiTaskDispatchConfirm";
 import { executeLearningDispatch, previewTaskDispatch, type TaskDispatchPreview } from "../features/ai-tasks/taskDispatch";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -290,6 +291,7 @@ function LearningPanelSession({
     void getDictionaryEntry(task.outputDictionaryEntryId)
       .then((value) => {
         if (!active) return;
+        requireLearningResult(value, task);
         handledCompletionRef.current = task.id;
         setError(null);
         setEntry(value);
@@ -467,6 +469,8 @@ function LearningPanelSession({
     setError(null);
     try {
       const application = await importLearningResult(task.id, resultPath);
+      requireLearningResult(application.dictionaryEntry, task);
+      if (application.task.id !== task.id) throw new Error("返回的学习任务不匹配。");
       handledCompletionRef.current = task.id;
       setTask(application.task);
       setEntry(application.dictionaryEntry);

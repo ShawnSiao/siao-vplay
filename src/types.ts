@@ -980,25 +980,8 @@ export type LearningTask = {
   startedAtMs: number | null;
   completedAtMs: number | null;
 };
-export type DictionaryEntry = {
-  id: string;
-  projectId: string;
-  taskId: string;
-  sourceVersionId: string;
-  translationVersionId: string | null;
-  sourceSegmentId: string;
-  selectedText: string;
-  selectionKind: LearningSelectionKind;
-  pronunciation: string;
-  partOfSpeech: string;
-  contextualMeaning: string;
-  usageNote: string | null;
-  sourceSentence: string;
-  translatedSentence: string | null;
-  languageCode: string;
-  playbackPositionMs: number;
-  createdAtMs: number;
-};
+import type { DictionaryEntry } from "./generated/dictionary-entry";
+export type { DictionaryEntry } from "./generated/dictionary-entry";
 
 export type LearningApplication = {
   task: LearningTask;

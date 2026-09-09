@@ -1,12 +1,14 @@
+import { createPlayerSubtitleFixtures } from "../src/e2e/playerSubtitleFixtures";
 import { expect, test, type Page } from "@playwright/test";
 
 async function installRecoveryFixture(page: Page, status = "interrupted") {
-  await page.addInitScript((status) => {
+  const { originalSubtitle } = createPlayerSubtitleFixtures("e2e-project");
+  const source = { ...originalSubtitle, id: "historical-original",
+    segments: [{ ...originalSubtitle.segments[0], id: "old-line", text: "Historical sentence.", startMs: 5000, endMs: 7000, words: [], sourceSegmentId: null }] };
+  await page.addInitScript(({ status, source }) => {
     const task = { id: "old-task", projectId: "e2e-project", handoffKind: "codex", status, stage: "interrupted",
       sourceVersionId: "historical-original", translationVersionId: null, sourceSegmentId: "old-line", selectedText: "Historical",
       selectionKind: "word", playbackPositionMs: 6000, progress: 0, outputDictionaryEntryId: null };
-    const source = { id: "historical-original", projectId: "e2e-project", role: "original", languageCode: "en", versionNumber: 1,
-      segments: [{ id: "old-line", text: "Historical sentence.", startMs: 5000, endMs: 7000, words: [], sourceSegmentId: null }] };
     const state = window as unknown as { __TAURI_INTERNALS__: unknown; reads: number; failRead: boolean };
     state.reads = 0;
     state.failRead = true;
@@ -22,7 +24,7 @@ async function installRecoveryFixture(page: Page, status = "interrupted") {
         default: throw new Error(`Unexpected fixture IPC: ${command}`);
       }
     } };
-  }, status);
+  }, { status, source });
 }
 
 test("restored learning uses the historical sentence and cutoff, then permits an explicit new context", async ({ page }) => {

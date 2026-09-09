@@ -1,3 +1,4 @@
+export { getDictionaryEntry, listDictionaryEntries } from "./dictionaryGateway";
 export { prepareTranslationTask, getTranslationTask, listTranslationTasks, readTranslationPrompt, importTranslationResult, startCodexTranslationTask, cancelTranslationTask, resumeCodexTranslationTask } from "./translationGateway";
 export { inspectSubtitleFile, importSubtitleFile, listSubtitleVersions, getSubtitleVersion, listSubtitleVersionMetadata, reviseSubtitleVersion, restoreSubtitleVersion, inspectEmbeddedSubtitle, importEmbeddedSubtitle } from "./subtitleGateway";
 export { inspectYouTubeUrl, importYouTubeUrl, cancelYouTubeImport, getPublicResolverDisclosure } from "./publicVideoGateway";
@@ -20,7 +21,6 @@ import type {
   Explanation,
   ExplanationApplication,
   ExplanationTask,
-  DictionaryEntry,
   LearningApplication,
   LearningCard,
   LearningCardsExport,
@@ -914,18 +914,6 @@ export async function listLearningTasks(
 
 export async function readLearningPrompt(taskId: string): Promise<string> {
   return invoke<string>("read_learning_prompt", { taskId });
-}
-
-export async function getDictionaryEntry(
-  entryId: string,
-): Promise<DictionaryEntry> {
-  return invoke<DictionaryEntry>("get_dictionary_entry", { entryId });
-}
-
-export async function listDictionaryEntries(
-  projectId: string,
-): Promise<DictionaryEntry[]> {
-  return invoke<DictionaryEntry[]>("list_dictionary_entries", { projectId });
 }
 
 export async function importLearningResult(

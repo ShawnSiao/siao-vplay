@@ -1,3 +1,7 @@
+mod dictionary;
+pub use dictionary::DictionaryEntry;
+#[cfg(test)]
+mod wire_schema;
 use std::{
     fs,
     path::{Component, Path, PathBuf},
@@ -163,27 +167,7 @@ pub struct LearningTask {
     pub completed_at_ms: Option<i64>,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct DictionaryEntry {
-    pub id: String,
-    pub project_id: String,
-    pub task_id: String,
-    pub source_version_id: String,
-    pub translation_version_id: Option<String>,
-    pub source_segment_id: String,
-    pub selected_text: String,
-    pub selection_kind: String,
-    pub pronunciation: String,
-    pub part_of_speech: String,
-    pub contextual_meaning: String,
-    pub usage_note: Option<String>,
-    pub source_sentence: String,
-    pub translated_sentence: Option<String>,
-    pub language_code: String,
-    pub playback_position_ms: i64,
-    pub created_at_ms: i64,
-}
+
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
