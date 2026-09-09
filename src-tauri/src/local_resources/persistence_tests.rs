@@ -86,3 +86,18 @@ fn inactive_receipt_removal_rejects_non_file_sidecar_before_deleting_primary() {
     assert!(manager.remove_inactive_receipt("ffmpeg-cpu", "1").is_err());
     assert_eq!(fs::read(&path).unwrap(), before);
 }
+
+#[test]
+fn active_removal_preflight_failure_preserves_configuration_and_payload() {
+    let (_data, _parent, mut manager) = setup();
+    let root = configuration_root(manager.configuration.as_ref().unwrap());
+    let install = root.join("packages/ffmpeg-cpu/1");
+    fs::create_dir_all(&install).unwrap(); fs::write(install.join("payload"), b"keep").unwrap();
+    let target = root.join("receipts/ffmpeg-cpu/1.json");
+    let before = fs::read(&manager.config_path).unwrap();
+    fs::create_dir(target.with_extension("json.bak")).unwrap();
+    assert!(manager.deactivate_resource("ffmpeg-cpu").is_err());
+    assert_eq!(fs::read(&manager.config_path).unwrap(), before);
+    assert_eq!(fs::read(install.join("payload")).unwrap(), b"keep");
+    assert!(target.is_file());
+}

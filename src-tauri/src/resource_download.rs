@@ -457,31 +457,10 @@ pub fn remove_resource(
         return Err(ResourceDownloadError::ResourceBusy(resource_id.to_owned()));
     }
     let affected_capability_ids = affected_capabilities(resource_id)?;
-    let Some(receipt) = local_resources::active_receipt(resource_id)? else {
-        return Ok(ResourceRemovalResult {
-            resource_id: resource_id.to_owned(),
-            removed: false,
-            affected_capability_ids,
-        });
-    };
-    let root = configured_available_root()?;
-    let install_path = join_safe_relative(&root, &receipt.install_relative_path)?;
-    let removal_path = root
-        .join("staging")
-        .join(format!("removal-{}", Uuid::new_v4()));
-    if install_path.exists() {
-        fs::rename(&install_path, &removal_path)?;
-    }
-    if let Err(error) = local_resources::deactivate_resource(resource_id) {
-        if removal_path.exists() && !install_path.exists() {
-            let _ = fs::rename(&removal_path, &install_path);
-        }
-        return Err(error.into());
-    }
-    remove_directory_if_exists(&removal_path)?;
+    let removed = local_resources::deactivate_resource(resource_id)?.is_some();
     Ok(ResourceRemovalResult {
         resource_id: resource_id.to_owned(),
-        removed: true,
+        removed,
         affected_capability_ids,
     })
 }

@@ -1,4 +1,5 @@
 mod activation;
+mod removal;
 #[cfg(test)]
 mod recovery_tests;
 mod persistence;
@@ -409,12 +410,12 @@ pub(crate) fn development_path_override(name: &str) -> Option<PathBuf> {
     }
 }
 
-pub(crate) fn activation_pending() -> Result<bool, LocalResourceError> {
+pub(crate) fn resource_change_pending() -> Result<bool, LocalResourceError> {
     if MANAGER.get().is_none() { return Ok(false); }
-    with_manager_read(|manager| activation::pending(&manager.config_path))
+    with_manager_read(|manager| Ok(activation::pending(&manager.config_path)? || removal::pending(&manager.config_path)?))
 }
 
-pub(crate) fn recover_activation_for_use() -> Result<(), LocalResourceError> {
+pub(crate) fn recover_changes_for_use() -> Result<(), LocalResourceError> {
     if MANAGER.get().is_none() { return Ok(()); }
     with_manager_write(|_| Ok(()))
 }
@@ -437,16 +438,24 @@ fn with_manager_write<T>(
     let mut state = state
         .write()
         .map_err(|_| io::Error::other("本地资源设置锁不可用"))?;
-    if activation::recover(&state.config_path)? != activation::Recovery::None {
+    if recover_transactions(&state.config_path)? {
         state.configuration = persistence::load_configuration(&state.config_path)?;
     }
     operation(&mut state)
 }
 
+fn recover_transactions(config: &Path) -> Result<bool, LocalResourceError> {
+    if activation::pending(config)? && removal::pending(config)? {
+        return Err(LocalResourceError::InvalidReceipt("存在冲突的资源变更记录，已保留文件".into()));
+    }
+    let activated = activation::recover(config)? != activation::Recovery::None;
+    Ok(removal::recover(config)? || activated)
+}
+
 impl LocalResourceManager {
     fn load(data_directory: &Path) -> Result<Self, LocalResourceError> {
         let config_path = data_directory.join(CONFIG_FILE_NAME);
-        activation::recover(&config_path)?;
+        recover_transactions(&config_path)?;
         let mut configuration = persistence::load_configuration(&config_path)?;
         let legacy_settings = load_legacy_runtime_settings(data_directory);
         let mut changed = false;
@@ -873,24 +882,7 @@ impl LocalResourceManager {
         &mut self,
         resource_id: &str,
     ) -> Result<Option<ResourceReceipt>, LocalResourceError> {
-        let receipt = self.active_receipt(resource_id)?;
-        let Some(receipt) = receipt else {
-            return Ok(None);
-        };
-        let mut configuration = self.configuration.clone().ok_or_else(|| {
-            LocalResourceError::ResourceNotReady(format!("{resource_id} 尚未配置"))
-        })?;
-        configuration.active_resources.remove(resource_id);
-        persist_json(&self.config_path, &configuration)?;
-        self.configuration = Some(configuration.clone());
-        let receipt_path = configuration_root(&configuration)
-            .join("receipts")
-            .join(resource_id)
-            .join(format!("{}.json", receipt.version));
-        if receipt_path.is_file() {
-            fs::remove_file(receipt_path)?;
-        }
-        Ok(Some(receipt))
+        removal::remove(self, resource_id)
     }
 
     fn remove_inactive_receipt(

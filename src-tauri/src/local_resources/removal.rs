@@ -1,0 +1,183 @@
+mod files;
+use super::*;
+const JOURNAL: &str = "resource-removal.json";
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct Journal {
+    schema_version: u32,
+    previous: LocalResourceConfiguration,
+    next: LocalResourceConfiguration,
+    receipt: ResourceReceipt,
+    receipt_raw: String,
+    staging_id: String,
+    had_payload: bool,
+}
+fn invalid() -> LocalResourceError {
+    LocalResourceError::InvalidReceipt(
+        "资源删除记录与当前状态不匹配，已保留文件，请检查后重试".into(),
+    )
+}
+fn journal_path(config: &Path) -> Result<PathBuf, LocalResourceError> {
+    Ok(config.parent().ok_or_else(invalid)?.join(JOURNAL))
+}
+fn validate(journal: &Journal) -> Result<(), LocalResourceError> {
+    if journal.schema_version != 1 {
+        return Err(invalid());
+    }
+    validate_configuration(&journal.previous)?;
+    validate_configuration(&journal.next)?;
+    let receipt = &journal.receipt;
+    validate_identifier(&receipt.resource_id, "资源 ID")?;
+    validate_identifier(&receipt.version, "资源版本")?;
+    validate_receipt(receipt, &receipt.resource_id, &receipt.version)?;
+    let expected_raw: ResourceReceipt = serde_json::from_str(&journal.receipt_raw)?;
+    if expected_raw != *receipt
+        || journal.previous.active_resources.get(&receipt.resource_id) != Some(&receipt.version)
+    {
+        return Err(invalid());
+    }
+    let mut next = journal.previous.clone();
+    next.active_resources.remove(&receipt.resource_id);
+    if next != journal.next {
+        return Err(invalid());
+    }
+    if !["packages", "models"].iter().any(|category| {
+        receipt.install_relative_path
+            == format!("{category}/{}/{}", receipt.resource_id, receipt.version)
+    }) {
+        return Err(invalid());
+    }
+    let id = uuid::Uuid::parse_str(&journal.staging_id).map_err(|_| invalid())?;
+    if id.to_string() != journal.staging_id {
+        return Err(invalid());
+    }
+    Ok(())
+}
+fn paths(journal: &Journal) -> Result<(PathBuf, PathBuf, PathBuf), LocalResourceError> {
+    let root = configuration_root(&journal.previous);
+    let install = files::contained(&root, &journal.receipt.install_relative_path)?;
+    let stage = files::contained(&root, &format!("staging/removal-{}", journal.staging_id))?;
+    let receipt = files::contained(
+        &root,
+        &format!(
+            "receipts/{}/{}.json",
+            journal.receipt.resource_id, journal.receipt.version
+        ),
+    )?;
+    Ok((install, stage, receipt))
+}
+pub(super) fn pending(config: &Path) -> Result<bool, LocalResourceError> {
+    let path = journal_path(config)?;
+    for candidate in [
+        path.clone(),
+        path.with_extension("json.bak"),
+        path.with_extension("json.part"),
+    ] {
+        if files::metadata(&candidate)?.is_some() {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+pub(super) fn recover(config: &Path) -> Result<bool, LocalResourceError> {
+    let path = journal_path(config)?;
+    let Some(journal) = persistence::read_recovering(&path, validate)? else {
+        return Ok(false);
+    };
+    let current = persistence::load_configuration(config)?.ok_or_else(invalid)?;
+    let committed = current == journal.next;
+    if !committed && current != journal.previous {
+        return Err(invalid());
+    }
+    let (install, stage, receipt) = paths(&journal)?;
+    files::check_record(&receipt)?;
+    let receipt_raw = match fs::read_to_string(&receipt) {
+        Ok(raw) => Some(raw),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => None,
+        Err(error) => return Err(error.into()),
+    };
+    if receipt_raw
+        .as_ref()
+        .is_some_and(|raw| raw != &journal.receipt_raw)
+        || (!committed && receipt_raw.is_none())
+    {
+        return Err(invalid());
+    }
+    let installed = files::directory(&install)?;
+    let staged = files::directory(&stage)?;
+    if committed {
+        if installed || (staged && !journal.had_payload) {
+            return Err(invalid());
+        }
+        if staged {
+            files::check_tree(&stage)?;
+        }
+        persistence::remove_record(&receipt)?;
+        if staged {
+            fs::remove_dir_all(&stage)?;
+        }
+    } else {
+        if journal.had_payload {
+            if installed == staged {
+                return Err(invalid());
+            }
+            if staged {
+                fs::rename(&stage, &install)?;
+            }
+        } else if installed || staged {
+            return Err(invalid());
+        }
+    }
+    persistence::remove_record(&path)?;
+    Ok(true)
+}
+pub(super) fn remove(
+    manager: &mut LocalResourceManager,
+    resource_id: &str,
+) -> Result<Option<ResourceReceipt>, LocalResourceError> {
+    if recover(&manager.config_path)? {
+        manager.configuration = persistence::load_configuration(&manager.config_path)?;
+    }
+    let Some(receipt) = manager.active_receipt(resource_id)? else {
+        return Ok(None);
+    };
+    let previous = manager.configuration.clone().ok_or_else(invalid)?;
+    let mut next = previous.clone();
+    next.active_resources.remove(resource_id);
+    let mut journal = Journal {
+        schema_version: 1,
+        previous,
+        next,
+        receipt,
+        receipt_raw: String::new(),
+        staging_id: uuid::Uuid::new_v4().to_string(),
+        had_payload: false,
+    };
+    let (install, stage, target) = paths(&journal)?;
+    files::check_record(&target)?;
+    journal.receipt_raw = fs::read_to_string(&target)?;
+    journal.had_payload = files::directory(&install)?;
+    if journal.had_payload {
+        files::check_tree(&install)?;
+    }
+    if files::metadata(&stage)?.is_some() {
+        return Err(invalid());
+    }
+    validate(&journal)?;
+    files::prepare(&journal_path(&manager.config_path)?, &journal)?;
+    let operation = (|| -> Result<(), LocalResourceError> {
+        if journal.had_payload {
+            fs::rename(&install, &stage)?;
+        }
+        persist_json(&manager.config_path, &journal.next)?;
+        Ok(())
+    })();
+    // Adopt committed configuration before cleanup, including when cleanup must be retried.
+    manager.configuration = persistence::load_configuration(&manager.config_path)?;
+    recover(&manager.config_path)?;
+    operation?;
+    Ok(Some(journal.receipt))
+}
+#[cfg(test)]
+mod tests;
