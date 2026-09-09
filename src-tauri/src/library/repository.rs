@@ -4,7 +4,7 @@ use rusqlite::{Connection, OptionalExtension, Row, params};
 
 use super::{
     Collection, CollectionDetail, CollectionKind, CollectionSortMode, CollectionSummary,
-    EpisodeReference, ItemAvailability, LibraryError, LibraryRootStatus, LibraryRootSummary,
+    ItemAvailability, LibraryError, LibraryRootStatus, LibraryRootSummary,
     MediaSummary, SearchResult, SearchResultKind, SeasonSummary,
 };
 
@@ -1005,39 +1005,6 @@ impl<'connection> LibraryRepository<'connection> {
         statement
             .query_and_then(params![limit], map_media_summary)?
             .collect()
-    }
-
-    pub(crate) fn list_episode_references(
-        &self,
-        collection_id: &str,
-    ) -> Result<Vec<EpisodeReference>, LibraryError> {
-        let mut statement = self.connection.prepare(
-            "SELECT
-                ci.project_id, ci.display_title, ci.season_number,
-                ci.episode_number, ci.absolute_order
-             FROM collection_items ci
-             JOIN collections c ON c.id = ci.collection_id
-             WHERE ci.collection_id = ?1
-             ORDER BY
-                CASE WHEN c.sort_mode = 'manual' THEN ci.absolute_order END,
-                CASE WHEN c.sort_mode != 'manual' THEN ci.season_number END,
-                CASE WHEN c.sort_mode != 'manual' THEN ci.episode_number END,
-                ci.absolute_order,
-                ci.display_title COLLATE NOCASE,
-                ci.project_id",
-        )?;
-        statement
-            .query_map(params![collection_id], |row| {
-                Ok(EpisodeReference {
-                    project_id: row.get(0)?,
-                    display_title: row.get(1)?,
-                    season_number: row.get(2)?,
-                    episode_number: row.get(3)?,
-                    absolute_order: row.get(4)?,
-                })
-            })?
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(Into::into)
     }
 
     pub(crate) fn search(

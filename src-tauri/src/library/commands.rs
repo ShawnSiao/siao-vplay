@@ -114,14 +114,17 @@ pub(crate) fn remove_project_from_collection(
 }
 
 #[tauri::command]
-pub(crate) fn get_episode_neighbors(
+pub(crate) async fn get_episode_neighbors(
     store: State<'_, ProjectStore>,
     collection_id: String,
     project_id: String,
 ) -> Result<EpisodeNeighborsResult, CommandError> {
-    let neighbors = LibraryService::new(store.inner().clone())
-        .get_episode_neighbors(&collection_id, &project_id)?;
-    Ok(EpisodeNeighborsResult { collection_id, project_id, neighbors })
+    let store = store.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let neighbors = LibraryService::new(store).get_episode_neighbors(&collection_id, &project_id)
+            .map_err(CommandError::from)?;
+        Ok(EpisodeNeighborsResult { collection_id, project_id, neighbors })
+    }).await.map_err(CommandError::background_task_failed)?
 }
 
 #[tauri::command]

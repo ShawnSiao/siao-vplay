@@ -269,19 +269,7 @@ impl LibraryService {
         validate_id("集合", collection_id)?;
         validate_id("视频", project_id)?;
         let connection = self.store.connect()?;
-        let episodes =
-            LibraryRepository::new(&connection).list_episode_references(collection_id)?;
-        let index = episodes
-            .iter()
-            .position(|episode| episode.project_id == project_id)
-            .ok_or_else(|| LibraryError::MembershipNotFound {
-                collection_id: collection_id.to_owned(),
-                project_id: project_id.to_owned(),
-            })?;
-        Ok(EpisodeNeighbors {
-            previous: index.checked_sub(1).map(|value| episodes[value].clone()),
-            next: episodes.get(index + 1).cloned(),
-        })
+        LibraryRepository::new(&connection).get_episode_neighbors(collection_id, project_id)
     }
 
     pub(crate) fn set_watch_later(
@@ -529,6 +517,7 @@ mod tests {
     }
     include!("section_service_tests.rs");
     include!("episode_page_tests.rs");
+    include!("episode_neighbor_tests.rs");
     include!("episode_snapshot_tests.rs");
     include!("search_service_tests.rs");
     #[test]

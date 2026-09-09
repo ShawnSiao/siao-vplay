@@ -108,4 +108,13 @@ fn benchmark_library_summary_reads() {
     assert_eq!(last.items.len(), 16);
     assert_eq!(last.next_offset, None);
     assert_eq!(last.snapshot_token, first.snapshot_token);
+    let middle_id: String = store.connect().unwrap().query_row(
+        "SELECT project_id FROM collection_items WHERE collection_id=?1 AND absolute_order=5000",
+        [&last.collection_id], |row| row.get(0)).unwrap();
+    for (label, project_id) in [("first", &first.items[0].project_id), ("middle", &middle_id), ("last", &last.items.last().unwrap().project_id)] {
+        let neighbors = measure(&format!("10000 collection neighbors {label}"), || service.get_episode_neighbors(&last.collection_id, project_id).unwrap());
+        assert_eq!(neighbors.previous.is_some(), label != "first");
+        assert_eq!(neighbors.next.is_some(), label != "last");
+    }
+
 }
