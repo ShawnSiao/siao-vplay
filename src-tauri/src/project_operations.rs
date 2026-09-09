@@ -44,16 +44,32 @@ impl Drop for Operation {
 #[must_use]
 pub(crate) struct Deletion(Arc<Gate>);
 impl Deletion {
-    pub(crate) fn acquire(store: &ProjectStore, project: &str) -> Result<Self, StoreError> {
+    pub(crate) fn begin(store: &ProjectStore, project: &str) -> Result<Self, StoreError> {
         let gate = gate(store, project)?;
         {
             let mut state = gate.0.lock().map_err(|_| io::Error::other("项目操作状态不可用"))?;
-            if state.deleting || state.users > 0 { return Err(busy().into()); }
+            if state.deleting { return Err(busy().into()); }
             state.deleting = true;
         }
         Ok(Self(gate))
     }
+    pub(crate) fn is_idle(&self) -> Result<bool, StoreError> {
+        Ok(self.0.0.lock().map_err(|_| io::Error::other("项目操作状态不可用"))?.users == 0)
+    }
+    pub(crate) fn ensure_ready(&self, store: &ProjectStore, project: &str) -> Result<(), StoreError> {
+        if !Arc::ptr_eq(&self.0, &gate(store, project)?) {
+            return Err(StoreError::Validation("删除许可与当前项目不一致".into()));
+        }
+        if !self.is_idle()? { return Err(busy().into()); }
+        Ok(())
+    }
+    pub(crate) fn acquire(store: &ProjectStore, project: &str) -> Result<Self, StoreError> {
+        let deletion = Self::begin(store, project)?;
+        deletion.ensure_ready(store, project)?;
+        Ok(deletion)
+    }
 }
+
 impl Drop for Deletion {
     fn drop(&mut self) { self.0.0.lock().unwrap_or_else(|error| error.into_inner()).deleting = false; }
 }
@@ -89,3 +105,7 @@ mod tests {
         assert_eq!(std::fs::read(media).unwrap(), b"retain source");
     }
 }
+
+#[cfg(test)]
+#[path = "project_closing_tests.rs"]
+mod closing_tests;

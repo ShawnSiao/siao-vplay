@@ -631,7 +631,16 @@ impl ProjectStore {
         remote_media_root: &Path,
     ) -> Result<DeleteProjectResult, StoreError> {
         validate_project_id(project_id)?;
-        let _deletion = crate::project_operations::Deletion::acquire(self, project_id)?;
+        let deletion = crate::project_operations::Deletion::acquire(self, project_id)?;
+        self.delete_project_with_permit(project_id, remote_media_root, &deletion)
+    }
+
+    pub(crate) fn delete_project_with_permit(
+        &self, project_id: &str, remote_media_root: &Path,
+        deletion: &crate::project_operations::Deletion,
+    ) -> Result<DeleteProjectResult, StoreError> {
+        validate_project_id(project_id)?;
+        deletion.ensure_ready(self, project_id)?;
         let project = match self.get_project(project_id) {
             Ok(project) => Some(project),
             Err(StoreError::ProjectNotFound(_)) => None,
