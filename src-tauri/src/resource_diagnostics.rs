@@ -61,7 +61,9 @@ impl ResourceDiagnosticsError {
 
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct LocalResourceDiagnostics {
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub generated_at_ms: i64,
     pub catalog_source: String,
     pub remote_catalog_enabled: bool,
@@ -75,6 +77,7 @@ pub struct LocalResourceDiagnostics {
 
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct ResourceDiagnosticItem {
     pub id: String,
     pub catalog_version: String,
@@ -90,26 +93,33 @@ pub struct ResourceDiagnosticItem {
 
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct ResourceVersionDiagnostic {
     pub version: String,
     pub active: bool,
     pub install_path: String,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub file_count: usize,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub installed_bytes: u64,
     pub manifest_sha256: String,
     pub health_status: String,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub activated_at_ms: Option<i64>,
     pub entrypoints_available: bool,
 }
 
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct ResourceTaskDiagnostic {
     pub id: String,
     pub resource_id: String,
     pub version: String,
     pub state: String,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub downloaded_bytes: u64,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub total_bytes: u64,
     pub error_code: Option<String>,
     pub error_message: Option<String>,

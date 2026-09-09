@@ -1,0 +1,224 @@
+{
+  "$defs": {
+    "ResourceDiagnosticItem": {
+      "properties": {
+        "activeVersion": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "artifactSha256": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "artifactUrl": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "catalogVersion": {
+          "type": "string"
+        },
+        "healthCheck": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "license": {
+          "type": "string"
+        },
+        "sourcePage": {
+          "type": "string"
+        },
+        "state": {
+          "type": "string"
+        },
+        "versions": {
+          "items": {
+            "$ref": "#/$defs/ResourceVersionDiagnostic"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "catalogVersion",
+        "activeVersion",
+        "state",
+        "license",
+        "sourcePage",
+        "artifactSha256",
+        "artifactUrl",
+        "healthCheck",
+        "versions"
+      ],
+      "type": "object"
+    },
+    "ResourceTaskDiagnostic": {
+      "properties": {
+        "downloadedBytes": {
+          "format": "uint64",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "errorCode": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "errorMessage": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "id": {
+          "type": "string"
+        },
+        "resourceId": {
+          "type": "string"
+        },
+        "state": {
+          "type": "string"
+        },
+        "totalBytes": {
+          "format": "uint64",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "resourceId",
+        "version",
+        "state",
+        "downloadedBytes",
+        "totalBytes",
+        "errorCode",
+        "errorMessage"
+      ],
+      "type": "object"
+    },
+    "ResourceVersionDiagnostic": {
+      "properties": {
+        "activatedAtMs": {
+          "format": "int64",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "active": {
+          "type": "boolean"
+        },
+        "entrypointsAvailable": {
+          "type": "boolean"
+        },
+        "fileCount": {
+          "format": "uint",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "healthStatus": {
+          "type": "string"
+        },
+        "installPath": {
+          "type": "string"
+        },
+        "installedBytes": {
+          "format": "uint64",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "manifestSha256": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "version",
+        "active",
+        "installPath",
+        "fileCount",
+        "installedBytes",
+        "manifestSha256",
+        "healthStatus",
+        "activatedAtMs",
+        "entrypointsAvailable"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "catalogSource": {
+      "type": "string"
+    },
+    "generatedAtMs": {
+      "format": "int64",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "preferredProfile": {
+      "type": "string"
+    },
+    "remoteCatalogEnabled": {
+      "type": "boolean"
+    },
+    "remoteSignaturePolicy": {
+      "type": "string"
+    },
+    "resourceRoot": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "resources": {
+      "items": {
+        "$ref": "#/$defs/ResourceDiagnosticItem"
+      },
+      "type": "array"
+    },
+    "rootState": {
+      "type": "string"
+    },
+    "tasks": {
+      "items": {
+        "$ref": "#/$defs/ResourceTaskDiagnostic"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "generatedAtMs",
+    "catalogSource",
+    "remoteCatalogEnabled",
+    "remoteSignaturePolicy",
+    "rootState",
+    "resourceRoot",
+    "preferredProfile",
+    "resources",
+    "tasks"
+  ],
+  "title": "LocalResourceDiagnostics",
+  "type": "object"
+}

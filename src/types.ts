@@ -1,4 +1,3 @@
-import type { LocalResourceRootState } from "./generated/local-resource-status";
 export interface PromptSelection {
   templateId: string;
   oneTimeRequirements: string;
@@ -573,53 +572,7 @@ export type { UnusedResourceCleanupPlan } from "./generated/unused-resource-clea
 
 export type { UnusedResourceCleanupResult } from "./generated/unused-resource-cleanup-result";
 
-export type ResourceVersionDiagnostic = {
-  version: string;
-  active: boolean;
-  installPath: string;
-  fileCount: number;
-  installedBytes: number;
-  manifestSha256: string;
-  healthStatus: string;
-  activatedAtMs: number | null;
-  entrypointsAvailable: boolean;
-};
-
-export type ResourceDiagnosticItem = {
-  id: string;
-  catalogVersion: string;
-  activeVersion: string | null;
-  state: "not_installed" | "ready" | "update_available" | "repair_required";
-  license: string;
-  sourcePage: string;
-  artifactSha256: string | null;
-  artifactUrl: string | null;
-  healthCheck: string;
-  versions: ResourceVersionDiagnostic[];
-};
-
-export type ResourceTaskDiagnostic = {
-  id: string;
-  resourceId: string;
-  version: string;
-  state: string;
-  downloadedBytes: number;
-  totalBytes: number;
-  errorCode: string | null;
-  errorMessage: string | null;
-};
-
-export type LocalResourceDiagnostics = {
-  generatedAtMs: number;
-  catalogSource: "embedded";
-  remoteCatalogEnabled: false;
-  remoteSignaturePolicy: string;
-  rootState: LocalResourceRootState;
-  resourceRoot: string | null;
-  preferredProfile: string;
-  resources: ResourceDiagnosticItem[];
-  tasks: ResourceTaskDiagnostic[];
-};
+export type { ResourceVersionDiagnostic, ResourceDiagnosticItem, ResourceTaskDiagnostic, LocalResourceDiagnostics } from "./generated/local-resource-diagnostics";
 
 export type { ResourceRollbackResult } from "./generated/resource-rollback-result";
 

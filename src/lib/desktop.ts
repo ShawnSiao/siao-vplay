@@ -1,3 +1,4 @@
+export { getLocalResourceDiagnostics } from "./resourceDiagnosticsGateway";
 export { planUnusedResourceCleanup, cleanupUnusedResources, removeLocalResource, rollbackLocalResource, planOldResourceVersionCleanup, cleanupOldResourceVersions } from "./resourceMaintenanceGateway";
 export { getLocalResourceStatus, configureLocalResourceRoot, repairLocalResourceRoot, reconnectLocalResourceRoot, setLocalResourceProfile, getLocalResourceNetworkStatus, setLocalResourceProxy } from "./resourceStatusGateway";
 import { browserResourceCapabilities } from "./resourceBrowserCapabilities";
@@ -29,7 +30,6 @@ import type {
   LocalResourceLocationPlan,
   LocalResourceMovePlan,
   LocalResourceMoveResult,
-  LocalResourceDiagnostics,
   MediaPreparation,
   MediaRuntimeStatus,
   Project,
@@ -270,10 +270,6 @@ export async function moveLocalResourceRoot(
 
 
 
-
-export async function getLocalResourceDiagnostics(): Promise<LocalResourceDiagnostics> {
-  return invoke<LocalResourceDiagnostics>("get_local_resource_diagnostics");
-}
 
 export async function getLocalResourceDiagnosticSummary(): Promise<string> {
   return invoke<string>("get_local_resource_diagnostic_summary");

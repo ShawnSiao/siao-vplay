@@ -59,6 +59,7 @@ fn committed_schemas_match_rust() {
     check_schema("unused-resource-cleanup-result", &serialized_schema::<crate::resource_migration::UnusedResourceCleanupResult>());
     check_schema("old-resource-version-cleanup-plan", &serialized_schema::<crate::resource_diagnostics::OldResourceVersionCleanupPlan>());
     check_schema("old-resource-version-cleanup-result", &serialized_schema::<crate::resource_diagnostics::OldResourceVersionCleanupResult>());
+    check_schema("local-resource-diagnostics", &serialized_schema::<crate::resource_diagnostics::LocalResourceDiagnostics>());
     check_schema("resource-network-status", &serialized_schema::<crate::resource_download::ResourceNetworkStatus>());
     check_schema("capability-preparation", &serialized_schema::<crate::resource_download::CapabilityPreparation>());
     check_schema("subtitle-burn-input", &serialized_schema::<crate::burn::StartSubtitleBurnInput>());
