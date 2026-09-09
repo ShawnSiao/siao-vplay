@@ -52,10 +52,13 @@ pub(super) fn clear_recorded_cache(database: &Path, root: &Path) -> Result<u64, 
         if Path::new(&path) != expected || !seen.insert(path.clone()) {
             continue;
         }
-        let Some(_) = ordinary_cache_file(&expected, root)? else {
+        if matches!(
+            cache_file_state(&expected, root)?,
+            CacheFileState::Protected
+        ) {
             continue;
-        };
-        let canonical = dunce::canonicalize(&expected)?;
+        }
+        let canonical = dunce::canonicalize(&expected).unwrap_or_else(|_| expected.clone());
         if sources.contains(&canonical) {
             continue;
         }
@@ -63,38 +66,60 @@ pub(super) fn clear_recorded_cache(database: &Path, root: &Path) -> Result<u64, 
     }
     drop(statement);
     drop(connection);
+    let mut connection = Connection::open(database)?;
+    connection.pragma_update(None, "foreign_keys", "ON")?;
+    let transaction = connection.transaction()?;
     let mut reclaimed = 0_u64;
     for path in entries {
         // Recheck before each operation; never recurse through an unowned directory.
-        let Some(metadata) = ordinary_cache_file(Path::new(&path), root)? else {
-            continue;
-        };
-        fs::remove_file(&path)?;
-        super::database::clear_cache_references(database, &path)?;
-        reclaimed = reclaimed.saturating_add(metadata.len());
+        match cache_file_state(Path::new(&path), root)? {
+            CacheFileState::Protected => continue,
+            CacheFileState::Missing => {}
+            CacheFileState::File(metadata) => {
+                fs::remove_file(&path)?;
+                reclaimed = reclaimed.saturating_add(metadata.len());
+            }
+        }
+        super::database::clear_cache_references(&transaction, &path)?;
     }
+    transaction.commit()?;
     Ok(reclaimed)
 }
 
-fn ordinary_cache_file(path: &Path, root: &Path) -> Result<Option<fs::Metadata>, StorageError> {
+enum CacheFileState {
+    Missing,
+    File(fs::Metadata),
+    Protected,
+}
+
+fn cache_file_state(path: &Path, root: &Path) -> Result<CacheFileState, StorageError> {
     let Some(parent) = path.parent() else {
-        return Ok(None);
+        return Ok(CacheFileState::Protected);
     };
-    for candidate in [parent, path] {
-        let metadata = match fs::symlink_metadata(candidate) {
-            Ok(metadata) => metadata,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-            Err(error) => return Err(error.into()),
-        };
-        if metadata.is_symlink() || is_reparse(&metadata) {
-            return Ok(None);
+    // Candidate shape is validated before this helper: root/project/generated-file.
+    match fs::symlink_metadata(parent) {
+        Ok(metadata) => {
+            if !metadata.is_dir()
+                || metadata.is_symlink()
+                || is_reparse(&metadata)
+                || dunce::canonicalize(parent)?.parent() != Some(root)
+            {
+                return Ok(CacheFileState::Protected);
+            }
         }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return Ok(CacheFileState::Missing);
+        }
+        Err(error) => return Err(error.into()),
     }
-    if dunce::canonicalize(parent)?.parent() != Some(root) {
-        return Ok(None);
+    match fs::symlink_metadata(path) {
+        Ok(metadata) if metadata.is_file() && !metadata.is_symlink() && !is_reparse(&metadata) => {
+            Ok(CacheFileState::File(metadata))
+        }
+        Ok(_) => Ok(CacheFileState::Protected),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(CacheFileState::Missing),
+        Err(error) => Err(error.into()),
     }
-    let metadata = fs::symlink_metadata(path)?;
-    Ok(metadata.is_file().then_some(metadata))
 }
 
 #[cfg(windows)]

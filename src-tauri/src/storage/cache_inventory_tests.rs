@@ -2,6 +2,87 @@ use super::*;
 use crate::store::ProjectStore;
 
 #[test]
+fn missing_project_directory_reconciles_only_its_cache_reference() {
+    let (_directory, store, root, project) = fixture();
+    let parent = root.join(project);
+    let path = parent.join("poster-aaaaaaaaaaaaaaaa.jpg");
+    record_poster(&store, &path);
+    fs::remove_dir(&parent).unwrap();
+    assert_eq!(
+        clear_recorded_cache(store.database_path(), &root).unwrap(),
+        0
+    );
+    assert_eq!(poster(&store), None);
+    let count: i64 = Connection::open(store.database_path())
+        .unwrap()
+        .query_row("SELECT COUNT(*) FROM projects", [], |row| row.get(0))
+        .unwrap();
+    assert_eq!(count, 1);
+}
+
+#[test]
+fn missing_original_media_collision_is_not_reconciled() {
+    let (_directory, store, root, project) = fixture();
+    let path = root.join(project).join("poster-aaaaaaaaaaaaaaaa.jpg");
+    record_poster(&store, &path);
+    Connection::open(store.database_path())
+        .unwrap()
+        .execute(
+            "UPDATE media_sources SET locator = ?1",
+            [path.to_string_lossy().as_ref()],
+        )
+        .unwrap();
+    assert_eq!(
+        clear_recorded_cache(store.database_path(), &root).unwrap(),
+        0
+    );
+    assert!(poster(&store).is_some());
+}
+
+#[test]
+fn reference_updates_roll_back_together_and_retry_after_commit_failure() {
+    let (_directory, store, root, project) = fixture();
+    let path = root.join(project).join("poster-aaaaaaaaaaaaaaaa.jpg");
+    fs::write(&path, b"poster").unwrap();
+    record_poster(&store, &path);
+    let connection = Connection::open(store.database_path()).unwrap();
+    // A deferred foreign-key violation fails commit after the cache UPDATE succeeds.
+    connection.execute_batch("CREATE TABLE cleanup_parent(id INTEGER PRIMARY KEY); CREATE TABLE cleanup_child(id INTEGER REFERENCES cleanup_parent(id) DEFERRABLE INITIALLY DEFERRED); CREATE TRIGGER fail_cleanup_commit AFTER UPDATE OF poster_path ON media_sources BEGIN INSERT INTO cleanup_child VALUES(123); END;").unwrap();
+    assert!(clear_recorded_cache(store.database_path(), &root).is_err());
+    assert!(!path.exists());
+    assert!(poster(&store).is_some());
+    connection
+        .execute_batch("DROP TRIGGER fail_cleanup_commit;")
+        .unwrap();
+    assert_eq!(
+        clear_recorded_cache(store.database_path(), &root).unwrap(),
+        0
+    );
+    assert_eq!(poster(&store), None);
+}
+
+#[test]
+fn retry_repairs_references_after_file_deletion_and_database_failure() {
+    let (_directory, store, root, project) = fixture();
+    let path = root.join(project).join("poster-aaaaaaaaaaaaaaaa.jpg");
+    fs::write(&path, b"poster").unwrap();
+    record_poster(&store, &path);
+    let connection = Connection::open(store.database_path()).unwrap();
+    connection.execute_batch("CREATE TRIGGER reject_cache_update BEFORE UPDATE OF poster_path ON media_sources BEGIN SELECT RAISE(ABORT, 'injected update failure'); END;").unwrap();
+    assert!(clear_recorded_cache(store.database_path(), &root).is_err());
+    assert!(!path.exists());
+    assert!(poster(&store).is_some());
+    connection
+        .execute_batch("DROP TRIGGER reject_cache_update;")
+        .unwrap();
+    assert_eq!(
+        clear_recorded_cache(store.database_path(), &root).unwrap(),
+        0
+    );
+    assert_eq!(poster(&store), None);
+}
+
+#[test]
 fn removes_a_recorded_playback_proxy() {
     let (_directory, store, root, project) = fixture();
     let path = root.join(&project).join("playback-aaaaaaaaaaaaaaaa.mp4");

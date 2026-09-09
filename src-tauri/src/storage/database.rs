@@ -96,12 +96,9 @@ pub(super) fn rewrite_paths_in_transaction(connection: &Connection, area: Storag
     Ok(())
 }
 
-pub(crate) fn clear_cache_references(database: &Path, path: &str) -> Result<(), StorageError> {
-    let mut connection = Connection::open(database)?;
-    let transaction = connection.transaction()?;
+pub(crate) fn clear_cache_references(transaction: &rusqlite::Transaction<'_>, path: &str) -> Result<(), StorageError> {
     transaction.execute("UPDATE media_sources SET poster_path = NULL WHERE poster_path = ?1", [path])?;
     transaction.execute("DELETE FROM media_artifacts WHERE kind = 'playback_proxy' AND path = ?1", [path])?;
-    transaction.commit()?;
     Ok(())
 }
 
