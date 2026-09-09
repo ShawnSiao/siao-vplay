@@ -1,3 +1,4 @@
+import { TranscriptionPanel } from "../components/TranscriptionPanel";
 import { locationResult } from "../test-fixtures/resourceLocation";
 import { catalog } from "./runtimeCatalog";
 import { StrictMode, useMemo, useState } from "react";
@@ -254,6 +255,6 @@ if (!root) {
 
 createRoot(root).render(
   <StrictMode>
-    {new URLSearchParams(window.location.search).has("live") ? <LiveRuntimeView /> : <RuntimeHarness />}
+    {new URLSearchParams(window.location.search).has("transcription") ? <TranscriptionPanel projectId="project" currentVersion={null} onJobTracked={() => undefined} onVersionReady={() => undefined} /> : new URLSearchParams(window.location.search).has("live") ? <LiveRuntimeView /> : <RuntimeHarness />}
   </StrictMode>,
 );

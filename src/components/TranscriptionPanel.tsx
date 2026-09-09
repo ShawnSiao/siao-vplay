@@ -145,68 +145,60 @@ export function TranscriptionPanel({
   const reportedVersionRef = useRef<string | null>(null);
   const [runtimeStatus, setRuntimeStatus] =
     useState<TranscriptionRuntimeStatus | null>(null);
-  const [runtimeLoading, setRuntimeLoading] = useState(true);
+  const [runtimeCheckedKey, setRuntimeCheckedKey] = useState<string | null>(null);
   const [language, setLanguage] =
     useState<(typeof languageOptions)[number][0] | "">("");
   const [profileId, setProfileId] = useState<"fast" | "standard">(
     localResourceStatus?.preferredProfile === "fast" ? "fast" : "standard",
   );
   const [replaceConfirmed, setReplaceConfirmed] = useState(false);
-  const [job, setJob] = useState<TranscriptionJob | null>(null);
+  const [storedJob, setJob] = useState<TranscriptionJob | null>(null);
+  const job = storedJob?.projectId === projectId ? storedJob : null;
   const [operation, setOperation] = useState<
     "start" | "cancel" | "resume" | null
   >(null);
   const [error, setError] = useState<string | null>(null);
 
+  const [checkAttempt, setCheckAttempt] = useState(0);
+  const [jobsCheckedKey, setJobsCheckedKey] = useState<string | null>(null);
+  const checkKey = JSON.stringify([projectId, currentVersion?.id ?? null, localResourceStatus?.preferredProfile, checkAttempt]);
+  const runtimeLoading = runtimeCheckedKey !== checkKey;
+  const jobsLoading = jobsCheckedKey !== checkKey;
+  const [runtimeReadError, setRuntimeReadError] = useState<string | null>(null);
+  const [jobsReadError, setJobsReadError] = useState<string | null>(null);
   useEffect(() => {
     let active = true;
-    void Promise.all([
-      getTranscriptionRuntimeStatus(),
-      listTranscriptionJobs(projectId),
-    ])
-      .then(([status, jobs]) => {
-        if (!active) {
-          return;
-        }
-        setRuntimeStatus(status);
-        const unfinished =
-          jobs.find((item) => activeStatuses.has(item.status)) ??
-          jobs.find((item) =>
-            ["failed", "interrupted", "cancelled"].includes(item.status),
-          ) ??
-          (!currentVersion
-            ? jobs.find(
-                (item) =>
-                  item.status === "completed" &&
-                  item.subtitleVersionId !== null,
-              )
-            : undefined);
-        if (unfinished) {
-          setJob(unfinished);
-          setLanguage(
-            languageOptions.some(([value]) => value === unfinished.languageCode)
-              ? unfinished.languageCode
-              : "",
-          );
-          setProfileId(profileForModelKind(unfinished.modelKind));
-        } else if (localResourceStatus?.preferredProfile === "fast") {
-          setProfileId("fast");
-        }
-      })
-      .catch((cause: unknown) => {
-        if (active) {
-          setError(userFacingError(cause));
-        }
-      })
-      .finally(() => {
-        if (active) {
-          setRuntimeLoading(false);
-        }
-      });
-    return () => {
-      active = false;
-    };
-  }, [currentVersion, localResourceStatus?.preferredProfile, projectId]);
+    void getTranscriptionRuntimeStatus().then(status => {
+      if (active) { setRuntimeStatus(status); setRuntimeReadError(null); }
+    }).catch((cause: unknown) => {
+      if (active) { setRuntimeStatus(null); setRuntimeReadError(userFacingError(cause)); }
+    }).finally(() => { if (active) setRuntimeCheckedKey(checkKey); });
+    void listTranscriptionJobs(projectId).then(jobs => {
+      if (!active) return;
+      setJobsReadError(null);
+      const unfinished = jobs.find(item => activeStatuses.has(item.status)) ??
+        jobs.find(item => ["failed", "interrupted", "cancelled"].includes(item.status)) ??
+        (!currentVersion ? jobs.find(item => item.status === "completed" && item.subtitleVersionId !== null) : undefined);
+      // A refresh must not replace a newer command or polling result already owned by this panel.
+      setJob(current => current?.projectId === projectId ? current : unfinished ?? null);
+      if (unfinished) {
+        setLanguage(languageOptions.some(([value]) => value === unfinished.languageCode) ? unfinished.languageCode : "");
+        setProfileId(profileForModelKind(unfinished.modelKind));
+      } else if (checkAttempt === 0 && localResourceStatus?.preferredProfile === "fast") setProfileId("fast");
+    }).catch((cause: unknown) => { if (active) setJobsReadError(userFacingError(cause)); })
+      .finally(() => { if (active) setJobsCheckedKey(checkKey); });
+    return () => { active = false; };
+  }, [currentVersion, localResourceStatus?.preferredProfile, projectId, checkAttempt, checkKey]);
+
+  const bootstrapNotice = runtimeReadError || jobsReadError ? (
+    <div className="notice danger transcription-error" role="alert">
+      <strong>字幕准备检查未完成</strong>
+      {runtimeReadError ? <p>{runtimeReadError}</p> : null}
+      {jobsReadError ? <p>{jobsReadError}</p> : null}
+      <button className="button quiet" type="button" disabled={runtimeLoading || jobsLoading || operation !== null}
+        onClick={() => setCheckAttempt(value => value + 1)}>重新检查</button>
+    </div>
+  ) : null;
 
   useEffect(() => {
     if (job && activeStatuses.has(job.status)) {
@@ -270,7 +262,7 @@ export function TranscriptionPanel({
     (localResourceStatus?.preferredProfile === profileId &&
       managedCapability?.state === "ready");
   const canStart =
-    !runtimeLoading &&
+    !runtimeLoading && !jobsLoading && !runtimeReadError && !jobsReadError &&
     managedResourcesReady &&
     runtimeStatus?.available === true &&
     selectedModel?.available === true &&
@@ -334,7 +326,7 @@ export function TranscriptionPanel({
     }
   };
 
-  if (runtimeLoading) {
+  if ((runtimeLoading || jobsLoading) && !job && !runtimeReadError && !jobsReadError) {
     return (
       <div className="transcription-loading" role="status">
         <span className="spinner"></span>
@@ -418,6 +410,7 @@ export function TranscriptionPanel({
             </button>
           </div>
         ) : null}
+        {bootstrapNotice}
         {error ? (
           <div className="notice danger transcription-error" role="alert">
             <strong>字幕生成未继续</strong>
@@ -556,6 +549,7 @@ export function TranscriptionPanel({
         {operation === "start" ? "正在建立任务…" : "生成原文字幕"}
       </button>
 
+      {bootstrapNotice}
       {error ? (
         <div className="notice danger transcription-error" role="alert">
           <strong>无法开始生成</strong>

@@ -1,7 +1,7 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { LocalResourceCatalog, LocalResourceStatus } from "../types";
+import type { LocalResourceCatalog, LocalResourceStatus, TranscriptionJob } from "../types";
 import { TranscriptionPanel } from "./TranscriptionPanel";
 
 const desktopMocks = vi.hoisted(() => ({
@@ -172,4 +172,51 @@ describe("TranscriptionPanel", () => {
     await waitFor(() => expect(onPrepareResources).toHaveBeenCalledWith("fast"));
     expect(desktopMocks.startTranscription).not.toHaveBeenCalled();
   });
+});
+
+const savedJob: TranscriptionJob = { id: "job", projectId: "project", status: "transcribing", stage: "transcribing", progress: 0.4, languageCode: "en", modelKind: "small", runtimeBackend: "cpu", runtimeVersion: "1", subtitleVersionId: null, errorCode: null, errorMessage: null, createdAtMs: 1, updatedAtMs: 1, startedAtMs: 1, completedAtMs: null };
+const props = { projectId: "project", currentVersion: null, onJobTracked: vi.fn(), onVersionReady: vi.fn() };
+it("keeps a saved task visible when runtime detection fails", async () => {
+  desktopMocks.getTranscriptionRuntimeStatus.mockRejectedValue(new Error("检测暂时失败"));
+  desktopMocks.listTranscriptionJobs.mockResolvedValue([savedJob]);
+  render(<TranscriptionPanel {...props} />);
+  expect(await screen.findByText("正在识别语音")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "取消生成" })).toBeEnabled();
+  expect(await screen.findByRole("button", { name: "重新检查" })).toBeEnabled();
+});
+it("blocks duplicate generation until task history can be read again", async () => {
+  desktopMocks.listTranscriptionJobs.mockRejectedValueOnce(new Error("任务记录暂时不可读")).mockResolvedValue([]);
+  render(<TranscriptionPanel {...props} />);
+  expect(await screen.findByText("任务记录暂时不可读")).toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText(/视频原声语言/), { target: { value: "ja" } });
+  expect(screen.getByRole("button", { name: "生成原文字幕" })).toBeDisabled();
+  fireEvent.click(screen.getByRole("button", { name: "重新检查" }));
+  await waitFor(() => expect(screen.getByRole("button", { name: "生成原文字幕" })).toBeEnabled());
+  expect(screen.getByLabelText(/视频原声语言/)).toHaveValue("ja");
+  expect(desktopMocks.startTranscription).not.toHaveBeenCalled();
+  expect(screen.queryByText("任务记录暂时不可读")).not.toBeInTheDocument();
+});
+it("shows a saved task while a runtime check is still pending", async () => {
+  desktopMocks.getTranscriptionRuntimeStatus.mockReturnValue(new Promise(() => {}));
+  desktopMocks.listTranscriptionJobs.mockResolvedValue([savedJob]);
+  render(<TranscriptionPanel {...props} />);
+  expect(await screen.findByText("正在识别语音")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "取消生成" })).toBeEnabled();
+});
+
+it("does not expose or restore another project's job after switching", async () => {
+  let finishOld!: (value: TranscriptionJob[]) => void;
+  desktopMocks.listTranscriptionJobs.mockImplementationOnce(() => new Promise(resolve => { finishOld = resolve; })).mockResolvedValue([]);
+  const { rerender } = render(<TranscriptionPanel {...props} />);
+  rerender(<TranscriptionPanel {...props} projectId="other" />);
+  await act(async () => finishOld([savedJob]));
+  expect(await screen.findByRole("button", { name: "生成原文字幕" })).toBeInTheDocument();
+  expect(screen.queryByText("正在识别语音")).not.toBeInTheDocument();
+});
+it("hides the previous project's existing task immediately on switching", async () => {
+  desktopMocks.listTranscriptionJobs.mockResolvedValueOnce([savedJob]).mockReturnValue(new Promise(() => {}));
+  const { rerender } = render(<TranscriptionPanel {...props} />);
+  expect(await screen.findByText("正在识别语音")).toBeInTheDocument();
+  rerender(<TranscriptionPanel {...props} projectId="other" />);
+  expect(screen.queryByRole("button", { name: "取消生成" })).not.toBeInTheDocument();
 });
