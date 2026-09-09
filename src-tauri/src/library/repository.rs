@@ -1077,46 +1077,7 @@ impl<'connection> LibraryRepository<'connection> {
         pattern: &str,
         limit: i64,
     ) -> Result<Vec<SearchResult>, LibraryError> {
-        let mut statement = self.connection.prepare(
-            "SELECT
-                'collection' AS result_kind,
-                c.title,
-                CASE c.kind
-                    WHEN 'series' THEN '剧集'
-                    WHEN 'folder' THEN '文件夹'
-                    ELSE '合集'
-                END AS subtitle,
-                c.id AS collection_id,
-                NULL AS project_id,
-                NULL AS season_number,
-                NULL AS episode_number
-             FROM collections c
-             WHERE c.title LIKE ?1 ESCAPE '\\' COLLATE NOCASE
-
-             UNION ALL
-
-             SELECT
-                CASE WHEN MIN(ci.collection_id) IS NULL
-                    THEN 'unclassified' ELSE 'episode' END AS result_kind,
-                p.title,
-                CASE WHEN MIN(c.title) IS NULL
-                    THEN m.display_name ELSE MIN(c.title) END AS subtitle,
-                MIN(ci.collection_id) AS collection_id,
-                p.id AS project_id,
-                MIN(ci.season_number) AS season_number,
-                MIN(ci.episode_number) AS episode_number
-             FROM projects p
-             JOIN media_sources m ON m.project_id = p.id AND m.is_primary = 1
-             LEFT JOIN collection_items ci ON ci.project_id = p.id
-             LEFT JOIN collections c ON c.id = ci.collection_id
-             WHERE p.title LIKE ?1 ESCAPE '\\' COLLATE NOCASE
-                OR m.display_name LIKE ?1 ESCAPE '\\' COLLATE NOCASE
-                OR ci.display_title LIKE ?1 ESCAPE '\\' COLLATE NOCASE
-             GROUP BY p.id
-
-             ORDER BY title COLLATE NOCASE, result_kind, project_id
-             LIMIT ?2",
-        )?;
+        let mut statement = self.connection.prepare(include_str!("search.sql"))?;
         statement
             .query_and_then(params![pattern, limit], |row| {
                 let kind = row.get::<_, String>(0)?;
