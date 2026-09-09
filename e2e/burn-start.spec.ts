@@ -10,7 +10,7 @@ test("burn sends normalized style and selected versions only after confirmation"
       if (command === "get_storage_settings") return { revision: 1, appDataRoot: "fixture", appDataRootLockedByEnvironment: false,
         remoteMediaRoot: "fixture", remoteMediaUsesDefault: true, mediaCacheRoot: "fixture", mediaCacheUsesDefault: true,
         defaultSubtitleExportDirectory: null, defaultVideoReportExportDirectory: null, appDataUsedBytes: 0, appDataFreeSpaceBytes: null,
-        remoteMediaUsedBytes: 0, mediaCacheUsedBytes: 0, appDataAvailable: true, remoteMediaAvailable: true, mediaCacheAvailable: true };
+        remoteMediaUsedBytes: 0, mediaCacheUsedBytes: 0, appDataAvailable: true, remoteMediaAvailable: true, mediaCacheAvailable: true, pendingAppDataRoot: null };
       if (command === "plugin:dialog|open") return "fixture-output";
       if (command === "start_subtitle_burn") { state.starts.push(args.input); return job; }
       if (command === "get_subtitle_burn_job") return job;

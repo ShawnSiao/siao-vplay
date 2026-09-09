@@ -1,3 +1,4 @@
+import { storageSettingsFixture } from "../src/test-fixtures/storage";
 import { expect, test } from "@playwright/test";
 import { createSummaryFixtures } from "../src/test-fixtures/summary";
 import { summaryDispatchFixture } from "../src/test-fixtures/summaryDispatch";
@@ -41,7 +42,7 @@ test("completed summary read retries without dispatching again", async ({ page }
 
 test("invalid export receipt is disclosed without repeating export", async ({ page }) => {
   const { summary } = createSummaryFixtures();
-  await page.addInitScript(({ summary }) => {
+  await page.addInitScript(({ summary, storage }) => {
     const state = window as unknown as { exports: number; __TAURI_INTERNALS__: unknown };
     state.exports = 0;
     state.__TAURI_INTERNALS__ = { invoke: async (command: string) => {
@@ -50,13 +51,13 @@ test("invalid export receipt is disclosed without repeating export", async ({ pa
         case "get_ai_service_settings": return { schemaVersion: 1, revision: 0, providerCatalog: { schemaVersion: 1, providers: [] }, services: [], defaultServiceId: null };
         case "list_summary_tasks": case "list_analysis_prompt_templates": return [];
         case "list_video_summaries": return [summary];
-        case "get_storage_settings": return { defaultVideoReportExportDirectory: "W:/reports" };
+        case "get_storage_settings": return { ...storage, defaultVideoReportExportDirectory: "W:/reports" };
         case "plugin:dialog|open": return "W:/reports";
         case "export_video_summary": state.exports++; return { directory: "W:/other" };
         default: throw new Error(`Unexpected fixture IPC: ${command}`);
       }
     } };
-  }, { summary });
+  }, { summary, storage: storageSettingsFixture });
   await page.goto("/e2e/player.html?summary=confirm");
   await page.getByRole("button", { name: "保存 Markdown 报告" }).click();
   await expect(page.getByRole("alert")).toContainText("保存结果尚未确认");

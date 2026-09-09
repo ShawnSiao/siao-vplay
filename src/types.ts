@@ -561,33 +561,8 @@ export type { ExternalAgentTaskKind, ExternalAgentResultUpdate } from "./generat
 export type { CodexRuntimeStatus } from "./generated/codex-runtime-status";
 export type { AiTaskExecutionInfo } from "./generated/learning-task";
 
-export type StorageSettings = {
-  revision: number;
-  appDataRoot: string;
-  appDataRootLockedByEnvironment: boolean;
-  remoteMediaRoot: string;
-  remoteMediaUsesDefault: boolean;
-  mediaCacheRoot: string;
-  mediaCacheUsesDefault: boolean;
-  defaultSubtitleExportDirectory: string | null;
-  defaultVideoReportExportDirectory: string | null;
-  appDataUsedBytes: number;
-  appDataFreeSpaceBytes: number | null;
-  remoteMediaUsedBytes: number;
-  mediaCacheUsedBytes: number;
-  appDataAvailable: boolean;
-  remoteMediaAvailable: boolean;
-  mediaCacheAvailable: boolean;
-  pendingAppDataRoot: string | null;
-};
-
-export type SaveStorageSettingsInput = {
-  expectedRevision: number;
-  remoteMediaRoot: string | null;
-  mediaCacheRoot: string | null;
-  defaultSubtitleExportDirectory: string | null;
-  defaultVideoReportExportDirectory: string | null;
-};
+export type { StorageSettingsView as StorageSettings } from "./generated/storage-settings";
+export type { SaveStorageSettingsInput } from "./generated/save-storage-settings-input";
 
 export type LearningSelectionKind = "word" | "phrase" | "sentence";
 

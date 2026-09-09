@@ -1,0 +1,104 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "appDataAvailable": {
+      "type": "boolean"
+    },
+    "appDataFreeSpaceBytes": {
+      "format": "uint64",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "appDataRoot": {
+      "type": "string"
+    },
+    "appDataRootLockedByEnvironment": {
+      "type": "boolean"
+    },
+    "appDataUsedBytes": {
+      "format": "uint64",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "defaultSubtitleExportDirectory": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "defaultVideoReportExportDirectory": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "mediaCacheAvailable": {
+      "type": "boolean"
+    },
+    "mediaCacheRoot": {
+      "type": "string"
+    },
+    "mediaCacheUsedBytes": {
+      "format": "uint64",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "mediaCacheUsesDefault": {
+      "type": "boolean"
+    },
+    "pendingAppDataRoot": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "remoteMediaAvailable": {
+      "type": "boolean"
+    },
+    "remoteMediaRoot": {
+      "type": "string"
+    },
+    "remoteMediaUsedBytes": {
+      "format": "uint64",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "remoteMediaUsesDefault": {
+      "type": "boolean"
+    },
+    "revision": {
+      "format": "uint64",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "revision",
+    "appDataRoot",
+    "appDataRootLockedByEnvironment",
+    "remoteMediaRoot",
+    "remoteMediaUsesDefault",
+    "mediaCacheRoot",
+    "mediaCacheUsesDefault",
+    "defaultSubtitleExportDirectory",
+    "defaultVideoReportExportDirectory",
+    "appDataUsedBytes",
+    "appDataFreeSpaceBytes",
+    "remoteMediaUsedBytes",
+    "mediaCacheUsedBytes",
+    "appDataAvailable",
+    "remoteMediaAvailable",
+    "mediaCacheAvailable",
+    "pendingAppDataRoot"
+  ],
+  "title": "StorageSettingsView",
+  "type": "object"
+}

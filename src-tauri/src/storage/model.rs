@@ -105,7 +105,9 @@ fn default_migration_mode() -> StorageMigrationMode {
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct SaveStorageSettingsInput {
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740990_u64)))]
     pub expected_revision: u64,
     pub remote_media_root: Option<String>,
     pub media_cache_root: Option<String>,
@@ -115,7 +117,9 @@ pub struct SaveStorageSettingsInput {
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct StorageSettingsView {
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub revision: u64,
     pub app_data_root: String,
     pub app_data_root_locked_by_environment: bool,
@@ -125,15 +129,20 @@ pub struct StorageSettingsView {
     pub media_cache_uses_default: bool,
     pub default_subtitle_export_directory: Option<String>,
     pub default_video_report_export_directory: Option<String>,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub app_data_used_bytes: u64,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub app_data_free_space_bytes: Option<u64>,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub remote_media_used_bytes: u64,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub media_cache_used_bytes: u64,
     pub app_data_available: bool,
     pub remote_media_available: bool,
     pub media_cache_available: bool,
     pub pending_app_data_root: Option<String>,
 }
+
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]

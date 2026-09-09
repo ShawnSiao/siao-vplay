@@ -116,7 +116,7 @@ function MigrationDialog({
               {task.status === "restart_required" ? <div className="storage-notice"><strong>新目录已通过校验。</strong><span>重启后切换；确认运行正常前请保留旧目录。</span></div> : null}
             </>
           )}
-          {controller.error ? <div className="storage-error">{controller.error}</div> : null}
+          {controller.error ? <div className="storage-error" role="alert"><span>{controller.error}</span><button className="button quiet" type="button" disabled={controller.operation !== null} onClick={() => void controller.reload()}>重新读取存储设置</button></div> : null}
         </div>
         <footer>
           <button className="button text" type="button" disabled={active} onClick={onClose}>{terminal ? "稍后处理" : "关闭"}</button>
@@ -192,7 +192,7 @@ export function StoragePane({ controller }: StoragePaneProps) {
             </StorageRow>
           </div></section>
           {settings.pendingAppDataRoot ? <div className="storage-notice"><strong>等待重启切换。</strong><span>新应用数据位置：{settings.pendingAppDataRoot}</span></div> : <div className="storage-notice"><strong>核心数据迁移会保留旧目录。</strong><span>新位置验证正常后，再手动清理旧数据。</span></div>}
-          {controller.error ? <div className="storage-error">{controller.error}</div> : null}
+          {controller.error ? <div className="storage-error" role="alert"><span>{controller.error}</span><button className="button quiet" type="button" disabled={controller.operation !== null} onClick={() => void controller.reload()}>重新读取存储设置</button></div> : null}
         </div>
       </section>
       {dialogArea ? <MigrationDialog area={dialogArea} controller={controller} onClose={() => setDialogArea(null)} /> : null}

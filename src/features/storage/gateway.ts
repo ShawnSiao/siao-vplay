@@ -1,26 +1,13 @@
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 
-import type {
-  SaveStorageSettingsInput,
-  StorageSettings,
-} from "../../types";
+export { getStorageSettings, saveStorageSettings } from "../../lib/storageSettingsGateway";
 import type {
   StorageArea,
   StorageLocationKind,
   StorageMigrationMode,
   StorageMigrationTask,
 } from "./types";
-
-export function getStorageSettings(): Promise<StorageSettings> {
-  return invoke("get_storage_settings");
-}
-
-export function saveStorageSettings(
-  input: SaveStorageSettingsInput,
-): Promise<StorageSettings> {
-  return invoke("save_storage_settings", { input });
-}
 
 export async function chooseStorageDirectory(title: string): Promise<string | null> {
   const selected = await open({ multiple: false, directory: true, title });

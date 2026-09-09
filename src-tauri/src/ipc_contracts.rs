@@ -49,6 +49,8 @@ fn committed_schemas_match_rust() {
     check_schema("codex-runtime-status", &serialized_schema::<crate::codex_runner::CodexRuntimeStatus>());
     check_schema("media-runtime-status", &serialized_schema::<crate::media::MediaRuntimeStatus>());
     check_schema("transcription-runtime-status", &serialized_schema::<crate::transcription::TranscriptionRuntimeStatus>());
+    check_schema("storage-settings", &serialized_schema::<crate::storage::StorageSettingsView>());
+    check_schema("save-storage-settings-input", &serialized_schema::<crate::storage::SaveStorageSettingsInput>());
     check_schema("summary-export", &serialized_schema::<crate::summary::SummaryExport>());
     check_schema("summary-activity", &serialized_schema::<crate::summary::SummaryActivity>());
     check_schema("external-agent-result-update", &serialized_schema::<crate::external_handoff::ExternalAgentResultUpdate>());

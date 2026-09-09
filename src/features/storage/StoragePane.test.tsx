@@ -136,3 +136,13 @@ it("shows the initial read failure and an explicit retry instead of indefinite l
   fireEvent.click(screen.getByRole("button", { name: "重新读取存储设置" }));
   expect(value.reload).toHaveBeenCalledTimes(1);
 });
+
+
+it("offers a read-only refresh when a save result is uncertain", () => {
+  const value = controller({ error: "存储设置保存结果尚未确认", reportDirectory: "W:/draft" });
+  render(<StoragePane controller={value} />);
+  fireEvent.click(screen.getByRole("button", { name: "重新读取存储设置" }));
+  expect(value.reload).toHaveBeenCalledTimes(1);
+  expect(value.saveDefaults).not.toHaveBeenCalled();
+  expect(screen.getByText("W:/draft")).toBeVisible();
+});

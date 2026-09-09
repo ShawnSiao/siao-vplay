@@ -1,7 +1,6 @@
-import { invoke } from "@tauri-apps/api/core";
+import { getStorageSettings } from "./storageSettingsGateway";
 import { open } from "@tauri-apps/plugin-dialog";
 
-import type { StorageSettings } from "../types";
 
 export type StorageDirectoryKind = "subtitle" | "video" | "report";
 
@@ -9,7 +8,7 @@ export async function chooseConfiguredStorageDirectory(
   kind: StorageDirectoryKind,
   title: string,
 ): Promise<string | null> {
-  const settings = await invoke<StorageSettings>("get_storage_settings");
+  const settings = await getStorageSettings();
   const defaultPath = kind === "subtitle"
     ? settings.defaultSubtitleExportDirectory
     : settings.defaultVideoReportExportDirectory;
