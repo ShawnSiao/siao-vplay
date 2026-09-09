@@ -1,0 +1,321 @@
+{
+  "$defs": {
+    "AnalysisMode": {
+      "enum": [
+        "automatic",
+        "general",
+        "science_technology",
+        "software_architecture"
+      ],
+      "type": "string"
+    },
+    "AnalysisScope": {
+      "enum": [
+        "current_progress",
+        "full_video"
+      ],
+      "type": "string"
+    },
+    "AnalysisTaskType": {
+      "enum": [
+        "understanding",
+        "summary"
+      ],
+      "type": "string"
+    },
+    "ChunkStatus": {
+      "enum": [
+        "prepared",
+        "queued",
+        "running",
+        "completed",
+        "failed",
+        "cancelled"
+      ],
+      "type": "string"
+    },
+    "PromptSnapshot": {
+      "properties": {
+        "baseTemplateId": {
+          "type": "string"
+        },
+        "composedPrompt": {
+          "type": "string"
+        },
+        "oneTimeRequirements": {
+          "type": "string"
+        },
+        "schemaVersion": {
+          "format": "uint32",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "sha256": {
+          "type": "string"
+        },
+        "systemRulesVersion": {
+          "type": "string"
+        },
+        "taskType": {
+          "$ref": "#/$defs/AnalysisTaskType"
+        },
+        "templateId": {
+          "type": "string"
+        },
+        "templateName": {
+          "type": "string"
+        },
+        "templateRequirements": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "taskType",
+        "systemRulesVersion",
+        "templateId",
+        "templateName",
+        "baseTemplateId",
+        "templateRequirements",
+        "oneTimeRequirements",
+        "composedPrompt",
+        "sha256"
+      ],
+      "type": "object"
+    },
+    "SummaryChunk": {
+      "properties": {
+        "contextSegmentIds": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "endMs": {
+          "format": "int64",
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": "integer"
+        },
+        "id": {
+          "type": "string"
+        },
+        "ordinal": {
+          "format": "uint",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "retryCount": {
+          "format": "uint32",
+          "maximum": 255,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "segmentIds": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "startMs": {
+          "format": "int64",
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": "integer"
+        },
+        "status": {
+          "$ref": "#/$defs/ChunkStatus"
+        }
+      },
+      "required": [
+        "id",
+        "ordinal",
+        "startMs",
+        "endMs",
+        "segmentIds",
+        "contextSegmentIds",
+        "status",
+        "retryCount"
+      ],
+      "type": "object"
+    },
+    "SummaryExecutionKind": {
+      "enum": [
+        "manual",
+        "codex",
+        "api"
+      ],
+      "type": "string"
+    },
+    "TaskStatus": {
+      "enum": [
+        "prepared",
+        "awaiting_external_result",
+        "queued",
+        "running",
+        "paused",
+        "validating",
+        "completed",
+        "failed",
+        "cancelled",
+        "interrupted"
+      ],
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "analysisMode": {
+      "$ref": "#/$defs/AnalysisMode"
+    },
+    "cancelRequested": {
+      "type": "boolean"
+    },
+    "chunks": {
+      "items": {
+        "$ref": "#/$defs/SummaryChunk"
+      },
+      "type": "array"
+    },
+    "createdAtMs": {
+      "format": "int64",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+    },
+    "errorCode": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "errorMessage": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "executionKind": {
+      "$ref": "#/$defs/SummaryExecutionKind"
+    },
+    "id": {
+      "type": "string"
+    },
+    "materialManifestSha256": {
+      "type": "string"
+    },
+    "materialsDirectory": {
+      "type": "string"
+    },
+    "modelId": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "outputSummaryId": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "playbackCutoffMs": {
+      "format": "int64",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "progress": {
+      "format": "double",
+      "maximum": 1,
+      "minimum": 0,
+      "type": "number"
+    },
+    "projectId": {
+      "type": "string"
+    },
+    "promptSnapshot": {
+      "$ref": "#/$defs/PromptSnapshot"
+    },
+    "providerId": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "scope": {
+      "$ref": "#/$defs/AnalysisScope"
+    },
+    "serviceConfigId": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "serviceRevision": {
+      "format": "uint64",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "spoilerConfirmed": {
+      "type": "boolean"
+    },
+    "stage": {
+      "type": "string"
+    },
+    "status": {
+      "$ref": "#/$defs/TaskStatus"
+    },
+    "subtitleVersionId": {
+      "type": "string"
+    },
+    "updatedAtMs": {
+      "format": "int64",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+    },
+    "visualMaterialAuthorized": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "id",
+    "projectId",
+    "scope",
+    "playbackCutoffMs",
+    "analysisMode",
+    "executionKind",
+    "promptSnapshot",
+    "subtitleVersionId",
+    "materialManifestSha256",
+    "visualMaterialAuthorized",
+    "spoilerConfirmed",
+    "status",
+    "stage",
+    "progress",
+    "serviceConfigId",
+    "serviceRevision",
+    "providerId",
+    "modelId",
+    "outputSummaryId",
+    "cancelRequested",
+    "errorCode",
+    "errorMessage",
+    "createdAtMs",
+    "updatedAtMs",
+    "chunks",
+    "materialsDirectory"
+  ],
+  "title": "SummaryTask",
+  "type": "object"
+}

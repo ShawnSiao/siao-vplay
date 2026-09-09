@@ -1,4 +1,4 @@
-import type { PromptSelection, PromptSnapshot } from "../analysis/types";
+import type { PromptSelection } from "../analysis/types";
 
 export type SummaryScope = "current_progress" | "full_video";
 export type SummaryAnalysisMode =
@@ -8,57 +8,9 @@ export type SummaryAnalysisMode =
   | "software_architecture";
 export type SummaryExecutionKind = "manual" | "codex" | "api";
 
-export type SummaryChunk = {
-  id: string;
-  ordinal: number;
-  startMs: number;
-  endMs: number;
-  segmentIds: string[];
-  contextSegmentIds: string[];
-  status: "prepared" | "queued" | "running" | "completed" | "failed" | "cancelled";
-  retryCount: number;
-};
-
-export type SummaryTaskStatus =
-  | "prepared"
-  | "awaiting_external_result"
-  | "queued"
-  | "running"
-  | "paused"
-  | "validating"
-  | "completed"
-  | "failed"
-  | "cancelled"
-  | "interrupted";
-
-export type SummaryTask = {
-  id: string;
-  projectId: string;
-  scope: SummaryScope;
-  playbackCutoffMs: number | null;
-  analysisMode: SummaryAnalysisMode;
-  executionKind: SummaryExecutionKind;
-  promptSnapshot: PromptSnapshot;
-  subtitleVersionId: string;
-  materialManifestSha256: string;
-  visualMaterialAuthorized: boolean;
-  spoilerConfirmed: boolean;
-  status: SummaryTaskStatus;
-  stage: string;
-  progress: number;
-  serviceConfigId: string | null;
-  serviceRevision: number | null;
-  providerId: string | null;
-  modelId: string | null;
-  outputSummaryId: string | null;
-  cancelRequested: boolean;
-  errorCode: string | null;
-  errorMessage: string | null;
-  createdAtMs: number;
-  updatedAtMs: number;
-  chunks: SummaryChunk[];
-  materialsDirectory: string;
-};
+import type { SummaryTask } from "../../generated/summary-task";
+export type { SummaryTask, SummaryChunk } from "../../generated/summary-task";
+export type SummaryTaskStatus = SummaryTask["status"];
 
 export type EvidenceKind =
   | "video_statement"

@@ -1,3 +1,5 @@
+#[cfg(test)]
+mod wire_schema;
 mod activity;
 pub mod commands;
 

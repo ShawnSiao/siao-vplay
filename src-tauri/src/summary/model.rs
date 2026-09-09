@@ -8,6 +8,7 @@ use crate::store::StoreError;
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub enum AnalysisTaskType {
     Understanding,
     Summary,
@@ -69,7 +70,9 @@ pub struct DeleteAnalysisPromptTemplateInput {
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct PromptSnapshot {
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub schema_version: u32,
     pub task_type: AnalysisTaskType,
     pub system_rules_version: String,
@@ -135,6 +138,7 @@ impl AnalysisScope {
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub enum AnalysisMode {
     Automatic,
     General,
@@ -246,23 +250,31 @@ pub struct ExportVideoSummaryInput {
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct SummaryChunk {
     pub id: String,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub ordinal: usize,
+    #[cfg_attr(test, schemars(range(min = -9007199254740991_i64, max = 9007199254740991_i64)))]
     pub start_ms: i64,
+    #[cfg_attr(test, schemars(range(min = -9007199254740991_i64, max = 9007199254740991_i64)))]
     pub end_ms: i64,
     pub segment_ids: Vec<String>,
     pub context_segment_ids: Vec<String>,
+    #[cfg_attr(test, schemars(with = "super::wire_schema::ChunkStatus"))]
     pub status: String,
+    #[cfg_attr(test, schemars(with = "u32", range(min = 0, max = 255)))]
     pub retry_count: u8,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct SummaryTask {
     pub id: String,
     pub project_id: String,
     pub scope: AnalysisScope,
+    #[cfg_attr(test, schemars(range(min = -9007199254740991_i64, max = 9007199254740991_i64)))]
     pub playback_cutoff_ms: Option<i64>,
     pub analysis_mode: AnalysisMode,
     pub execution_kind: SummaryExecutionKind,
@@ -271,10 +283,13 @@ pub struct SummaryTask {
     pub material_manifest_sha256: String,
     pub visual_material_authorized: bool,
     pub spoiler_confirmed: bool,
+    #[cfg_attr(test, schemars(with = "super::wire_schema::TaskStatus"))]
     pub status: String,
     pub stage: String,
+    #[cfg_attr(test, schemars(range(min = 0, max = 1)))]
     pub progress: f64,
     pub service_config_id: Option<String>,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub service_revision: Option<u64>,
     pub provider_id: Option<String>,
     pub model_id: Option<String>,
@@ -282,7 +297,9 @@ pub struct SummaryTask {
     pub cancel_requested: bool,
     pub error_code: Option<String>,
     pub error_message: Option<String>,
+    #[cfg_attr(test, schemars(range(min = -9007199254740991_i64, max = 9007199254740991_i64)))]
     pub created_at_ms: i64,
+    #[cfg_attr(test, schemars(range(min = -9007199254740991_i64, max = 9007199254740991_i64)))]
     pub updated_at_ms: i64,
     pub chunks: Vec<SummaryChunk>,
     pub materials_directory: String,
