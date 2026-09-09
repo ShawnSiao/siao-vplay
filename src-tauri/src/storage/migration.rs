@@ -198,12 +198,12 @@ impl StorageManager {
         let source_database = source.join("projects").join("siaovplay.db");
         let skip_database =
             (task.area == StorageArea::AppData).then_some(source_database.as_path());
+        let cancelled = self.cancel_flag()?;
         let entries = if task.mode == StorageMigrationMode::Copy {
-            migration_copy::scan_files(&source, skip_database)?
+            migration_copy::scan_files_controlled(&source, skip_database, &cancelled)?
         } else {
             Vec::new()
         };
-        let cancelled = self.cancel_flag()?;
         migration_copy::copy_and_verify(&entries, &destination, &cancelled, |bytes, files| {
             self.update_progress(bytes, files)
         })?;

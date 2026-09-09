@@ -5,6 +5,7 @@ mod maintenance;
 mod migration;
 mod migration_commit;
 mod migration_copy;
+mod migration_stream;
 mod migration_state;
 mod model;
 mod paths;

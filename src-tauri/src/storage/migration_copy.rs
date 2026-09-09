@@ -6,9 +6,7 @@ use std::{
     sync::atomic::{AtomicBool, Ordering},
 };
 
-use sha2::{Digest, Sha256};
-
-use super::StorageError;
+use super::{StorageError, migration_stream};
 
 #[derive(Clone, Debug)]
 pub(crate) struct CopyEntry {
@@ -21,13 +19,24 @@ pub(crate) fn scan_files(
     source: &Path,
     skip_database: Option<&Path>,
 ) -> Result<Vec<CopyEntry>, StorageError> {
+    scan_files_controlled(source, skip_database, &AtomicBool::new(false))
+}
+
+pub(crate) fn scan_files_controlled(
+    source: &Path,
+    skip_database: Option<&Path>,
+    cancelled: &AtomicBool,
+) -> Result<Vec<CopyEntry>, StorageError> {
+    migration_stream::check(cancelled)?;
     let mut files = Vec::new();
     if !source.exists() {
         return Ok(files);
     }
     let mut pending = vec![source.to_path_buf()];
     while let Some(directory) = pending.pop() {
+        migration_stream::check(cancelled)?;
         for entry in fs::read_dir(&directory)? {
+            migration_stream::check(cancelled)?;
             let entry = entry?;
             if directory == source && entry.file_name() == crate::instance_lock::LOCK_FILE_NAME {
                 continue;
@@ -55,6 +64,7 @@ pub(crate) fn scan_files(
         }
     }
     files.sort_by(|left, right| left.relative.cmp(&right.relative));
+    migration_stream::check(cancelled)?;
     Ok(files)
 }
 
@@ -76,34 +86,51 @@ where
         if let Some(parent) = target.parent() {
             fs::create_dir_all(parent)?;
         }
-        copy_file(&entry.source, &target)?;
-        if file_sha256(&entry.source)? != file_sha256(&target)? {
+        copy_file(&entry.source, &target, cancelled)?;
+        if file_sha256(&entry.source, cancelled)? != file_sha256(&target, cancelled)? {
             return Err(StorageError::MigrationIntegrity(format!(
                 "文件校验失败：{}",
                 entry.relative.display()
             )));
         }
         copied_bytes = copied_bytes.saturating_add(entry.bytes);
+        migration_stream::check(cancelled)?;
         progress(copied_bytes, index + 1)?;
     }
-    Ok(())
+    migration_stream::check(cancelled)
 }
 
-fn copy_file(source: &Path, destination: &Path) -> Result<(), StorageError> {
+fn copy_file(
+    source: &Path,
+    destination: &Path,
+    cancelled: &AtomicBool,
+) -> Result<(), StorageError> {
+    migration_stream::check(cancelled)?;
+    let mut reader = fs::File::open(source)?;
+    copy_reader(&mut reader, destination, cancelled)
+}
+
+fn copy_reader(
+    reader: &mut impl Read,
+    destination: &Path,
+    cancelled: &AtomicBool,
+) -> Result<(), StorageError> {
+    migration_stream::check(cancelled)?;
     let temporary = destination.with_file_name(format!(
         ".siaovplay-migration-{}.part",
         uuid::Uuid::new_v4().simple()
     ));
-    let mut reader = fs::File::open(source)?;
     let mut writer = fs::OpenOptions::new()
         .write(true)
         .create_new(true)
         .open(&temporary)?;
     let result = (|| -> Result<(), StorageError> {
-        std::io::copy(&mut reader, &mut writer)?;
+        migration_stream::copy_bytes(reader, &mut writer, cancelled)?;
+        migration_stream::check(cancelled)?;
         writer.flush()?;
         writer.sync_all()?;
         drop(writer);
+        migration_stream::check(cancelled)?;
         // Replace only after the copy is durable; do not delete an old destination first.
         fs::rename(&temporary, destination)?;
         Ok(())
@@ -114,18 +141,9 @@ fn copy_file(source: &Path, destination: &Path) -> Result<(), StorageError> {
     result
 }
 
-fn file_sha256(path: &Path) -> Result<String, StorageError> {
-    let mut file = fs::File::open(path)?;
-    let mut digest = Sha256::new();
-    let mut buffer = [0_u8; 1024 * 1024];
-    loop {
-        let read = file.read(&mut buffer)?;
-        if read == 0 {
-            break;
-        }
-        digest.update(&buffer[..read]);
-    }
-    Ok(format!("{:x}", digest.finalize()))
+fn file_sha256(path: &Path, cancelled: &AtomicBool) -> Result<String, StorageError> {
+    migration_stream::check(cancelled)?;
+    migration_stream::hash_bytes(&mut fs::File::open(path)?, cancelled)
 }
 
 fn is_database_companion(path: &Path, database: Option<&Path>) -> bool {
@@ -148,6 +166,64 @@ fn is_database_companion(path: &Path, database: Option<&Path>) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn mid_copy_cancellation_keeps_prior_target_and_removes_own_temporary_file() {
+        struct Reader<'a>(&'a AtomicBool);
+        impl Read for Reader<'_> {
+            fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
+                buffer.fill(1);
+                self.0.store(true, Ordering::Relaxed);
+                Ok(buffer.len())
+            }
+        }
+        let directory = tempfile::tempdir().unwrap();
+        let target = directory.path().join("target.txt");
+        fs::write(&target, b"retain").unwrap();
+        let cancelled = AtomicBool::new(false);
+        assert!(matches!(
+            copy_reader(&mut Reader(&cancelled), &target, &cancelled),
+            Err(StorageError::MigrationCancelled)
+        ));
+        assert_eq!(fs::read(&target).unwrap(), b"retain");
+        assert_eq!(fs::read_dir(directory.path()).unwrap().count(), 1);
+    }
+
+    #[test]
+    fn cancelled_scan_and_hash_do_not_open_the_source() {
+        let directory = tempfile::tempdir().unwrap();
+        let absent = directory.path().join("absent");
+        let cancelled = AtomicBool::new(true);
+        assert!(matches!(
+            scan_files_controlled(&absent, None, &cancelled),
+            Err(StorageError::MigrationCancelled)
+        ));
+        assert!(matches!(
+            file_sha256(&absent, &cancelled),
+            Err(StorageError::MigrationCancelled)
+        ));
+    }
+
+    #[test]
+    fn cancellation_at_final_progress_is_not_reported_as_success() {
+        let directory = tempfile::tempdir().unwrap();
+        let source = directory.path().join("source");
+        fs::create_dir(&source).unwrap();
+        fs::write(source.join("file"), b"source").unwrap();
+        let entries = scan_files(&source, None).unwrap();
+        let cancelled = AtomicBool::new(false);
+        let result = copy_and_verify(
+            &entries,
+            &directory.path().join("destination"),
+            &cancelled,
+            |_, _| {
+                cancelled.store(true, Ordering::Relaxed);
+                Ok(())
+            },
+        );
+        assert!(matches!(result, Err(StorageError::MigrationCancelled)));
+        assert_eq!(fs::read(source.join("file")).unwrap(), b"source");
+    }
 
     #[test]
     fn copy_verifies_nested_files_and_skips_database_companions() {
@@ -218,7 +294,7 @@ mod tests {
             .path()
             .join("destination.siaovplay-migration-part");
         fs::write(&unrelated, "unrelated").unwrap();
-        assert!(copy_file(&source, &target).is_err());
+        assert!(copy_file(&source, &target, &AtomicBool::new(false)).is_err());
         assert_eq!(fs::read_to_string(&source).unwrap(), "source");
         assert_eq!(
             fs::read_to_string(target.join("retained.txt")).unwrap(),
@@ -235,7 +311,7 @@ mod tests {
         let target = directory.path().join("destination.txt");
         fs::write(&source, "new").unwrap();
         fs::write(&target, "old").unwrap();
-        copy_file(&source, &target).unwrap();
+        copy_file(&source, &target, &AtomicBool::new(false)).unwrap();
         assert_eq!(fs::read_to_string(target).unwrap(), "new");
         assert_eq!(fs::read_dir(directory.path()).unwrap().count(), 2);
     }
