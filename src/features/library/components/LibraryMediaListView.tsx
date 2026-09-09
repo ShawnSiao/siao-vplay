@@ -1,4 +1,5 @@
 import { PagedMediaList } from "./PagedMediaList";
+import type { LibraryCollectionPagination } from "../useLibraryCollectionPaging";
 import type { CollectionSummary, LibraryMediaSummary } from "../../../types";
 import type { LibrarySectionPageState } from "../useLibraryController";
 import { LibraryMediaItem } from "./LibraryMediaItem";
@@ -6,6 +7,7 @@ import { LibraryMediaItem } from "./LibraryMediaItem";
 type LibraryMediaListViewProps = {
   kind: "watch_later" | "unclassified";
   page: LibrarySectionPageState;
+  pagination?: LibraryCollectionPagination;
   collections: CollectionSummary[];
   mutationPending: boolean;
   onRetry: () => void;
@@ -25,14 +27,15 @@ export function LibraryMediaListView({
   page,
   onRetry,
   onLoadMore,
+  pagination,
   ...mediaProps
 }: LibraryMediaListViewProps) {
   const watchLater = kind === "watch_later";
   const title = watchLater ? "稍后观看" : "未分类";
-  const emptyTitle = watchLater
+  const emptyTitle = page.totalCount > 0 ? "本页已无视频" : watchLater
     ? "还没有稍后观看的视频"
     : "所有视频都已分类";
-  const emptyDescription = watchLater
+  const emptyDescription = page.totalCount > 0 ? "可返回上一页继续浏览。" : watchLater
     ? "可从未分类列表或播放器将视频加入稍后观看。"
     : "新导入且未加入合集的视频会显示在这里。";
 
@@ -61,7 +64,7 @@ export function LibraryMediaListView({
         </div>
       ) : (
         <PagedMediaList key={kind} contentKind="videos" items={page.items} empty={<div className="library-empty-panel"><strong>{emptyTitle}</strong><p>{emptyDescription}</p></div>}
-          page={{ totalCount: page.totalCount, nextOffset: page.nextOffset, loadingMore: page.loadingMore || page.loading,
+          page={pagination ?? { totalCount: page.totalCount, nextOffset: page.nextOffset, loadingMore: page.loadingMore || page.loading,
             error: page.error, loadMore: onLoadMore, reload: onRetry }} renderItem={media => (
               <LibraryMediaItem
                 key={media.projectId}

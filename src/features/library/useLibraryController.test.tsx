@@ -82,7 +82,7 @@ afterEach(() => {
 });
 
 describe("useLibraryController", () => {
-  it("restores a valid section and appends snapshot-bound pages", async () => {
+  it("restores a valid section and replaces snapshot-bound pages", async () => {
     window.localStorage.setItem("siaovplay-library-section", "watch_later");
     gatewayMocks.getLibraryHome.mockResolvedValue(libraryHome(0));
     gatewayMocks.listLibrarySection
@@ -107,7 +107,7 @@ describe("useLibraryController", () => {
     });
     expect(
       result.current.state.sectionPages.watch_later.items.map((item) => item.projectId),
-    ).toEqual(["first", "second"]);
+    ).toEqual(["second"]);
     expect(result.current.state.sectionPages.watch_later.nextOffset).toBeNull();
   });
 

@@ -1,3 +1,4 @@
+import { useSectionWindowPreview } from "./useSectionWindowPreview";
 import { useLibraryPagesPreview } from "./useLibraryPagesPreview";
 import { ActivityPreview } from "./ActivityPreview";
 import { ProjectCleanupNotice } from "../components/ProjectCleanupNotice";
@@ -174,9 +175,10 @@ const folderPreview: LibraryFolderImportState = {
 };
 
 export function LibraryHarness() {
+  const sectionWindow = useSectionWindowPreview(mediaSummary);
   const collectionPreview = useLibraryPagesPreview();
   const emptyMode = new URLSearchParams(window.location.search).has("empty");
-  const [folderImport, setFolderImport] = useState<LibraryFolderImportState | null>(null); const [section, setSection] = useState<LibrarySection>(loadedListCount ? (new URLSearchParams(location.search).get("section") === "watch_later" ? "watch_later" : "unclassified") : longListMode ? "unclassified" : "home");
+  const [folderImport, setFolderImport] = useState<LibraryFolderImportState | null>(null); const [section, setSection] = useState<LibrarySection>(sectionWindow ? sectionWindow.initialSection : loadedListCount ? (new URLSearchParams(location.search).get("section") === "watch_later" ? "watch_later" : "unclassified") : longListMode ? "unclassified" : "home");
   const [recovery, setRecovery] = useState<LibraryRecoveryState | null>(null);
   const [watchLaterItems, setWatchLaterItems] = useState(loadedListCount ? unclassifiedItems : [mediaSummary]);
   const [uncategorizedItems, setUncategorizedItems] = useState(unclassifiedItems);
@@ -252,7 +254,7 @@ export function LibraryHarness() {
       <LibraryScreen
         home={visibleHome}
         section={section}
-        sectionPages={{
+        sectionPages={sectionWindow?.pages ?? {
           continue_watching: {
             items: libraryHome.continueWatching,
             totalCount: libraryHome.continueWatching.length,
@@ -313,8 +315,10 @@ export function LibraryHarness() {
         onDelete={() => undefined}
         onOpenLocation={() => undefined}
         onSelectSection={setSection}
-        onLoadMoreSection={async () => false}
-        onReloadSection={() => undefined}
+        onLoadMoreSection={sectionWindow?.loadMore ?? (async () => false)}
+        onPreviousSection={sectionWindow?.previous}
+        onRetrySectionPage={sectionWindow?.retry}
+        onReloadSection={sectionWindow?.reload ?? (() => undefined)}
         onOpenCollection={() => undefined}
         onCloseCollection={() => undefined}
         onSelectSeason={() => undefined}

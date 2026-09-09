@@ -759,7 +759,7 @@ export function useLibraryController() {
     void refresh();
   }, [refresh]);
 
-  const { loadSectionPage, loadMoreSection } = useLibrarySectionPaging(
+  const { loadSectionPage, loadMoreSection, loadPreviousSection, retrySection } = useLibrarySectionPaging(
     state.section,
     state.sectionPages,
     dispatch,
@@ -1207,6 +1207,7 @@ export function useLibraryController() {
     setSection,
     loadSectionPage,
     loadMoreSection,
+    loadPreviousSection, retrySection,
     setSearchQuery,
     openCollection: loadCollection,
     collectionPagination,

@@ -14,6 +14,7 @@ import type {
   LibraryCollectionDeletionResult,
   LibraryHome,
   LibraryMediaSummary,
+  LibraryMediaSection,
 } from "../types";
 import { Dialog } from "./Dialog";
 import { LibraryImportDialog } from "./LibraryImportDialog";
@@ -50,6 +51,8 @@ type LibraryScreenProps = {
   onReloadSection: (
     section: "continue_watching" | "watch_later" | "unclassified",
   ) => void;
+  onPreviousSection?: (section: LibraryMediaSection) => Promise<boolean>;
+  onRetrySectionPage?: (section: LibraryMediaSection) => Promise<boolean>;
   onOpenCollection: (collectionId: string) => void;
   onCloseCollection: () => void;
   onSelectSeason: (season: number | null) => void;
@@ -76,6 +79,15 @@ export function LibraryScreen(props: LibraryScreenProps) {
   const [revokeRootId, setRevokeRootId] = useState<string | null>(null);
   const [deleteNotice, setDeleteNotice] = useState<string | null>(null);
   const [importOpen, setImportOpen] = useState(false);
+  const paginationFor = (section: LibraryMediaSection): LibraryCollectionPagination | undefined => {
+    if (!props.onPreviousSection) return undefined;
+    const page = props.sectionPages[section];
+    return { offset: page.offset ?? 0, totalCount: page.totalCount, nextOffset: page.nextOffset,
+      loadingMore: page.loading || page.loadingMore, error: page.error,
+      loadMore: () => props.onLoadMoreSection(section), loadPrevious: () => props.onPreviousSection!(section),
+      retry: props.onRetrySectionPage ? () => props.onRetrySectionPage!(section) : undefined,
+      reload: () => props.onReloadSection(section) };
+  };
   const commonMediaProps = {
     collections: props.home.collections,
     mutationPending: props.mutationPending,
@@ -108,6 +120,7 @@ export function LibraryScreen(props: LibraryScreenProps) {
           <LibraryHomeView
             home={props.home}
             continuePage={props.sectionPages.continue_watching}
+            pagination={paginationFor("continue_watching")}
             previewMode={props.previewMode}
             onOpen={props.onOpen}
             onOpenCollection={props.onOpenCollection}
@@ -161,6 +174,7 @@ export function LibraryScreen(props: LibraryScreenProps) {
         {props.section === "watch_later" && !props.currentCollection ? (
           <LibraryMediaListView
             kind="watch_later"
+            pagination={paginationFor("watch_later")}
             page={props.sectionPages.watch_later}
             onRetry={() => props.onReloadSection("watch_later")}
             onLoadMore={() => props.onLoadMoreSection("watch_later")}
@@ -171,6 +185,7 @@ export function LibraryScreen(props: LibraryScreenProps) {
         {props.section === "unclassified" && !props.currentCollection ? (
           <LibraryMediaListView
             kind="unclassified"
+            pagination={paginationFor("unclassified")}
             page={props.sectionPages.unclassified}
             onRetry={() => props.onReloadSection("unclassified")}
             onLoadMore={() => props.onLoadMoreSection("unclassified")}

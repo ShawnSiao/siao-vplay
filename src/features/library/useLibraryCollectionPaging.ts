@@ -73,4 +73,4 @@ export function useLibraryCollectionPaging(view: View, dispatch: Dispatch<Collec
   return { loadCollection, collectionPagination };
 }
 export type LibraryCollectionPagination = { totalCount: number; nextOffset: number | null; loadingMore: boolean; error: string | null;
-  loadMore: () => Promise<boolean>; reload: () => void; offset?: number; loadPrevious?: () => Promise<boolean> };
+  loadMore: () => Promise<boolean>; reload: () => void; offset?: number; loadPrevious?: () => Promise<boolean>; retry?: () => Promise<boolean> };

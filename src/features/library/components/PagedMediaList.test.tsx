@@ -20,6 +20,13 @@ it("keeps an accessible focus target when the last item is removed", () => {
   rerender(content([]));
   expect(screen.getByRole("group", { name: "视频列表" })).toHaveFocus();
 });
+it("does not display an inverted range after removing the last row on a later page", () => {
+  render(<PagedMediaList contentKind="videos" items={[]} empty={<p>本页已清空</p>} renderItem={renderItem}
+    page={{ offset: 24, totalCount: 24, nextOffset: null, loadingMore: false, error: null,
+      loadMore: vi.fn(), loadPrevious: vi.fn(), reload: vi.fn() }} />);
+  expect(screen.getByRole("status")).toHaveTextContent("本页暂无内容");
+  expect(screen.getByRole("button", { name: "上一页视频" })).toBeEnabled();
+});
 
 it("does not steal outside focus when a backend page arrives", () => {
   const content = (offset: number) => <><button>outside</button><PagedMediaList items={[offset ? second : first]} empty={null} renderItem={renderItem}

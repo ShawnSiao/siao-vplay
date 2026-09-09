@@ -16,6 +16,11 @@ export type LibrarySectionPageState = {
   totalCount: number;
   nextOffset: number | null;
   snapshotToken?: string;
+  offset?: number;
+  pageSize?: number;
+  failedOffset?: number;
+  failedContinuation?: boolean;
+  requestId?: number;
   initialized: boolean;
   loading: boolean;
   loadingMore: boolean;
@@ -32,6 +37,7 @@ export type LibrarySectionAction =
       type: "section_page_started";
       section: LibraryMediaSection;
       append: boolean;
+      requestId?: number;
     }
   | {
       type: "section_page_loaded";
@@ -40,12 +46,18 @@ export type LibrarySectionAction =
       totalCount: number;
       nextOffset: number | null;
       snapshotToken?: string;
+      offset?: number;
+      pageSize?: number;
+      requestId?: number;
       append: boolean;
     }
   | {
       type: "section_page_failed";
       section: LibraryMediaSection;
       message: string;
+      offset?: number;
+      continuation?: boolean;
+      requestId?: number;
     }
   | {
       type: "section_page_remove";
@@ -128,17 +140,6 @@ export function sectionsFromHome(
   };
 }
 
-function mergePageItems(
-  current: LibraryMediaSummary[],
-  incoming: LibraryMediaSummary[],
-): LibraryMediaSummary[] {
-  const items = new Map(current.map((item) => [item.projectId, item]));
-  for (const item of incoming) {
-    items.set(item.projectId, item);
-  }
-  return Array.from(items.values());
-}
-
 export function reduceSectionPages(
   pages: LibrarySectionPages,
   action: LibrarySectionAction,
@@ -153,17 +154,21 @@ export function reduceSectionPages(
           loading: !action.append,
           loadingMore: action.append,
           error: null,
+          requestId: action.requestId,
         },
       };
     case "section_page_loaded":
+      if (action.requestId !== undefined && page.requestId !== action.requestId) return pages;
       if (action.append && page.snapshotToken !== action.snapshotToken) return pages;
       return {
         ...pages,
         [action.section]: {
-          items: action.append ? mergePageItems(page.items, action.items) : action.items,
+          items: action.items,
           totalCount: action.totalCount,
           nextOffset: action.nextOffset,
           snapshotToken: action.snapshotToken,
+          offset: action.offset,
+          pageSize: action.pageSize,
           initialized: true,
           loading: false,
           loadingMore: false,
@@ -171,6 +176,7 @@ export function reduceSectionPages(
         },
       };
     case "section_page_failed":
+      if (action.requestId !== undefined && page.requestId !== action.requestId) return pages;
       return {
         ...pages,
         [action.section]: {
@@ -179,6 +185,8 @@ export function reduceSectionPages(
           loading: false,
           loadingMore: false,
           error: action.message,
+          failedOffset: action.offset,
+          failedContinuation: action.continuation,
         },
       };
     case "section_page_remove": {
@@ -190,6 +198,8 @@ export function reduceSectionPages(
           ...page,
           items,
           snapshotToken: undefined,
+          requestId: undefined,
+          loading: false, loadingMore: false,
           totalCount: removed ? Math.max(0, page.totalCount - 1) : page.totalCount,
         },
       };
@@ -214,6 +224,8 @@ export function removeUnclassifiedProject(
         ...pages.unclassified,
         items: pages.unclassified.items.filter((item) => item.projectId !== projectId),
         snapshotToken: undefined,
+        requestId: undefined,
+        loading: false, loadingMore: false,
         totalCount: removed
           ? Math.max(0, pages.unclassified.totalCount - 1)
           : pages.unclassified.totalCount,

@@ -1,4 +1,6 @@
 import { playbackUrl } from "../../../lib/desktop";
+import { LibraryContinueWindow } from "./LibraryContinueWindow";
+import type { LibraryCollectionPagination } from "../useLibraryCollectionPaging";
 import { fileExtension, formatDuration, formatRecentTime } from "../../../lib/format";
 import type { CollectionSummary, LibraryHome, LibraryMediaSummary } from "../../../types";
 import type { LibrarySectionPageState } from "../useLibraryController";
@@ -8,6 +10,7 @@ import "../library-first-run.css";
 type LibraryHomeViewProps = {
   home: LibraryHome;
   continuePage: LibrarySectionPageState;
+  pagination?: LibraryCollectionPagination;
   previewMode: boolean;
   onOpen: (media: LibraryMediaSummary) => void;
   onOpenCollection: (collectionId: string) => void;
@@ -59,6 +62,7 @@ function CollectionPreview({
 export function LibraryHomeView({
   home,
   continuePage,
+  pagination,
   previewMode,
   onOpen,
   onOpenCollection,
@@ -66,7 +70,7 @@ export function LibraryHomeView({
   onImport,
   onLoadMore,
 }: LibraryHomeViewProps) {
-  const continueItems = continuePage.items.length
+  const continueItems = continuePage.initialized
     ? continuePage.items
     : home.continueWatching;
   const hero = continueItems[0] ?? null;
@@ -120,6 +124,7 @@ export function LibraryHomeView({
         <h1 className="sr-only">继续观看</h1>
       </header>
 
+      <LibraryContinueWindow pagination={pagination} count={continueItems.length}>
       {hero ? (
         <section className="library-continue-section" aria-labelledby="continue-heading">
           <h2 className="sr-only" id="continue-heading">最近观看</h2>
@@ -127,7 +132,7 @@ export function LibraryHomeView({
             <button
               className="library-continue-visual"
               type="button"
-              aria-label={`打开最近观看的 ${hero.projectTitle}`}
+              aria-label={`打开${continuePage.offset ? "继续观看的" : "最近观看的"} ${hero.projectTitle}`}
               onClick={() => onOpen(hero)}
             >
               {hero.posterPath ? (
@@ -138,7 +143,7 @@ export function LibraryHomeView({
               <i className="library-continue-shade" aria-hidden="true" />
             </button>
             <div className="library-continue-copy">
-              <span className="library-resume-label">最近观看</span>
+              <span className="library-resume-label">{continuePage.offset ? "继续观看" : "最近观看"}</span>
               <h2 title={hero.displayName}>{hero.projectTitle}</h2>
               <div className="library-continue-time">
                 <span>{formatDuration(hero.positionMs)}</span>
@@ -170,7 +175,7 @@ export function LibraryHomeView({
                   <small>从 {formatDuration(media.positionMs)} 继续</small>
                 </button>
               ))}
-              {continuePage.nextOffset !== null ? (
+              {continuePage.nextOffset !== null && !pagination ? (
                 <button
                   className="library-load-more-card"
                   type="button"
@@ -185,18 +190,19 @@ export function LibraryHomeView({
               ) : null}
             </div>
           ) : null}
-          {continuePage.error ? <p className="library-inline-error" role="alert">{continuePage.error}</p> : null}
+          {continuePage.error && !pagination ? <p className="library-inline-error" role="alert">{continuePage.error}</p> : null}
         </section>
       ) : (
         <section className="library-empty-resume">
           <div aria-hidden="true">▶</div>
           <span>
-            <strong>还没有观看记录</strong>
+            <strong>{continuePage.totalCount > 0 ? "本页暂无观看记录" : "还没有观看记录"}</strong>
             <p>{previewMode ? "桌面应用会显示真实观看进度。" : "添加视频后，播放位置会保存在当前设备。"}</p>
           </span>
           <button type="button" onClick={onImport}>添加视频</button>
         </section>
       )}
+      </LibraryContinueWindow>
 
       <section className="library-section" aria-labelledby="home-series-title">
         <div className="library-section-heading">

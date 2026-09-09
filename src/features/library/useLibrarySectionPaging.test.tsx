@@ -88,5 +88,5 @@ it("replaces a 12-row home preview before continuing from the first page snapsho
   expect(result.current.pages.unclassified.snapshotToken).toBe("snapshot");
   await act(async () => { await result.current.loadMoreSection("unclassified"); });
   expect(read).toHaveBeenNthCalledWith(2, "unclassified", 24, "snapshot");
-  expect(result.current.pages.unclassified.items).toHaveLength(30);
+  expect(result.current.pages.unclassified.items).toHaveLength(6);
 });

@@ -86,6 +86,7 @@ export default function App() {
     setSection: setLibrarySection,
     loadSectionPage,
     loadMoreSection,
+    loadPreviousSection, retrySection,
     setSearchQuery,
     openCollection,
     collectionPagination,
@@ -784,6 +785,8 @@ export default function App() {
             }
             onSelectSection={selectLibrarySection}
             onLoadMoreSection={async (section) => Boolean(await loadMoreSection(section))}
+            onPreviousSection={async (section) => Boolean(await loadPreviousSection(section))}
+            onRetrySectionPage={async (section) => Boolean(await retrySection(section))}
             onReloadSection={(section) => void loadSectionPage(section, 0)}
             onOpenCollection={(collectionId) =>
               void openCollection(collectionId)
