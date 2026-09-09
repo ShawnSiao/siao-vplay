@@ -13,6 +13,75 @@ fn fixture(root: &Path) -> StorageMigrationTask {
 }
 
 #[test]
+fn future_record_is_preserved_on_startup_and_on_write() {
+    let dir = tempfile::tempdir().unwrap();
+    let task = fixture(dir.path());
+    let bootstrap = dir.path().join("isolated");
+    fs::create_dir(&bootstrap).unwrap();
+    let path = bootstrap.join("storage-migration.json");
+    let mut value = serde_json::to_value(&task).unwrap();
+    value["schemaVersion"] = serde_json::json!(999);
+    value["futureState"] = serde_json::json!({ "retain": true });
+    let bytes = serde_json::to_vec(&value).unwrap();
+    fs::write(&path, &bytes).unwrap();
+    assert!(load_migration_runtime(&bootstrap, None).is_err());
+    assert_eq!(fs::read(&path).unwrap(), bytes);
+    assert!(persist_task(&path, &task).is_err());
+    assert_eq!(fs::read(&path).unwrap(), bytes);
+    assert_eq!(fs::read_dir(bootstrap).unwrap().count(), 1);
+}
+
+#[test]
+fn malformed_record_versions_are_never_treated_as_legacy() {
+    let dir = tempfile::tempdir().unwrap();
+    let task = fixture(dir.path());
+    let bootstrap = dir.path().join("isolated");
+    fs::create_dir(&bootstrap).unwrap();
+    let path = bootstrap.join("storage-migration.json");
+    for version in [serde_json::json!(null), serde_json::json!("1"), serde_json::json!(0), serde_json::json!(-1)] {
+        let mut value = serde_json::to_value(&task).unwrap();
+        value["schemaVersion"] = version;
+        let bytes = serde_json::to_vec(&value).unwrap();
+        fs::write(&path, &bytes).unwrap();
+        assert!(load_migration_runtime(&bootstrap, None).is_err());
+        assert!(persist_task(&path, &task).is_err());
+        assert_eq!(fs::read(&path).unwrap(), bytes);
+    }
+}
+
+#[test]
+fn future_backup_cannot_be_promoted_or_bypassed_by_a_new_write() {
+    let dir = tempfile::tempdir().unwrap();
+    let task = fixture(dir.path());
+    let bootstrap = dir.path().join("isolated");
+    fs::create_dir(&bootstrap).unwrap();
+    let path = bootstrap.join("storage-migration.json");
+    let backup = bootstrap.join(".storage-migration.json.0123456789abcdef0123456789abcdef.previous");
+    let mut value = serde_json::to_value(&task).unwrap();
+    value["schemaVersion"] = serde_json::json!(2);
+    let bytes = serde_json::to_vec(&value).unwrap();
+    fs::write(&backup, &bytes).unwrap();
+    assert!(load_migration_runtime(&bootstrap, None).is_err());
+    assert!(persist_task(&path, &task).is_err());
+    assert!(!path.exists());
+    assert_eq!(fs::read(&backup).unwrap(), bytes);
+}
+
+#[test]
+fn new_records_are_versioned_and_preserve_task_identity() {
+    let dir = tempfile::tempdir().unwrap();
+    let task = fixture(dir.path());
+    let path = dir.path().join("storage-migration.json");
+    persist_task(&path, &task).unwrap();
+    let value: serde_json::Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+    assert_eq!(value["schemaVersion"], 1);
+    assert_eq!(value["id"], task.id);
+    let restored = load_migration_runtime(dir.path(), None).unwrap().task.unwrap();
+    assert_eq!(restored.id, task.id);
+    assert_eq!(restored.destination_root, task.destination_root);
+}
+
+#[test]
 fn migration_record_directory_is_never_adopted_or_moved() {
     let dir = tempfile::tempdir().unwrap();
     let task = fixture(dir.path());

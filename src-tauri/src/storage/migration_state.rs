@@ -10,6 +10,27 @@ use uuid::Uuid;
 use super::{StorageArea, StorageError, StorageMigrationStatus, StorageMigrationTask};
 
 const MIGRATION_FILE_NAME: &str = "storage-migration.json";
+const MIGRATION_RECORD_VERSION: u32 = 1;
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct MigrationRecord<'a> {
+    schema_version: u32,
+    #[serde(flatten)]
+    task: &'a StorageMigrationTask,
+}
+
+fn read_record(path: &Path) -> Result<StorageMigrationTask, StorageError> {
+    let value: serde_json::Value = serde_json::from_slice(&fs::read(path)?)?;
+    // Missing version denotes the legacy task-only record. An explicit invalid
+    // version is never treated as legacy or silently rewritten by recovery.
+    if let Some(version) = value.get("schemaVersion") {
+        if version.as_u64() != Some(u64::from(MIGRATION_RECORD_VERSION)) {
+            return Err(StorageError::MigrationIntegrity("迁移记录版本不受支持，已保留原文件；请使用兼容版本恢复".to_owned()));
+        }
+    }
+    Ok(serde_json::from_value(value)?)
+}
 
 #[derive(Debug)]
 pub(crate) struct MigrationRuntime {
@@ -63,7 +84,7 @@ fn ordinary_file(path: &Path) -> Result<bool, StorageError> {
 
 fn load_task(path: &Path) -> Result<Option<StorageMigrationTask>, StorageError> {
     if ordinary_file(path)? {
-        return Ok(Some(serde_json::from_slice(&fs::read(path)?)?));
+        return read_record(path).map(Some);
     }
     let parent = path.parent().ok_or_else(|| StorageError::MigrationIntegrity("迁移记录目录缺失".to_owned()))?;
     let prefix = format!(".{MIGRATION_FILE_NAME}.");
@@ -81,14 +102,16 @@ fn load_task(path: &Path) -> Result<Option<StorageMigrationTask>, StorageError> 
         previous = Some(entry.path());
     }
     // Only a committed legacy backup can be recovered. Never promote a .part candidate.
-    previous.map(|previous| Ok(serde_json::from_slice(&fs::read(previous)?)?)).transpose()
+    previous.map(|previous| read_record(&previous)).transpose()
 }
 
 pub(crate) fn persist_task(path: &Path, task: &StorageMigrationTask) -> Result<(), StorageError> {
-    ordinary_file(path)?;
+    // Guard both the current record and any recoverable legacy candidate before
+    // creating a replacement, including writes after an external format change.
+    let _ = load_task(path)?;
     let suffix = Uuid::new_v4().simple().to_string();
     let temporary = path.with_file_name(format!(".{MIGRATION_FILE_NAME}.{suffix}.part"));
-    let bytes = serde_json::to_vec_pretty(task)?;
+    let bytes = serde_json::to_vec_pretty(&MigrationRecord { schema_version: MIGRATION_RECORD_VERSION, task })?;
     let mut file = fs::OpenOptions::new().write(true).create_new(true).open(&temporary)?;
     let result: Result<(), StorageError> = (|| {
         file.write_all(&bytes)?;
