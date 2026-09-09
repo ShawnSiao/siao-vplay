@@ -8,27 +8,37 @@ use std::collections::BTreeSet;
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct ExplanationEvidence {
     pub explanation_id: String,
     pub project_id: String,
     pub task_id: String,
     pub source_version_id: String,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_i64)))]
     pub playback_cutoff_ms: i64,
+    #[cfg_attr(test, schemars(length(max = 40)))]
     pub subtitles: Vec<SubtitleEvidence>,
+    #[cfg_attr(test, schemars(length(max = 6)))]
     pub frames: Vec<FrameEvidence>,
 }
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct SubtitleEvidence {
     pub segment_id: String,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_i64)))]
     pub start_ms: i64,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_i64)))]
     pub end_ms: i64,
+    #[cfg_attr(test, schemars(length(max = 20000)))]
     pub text: String,
 }
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct FrameEvidence {
     pub id: String,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_i64)))]
     pub timestamp_ms: i64,
 }
 

@@ -23,3 +23,13 @@ it.each([
   invoke.mockResolvedValue({ ...evidence, ...change });
   await expect(readExplanationEvidence(explanation)).rejects.toThrow();
 });
+
+it.each(["原".repeat(20_000), "😀".repeat(20_000)])("accepts the backend Unicode character limit", async text => {
+  const value = { ...evidence, subtitles: [{ ...evidence.subtitles[0], text }] };
+  invoke.mockResolvedValue(value);
+  await expect(readExplanationEvidence(explanation)).resolves.toEqual(value);
+});
+it("rejects more than the backend Unicode character limit", async () => {
+  invoke.mockResolvedValue({...evidence, subtitles:[{...evidence.subtitles[0], text:"😀".repeat(20_001)}]});
+  await expect(readExplanationEvidence(explanation)).rejects.toThrow();
+});
