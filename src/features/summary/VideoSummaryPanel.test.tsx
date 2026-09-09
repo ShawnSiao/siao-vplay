@@ -5,6 +5,7 @@ import type { SubtitleVersion } from "../../types";
 import { createSummaryFixtures } from "../../test-fixtures/summary";
 
 const gateway = vi.hoisted(() => ({
+  getVideoSummary: vi.fn(),
   listSummaryTasks: vi.fn(),
   listVideoSummaries: vi.fn(),
   prepareSummaryTask: vi.fn(),
@@ -19,7 +20,6 @@ vi.mock("./gateway", () => ({
   chooseSummaryExportDirectory: vi.fn(),
   exportVideoSummary: vi.fn(),
   getSummaryTask: vi.fn(),
-  getVideoSummary: vi.fn(),
   openSummaryMaterials: vi.fn(),
 }));
 vi.mock("../../lib/desktop", () => ({
@@ -117,4 +117,23 @@ describe("VideoSummaryPanel", () => {
     await waitFor(() => expect(gateway.resumeSummaryTask).toHaveBeenCalledWith(task.id, "confirmed-hash"));
     expect(gateway.prepareSummaryTask).toHaveBeenCalledTimes(1);
   });
+
+it("retries a failed completed-result read without sending another task", async () => {
+  const { task, summary } = createSummaryFixtures();
+  gateway.listSummaryTasks.mockResolvedValue([]);
+  gateway.listVideoSummaries.mockResolvedValue([]);
+  gateway.startSummaryTask.mockResolvedValue({ ...task, status: "completed", outputSummaryId: summary.id });
+  gateway.getVideoSummary.mockRejectedValueOnce(new Error("读取暂时失败")).mockResolvedValue(summary);
+  render(<VideoSummaryPanel projectId="project-1" playbackCutoffMs={1_600_000} durationMs={5_200_000}
+    sourceVersion={{ id: "subtitle-1" } as SubtitleVersion} translationVersion={null} onPrepareSubtitles={vi.fn()} />);
+  fireEvent.click(await screen.findByRole("button", { name: "准备并查看发送清单" }));
+  fireEvent.click(await screen.findByRole("button", { name: "确认发送并开始" }));
+  expect(await screen.findByText("读取暂时失败")).toBeInTheDocument();
+  const sends = gateway.startSummaryTask.mock.calls.length;
+  fireEvent.click(screen.getByRole("button", { name: "重新读取总结" }));
+  expect(await screen.findByRole("heading", { name: summary.result.title })).toBeInTheDocument();
+  expect(gateway.getVideoSummary).toHaveBeenCalledTimes(2);
+  expect(gateway.startSummaryTask).toHaveBeenCalledTimes(sends);
+});
+
 });

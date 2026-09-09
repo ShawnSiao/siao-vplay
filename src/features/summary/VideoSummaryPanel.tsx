@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { commandError, getCodexRuntimeStatus } from "../../lib/desktop";
 import type { CodexRuntimeStatus, SubtitleVersion } from "../../types";
@@ -18,6 +18,7 @@ import {
   resumeSummaryTask,
   startSummaryTask,
 } from "./gateway";
+import { useSummaryCompletion } from "./useSummaryCompletion";
 import { SummaryProgress } from "./SummaryProgress";
 import { SummaryResultView } from "./SummaryResultView";
 import { SummarySetup } from "./SummarySetup";
@@ -63,7 +64,6 @@ export function VideoSummaryPanel({
   onJump,
   onPausePlayback,
 }: VideoSummaryPanelProps) {
-  const completionRef = useRef<string | null>(null);
   const execution = useAiExecutionChoice(true);
   const [runtime, setRuntime] = useState<CodexRuntimeStatus | null>(null);
   const [scope, setScope] = useState<SummaryScope>("current_progress");
@@ -126,14 +126,10 @@ export function VideoSummaryPanel({
     };
   }, [showError, task]);
 
-  useEffect(() => {
-    if (!task?.outputSummaryId || task.status !== "completed" || completionRef.current === task.id) return;
-    completionRef.current = task.id;
-    void getVideoSummary(task.outputSummaryId).then((value) => {
-      setSummary(value);
-      setHistory((current) => [value, ...current.filter((item) => item.id !== value.id)]);
-    }).catch(showError);
-  }, [showError, task]);
+  const completion = useSummaryCompletion({ projectId, task, read: getVideoSummary, onResult: (value) => {
+    setSummary(value);
+    setHistory((current) => [value, ...current.filter((item) => item.id !== value.id)]);
+  } });
 
   const start = async () => {
     setOperation("start");
@@ -156,7 +152,6 @@ export function VideoSummaryPanel({
         providerId: choice.preview.providerId,
         modelId: choice.preview.modelId,
       });
-      completionRef.current = null;
       setSummary(null);
       setTask(prepared);
       setConfirmation({ preview: await previewSummaryDispatch(prepared.id), resume: false });
@@ -227,7 +222,6 @@ export function VideoSummaryPanel({
 
   const newSummary = () => {
     setConfirmation(null);
-    completionRef.current = null;
     setTask(null);
     setSummary(null);
     setError(null);
@@ -258,6 +252,10 @@ export function VideoSummaryPanel({
           </select>
         </label>
       ) : null}
+      {completion.error ? <div className="understanding-error" role="alert">
+        {commandError(completion.error).message}
+        <button className="button small" type="button" onClick={completion.retry}>重新读取总结</button>
+      </div> : null}
       {error ? <div className="understanding-error" role="alert">{error}</div> : null}
       {confirmation ? <SummaryDispatchConfirm preview={confirmation.preview} busy={operation !== null}
         onConfirm={() => void confirmDispatch()} onBack={() => setConfirmation(null)} /> : summary ? (
