@@ -1,4 +1,5 @@
-export type AnalysisTaskType = "understanding" | "summary";
+export type { AnalysisTaskType, AnalysisPromptTemplate } from "../../generated/analysis-prompt-template";
+import type { AnalysisTaskType } from "../../generated/analysis-prompt-template";
 
 export type AnalysisScope = "current_progress" | "full_video";
 
@@ -7,17 +8,6 @@ export type AnalysisMode =
   | "general"
   | "science_technology"
   | "software_architecture";
-
-export interface AnalysisPromptTemplate {
-  id: string;
-  taskType: AnalysisTaskType;
-  baseTemplateId: string;
-  name: string;
-  customRequirements: string;
-  isBuiltin: boolean;
-  createdAtMs: number;
-  updatedAtMs: number;
-}
 
 export type { PromptSelection } from "../../types";
 

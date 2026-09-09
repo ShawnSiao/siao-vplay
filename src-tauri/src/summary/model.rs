@@ -35,6 +35,7 @@ impl AnalysisTaskType {
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct AnalysisPromptTemplate {
     pub id: String,
     pub task_type: AnalysisTaskType,
@@ -42,7 +43,9 @@ pub struct AnalysisPromptTemplate {
     pub name: String,
     pub custom_requirements: String,
     pub is_builtin: bool,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_i64)))]
     pub created_at_ms: i64,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_i64)))]
     pub updated_at_ms: i64,
 }
 
