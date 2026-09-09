@@ -308,6 +308,7 @@ function libraryReducer(state: LibraryState, action: LibraryAction): LibraryStat
     case "set_section":
       return {
         ...state,
+        collectionLoading: false,
         section: action.section,
         currentCollection: null,
         currentEpisodes: [],
@@ -336,6 +337,7 @@ function libraryReducer(state: LibraryState, action: LibraryAction): LibraryStat
     case "close_collection":
       return {
         ...state,
+        collectionLoading: false,
         currentCollection: null,
         currentEpisodes: [],
         selectedSeason: null,
@@ -899,6 +901,7 @@ export function useLibraryController() {
   const { changeWatchLater, changeWatched } = useLibraryWatchActions(runMutation, dispatch);
 
   const setSection = useCallback((section: LibrarySection) => {
+    collectionRequestSequence.current += 1;
     window.localStorage.setItem(librarySectionStorageKey, section);
     dispatch({ type: "set_section", section });
   }, []);
@@ -906,6 +909,7 @@ export function useLibraryController() {
     dispatch({ type: "set_search_query", query });
   }, []);
   const closeCollection = useCallback(() => {
+    collectionRequestSequence.current += 1;
     dispatch({ type: "close_collection" });
   }, []);
   const selectSeason = useCallback(
