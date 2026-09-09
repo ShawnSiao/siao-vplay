@@ -257,6 +257,7 @@ pub fn prepare_translation_task(
     store: &ProjectStore,
     input: PrepareTranslationTaskInput,
 ) -> Result<TranslationTask, TranslationError> {
+    let _project_operation = crate::project_operations::Operation::acquire(store, &input.project_id)?;
     let PrepareTranslationTaskInput {
         project_id,
         handoff_kind,

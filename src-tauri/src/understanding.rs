@@ -184,6 +184,7 @@ pub(crate) fn prepare_explanation_task_with<F>(
 where
     F: Fn(&Path, i64, &Path) -> Result<(), UnderstandingError>,
 {
+    let _project_operation = crate::project_operations::Operation::acquire(store, &input.project_id)?;
     let _data_access = crate::storage::database_access::shared(store.database_path())?;
     let (status, stage, receiver_label) = match input.handoff_kind.trim() {
         "manual" => (

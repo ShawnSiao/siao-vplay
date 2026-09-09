@@ -199,6 +199,7 @@ pub fn start_subtitle_burn(
     store: &ProjectStore,
     input: StartSubtitleBurnInput,
 ) -> Result<SubtitleBurnJob, SubtitleBurnError> {
+    let _project_operation = crate::project_operations::Operation::acquire(store, &input.project_id)?;
     validate_burn_style(input.style)?;
     if !input.confirm_version_selection {
         return Err(SubtitleBurnError::Delivery(DeliveryError::InvalidExport(

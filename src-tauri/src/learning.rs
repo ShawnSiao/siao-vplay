@@ -266,6 +266,7 @@ pub fn prepare_learning_task(
     store: &ProjectStore,
     input: PrepareLearningTaskInput,
 ) -> Result<LearningTask, LearningError> {
+    let _project_operation = crate::project_operations::Operation::acquire(store, &input.project_id)?;
     let _data_access = crate::storage::database_access::shared(store.database_path())?;
     let (status, stage, receiver_label) = match input.handoff_kind.trim() {
         "manual" => (
@@ -664,6 +665,7 @@ pub(crate) fn create_learning_card_with<F>(
 where
     F: Fn(&Path, i64, &Path) -> Result<(), LearningError>,
 {
+    let _project_operation = crate::project_operations::Operation::acquire(store, &input.project_id)?;
     let _data_access = crate::storage::database_access::shared(store.database_path())?;
     let project = store.get_project(&input.project_id)?;
     let entry = get_dictionary_entry(store, &input.dictionary_entry_id)?;
@@ -907,6 +909,7 @@ pub fn delete_learning_card(
     project_id: &str,
     card_id: &str,
 ) -> Result<bool, LearningError> {
+    let _project_operation = crate::project_operations::Operation::acquire(store, project_id)?;
     let _data_access = crate::storage::database_access::shared(store.database_path())?;
     store.get_project(project_id)?;
     let card = get_learning_card(store, card_id)?;
@@ -2372,6 +2375,8 @@ mod tests {
             |_media_path, timestamp_ms, output_path| {
                 assert!(crate::storage::database_access::exclusive(fixture.store.database_path()).is_err(),
                     "migration must not split screenshot creation from card persistence");
+                assert!(crate::project_operations::Deletion::acquire(&fixture.store, &fixture.project_id).is_err(),
+                    "project deletion must not start during card screenshot creation");
                 assert_eq!(timestamp_ms, 1_000);
                 fs::write(output_path, [0xff, 0xd8, 0xff, 0xe0, 4, 5, 6])?;
                 Ok(())

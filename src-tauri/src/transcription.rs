@@ -938,6 +938,7 @@ pub fn start_transcription(
     store: &ProjectStore,
     input: StartTranscriptionInput,
 ) -> Result<TranscriptionJob, TranscriptionError> {
+    let _project_operation = crate::project_operations::Operation::acquire(store, &input.project_id)?;
     let language = TranscriptionLanguage::parse(&input.language_code)?;
     let model_kind = TranscriptionModelKind::parse(&input.model_kind)?;
     let runtime = preferred_runtime()?;
