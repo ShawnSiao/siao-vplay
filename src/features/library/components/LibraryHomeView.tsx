@@ -80,6 +80,7 @@ export function LibraryHomeView({
   );
   const firstRun =
     home.totalProjectCount === 0 &&
+    home.folderCount === 0 && home.collectionCount === 0 &&
     home.folders.length === 0 &&
     collections.length === 0;
 

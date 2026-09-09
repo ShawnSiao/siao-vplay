@@ -92,3 +92,46 @@ fn overview_windows_decode_only_selected_collections_with_stable_ties() {
     assert!(repository.list_collection_summary_window(2, 0, None).is_ok(), "off-page records must not be decoded");
     assert!(repository.list_collection_summaries().is_err(), "fixture must expose the malformed off-page row");
 }
+
+#[test]
+fn home_overview_previews_are_bounded() {
+    let fixture = Fixture::new();
+    for index in 0..26 {
+        overview_root(&fixture, index);
+        fixture.collection(&format!("Collection {index:03}"));
+    }
+    let home = fixture.service.get_home().unwrap();
+    assert_eq!((home.collection_count, home.folder_count, home.watch_later_count), (26, 26, 0));
+    assert_eq!(home.collections.len(), 4);
+    assert_eq!(home.folders.len(), 4);
+}
+
+#[test]
+fn home_totals_exclude_system_collections_and_preserve_watch_later() {
+    let fixture = Fixture::new();
+    fixture.collection("Empty manual");
+    let project = fixture.project("watch.mp4");
+    fixture.service.set_watch_later(&project.id, true).unwrap();
+    let home = fixture.service.get_home().unwrap();
+    assert_eq!(home.collection_count, 1);
+    assert_eq!(home.watch_later_count, 1);
+    assert_eq!(home.collections.len(), 1);
+    assert!(home.collections.iter().all(|row| row.collection.system_key.is_none()));
+    fixture.service.set_watch_later(&project.id, false).unwrap();
+    assert_eq!(fixture.service.get_home().unwrap().watch_later_count, 0);
+}
+
+#[test]
+fn home_overview_totals_and_previews_share_a_read_snapshot() {
+    let fixture = Fixture::new();
+    fixture.collection("Before");
+    let home = fixture.service.get_home_with_checkpoint(|| {
+        fixture.collection("After");
+        overview_root(&fixture, 0);
+    }).unwrap();
+    assert_eq!((home.collection_count, home.folder_count), (1, 0));
+    assert_eq!(home.collections.len(), 1);
+    assert!(home.folders.is_empty());
+    let refreshed = fixture.service.get_home().unwrap();
+    assert_eq!((refreshed.collection_count, refreshed.folder_count), (2, 1));
+}

@@ -456,7 +456,7 @@ function libraryHomeFor(value: Project = project): LibraryHome {
   return {
     continueWatching: value.playbackState.positionMs > 0 ? [media] : [],
     continueWatchingCount: value.playbackState.positionMs > 0 ? 1 : 0,
-    collections: [],
+    collectionCount: 0, folderCount: 0, watchLaterCount: 0, collections: [],
     folders: [],
     unclassified: [media],
     recentlyAdded: [media],

@@ -108,7 +108,7 @@ export function sectionsFromHome(
 ): LibrarySectionPages {
   const continueTotal = home.continueWatchingCount ?? home.continueWatching.length;
   const watchLaterTotal =
-    home.collections.find((item) => item.systemKey === "watch_later")?.itemCount ?? 0;
+    home.watchLaterCount;
   return {
     continue_watching: {
       items: home.continueWatching,

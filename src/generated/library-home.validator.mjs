@@ -2,7 +2,7 @@
 "use strict";
 export const validate = validate20;
 export default validate20;
-const schema31 = {"$defs":{"CollectionKind":{"enum":["series","folder","manual"],"type":"string"},"CollectionSortMode":{"enum":["episode","natural","manual","added_at"],"type":"string"},"CollectionSummary":{"properties":{"autoPlayNext":{"type":"boolean"},"createdAtMs":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"id":{"type":"string"},"itemCount":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"kind":{"$ref":"#/$defs/CollectionKind"},"lastOpenedAtMs":{"maximum":9007199254740991,"minimum":0,"type":["integer","null"]},"posterPath":{"type":["string","null"]},"rootId":{"type":["string","null"]},"seasonCount":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"sortMode":{"$ref":"#/$defs/CollectionSortMode"},"systemKey":{"anyOf":[{"$ref":"#/$defs/CollectionSystemKey"},{"type":"null"}]},"title":{"type":"string"},"totalDurationMs":{"maximum":9007199254740991,"minimum":0,"type":["integer","null"]},"updatedAtMs":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"watchedCount":{"maximum":9007199254740991,"minimum":0,"type":"integer"}},"required":["id","kind","title","rootId","systemKey","posterPath","sortMode","autoPlayNext","lastOpenedAtMs","createdAtMs","updatedAtMs","itemCount","seasonCount","watchedCount","totalDurationMs"],"type":"object"},"CollectionSystemKey":{"enum":["watch_later"],"type":"string"},"ItemAvailability":{"enum":["available","missing","root_offline","changed"],"type":"string"},"LibraryRootStatus":{"enum":["linked","orphaned","ambiguous"],"type":"string"},"LibraryRootSummary":{"properties":{"availability":{"$ref":"#/$defs/RootAvailability"},"displayName":{"type":"string"},"id":{"type":"string"},"itemCount":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"lastScannedAtMs":{"maximum":9007199254740991,"minimum":0,"type":["integer","null"]},"path":{"type":"string"},"status":{"$ref":"#/$defs/LibraryRootStatus"}},"required":["id","path","displayName","availability","status","lastScannedAtMs","itemCount"],"type":"object"},"MediaSummary":{"properties":{"absoluteOrder":{"maximum":9007199254740991,"minimum":0,"type":["integer","null"]},"chineseTranslationAvailable":{"type":"boolean"},"collectionId":{"type":["string","null"]},"collectionTitle":{"type":["string","null"]},"completedAtMs":{"maximum":9007199254740991,"minimum":0,"type":["integer","null"]},"createdAtMs":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"displayName":{"type":"string"},"durationMs":{"maximum":9007199254740991,"minimum":0,"type":["integer","null"]},"episodeNumber":{"maximum":9007199254740991,"minimum":0,"type":["integer","null"]},"episodeTitle":{"type":["string","null"]},"itemAvailability":{"anyOf":[{"$ref":"#/$defs/ItemAvailability"},{"type":"null"}]},"lastOpenedAtMs":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"mediaAvailable":{"type":"boolean"},"mediaLocator":{"type":"string"},"originalSubtitleAvailable":{"type":"boolean"},"positionMs":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"posterPath":{"type":["string","null"]},"projectId":{"type":"string"},"projectTitle":{"type":"string"},"seasonNumber":{"maximum":9007199254740991,"minimum":0,"type":["integer","null"]}},"required":["projectId","projectTitle","displayName","mediaLocator","mediaAvailable","posterPath","positionMs","durationMs","completedAtMs","lastOpenedAtMs","createdAtMs","originalSubtitleAvailable","chineseTranslationAvailable","collectionId","collectionTitle","seasonNumber","episodeNumber","absoluteOrder","episodeTitle","itemAvailability"],"type":"object"},"RootAvailability":{"enum":["available","offline"],"type":"string"}},"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"collectionItemCount":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"collections":{"items":{"$ref":"#/$defs/CollectionSummary"},"type":"array"},"continueWatching":{"items":{"$ref":"#/$defs/MediaSummary"},"type":"array"},"continueWatchingCount":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"folders":{"items":{"$ref":"#/$defs/LibraryRootSummary"},"type":"array"},"recentlyAdded":{"items":{"$ref":"#/$defs/MediaSummary"},"type":"array"},"totalProjectCount":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"unclassified":{"items":{"$ref":"#/$defs/MediaSummary"},"type":"array"},"unclassifiedCount":{"maximum":9007199254740991,"minimum":0,"type":"integer"}},"required":["continueWatching","continueWatchingCount","collections","folders","unclassified","recentlyAdded","totalProjectCount","collectionItemCount","unclassifiedCount"],"title":"LibraryHome","type":"object"};
+const schema31 = {"$defs":{"CollectionKind":{"enum":["series","folder","manual"],"type":"string"},"CollectionSortMode":{"enum":["episode","natural","manual","added_at"],"type":"string"},"CollectionSummary":{"properties":{"autoPlayNext":{"type":"boolean"},"createdAtMs":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"id":{"type":"string"},"itemCount":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"kind":{"$ref":"#/$defs/CollectionKind"},"lastOpenedAtMs":{"maximum":9007199254740991,"minimum":0,"type":["integer","null"]},"posterPath":{"type":["string","null"]},"rootId":{"type":["string","null"]},"seasonCount":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"sortMode":{"$ref":"#/$defs/CollectionSortMode"},"systemKey":{"anyOf":[{"$ref":"#/$defs/CollectionSystemKey"},{"type":"null"}]},"title":{"type":"string"},"totalDurationMs":{"maximum":9007199254740991,"minimum":0,"type":["integer","null"]},"updatedAtMs":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"watchedCount":{"maximum":9007199254740991,"minimum":0,"type":"integer"}},"required":["id","kind","title","rootId","systemKey","posterPath","sortMode","autoPlayNext","lastOpenedAtMs","createdAtMs","updatedAtMs","itemCount","seasonCount","watchedCount","totalDurationMs"],"type":"object"},"CollectionSystemKey":{"enum":["watch_later"],"type":"string"},"ItemAvailability":{"enum":["available","missing","root_offline","changed"],"type":"string"},"LibraryRootStatus":{"enum":["linked","orphaned","ambiguous"],"type":"string"},"LibraryRootSummary":{"properties":{"availability":{"$ref":"#/$defs/RootAvailability"},"displayName":{"type":"string"},"id":{"type":"string"},"itemCount":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"lastScannedAtMs":{"maximum":9007199254740991,"minimum":0,"type":["integer","null"]},"path":{"type":"string"},"status":{"$ref":"#/$defs/LibraryRootStatus"}},"required":["id","path","displayName","availability","status","lastScannedAtMs","itemCount"],"type":"object"},"MediaSummary":{"properties":{"absoluteOrder":{"maximum":9007199254740991,"minimum":0,"type":["integer","null"]},"chineseTranslationAvailable":{"type":"boolean"},"collectionId":{"type":["string","null"]},"collectionTitle":{"type":["string","null"]},"completedAtMs":{"maximum":9007199254740991,"minimum":0,"type":["integer","null"]},"createdAtMs":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"displayName":{"type":"string"},"durationMs":{"maximum":9007199254740991,"minimum":0,"type":["integer","null"]},"episodeNumber":{"maximum":9007199254740991,"minimum":0,"type":["integer","null"]},"episodeTitle":{"type":["string","null"]},"itemAvailability":{"anyOf":[{"$ref":"#/$defs/ItemAvailability"},{"type":"null"}]},"lastOpenedAtMs":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"mediaAvailable":{"type":"boolean"},"mediaLocator":{"type":"string"},"originalSubtitleAvailable":{"type":"boolean"},"positionMs":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"posterPath":{"type":["string","null"]},"projectId":{"type":"string"},"projectTitle":{"type":"string"},"seasonNumber":{"maximum":9007199254740991,"minimum":0,"type":["integer","null"]}},"required":["projectId","projectTitle","displayName","mediaLocator","mediaAvailable","posterPath","positionMs","durationMs","completedAtMs","lastOpenedAtMs","createdAtMs","originalSubtitleAvailable","chineseTranslationAvailable","collectionId","collectionTitle","seasonNumber","episodeNumber","absoluteOrder","episodeTitle","itemAvailability"],"type":"object"},"RootAvailability":{"enum":["available","offline"],"type":"string"}},"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"collectionCount":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"collectionItemCount":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"collections":{"items":{"$ref":"#/$defs/CollectionSummary"},"maxItems":4,"type":"array"},"continueWatching":{"items":{"$ref":"#/$defs/MediaSummary"},"type":"array"},"continueWatchingCount":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"folderCount":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"folders":{"items":{"$ref":"#/$defs/LibraryRootSummary"},"maxItems":4,"type":"array"},"recentlyAdded":{"items":{"$ref":"#/$defs/MediaSummary"},"type":"array"},"totalProjectCount":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"unclassified":{"items":{"$ref":"#/$defs/MediaSummary"},"type":"array"},"unclassifiedCount":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"watchLaterCount":{"maximum":9007199254740991,"minimum":0,"type":"integer"}},"required":["continueWatching","continueWatchingCount","collections","folders","unclassified","recentlyAdded","totalProjectCount","collectionCount","folderCount","watchLaterCount","collectionItemCount","unclassifiedCount"],"title":"LibraryHome","type":"object"};
 const schema32 = {"properties":{"autoPlayNext":{"type":"boolean"},"createdAtMs":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"id":{"type":"string"},"itemCount":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"kind":{"$ref":"#/$defs/CollectionKind"},"lastOpenedAtMs":{"maximum":9007199254740991,"minimum":0,"type":["integer","null"]},"posterPath":{"type":["string","null"]},"rootId":{"type":["string","null"]},"seasonCount":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"sortMode":{"$ref":"#/$defs/CollectionSortMode"},"systemKey":{"anyOf":[{"$ref":"#/$defs/CollectionSystemKey"},{"type":"null"}]},"title":{"type":"string"},"totalDurationMs":{"maximum":9007199254740991,"minimum":0,"type":["integer","null"]},"updatedAtMs":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"watchedCount":{"maximum":9007199254740991,"minimum":0,"type":"integer"}},"required":["id","kind","title","rootId","systemKey","posterPath","sortMode","autoPlayNext","lastOpenedAtMs","createdAtMs","updatedAtMs","itemCount","seasonCount","watchedCount","totalDurationMs"],"type":"object"};
 const schema33 = {"enum":["series","folder","manual"],"type":"string"};
 const schema34 = {"enum":["episode","natural","manual","added_at"],"type":"string"};
@@ -1056,27 +1056,27 @@ evaluated0.items = undefined;
 if(errors === 0){
 if(data && typeof data == "object" && !Array.isArray(data)){
 let missing0;
-if((((((((((data.continueWatching === undefined) && (missing0 = "continueWatching")) || ((data.continueWatchingCount === undefined) && (missing0 = "continueWatchingCount"))) || ((data.collections === undefined) && (missing0 = "collections"))) || ((data.folders === undefined) && (missing0 = "folders"))) || ((data.unclassified === undefined) && (missing0 = "unclassified"))) || ((data.recentlyAdded === undefined) && (missing0 = "recentlyAdded"))) || ((data.totalProjectCount === undefined) && (missing0 = "totalProjectCount"))) || ((data.collectionItemCount === undefined) && (missing0 = "collectionItemCount"))) || ((data.unclassifiedCount === undefined) && (missing0 = "unclassifiedCount"))){
+if(((((((((((((data.continueWatching === undefined) && (missing0 = "continueWatching")) || ((data.continueWatchingCount === undefined) && (missing0 = "continueWatchingCount"))) || ((data.collections === undefined) && (missing0 = "collections"))) || ((data.folders === undefined) && (missing0 = "folders"))) || ((data.unclassified === undefined) && (missing0 = "unclassified"))) || ((data.recentlyAdded === undefined) && (missing0 = "recentlyAdded"))) || ((data.totalProjectCount === undefined) && (missing0 = "totalProjectCount"))) || ((data.collectionCount === undefined) && (missing0 = "collectionCount"))) || ((data.folderCount === undefined) && (missing0 = "folderCount"))) || ((data.watchLaterCount === undefined) && (missing0 = "watchLaterCount"))) || ((data.collectionItemCount === undefined) && (missing0 = "collectionItemCount"))) || ((data.unclassifiedCount === undefined) && (missing0 = "unclassifiedCount"))){
 validate20.errors = [{instancePath,schemaPath:"#/required",keyword:"required",params:{missingProperty: missing0},message:"must have required property '"+missing0+"'"}];
 return false;
 }
 else {
-if(data.collectionItemCount !== undefined){
-let data0 = data.collectionItemCount;
+if(data.collectionCount !== undefined){
+let data0 = data.collectionCount;
 const _errs1 = errors;
 if(!(((typeof data0 == "number") && (!(data0 % 1) && !isNaN(data0))) && (isFinite(data0)))){
-validate20.errors = [{instancePath:instancePath+"/collectionItemCount",schemaPath:"#/properties/collectionItemCount/type",keyword:"type",params:{type: "integer"},message:"must be integer"}];
+validate20.errors = [{instancePath:instancePath+"/collectionCount",schemaPath:"#/properties/collectionCount/type",keyword:"type",params:{type: "integer"},message:"must be integer"}];
 return false;
 }
 if(errors === _errs1){
 if((typeof data0 == "number") && (isFinite(data0))){
 if(data0 > 9007199254740991 || isNaN(data0)){
-validate20.errors = [{instancePath:instancePath+"/collectionItemCount",schemaPath:"#/properties/collectionItemCount/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"}];
+validate20.errors = [{instancePath:instancePath+"/collectionCount",schemaPath:"#/properties/collectionCount/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"}];
 return false;
 }
 else {
 if(data0 < 0 || isNaN(data0)){
-validate20.errors = [{instancePath:instancePath+"/collectionItemCount",schemaPath:"#/properties/collectionItemCount/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"}];
+validate20.errors = [{instancePath:instancePath+"/collectionCount",schemaPath:"#/properties/collectionCount/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"}];
 return false;
 }
 }
@@ -1088,28 +1088,25 @@ else {
 var valid0 = true;
 }
 if(valid0){
-if(data.collections !== undefined){
-let data1 = data.collections;
+if(data.collectionItemCount !== undefined){
+let data1 = data.collectionItemCount;
 const _errs3 = errors;
+if(!(((typeof data1 == "number") && (!(data1 % 1) && !isNaN(data1))) && (isFinite(data1)))){
+validate20.errors = [{instancePath:instancePath+"/collectionItemCount",schemaPath:"#/properties/collectionItemCount/type",keyword:"type",params:{type: "integer"},message:"must be integer"}];
+return false;
+}
 if(errors === _errs3){
-if(Array.isArray(data1)){
-var valid1 = true;
-const len0 = data1.length;
-for(let i0=0; i0<len0; i0++){
-const _errs5 = errors;
-if(!(validate21(data1[i0], {instancePath:instancePath+"/collections/" + i0,parentData:data1,parentDataProperty:i0,rootData,dynamicAnchors}))){
-vErrors = vErrors === null ? validate21.errors : vErrors.concat(validate21.errors);
-errors = vErrors.length;
-}
-var valid1 = _errs5 === errors;
-if(!valid1){
-break;
-}
-}
+if((typeof data1 == "number") && (isFinite(data1))){
+if(data1 > 9007199254740991 || isNaN(data1)){
+validate20.errors = [{instancePath:instancePath+"/collectionItemCount",schemaPath:"#/properties/collectionItemCount/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"}];
+return false;
 }
 else {
-validate20.errors = [{instancePath:instancePath+"/collections",schemaPath:"#/properties/collections/type",keyword:"type",params:{type: "array"},message:"must be array"}];
+if(data1 < 0 || isNaN(data1)){
+validate20.errors = [{instancePath:instancePath+"/collectionItemCount",schemaPath:"#/properties/collectionItemCount/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"}];
 return false;
+}
+}
 }
 }
 var valid0 = _errs3 === errors;
@@ -1118,20 +1115,56 @@ else {
 var valid0 = true;
 }
 if(valid0){
+if(data.collections !== undefined){
+let data2 = data.collections;
+const _errs5 = errors;
+if(errors === _errs5){
+if(Array.isArray(data2)){
+if(data2.length > 4){
+validate20.errors = [{instancePath:instancePath+"/collections",schemaPath:"#/properties/collections/maxItems",keyword:"maxItems",params:{limit: 4},message:"must NOT have more than 4 items"}];
+return false;
+}
+else {
+var valid1 = true;
+const len0 = data2.length;
+for(let i0=0; i0<len0; i0++){
+const _errs7 = errors;
+if(!(validate21(data2[i0], {instancePath:instancePath+"/collections/" + i0,parentData:data2,parentDataProperty:i0,rootData,dynamicAnchors}))){
+vErrors = vErrors === null ? validate21.errors : vErrors.concat(validate21.errors);
+errors = vErrors.length;
+}
+var valid1 = _errs7 === errors;
+if(!valid1){
+break;
+}
+}
+}
+}
+else {
+validate20.errors = [{instancePath:instancePath+"/collections",schemaPath:"#/properties/collections/type",keyword:"type",params:{type: "array"},message:"must be array"}];
+return false;
+}
+}
+var valid0 = _errs5 === errors;
+}
+else {
+var valid0 = true;
+}
+if(valid0){
 if(data.continueWatching !== undefined){
-let data3 = data.continueWatching;
-const _errs6 = errors;
-if(errors === _errs6){
-if(Array.isArray(data3)){
-var valid2 = true;
-const len1 = data3.length;
-for(let i1=0; i1<len1; i1++){
+let data4 = data.continueWatching;
 const _errs8 = errors;
-if(!(validate23(data3[i1], {instancePath:instancePath+"/continueWatching/" + i1,parentData:data3,parentDataProperty:i1,rootData,dynamicAnchors}))){
+if(errors === _errs8){
+if(Array.isArray(data4)){
+var valid2 = true;
+const len1 = data4.length;
+for(let i1=0; i1<len1; i1++){
+const _errs10 = errors;
+if(!(validate23(data4[i1], {instancePath:instancePath+"/continueWatching/" + i1,parentData:data4,parentDataProperty:i1,rootData,dynamicAnchors}))){
 vErrors = vErrors === null ? validate23.errors : vErrors.concat(validate23.errors);
 errors = vErrors.length;
 }
-var valid2 = _errs8 === errors;
+var valid2 = _errs10 === errors;
 if(!valid2){
 break;
 }
@@ -1142,61 +1175,31 @@ validate20.errors = [{instancePath:instancePath+"/continueWatching",schemaPath:"
 return false;
 }
 }
-var valid0 = _errs6 === errors;
+var valid0 = _errs8 === errors;
 }
 else {
 var valid0 = true;
 }
 if(valid0){
 if(data.continueWatchingCount !== undefined){
-let data5 = data.continueWatchingCount;
-const _errs9 = errors;
-if(!(((typeof data5 == "number") && (!(data5 % 1) && !isNaN(data5))) && (isFinite(data5)))){
+let data6 = data.continueWatchingCount;
+const _errs11 = errors;
+if(!(((typeof data6 == "number") && (!(data6 % 1) && !isNaN(data6))) && (isFinite(data6)))){
 validate20.errors = [{instancePath:instancePath+"/continueWatchingCount",schemaPath:"#/properties/continueWatchingCount/type",keyword:"type",params:{type: "integer"},message:"must be integer"}];
 return false;
 }
-if(errors === _errs9){
-if((typeof data5 == "number") && (isFinite(data5))){
-if(data5 > 9007199254740991 || isNaN(data5)){
+if(errors === _errs11){
+if((typeof data6 == "number") && (isFinite(data6))){
+if(data6 > 9007199254740991 || isNaN(data6)){
 validate20.errors = [{instancePath:instancePath+"/continueWatchingCount",schemaPath:"#/properties/continueWatchingCount/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"}];
 return false;
 }
 else {
-if(data5 < 0 || isNaN(data5)){
+if(data6 < 0 || isNaN(data6)){
 validate20.errors = [{instancePath:instancePath+"/continueWatchingCount",schemaPath:"#/properties/continueWatchingCount/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"}];
 return false;
 }
 }
-}
-}
-var valid0 = _errs9 === errors;
-}
-else {
-var valid0 = true;
-}
-if(valid0){
-if(data.folders !== undefined){
-let data6 = data.folders;
-const _errs11 = errors;
-if(errors === _errs11){
-if(Array.isArray(data6)){
-var valid3 = true;
-const len2 = data6.length;
-for(let i2=0; i2<len2; i2++){
-const _errs13 = errors;
-if(!(validate25(data6[i2], {instancePath:instancePath+"/folders/" + i2,parentData:data6,parentDataProperty:i2,rootData,dynamicAnchors}))){
-vErrors = vErrors === null ? validate25.errors : vErrors.concat(validate25.errors);
-errors = vErrors.length;
-}
-var valid3 = _errs13 === errors;
-if(!valid3){
-break;
-}
-}
-}
-else {
-validate20.errors = [{instancePath:instancePath+"/folders",schemaPath:"#/properties/folders/type",keyword:"type",params:{type: "array"},message:"must be array"}];
-return false;
 }
 }
 var valid0 = _errs11 === errors;
@@ -1205,20 +1208,83 @@ else {
 var valid0 = true;
 }
 if(valid0){
-if(data.recentlyAdded !== undefined){
-let data8 = data.recentlyAdded;
-const _errs14 = errors;
-if(errors === _errs14){
+if(data.folderCount !== undefined){
+let data7 = data.folderCount;
+const _errs13 = errors;
+if(!(((typeof data7 == "number") && (!(data7 % 1) && !isNaN(data7))) && (isFinite(data7)))){
+validate20.errors = [{instancePath:instancePath+"/folderCount",schemaPath:"#/properties/folderCount/type",keyword:"type",params:{type: "integer"},message:"must be integer"}];
+return false;
+}
+if(errors === _errs13){
+if((typeof data7 == "number") && (isFinite(data7))){
+if(data7 > 9007199254740991 || isNaN(data7)){
+validate20.errors = [{instancePath:instancePath+"/folderCount",schemaPath:"#/properties/folderCount/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"}];
+return false;
+}
+else {
+if(data7 < 0 || isNaN(data7)){
+validate20.errors = [{instancePath:instancePath+"/folderCount",schemaPath:"#/properties/folderCount/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"}];
+return false;
+}
+}
+}
+}
+var valid0 = _errs13 === errors;
+}
+else {
+var valid0 = true;
+}
+if(valid0){
+if(data.folders !== undefined){
+let data8 = data.folders;
+const _errs15 = errors;
+if(errors === _errs15){
 if(Array.isArray(data8)){
+if(data8.length > 4){
+validate20.errors = [{instancePath:instancePath+"/folders",schemaPath:"#/properties/folders/maxItems",keyword:"maxItems",params:{limit: 4},message:"must NOT have more than 4 items"}];
+return false;
+}
+else {
+var valid3 = true;
+const len2 = data8.length;
+for(let i2=0; i2<len2; i2++){
+const _errs17 = errors;
+if(!(validate25(data8[i2], {instancePath:instancePath+"/folders/" + i2,parentData:data8,parentDataProperty:i2,rootData,dynamicAnchors}))){
+vErrors = vErrors === null ? validate25.errors : vErrors.concat(validate25.errors);
+errors = vErrors.length;
+}
+var valid3 = _errs17 === errors;
+if(!valid3){
+break;
+}
+}
+}
+}
+else {
+validate20.errors = [{instancePath:instancePath+"/folders",schemaPath:"#/properties/folders/type",keyword:"type",params:{type: "array"},message:"must be array"}];
+return false;
+}
+}
+var valid0 = _errs15 === errors;
+}
+else {
+var valid0 = true;
+}
+if(valid0){
+if(data.recentlyAdded !== undefined){
+let data10 = data.recentlyAdded;
+const _errs18 = errors;
+if(errors === _errs18){
+if(Array.isArray(data10)){
 var valid4 = true;
-const len3 = data8.length;
+const len3 = data10.length;
 for(let i3=0; i3<len3; i3++){
-const _errs16 = errors;
-if(!(validate23(data8[i3], {instancePath:instancePath+"/recentlyAdded/" + i3,parentData:data8,parentDataProperty:i3,rootData,dynamicAnchors}))){
+const _errs20 = errors;
+if(!(validate23(data10[i3], {instancePath:instancePath+"/recentlyAdded/" + i3,parentData:data10,parentDataProperty:i3,rootData,dynamicAnchors}))){
 vErrors = vErrors === null ? validate23.errors : vErrors.concat(validate23.errors);
 errors = vErrors.length;
 }
-var valid4 = _errs16 === errors;
+var valid4 = _errs20 === errors;
 if(!valid4){
 break;
 }
@@ -1229,53 +1295,53 @@ validate20.errors = [{instancePath:instancePath+"/recentlyAdded",schemaPath:"#/p
 return false;
 }
 }
-var valid0 = _errs14 === errors;
+var valid0 = _errs18 === errors;
 }
 else {
 var valid0 = true;
 }
 if(valid0){
 if(data.totalProjectCount !== undefined){
-let data10 = data.totalProjectCount;
-const _errs17 = errors;
-if(!(((typeof data10 == "number") && (!(data10 % 1) && !isNaN(data10))) && (isFinite(data10)))){
+let data12 = data.totalProjectCount;
+const _errs21 = errors;
+if(!(((typeof data12 == "number") && (!(data12 % 1) && !isNaN(data12))) && (isFinite(data12)))){
 validate20.errors = [{instancePath:instancePath+"/totalProjectCount",schemaPath:"#/properties/totalProjectCount/type",keyword:"type",params:{type: "integer"},message:"must be integer"}];
 return false;
 }
-if(errors === _errs17){
-if((typeof data10 == "number") && (isFinite(data10))){
-if(data10 > 9007199254740991 || isNaN(data10)){
+if(errors === _errs21){
+if((typeof data12 == "number") && (isFinite(data12))){
+if(data12 > 9007199254740991 || isNaN(data12)){
 validate20.errors = [{instancePath:instancePath+"/totalProjectCount",schemaPath:"#/properties/totalProjectCount/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"}];
 return false;
 }
 else {
-if(data10 < 0 || isNaN(data10)){
+if(data12 < 0 || isNaN(data12)){
 validate20.errors = [{instancePath:instancePath+"/totalProjectCount",schemaPath:"#/properties/totalProjectCount/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"}];
 return false;
 }
 }
 }
 }
-var valid0 = _errs17 === errors;
+var valid0 = _errs21 === errors;
 }
 else {
 var valid0 = true;
 }
 if(valid0){
 if(data.unclassified !== undefined){
-let data11 = data.unclassified;
-const _errs19 = errors;
-if(errors === _errs19){
-if(Array.isArray(data11)){
+let data13 = data.unclassified;
+const _errs23 = errors;
+if(errors === _errs23){
+if(Array.isArray(data13)){
 var valid5 = true;
-const len4 = data11.length;
+const len4 = data13.length;
 for(let i4=0; i4<len4; i4++){
-const _errs21 = errors;
-if(!(validate23(data11[i4], {instancePath:instancePath+"/unclassified/" + i4,parentData:data11,parentDataProperty:i4,rootData,dynamicAnchors}))){
+const _errs25 = errors;
+if(!(validate23(data13[i4], {instancePath:instancePath+"/unclassified/" + i4,parentData:data13,parentDataProperty:i4,rootData,dynamicAnchors}))){
 vErrors = vErrors === null ? validate23.errors : vErrors.concat(validate23.errors);
 errors = vErrors.length;
 }
-var valid5 = _errs21 === errors;
+var valid5 = _errs25 === errors;
 if(!valid5){
 break;
 }
@@ -1286,37 +1352,67 @@ validate20.errors = [{instancePath:instancePath+"/unclassified",schemaPath:"#/pr
 return false;
 }
 }
-var valid0 = _errs19 === errors;
+var valid0 = _errs23 === errors;
 }
 else {
 var valid0 = true;
 }
 if(valid0){
 if(data.unclassifiedCount !== undefined){
-let data13 = data.unclassifiedCount;
-const _errs22 = errors;
-if(!(((typeof data13 == "number") && (!(data13 % 1) && !isNaN(data13))) && (isFinite(data13)))){
+let data15 = data.unclassifiedCount;
+const _errs26 = errors;
+if(!(((typeof data15 == "number") && (!(data15 % 1) && !isNaN(data15))) && (isFinite(data15)))){
 validate20.errors = [{instancePath:instancePath+"/unclassifiedCount",schemaPath:"#/properties/unclassifiedCount/type",keyword:"type",params:{type: "integer"},message:"must be integer"}];
 return false;
 }
-if(errors === _errs22){
-if((typeof data13 == "number") && (isFinite(data13))){
-if(data13 > 9007199254740991 || isNaN(data13)){
+if(errors === _errs26){
+if((typeof data15 == "number") && (isFinite(data15))){
+if(data15 > 9007199254740991 || isNaN(data15)){
 validate20.errors = [{instancePath:instancePath+"/unclassifiedCount",schemaPath:"#/properties/unclassifiedCount/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"}];
 return false;
 }
 else {
-if(data13 < 0 || isNaN(data13)){
+if(data15 < 0 || isNaN(data15)){
 validate20.errors = [{instancePath:instancePath+"/unclassifiedCount",schemaPath:"#/properties/unclassifiedCount/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"}];
 return false;
 }
 }
 }
 }
-var valid0 = _errs22 === errors;
+var valid0 = _errs26 === errors;
 }
 else {
 var valid0 = true;
+}
+if(valid0){
+if(data.watchLaterCount !== undefined){
+let data16 = data.watchLaterCount;
+const _errs28 = errors;
+if(!(((typeof data16 == "number") && (!(data16 % 1) && !isNaN(data16))) && (isFinite(data16)))){
+validate20.errors = [{instancePath:instancePath+"/watchLaterCount",schemaPath:"#/properties/watchLaterCount/type",keyword:"type",params:{type: "integer"},message:"must be integer"}];
+return false;
+}
+if(errors === _errs28){
+if((typeof data16 == "number") && (isFinite(data16))){
+if(data16 > 9007199254740991 || isNaN(data16)){
+validate20.errors = [{instancePath:instancePath+"/watchLaterCount",schemaPath:"#/properties/watchLaterCount/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"}];
+return false;
+}
+else {
+if(data16 < 0 || isNaN(data16)){
+validate20.errors = [{instancePath:instancePath+"/watchLaterCount",schemaPath:"#/properties/watchLaterCount/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"}];
+return false;
+}
+}
+}
+}
+var valid0 = _errs28 === errors;
+}
+else {
+var valid0 = true;
+}
+}
+}
 }
 }
 }
@@ -1336,4 +1432,4 @@ return false;
 validate20.errors = vErrors;
 return errors === 0;
 }
-validate20.evaluated = {"props":{"collectionItemCount":true,"collections":true,"continueWatching":true,"continueWatchingCount":true,"folders":true,"recentlyAdded":true,"totalProjectCount":true,"unclassified":true,"unclassifiedCount":true},"dynamicProps":false,"dynamicItems":false};
+validate20.evaluated = {"props":{"collectionCount":true,"collectionItemCount":true,"collections":true,"continueWatching":true,"continueWatchingCount":true,"folderCount":true,"folders":true,"recentlyAdded":true,"totalProjectCount":true,"unclassified":true,"unclassifiedCount":true,"watchLaterCount":true},"dynamicProps":false,"dynamicItems":false};

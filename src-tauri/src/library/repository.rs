@@ -387,6 +387,7 @@ impl<'connection> LibraryRepository<'connection> {
             .map_err(Into::into)
     }
 
+    #[cfg(test)]
     pub(crate) fn list_collection_summaries(&self) -> Result<Vec<CollectionSummary>, LibraryError> {
         self.list_collection_summary_window(-1, 0, None)
     }
@@ -451,6 +452,7 @@ impl<'connection> LibraryRepository<'connection> {
         Ok(CollectionDetail { summary, seasons })
     }
 
+    #[cfg(test)]
     pub(crate) fn list_roots(&self) -> Result<Vec<LibraryRootSummary>, LibraryError> {
         self.list_root_window(-1, 0)
     }

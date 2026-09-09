@@ -376,7 +376,7 @@ function libraryReducer(state: LibraryState, action: LibraryAction): LibraryStat
           collections: [
             summary,
             ...state.home.collections.filter((item) => item.id !== summary.id),
-          ],
+          ].filter((item) => item.systemKey === null).slice(0, 4),
         },
       };
     }
@@ -389,12 +389,13 @@ function libraryReducer(state: LibraryState, action: LibraryAction): LibraryStat
             : state.currentCollection,
         home: {
           ...state.home,
+          watchLaterCount: action.detail.summary.systemKey === "watch_later" ? action.detail.summary.itemCount : state.home.watchLaterCount,
           collections: [
             action.detail.summary,
             ...state.home.collections.filter(
               (item) => item.id !== action.detail.summary.id,
             ),
-          ],
+          ].filter((item) => item.systemKey === null).slice(0, 4),
         },
       };
     case "remove_collection":
@@ -515,8 +516,8 @@ function libraryReducer(state: LibraryState, action: LibraryAction): LibraryStat
             ...state.home.collections.filter(
               (collection) => collection.id !== action.result.collection.summary.id,
             ),
-          ],
-          folders: [
+          ].filter((item) => item.systemKey === null).slice(0, 4),
+          folders: ([
             {
               id: action.result.rootId,
               path: action.importedRootPath,
@@ -527,7 +528,7 @@ function libraryReducer(state: LibraryState, action: LibraryAction): LibraryStat
               itemCount: importedItems,
             },
             ...state.home.folders.filter((folder) => folder.id !== action.result.rootId),
-          ],
+          ] satisfies LibraryHome["folders"]).slice(0, 4),
           totalProjectCount: state.home.totalProjectCount + createdProjects,
           collectionItemCount: state.home.collectionItemCount + importedItems,
         },
@@ -647,16 +648,16 @@ function libraryReducer(state: LibraryState, action: LibraryAction): LibraryStat
             : state.currentCollection,
         home: {
           ...state.home,
-          folders: [
+          folders: ([
             action.result.root,
             ...state.home.folders.filter((root) => root.id !== action.result.root.id),
-          ],
+          ] satisfies LibraryHome["folders"]).slice(0, 4),
           collections: [
             action.result.collection.summary,
             ...state.home.collections.filter(
               (collection) => collection.id !== action.result.collection.summary.id,
             ),
-          ],
+          ].filter((item) => item.systemKey === null).slice(0, 4),
           totalProjectCount:
             state.home.totalProjectCount + action.result.createdProjectCount,
           collectionItemCount: state.home.collectionItemCount + added,
@@ -674,16 +675,16 @@ function libraryReducer(state: LibraryState, action: LibraryAction): LibraryStat
         recovery: emptyRecovery,
         home: {
           ...state.home,
-          folders: [
+          folders: ([
             action.result.root,
             ...state.home.folders.filter((root) => root.id !== action.result.root.id),
-          ],
+          ] satisfies LibraryHome["folders"]).slice(0, 4),
           collections: [
             action.result.collection.summary,
             ...state.home.collections.filter(
               (collection) => collection.id !== action.result.collection.summary.id,
             ),
-          ],
+          ].filter((item) => item.systemKey === null).slice(0, 4),
           totalProjectCount:
             state.home.totalProjectCount + action.result.createdProjectCount,
           collectionItemCount: state.home.collectionItemCount + added,
@@ -696,10 +697,10 @@ function libraryReducer(state: LibraryState, action: LibraryAction): LibraryStat
         recovery: emptyRecovery,
         home: {
           ...state.home,
-          folders: [
+          folders: ([
             action.result.root,
             ...state.home.folders.filter((root) => root.id !== action.result.root.id),
-          ],
+          ] satisfies LibraryHome["folders"]).slice(0, 4),
         },
       };
     case "recovery_closed":

@@ -23,7 +23,8 @@ for (const name of names) {
   const runtimeSchema = prepareRuntimeSchema(schema);
   const title = schema.title;
   if (!/^[A-Z][A-Za-z0-9]*$/.test(title)) throw new Error(`Invalid contract title: ${title}`);
-  const types = await compile(runtimeSchema, title, { bannerComment: "/* Generated from Rust IPC schema. Run npm run contracts:generate. */", style: { singleQuote: false } });
+  // Keep mutable home previews as arrays; Ajv still enforces schema maxItems.
+  const types = await compile(runtimeSchema, title, { ...(name === "library-home" ? { maxItems: 0 } : {}), bannerComment: "/* Generated from Rust IPC schema. Run npm run contracts:generate. */", style: { singleQuote: false } });
   const ajv = new Ajv({ strict: true, allErrors: false, code: { source: true, esm: true, lines: true } });
   const validate = ajv.compile(runtimeSchema);
   for (const example of examples) {

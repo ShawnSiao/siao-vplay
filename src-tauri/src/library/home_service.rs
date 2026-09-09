@@ -15,14 +15,16 @@ impl LibraryService {
         let repository = LibraryRepository::new(&transaction);
         let (total_project_count, collection_item_count, unclassified_count) =
             repository.counts()?;
+        let (collection_count, folder_count, watch_later_count) = repository.home_overview_counts()?;
         after_count();
         let home = LibraryHome {
             continue_watching: repository.list_continue_watching(HOME_CONTINUE_LIMIT)?,
             continue_watching_count: repository.continue_watching_count()?,
-            collections: repository.list_collection_summaries()?,
-            folders: repository.list_roots()?,
+            collections: repository.list_home_collections()?,
+            folders: repository.list_root_window(4, 0)?,
             unclassified: repository.list_unclassified(HOME_UNCLASSIFIED_LIMIT)?,
             recently_added: repository.list_recently_added(HOME_RECENTLY_ADDED_LIMIT)?,
+            collection_count, folder_count, watch_later_count,
             total_project_count,
             collection_item_count,
             unclassified_count,

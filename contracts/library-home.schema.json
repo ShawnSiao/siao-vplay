@@ -346,6 +346,12 @@
   },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "properties": {
+    "collectionCount": {
+      "format": "int64",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    },
     "collectionItemCount": {
       "format": "int64",
       "maximum": 9007199254740991,
@@ -356,6 +362,7 @@
       "items": {
         "$ref": "#/$defs/CollectionSummary"
       },
+      "maxItems": 4,
       "type": "array"
     },
     "continueWatching": {
@@ -370,10 +377,17 @@
       "minimum": 0,
       "type": "integer"
     },
+    "folderCount": {
+      "format": "int64",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    },
     "folders": {
       "items": {
         "$ref": "#/$defs/LibraryRootSummary"
       },
+      "maxItems": 4,
       "type": "array"
     },
     "recentlyAdded": {
@@ -399,6 +413,12 @@
       "maximum": 9007199254740991,
       "minimum": 0,
       "type": "integer"
+    },
+    "watchLaterCount": {
+      "format": "int64",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
     }
   },
   "required": [
@@ -409,6 +429,9 @@
     "unclassified",
     "recentlyAdded",
     "totalProjectCount",
+    "collectionCount",
+    "folderCount",
+    "watchLaterCount",
     "collectionItemCount",
     "unclassifiedCount"
   ],

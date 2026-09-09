@@ -1,6 +1,7 @@
 WITH selected AS MATERIALIZED (
     SELECT * FROM collections c
     WHERE (?3 IS NULL OR (c.system_key IS NULL AND (c.root_id IS NOT NULL) = ?3))
+        AND (?5 OR c.system_key IS NULL)
         AND instr(lower(c.title), lower(?4)) > 0
     ORDER BY CASE WHEN c.system_key = 'watch_later' THEN 1 ELSE 0 END,
         COALESCE(c.last_opened_at_ms, 0) DESC, c.updated_at_ms DESC,

@@ -8,15 +8,24 @@ export type RootAvailability = "available" | "offline";
 export type LibraryRootStatus = "linked" | "orphaned" | "ambiguous";
 
 export interface LibraryHome {
+  collectionCount: number;
   collectionItemCount: number;
+  /**
+   * @maxItems 4
+   */
   collections: CollectionSummary[];
   continueWatching: MediaSummary[];
   continueWatchingCount: number;
+  folderCount: number;
+  /**
+   * @maxItems 4
+   */
   folders: LibraryRootSummary[];
   recentlyAdded: MediaSummary[];
   totalProjectCount: number;
   unclassified: MediaSummary[];
   unclassifiedCount: number;
+  watchLaterCount: number;
   [k: string]: unknown;
 }
 export interface CollectionSummary {

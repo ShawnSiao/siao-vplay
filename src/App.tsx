@@ -716,14 +716,9 @@ export default function App() {
             libraryState.sectionPages.continue_watching.totalCount ??
             libraryState.home.continueWatching.length,
           episodeFiles: libraryState.home.totalProjectCount,
-          series: libraryState.home.collections.filter(
-            (collection) => collection.systemKey === null,
-          ).length,
-          folders: libraryState.home.folders.length,
-          watchLater:
-            libraryState.home.collections.find(
-              (collection) => collection.systemKey === "watch_later",
-            )?.itemCount ?? 0,
+          series: libraryState.home.collectionCount,
+          folders: libraryState.home.folderCount,
+          watchLater: libraryState.home.watchLaterCount,
           unclassified: libraryState.home.unclassifiedCount,
         }}
         librarySection={libraryState.section}

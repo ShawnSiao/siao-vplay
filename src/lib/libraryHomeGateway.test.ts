@@ -12,6 +12,14 @@ beforeEach(() => mocks.invoke.mockReset());
 it.each([
   {}, { ...empty, totalProjectCount: -1 }, { ...empty, continueWatchingCount: undefined },
   { ...empty, unclassified: [item] },
+  { ...empty, collectionCount: undefined },
+  { ...empty, folderCount: -1 },
+  { ...empty, watchLaterCount: 1 },
+  { ...empty, collections: [summary] },
+  { ...empty, folders: [folder] },
+  { ...empty, collectionCount: 5, collections: Array.from({ length: 5 }, (_, index) => ({ ...summary, id: String(index) })) },
+  { ...empty, folderCount: 5, folders: Array.from({ length: 5 }, (_, index) => ({ ...folder, id: String(index) })) },
+  { ...empty, collectionCount: 1, collections: [{ ...summary, systemKey: "watch_later" }] },
   { ...empty, totalProjectCount: 2, recentlyAdded: [item, item] },
   { ...empty, totalProjectCount: 1, continueWatchingCount: 2 },
   { ...empty, totalProjectCount: Number.MAX_SAFE_INTEGER + 1 },
@@ -26,7 +34,7 @@ it.each([
   await expect(getLibraryHome()).rejects.toThrow();
 });
 it("accepts shared membership counts and offline roots", async () => {
-  const value = { ...empty, totalProjectCount: 1, collectionItemCount: 2,
+  const value = { ...empty, totalProjectCount: 1, collectionItemCount: 2, collectionCount: 2, folderCount: 1,
     collections: [summary, { ...summary, id: "second" }], folders: [folder] };
   mocks.invoke.mockResolvedValue(value);
   await expect(getLibraryHome()).resolves.toEqual(value);
@@ -36,4 +44,10 @@ it("accepts empty and populated home snapshots", async () => {
   mocks.invoke.mockResolvedValueOnce(empty).mockResolvedValueOnce(populated);
   await expect(getLibraryHome()).resolves.toEqual(empty);
   await expect(getLibraryHome()).resolves.toEqual(populated);
+});
+
+it("accepts independent overview totals larger than previews", async () => {
+  const value = { ...empty, totalProjectCount: 10, watchLaterCount: 7, collectionCount: 1000, folderCount: 10000, collections: [summary], folders: [folder] };
+  mocks.invoke.mockResolvedValue(value);
+  await expect(getLibraryHome()).resolves.toEqual(value);
 });

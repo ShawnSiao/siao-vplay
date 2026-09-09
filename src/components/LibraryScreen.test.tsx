@@ -57,6 +57,7 @@ function home(overrides: Partial<LibraryHome> = {}): LibraryHome {
   return {
     continueWatching: [],
     continueWatchingCount: 0,
+    collectionCount: overrides.collections?.length ?? 1, folderCount: overrides.folders?.length ?? 0, watchLaterCount: 0,
     collections: [collection],
     folders: [],
     unclassified: [],

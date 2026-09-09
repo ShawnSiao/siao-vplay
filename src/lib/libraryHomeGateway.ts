@@ -16,6 +16,9 @@ export async function readLibraryHome(): Promise<LibraryHome> {
     || value.unclassified.length > value.unclassifiedCount
     || value.unclassifiedCount > value.totalProjectCount
     || value.recentlyAdded.length > value.totalProjectCount
-    || value.collections.some(item => item.watchedCount > item.itemCount)) throw invalid();
+    || value.collections.length > value.collectionCount
+    || value.folders.length > value.folderCount
+    || value.watchLaterCount > value.totalProjectCount
+    || value.collections.some(item => item.systemKey !== null || item.watchedCount > item.itemCount)) throw invalid();
   return value;
 }

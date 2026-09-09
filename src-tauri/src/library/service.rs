@@ -771,9 +771,12 @@ mod tests {
             .expect("repeat add should be harmless");
 
         let home = fixture.service.get_home().expect("home should load");
-        let watch_later = home
-            .collections
-            .iter()
+        assert_eq!(home.watch_later_count, 1);
+        assert_eq!(home.collection_count, 0);
+        assert!(home.collections.is_empty());
+        let connection = fixture.service.store.connect().unwrap();
+        let summaries = LibraryRepository::new(&connection).list_collection_summaries().unwrap();
+        let watch_later = summaries.iter()
             .find(|value| value.collection.system_key.as_deref() == Some(WATCH_LATER_KEY))
             .expect("watch later collection should exist");
         assert_eq!(watch_later.item_count, 1);

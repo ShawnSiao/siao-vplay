@@ -15,6 +15,7 @@ const media = {
 const home = {
   continueWatching: [],
   continueWatchingCount: 0,
+  collectionCount: 0, folderCount: 0, watchLaterCount: 0,
   collections: [],
   folders: [],
   unclassified: [media],
