@@ -43,3 +43,21 @@ fn failed_root_repair_save_preserves_live_and_persisted_configuration() {
     fs::rename(configuration_root(manager.configuration.as_ref().unwrap()), parent.path().join("retained-root")).unwrap();
     assert_failed_save_keeps_configuration(manager, |manager| manager.repair_configured_root(true).map(|_| ()));
 }
+
+#[test]
+fn failed_same_version_activation_restores_original_receipt() {
+    let (_data, _parent, mut manager) = setup();
+    let path = configuration_root(manager.configuration.as_ref().unwrap()).join("receipts/ffmpeg-cpu/1.json");
+    let before = fs::read(&path).unwrap();
+    fs::create_dir(manager.config_path.with_extension("json.part")).unwrap();
+    let mut changed = receipt("1"); changed.entrypoints.insert("ffmpeg".into(), "bin/changed.exe".into());
+    assert!(manager.activate_receipt(changed).is_err());
+    assert_eq!(fs::read(path).unwrap(), before);
+}
+#[test]
+fn failed_new_version_activation_does_not_leave_a_committed_receipt() {
+    let (_data, _parent, mut manager) = setup();
+    let path = configuration_root(manager.configuration.as_ref().unwrap()).join("receipts/ffmpeg-cpu/2.json");
+    fs::create_dir(manager.config_path.with_extension("json.part")).unwrap();
+    assert!(manager.activate_receipt(receipt("2")).is_err()); assert!(!path.exists());
+}

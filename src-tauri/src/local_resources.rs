@@ -1,3 +1,4 @@
+mod activation;
 #[cfg(test)]
 mod recovery_tests;
 mod persistence;
@@ -408,6 +409,17 @@ pub(crate) fn development_path_override(name: &str) -> Option<PathBuf> {
     }
 }
 
+pub(crate) fn activation_pending() -> Result<bool, LocalResourceError> {
+    if MANAGER.get().is_none() { return Ok(false); }
+    with_manager_read(|manager| activation::pending(&manager.config_path))
+}
+
+pub(crate) fn recover_activation_for_use() -> Result<(), LocalResourceError> {
+    if MANAGER.get().is_none() { return Ok(()); }
+    with_manager_write(|_| Ok(()))
+}
+
+
 fn with_manager_read<T>(
     operation: impl FnOnce(&LocalResourceManager) -> Result<T, LocalResourceError>,
 ) -> Result<T, LocalResourceError> {
@@ -425,12 +437,16 @@ fn with_manager_write<T>(
     let mut state = state
         .write()
         .map_err(|_| io::Error::other("本地资源设置锁不可用"))?;
+    if activation::recover(&state.config_path)? != activation::Recovery::None {
+        state.configuration = persistence::load_configuration(&state.config_path)?;
+    }
     operation(&mut state)
 }
 
 impl LocalResourceManager {
     fn load(data_directory: &Path) -> Result<Self, LocalResourceError> {
         let config_path = data_directory.join(CONFIG_FILE_NAME);
+        activation::recover(&config_path)?;
         let mut configuration = persistence::load_configuration(&config_path)?;
         let legacy_settings = load_legacy_runtime_settings(data_directory);
         let mut changed = false;
@@ -796,33 +812,8 @@ impl LocalResourceManager {
         Ok(receipt)
     }
 
-    fn activate_receipt(&mut self, mut receipt: ResourceReceipt) -> Result<(), LocalResourceError> {
-        let mut configuration = self
-            .configuration
-            .clone()
-            .ok_or_else(|| LocalResourceError::ResourceNotReady(receipt.resource_id.clone()))?;
-        validate_receipt(&receipt, &receipt.resource_id, &receipt.version)?;
-        if receipt.health_status != "passed" {
-            return Err(LocalResourceError::InvalidReceipt(format!(
-                "{}@{} 的健康检查未通过，不能激活",
-                receipt.resource_id, receipt.version
-            )));
-        }
-        receipt.activated_at_ms = Some(now_ms());
-        let receipt_directory = configuration_root(&configuration)
-            .join("receipts")
-            .join(&receipt.resource_id);
-        fs::create_dir_all(&receipt_directory)?;
-        persist_json(
-            &receipt_directory.join(format!("{}.json", receipt.version)),
-            &receipt,
-        )?;
-        configuration
-            .active_resources
-            .insert(receipt.resource_id.clone(), receipt.version.clone());
-        persist_json(&self.config_path, &configuration)?;
-        self.configuration = Some(configuration);
-        Ok(())
+    fn activate_receipt(&mut self, receipt: ResourceReceipt) -> Result<(), LocalResourceError> {
+        activation::activate(self, receipt)
     }
 
     fn active_receipt(

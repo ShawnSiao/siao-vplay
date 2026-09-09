@@ -13,7 +13,8 @@ fn registry() -> &'static Arc<ResourceUsage> {
 }
 
 pub(crate) fn configured(required_ids: &[&str]) -> io::Result<ResourceLease> {
-    registry().read(|| {
+    local_resources::recover_activation_for_use().map_err(|error| io::Error::other(error.to_string()))?;
+    let lease = registry().read(|| {
         let mut versions = local_resources::configuration_snapshot()
             .map(|configuration| configuration.active_resources)
             .unwrap_or_default();
@@ -24,7 +25,11 @@ pub(crate) fn configured(required_ids: &[&str]) -> io::Result<ResourceLease> {
                 .or_insert_with(|| "external-or-unavailable".to_owned());
         }
         versions
-    })
+    })?;
+    if local_resources::activation_pending().map_err(|error| io::Error::other(error.to_string()))? {
+        return Err(io::Error::new(io::ErrorKind::WouldBlock, "资源激活尚未恢复，请完成恢复后重试"));
+    }
+    Ok(lease)
 }
 
 pub(crate) fn maintain_all() -> io::Result<ResourceLease> {
