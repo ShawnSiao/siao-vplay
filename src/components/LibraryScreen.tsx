@@ -136,7 +136,7 @@ export function LibraryScreen(props: LibraryScreenProps) {
 
         {props.section === "series" || props.currentCollection ? (
           <LibrarySeriesView
-            home={props.home}
+            refreshKey={props.home}
             currentCollection={props.currentCollection}
             currentEpisodes={props.currentEpisodes}
             selectedSeason={props.selectedSeason}

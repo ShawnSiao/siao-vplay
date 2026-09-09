@@ -4,7 +4,7 @@ import { importedDetail, libraryHome, mediaSummary } from "../libraryControllerT
 import { LibrarySeriesView } from "./LibrarySeriesView";
 function view(count: number) {
   const episodes = Array.from({ length: count }, (_, index) => mediaSummary(`episode-${index + 1}`));
-  return { episodes, props: { home: libraryHome(count), currentCollection: importedDetail, currentEpisodes: episodes,
+  return { episodes, props: { refreshKey: libraryHome(count), currentCollection: importedDetail, currentEpisodes: episodes,
     selectedSeason: null, collectionLoading: false, mutationPending: false,
     onOpenCollection: vi.fn(), onCloseCollection: vi.fn(), onSelectSeason: vi.fn(), onCreateCollection: vi.fn(), onEditCollection: vi.fn(),
     onDeleteCollection: vi.fn(), onToggleAutoPlay: vi.fn(), onOpen: vi.fn(), onRelink: vi.fn(), onDelete: vi.fn(), onOpenLocation: vi.fn(),

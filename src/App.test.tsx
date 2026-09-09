@@ -1,4 +1,4 @@
-import { setupLibraryQueryMocks } from "./test/libraryQueryMocks";
+import { setupLibraryQueryMocks, createMockOverviewReaders } from "./test/libraryQueryMocks";
 import { readMockSubtitlePage } from "./test/subtitleHistoryPageMock";
 import { confirmProjectDeletion } from "./test/confirmProjectDeletion";
 import { verifyRejectedStartupStatus } from "./appStartupStatusTest";
@@ -167,7 +167,7 @@ const analysisGatewayMocks = vi.hoisted(() => ({
 
 const cleanupMocks = vi.hoisted(() => ({ getPendingProjectCleanup: vi.fn() }));
 vi.mock("./lib/projectDeletionGateway", () => ({ getPendingProjectCleanup: cleanupMocks.getPendingProjectCleanup, deleteProject: desktopMocks.deleteProject }));
-
+vi.mock("./lib/libraryOverviewGateway", () => createMockOverviewReaders(libraryGatewayMocks.getLibraryHome));
 vi.mock("./lib/subtitleMetadataPageGateway", () => ({ readSubtitleMetadataPage: (id: string, offset: number) => readMockSubtitlePage(desktopMocks.listSubtitleVersionMetadata, id, offset) }));
 vi.mock("./lib/desktop", () => ({
   ...desktopMocks,

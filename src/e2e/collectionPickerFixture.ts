@@ -4,12 +4,13 @@ import type { CollectionOverviewReader } from "../features/library/useCollection
 export function collectionPickerFixture(template: CollectionSummary): CollectionOverviewReader {
   const params = new URLSearchParams(location.search);
   const count = ["1000", "10000"].includes(params.get("collectionCount") ?? "") ? Number(params.get("collectionCount")) : 1;
+  const folderCount = params.has("collection-groups") ? count : count > 1 ? 2 : 0;
   let failed = false;
   return async input => {
     if (params.has("picker-retry") && !failed && input.offset === 24 && !input.query) {
       failed = true; throw new Error("测试：读取暂时失败");
     }
-    const rows = Array.from({ length: input.rootLinked ? 2 : count }, (_, i) => ({ ...template,
+    const rows = Array.from({ length: input.rootLinked ? folderCount : count }, (_, i) => ({ ...template,
       id: `${input.rootLinked ? "folder" : "manual"}-${i}`,
       rootId: input.rootLinked ? "fixture-root" : null,
       title: input.rootLinked ? `文件夹合集 ${i + 1}` : count === 1 ? template.title : `自建合集 ${i + 1}`,

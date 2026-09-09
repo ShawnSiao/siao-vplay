@@ -1,19 +1,20 @@
 import type { LibraryCollectionPagination } from "../useLibraryCollectionPaging";
 import { PagedMediaList } from "./PagedMediaList";
+import type { CollectionOverviewReader } from "../useCollectionOverviewPages";
+import { CollectionOverviewGroup } from "./CollectionOverviewGroup";
 
 import { MenuPopover } from "../../../components/MenuPopover";
 import { playbackUrl } from "../../../lib/desktop";
 import { formatDuration } from "../../../lib/format";
 import type {
   CollectionDetail,
-  CollectionSummary,
-  LibraryHome,
   LibraryMediaSummary,
 } from "../../../types";
 import { LibraryMediaItem } from "./LibraryMediaItem";
 
 type LibrarySeriesViewProps = {
-  home: LibraryHome;
+  refreshKey?: unknown;
+  readCollections?: CollectionOverviewReader;
   currentCollection: CollectionDetail | null;
   currentEpisodes: LibraryMediaSummary[];
   selectedSeason: number | null;
@@ -36,88 +37,6 @@ type LibrarySeriesViewProps = {
   onSetWatchLater: (projectId: string, enabled: boolean) => Promise<unknown>;
   onSetWatched: (projectId: string, watched: boolean) => Promise<unknown>;
 };
-
-function SeriesCard({
-  collection,
-  onOpen,
-}: {
-  collection: CollectionSummary;
-  onOpen: () => void;
-}) {
-  const progress = collection.itemCount
-    ? Math.round((collection.watchedCount / collection.itemCount) * 100)
-    : 0;
-  return (
-    <button
-      className="library-series-tile"
-      type="button"
-      aria-label={`打开合集 ${collection.title}`}
-      onClick={onOpen}
-    >
-      <span className="library-series-tile-poster">
-        {collection.posterPath ? (
-          <img src={playbackUrl(collection.posterPath)} alt="" />
-        ) : (
-          <span aria-hidden="true">{collection.rootId ? "▦" : "▤"}</span>
-        )}
-        <i className="library-series-kind">
-          {collection.rootId ? "文件夹剧集" : "自建合集"}
-        </i>
-      </span>
-      <span className="library-series-tile-copy">
-        <strong>{collection.title}</strong>
-        <small>
-          {collection.itemCount} 集
-          {collection.seasonCount ? ` · ${collection.seasonCount} 季` : ""}
-          {collection.totalDurationMs
-            ? ` · ${formatDuration(collection.totalDurationMs)}`
-            : ""}
-        </small>
-        <span className="library-progress-track" aria-label={`观看进度 ${progress}%`}>
-          <i style={{ width: `${progress}%` }} />
-        </span>
-        <small>{collection.watchedCount} 集已看</small>
-      </span>
-    </button>
-  );
-}
-
-function CollectionGroup({
-  title,
-  description,
-  collections,
-  onOpenCollection,
-}: {
-  title: string;
-  description: string;
-  collections: CollectionSummary[];
-  onOpenCollection: (collectionId: string) => void;
-}) {
-  return (
-    <section className="library-section" aria-labelledby={`${title}-title`}>
-      <div className="library-section-heading">
-        <div>
-          <h2 id={`${title}-title`}>{title}</h2>
-          <p>{description}</p>
-        </div>
-        <span>{collections.length} 个</span>
-      </div>
-      {collections.length ? (
-        <div className="library-series-grid">
-          {collections.map((collection) => (
-            <SeriesCard
-              key={collection.id}
-              collection={collection}
-              onOpen={() => onOpenCollection(collection.id)}
-            />
-          ))}
-        </div>
-      ) : (
-        <div className="library-empty-panel compact">当前分组还没有内容。</div>
-      )}
-    </section>
-  );
-}
 
 function CollectionDetailView(props: LibrarySeriesViewProps) {
   const { currentCollection } = props;
@@ -245,15 +164,6 @@ function CollectionDetailView(props: LibrarySeriesViewProps) {
 
 export function LibrarySeriesView(props: LibrarySeriesViewProps) {
   if (props.currentCollection) return <CollectionDetailView {...props} />;
-  const allCollections = props.home.collections.filter(
-    (collection) => collection.systemKey === null,
-  );
-  const folderCollections = allCollections.filter(
-    (collection) => collection.rootId !== null,
-  );
-  const manualCollections = allCollections.filter(
-    (collection) => collection.rootId === null,
-  );
 
   return (
     <div className="library-page library-series-page">
@@ -267,16 +177,16 @@ export function LibrarySeriesView(props: LibrarySeriesViewProps) {
           新建合集
         </button>
       </header>
-      <CollectionGroup
+      <CollectionOverviewGroup
         title="文件夹剧集"
         description="由授权文件夹识别并保持目录关联"
-        collections={folderCollections}
+        rootLinked={true} refreshKey={props.refreshKey} readCollections={props.readCollections}
         onOpenCollection={props.onOpenCollection}
       />
-      <CollectionGroup
+      <CollectionOverviewGroup
         title="自建合集"
         description="手动整理现有视频，不复制源文件"
-        collections={manualCollections}
+        rootLinked={false} refreshKey={props.refreshKey} readCollections={props.readCollections}
         onOpenCollection={props.onOpenCollection}
       />
     </div>

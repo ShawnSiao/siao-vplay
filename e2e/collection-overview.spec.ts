@@ -1,0 +1,30 @@
+import { expect, test } from "@playwright/test";
+
+test("collection overview groups paginate independently with bounded empty-poster cards", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", error => errors.push(error.message));
+  page.on("console", message => { if (message.type() === "error") errors.push(message.text()); });
+  await page.setViewportSize({ width: 960, height: 640 });
+  await page.goto("/e2e/library.html?collectionCount=1000&collection-groups=1&picker-retry=1");
+  await page.getByRole("button", { name: "媒体库：剧集" }).click();
+  const manual = page.getByRole("region", { name: "自建合集", exact: true });
+  const folders = page.getByRole("region", { name: "文件夹剧集", exact: true });
+  await expect(manual.locator(".library-series-tile")).toHaveCount(24);
+  await expect(folders.locator(".library-series-tile")).toHaveCount(24);
+  await manual.getByRole("button", { name: "下一页", exact: true }).click();
+  await expect(manual.getByRole("alert")).toContainText("读取暂时失败");
+  await expect(folders.getByRole("button", { name: "打开合集 文件夹合集 1", exact: true })).toBeEnabled();
+  await manual.getByRole("button", { name: "重试读取" }).click();
+  await expect(manual.getByRole("button", { name: "打开合集 自建合集 25", exact: true })).toBeFocused();
+  await expect(manual.locator(".library-series-tile")).toHaveCount(24);
+  await expect(folders.getByRole("button", { name: "打开合集 文件夹合集 1", exact: true })).toBeAttached();
+  expect(await manual.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
+  await page.screenshot({ path: "designs/open-source-readiness/collection-overview-960.png" });
+  expect(await manual.locator(".library-series-tile-poster").first().evaluate(element => element.getBoundingClientRect().height)).toBeLessThanOrEqual(44);
+  await manual.getByRole("button", { name: "上一页", exact: true }).click();
+  await expect(manual.getByRole("button", { name: "打开合集 自建合集 1", exact: true })).toBeFocused();
+  await folders.getByRole("button", { name: "下一页", exact: true }).click();
+  await expect(folders.getByRole("button", { name: "打开合集 文件夹合集 25", exact: true })).toBeFocused();
+  await expect(manual.getByRole("button", { name: "打开合集 自建合集 1", exact: true })).toBeAttached();
+  expect(errors).toEqual([]);
+});

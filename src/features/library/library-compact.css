@@ -30,14 +30,17 @@
   .library-screen .library-media-item[data-has-poster="false"] { grid-template-columns: 44px minmax(0, 1fr); }
 }
 
-.library-screen .library-series-card[data-has-poster="false"] { align-items: center; border-radius: 7px; }
-.library-screen .library-series-card[data-has-poster="false"] .library-series-poster {
+.library-screen .library-series-card[data-has-poster="false"],
+.library-screen .library-series-tile[data-has-poster="false"] { align-items: center; border-radius: 7px; }
+.library-screen .library-series-card[data-has-poster="false"] .library-series-poster,
+.library-screen .library-series-tile[data-has-poster="false"] .library-series-tile-poster {
   width: 44px;
   height: 44px;
   border-radius: 4px;
   background: var(--bg-control);
   font-size: 18px;
 }
+.library-screen .library-series-tile[data-has-poster="false"] .library-series-kind { display: none; }
 .library-screen .library-recent-grid > button[data-has-poster="false"] {
   grid-template-columns: 40px minmax(0, 1fr);
   padding: 12px;
