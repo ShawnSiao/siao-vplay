@@ -206,14 +206,17 @@ export function LocalResourcesDialog({
 
   const runAction = async (action: string, operation: () => Promise<unknown>) => {
     setBusyAction(action);
-    setLocalError(null);
-    controller.clearError();
+    if (action !== "load-diagnostics") {
+      setLocalError(null);
+      controller.clearError();
+    }
     try {
       await operation();
     } catch (cause) {
-      setLocalError(cause instanceof Error ? cause.message : String(cause));
+      const message = cause instanceof Error ? cause.message : String(cause);
+      setLocalError(previous => action === "load-diagnostics" ? previous ?? message : message);
     } finally {
-      setBusyAction(null);
+      setBusyAction(current => current === action ? null : current);
     }
   };
 

@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "affectedCapabilityIds": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "removed": {
+      "type": "boolean"
+    },
+    "resourceId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "resourceId",
+    "removed",
+    "affectedCapabilityIds"
+  ],
+  "title": "ResourceRemovalResult",
+  "type": "object"
+}

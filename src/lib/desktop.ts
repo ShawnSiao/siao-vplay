@@ -1,3 +1,4 @@
+export { planUnusedResourceCleanup, cleanupUnusedResources, removeLocalResource, rollbackLocalResource, planOldResourceVersionCleanup, cleanupOldResourceVersions } from "./resourceMaintenanceGateway";
 export { getLocalResourceStatus, configureLocalResourceRoot, repairLocalResourceRoot, reconnectLocalResourceRoot, setLocalResourceProfile, getLocalResourceNetworkStatus, setLocalResourceProxy } from "./resourceStatusGateway";
 import { browserResourceCapabilities } from "./resourceBrowserCapabilities";
 export { listResourceDownloadTasks, listenResourceDownloadTasks, prepareLocalCapability, pauseResourceDownload, resumeResourceDownload, cancelResourceDownload, retryResourceDownload, repairLocalResource, updateLocalResource } from "./resourceTaskGateway";
@@ -36,12 +37,6 @@ import type {
   RuntimeCatalog,
   ResourceAdoptionResult,
   ResourceMigrationPreview,
-  ResourceRemovalResult,
-  ResourceRollbackResult,
-  OldResourceVersionCleanupPlan,
-  OldResourceVersionCleanupResult,
-  UnusedResourceCleanupPlan,
-  UnusedResourceCleanupResult,
   SubtitleExport,
   SubtitleExportFormat,
   SubtitleExportMode,
@@ -270,27 +265,11 @@ export async function moveLocalResourceRoot(
 }
 
 
-export async function planUnusedResourceCleanup(): Promise<UnusedResourceCleanupPlan> {
-  return invoke<UnusedResourceCleanupPlan>("plan_unused_resource_cleanup");
-}
-
-export async function cleanupUnusedResources(): Promise<UnusedResourceCleanupResult> {
-  return invoke<UnusedResourceCleanupResult>("cleanup_unused_resources", {
-    input: { confirmed: true },
-  });
-}
 
 
 
 
-export async function removeLocalResource(
-  resourceId: string,
-  confirmed: boolean,
-): Promise<ResourceRemovalResult> {
-  return invoke<ResourceRemovalResult>("remove_local_resource", {
-    input: { resourceId, confirmed },
-  });
-}
+
 
 export async function getLocalResourceDiagnostics(): Promise<LocalResourceDiagnostics> {
   return invoke<LocalResourceDiagnostics>("get_local_resource_diagnostics");
@@ -304,24 +283,8 @@ export async function getLocalResourceThirdPartyNotices(): Promise<string> {
   return invoke<string>("get_local_resource_third_party_notices");
 }
 
-export async function rollbackLocalResource(
-  resourceId: string,
-  version: string,
-): Promise<ResourceRollbackResult> {
-  return invoke<ResourceRollbackResult>("rollback_local_resource", {
-    input: { resourceId, version, confirmed: true },
-  });
-}
 
-export async function planOldResourceVersionCleanup(): Promise<OldResourceVersionCleanupPlan> {
-  return invoke<OldResourceVersionCleanupPlan>("plan_old_resource_version_cleanup");
-}
 
-export async function cleanupOldResourceVersions(): Promise<OldResourceVersionCleanupResult> {
-  return invoke<OldResourceVersionCleanupResult>("cleanup_old_resource_versions", {
-    input: { confirmed: true },
-  });
-}
 
 export async function getRuntimeCatalog(): Promise<RuntimeCatalog> {
   if (!isDesktopApp) {

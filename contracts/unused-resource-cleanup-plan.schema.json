@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "confirmationRequired": {
+      "type": "boolean"
+    },
+    "reclaimableBytes": {
+      "format": "uint64",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "resourceIds": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "resourceIds",
+    "reclaimableBytes",
+    "confirmationRequired"
+  ],
+  "title": "UnusedResourceCleanupPlan",
+  "type": "object"
+}

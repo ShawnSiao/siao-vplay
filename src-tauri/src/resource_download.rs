@@ -149,6 +149,7 @@ pub struct RemoveLocalResourceInput {
 
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct ResourceRemovalResult {
     pub resource_id: String,
     pub removed: bool,

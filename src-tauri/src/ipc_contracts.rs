@@ -53,6 +53,12 @@ fn committed_schemas_match_rust() {
     check_schema("resource-download-task", &serialized_schema::<crate::resource_download::ResourceDownloadTask>());
     check_schema("resource-download-snapshot", &serialized_schema::<crate::resource_download::ResourceDownloadSnapshot>());
     check_schema("local-resource-status", &serialized_schema::<crate::local_resources::LocalResourceStatus>());
+    check_schema("resource-removal-result", &serialized_schema::<crate::resource_download::ResourceRemovalResult>());
+    check_schema("resource-rollback-result", &serialized_schema::<crate::resource_diagnostics::ResourceRollbackResult>());
+    check_schema("unused-resource-cleanup-plan", &serialized_schema::<crate::resource_migration::UnusedResourceCleanupPlan>());
+    check_schema("unused-resource-cleanup-result", &serialized_schema::<crate::resource_migration::UnusedResourceCleanupResult>());
+    check_schema("old-resource-version-cleanup-plan", &serialized_schema::<crate::resource_diagnostics::OldResourceVersionCleanupPlan>());
+    check_schema("old-resource-version-cleanup-result", &serialized_schema::<crate::resource_diagnostics::OldResourceVersionCleanupResult>());
     check_schema("resource-network-status", &serialized_schema::<crate::resource_download::ResourceNetworkStatus>());
     check_schema("capability-preparation", &serialized_schema::<crate::resource_download::CapabilityPreparation>());
     check_schema("subtitle-burn-input", &serialized_schema::<crate::burn::StartSubtitleBurnInput>());

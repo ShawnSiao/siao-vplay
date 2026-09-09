@@ -516,11 +516,7 @@ export type { ResourceNetworkStatus } from "./generated/resource-network-status"
 
 export type { CapabilityPreparation } from "./generated/capability-preparation";
 
-export type ResourceRemovalResult = {
-  resourceId: string;
-  removed: boolean;
-  affectedCapabilityIds: string[];
-};
+export type { ResourceRemovalResult } from "./generated/resource-removal-result";
 
 export type ResourceMigrationSource = {
   kind: "selected_directory";
@@ -573,16 +569,9 @@ export type LocalResourceMoveResult = {
   previousRootRetained: boolean;
 };
 
-export type UnusedResourceCleanupPlan = {
-  resourceIds: string[];
-  reclaimableBytes: number;
-  confirmationRequired: boolean;
-};
+export type { UnusedResourceCleanupPlan } from "./generated/unused-resource-cleanup-plan";
 
-export type UnusedResourceCleanupResult = {
-  removedResourceIds: string[];
-  reclaimedBytes: number;
-};
+export type { UnusedResourceCleanupResult } from "./generated/unused-resource-cleanup-result";
 
 export type ResourceVersionDiagnostic = {
   version: string;
@@ -632,29 +621,13 @@ export type LocalResourceDiagnostics = {
   tasks: ResourceTaskDiagnostic[];
 };
 
-export type ResourceRollbackResult = {
-  resourceId: string;
-  previousVersion: string;
-  activeVersion: string;
-};
+export type { ResourceRollbackResult } from "./generated/resource-rollback-result";
 
-export type OldResourceVersionCandidate = {
-  resourceId: string;
-  version: string;
-  reclaimableBytes: number;
-};
+export type { OldResourceVersionCandidate } from "./generated/old-resource-version-cleanup-plan";
 
-export type OldResourceVersionCleanupPlan = {
-  candidates: OldResourceVersionCandidate[];
-  protectedVersions: string[];
-  reclaimableBytes: number;
-  confirmationRequired: boolean;
-};
+export type { OldResourceVersionCleanupPlan } from "./generated/old-resource-version-cleanup-plan";
 
-export type OldResourceVersionCleanupResult = {
-  removedVersions: string[];
-  reclaimedBytes: number;
-};
+export type { OldResourceVersionCleanupResult } from "./generated/old-resource-version-cleanup-result";
 
 export type DeleteProjectResult = {
   projectId: string;

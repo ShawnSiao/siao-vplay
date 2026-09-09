@@ -127,6 +127,7 @@ pub struct RollbackLocalResourceInput {
 
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct ResourceRollbackResult {
     pub resource_id: String,
     pub previous_version: String,
@@ -141,25 +142,31 @@ pub struct CleanupOldResourceVersionsInput {
 
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct OldResourceVersionCandidate {
     pub resource_id: String,
     pub version: String,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub reclaimable_bytes: u64,
 }
 
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct OldResourceVersionCleanupPlan {
     pub candidates: Vec<OldResourceVersionCandidate>,
     pub protected_versions: Vec<String>,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub reclaimable_bytes: u64,
     pub confirmation_required: bool,
 }
 
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct OldResourceVersionCleanupResult {
     pub removed_versions: Vec<String>,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub reclaimed_bytes: u64,
 }
 

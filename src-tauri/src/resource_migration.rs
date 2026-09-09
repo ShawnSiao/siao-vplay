@@ -191,16 +191,20 @@ pub struct ConfirmLocalResourceOperationInput {
 
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct UnusedResourceCleanupPlan {
     pub resource_ids: Vec<String>,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub reclaimable_bytes: u64,
     pub confirmation_required: bool,
 }
 
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct UnusedResourceCleanupResult {
     pub removed_resource_ids: Vec<String>,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub reclaimed_bytes: u64,
 }
 

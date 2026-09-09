@@ -369,15 +369,16 @@ export function useLocalResources(): LocalResourcesController {
       }
     },
     loadDiagnostics: async () => {
+      const finishRead = beginRead("diagnostics");
       try {
         const [diagnostics, thirdPartyNotices] = await Promise.all([
           getLocalResourceDiagnostics(),
           getLocalResourceThirdPartyNotices(),
         ]);
-        setError(null);
+        finishRead();
         return { diagnostics, thirdPartyNotices };
       } catch (cause) {
-        captureError(cause);
+        finishRead(cause);
         throw cause;
       }
     },
