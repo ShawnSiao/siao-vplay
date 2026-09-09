@@ -25,7 +25,7 @@ import { PreparationScreen } from "./components/PreparationScreen";
 import { RemoteUrlDialog } from "./components/RemoteUrlDialog";
 import { createDeferredDialog } from "./components/createDeferredDialog";
 import { backgroundResultNotice } from "./features/ai-tasks/backgroundNotice";
-import type { PendingResourceAction } from "./features/environment-settings/LocalFeaturesDialog";
+import { useCapabilityPreparation } from "./features/resources/useCapabilityPreparation";
 import { SubtitleImportDialog } from "./components/SubtitleImportDialog";
 import { SubtitleDeliveryDialog } from "./components/SubtitleDeliveryDialog";
 import { SubtitleRevisionDialog } from "./components/SubtitleRevisionDialog";
@@ -65,8 +65,6 @@ import type {
 const activeTranscriptionStatuses = new Set<TranscriptionJob["status"]>(
   ["queued", "extracting", "transcribing", "validating"],
 );
-
-type PendingResourceResume = PendingResourceAction & { resume: () => Promise<void> | void };
 
 const EnvironmentSettingsDialog = createDeferredDialog(
   () => import("./features/environment-settings/EnvironmentSettingsDialog").then(module => module.EnvironmentSettingsDialog),
@@ -124,7 +122,6 @@ export default function App() {
   const [sessionId, setSessionId] = useState(0);
   const startupMediaHandledRef = useRef(false);
   const externalResultScanRef = useRef(false);
-  const pendingResourceResumeRef = useRef<PendingResourceResume | null>(null);
   const [appStatus, setAppStatus] = useState<AppStatus | null>(null);
   const [libraryError, setLibraryError] = useState<string | null>(null);
   const [activeProject, setActiveProject] = useState<Project | null>(null);
@@ -153,9 +150,8 @@ export default function App() {
   const [deleteCandidate, setDeleteCandidate] = useState<Project | null>(null);
   const [busyMessage, setBusyMessage] = useState<string | null>(null);
   const [toast, setToast] = useState<ToastNotice | null>(null);
-  const [localResourcesOpen, setLocalResourcesOpen] = useState(false);
-  const [pendingResourceAction, setPendingResourceAction] =
-    useState<PendingResourceAction | null>(null);
+  const { localResourcesOpen, pendingResourceAction, openLocalResources, closeLocalResources, requestCapability } =
+    useCapabilityPreparation({ isDesktopApp, localResourceStatus, refreshLocalResources, setToast });
   const episodeNavigation = useEpisodeNavigation(
     episodeContext,
     activeProject?.id ?? null,
@@ -168,13 +164,6 @@ export default function App() {
     refreshLibrary,
     setActiveProject,
   });
-
-  const openLocalResources = useCallback(() => {
-    pendingResourceResumeRef.current = null;
-    setPendingResourceAction(null);
-    setLocalResourcesOpen(true);
-    void refreshLocalResources().catch(() => undefined);
-  }, [refreshLocalResources]);
 
   const refreshLibraryView = useCallback(async () => {
     try {
@@ -202,82 +191,6 @@ export default function App() {
       active = false;
     };
   }, []);
-
-  const requestCapability = useCallback(
-    async (
-      capabilityId: string,
-      label: string,
-      resume: () => Promise<void> | void,
-      profileId?: "fast" | "standard",
-      isCurrent: IsCurrentOpening = () => true,
-    ) => {
-      if (!isCurrent()) return;
-      if (!isDesktopApp) {
-        await resume();
-        return;
-      }
-      const currentStatus = await refreshLocalResources();
-      if (!isCurrent()) return;
-      const capability = currentStatus.capabilities.find(
-        (item) => item.id === capabilityId,
-      );
-      if (capability?.state === "ready") {
-        await resume();
-        return;
-      }
-      const pending: PendingResourceResume = {
-        id: crypto.randomUUID(),
-        capabilityId,
-        label,
-        profileId,
-        resume,
-      };
-      pendingResourceResumeRef.current = pending;
-      setPendingResourceAction({
-        id: pending.id,
-        capabilityId: pending.capabilityId,
-        label: pending.label,
-        profileId: pending.profileId,
-      });
-      setLocalResourcesOpen(true);
-    },
-    [refreshLocalResources],
-  );
-
-  const closeLocalResources = useCallback(() => {
-    if (pendingResourceResumeRef.current) {
-      setToast("此次操作已取消；已开始的功能准备任务不会被删除。");
-    }
-    pendingResourceResumeRef.current = null;
-    setPendingResourceAction(null);
-    setLocalResourcesOpen(false);
-  }, []);
-
-  useEffect(() => {
-    const pending = pendingResourceResumeRef.current;
-    if (!pending || pending.id !== pendingResourceAction?.id) {
-      return;
-    }
-    const capability = localResourceStatus?.capabilities.find(
-      (item) => item.id === pending.capabilityId,
-    );
-    if (capability?.state !== "ready") {
-      return;
-    }
-    const timer = window.setTimeout(() => {
-      if (pendingResourceResumeRef.current?.id !== pending.id) {
-        return;
-      }
-      pendingResourceResumeRef.current = null;
-      setPendingResourceAction(null);
-      setLocalResourcesOpen(false);
-      setToast(`${pending.label}：所需功能已准备完成。`);
-      void Promise.resolve(pending.resume()).catch((error: unknown) =>
-        setToast(userFacingCommandError(error, "settings")),
-      );
-    }, 0);
-    return () => window.clearTimeout(timer);
-  }, [localResourceStatus, pendingResourceAction?.id]);
 
   useEffect(() => {
     const mediaTitle =

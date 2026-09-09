@@ -39,5 +39,16 @@ export default tseslint.config(
         }]
       }]
     }
+  },
+  {
+    files: ["src/features/resources/useCapabilityPreparation.ts", "src/features/resources/pendingResourceAction.ts"],
+    rules: {
+      "no-restricted-imports": ["error", {
+        patterns: [{
+          group: ["**/components/**", "**/environment-settings/**", "**/playback/**", "**/desktop", "**/desktop.ts"],
+          message: "Capability intent state receives resource status and actions; it must not depend on UI or the desktop facade."
+        }]
+      }]
+    }
   }
 );

@@ -24,12 +24,8 @@ import type {
 } from "../types";
 import { Dialog } from "./Dialog";
 
-export type PendingResourceAction = {
-  id: string;
-  capabilityId: string;
-  label: string;
-  profileId?: "fast" | "standard";
-};
+import type { PendingResourceAction } from "../features/resources/pendingResourceAction";
+export type { PendingResourceAction } from "../features/resources/pendingResourceAction";
 
 type LocalResourcesDialogProps = {
   controller: LocalResourcesController;
