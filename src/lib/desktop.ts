@@ -120,22 +120,6 @@ export async function chooseRuntimeStorageRoot(): Promise<string | null> {
   return typeof selected === "string" ? selected : null;
 }
 
-export async function setPreferredModel(
-  modelKind: "small" | "base",
-): Promise<RuntimeCatalog> {
-  return invoke<RuntimeCatalog>("set_preferred_model", {
-    input: { modelKind },
-  });
-}
-
-export async function downloadRuntimeComponent(
-  componentId: string,
-): Promise<RuntimeCatalog> {
-  return invoke<RuntimeCatalog>("download_runtime_component", {
-    input: { componentId },
-  });
-}
-
 export async function listProjects(): Promise<Project[]> {
   if (!isDesktopApp) {
     return [];

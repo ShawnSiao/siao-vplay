@@ -315,8 +315,6 @@ pub fn run() {
             commands::plan_old_resource_version_cleanup,
             commands::cleanup_old_resource_versions,
             commands::get_runtime_catalog,
-            commands::set_preferred_model,
-            commands::download_runtime_component,
             commands::inspect_project_media,
             preparation_commands::prepare_project_media,
             preparation_commands::get_media_preparation,

@@ -41,9 +41,7 @@ use crate::{
         ResourceDownloadTaskInput, ResourceRemovalResult,
     },
     resource_migration::{ConfirmLocalResourceOperationInput, ResourceMigrationError},
-    runtime::{
-        self, DownloadRuntimeComponentInput, RuntimeCatalog, RuntimeError, SetPreferredModelInput,
-    },
+    runtime::{self, RuntimeCatalog, RuntimeError},
     storage::{StorageError, StorageManager},
     store::{ProjectStore, StoreError},
     subtitles::{
@@ -322,12 +320,6 @@ impl From<RuntimeError> for CommandError {
         let code = match &error {
             RuntimeError::FileSystem(_) => "runtime_filesystem_error",
             RuntimeError::Serialization(_) => "runtime_serialization_error",
-            RuntimeError::UnknownComponent(_) => "runtime_component_invalid",
-            RuntimeError::InvalidStorageRoot(_) => "runtime_storage_root_invalid",
-            RuntimeError::InvalidModel(_) => "transcription_model_invalid",
-            RuntimeError::Download(_) => "runtime_download_failed",
-            RuntimeError::Integrity(_) => "runtime_integrity_failed",
-            RuntimeError::Archive(_) => "runtime_archive_invalid",
         };
         Self {
             code,
@@ -761,22 +753,6 @@ pub fn cleanup_old_resource_versions(
 #[tauri::command]
 pub fn get_runtime_catalog() -> Result<RuntimeCatalog, CommandError> {
     runtime::catalog().map_err(Into::into)
-}
-
-#[tauri::command]
-pub fn set_preferred_model(input: SetPreferredModelInput) -> Result<RuntimeCatalog, CommandError> {
-    runtime::set_preferred_model(&input.model_kind).map_err(Into::into)
-}
-
-#[tauri::command]
-pub async fn download_runtime_component(
-    input: DownloadRuntimeComponentInput,
-) -> Result<RuntimeCatalog, CommandError> {
-    tauri::async_runtime::spawn_blocking(move || {
-        runtime::download_component(&input.component_id).map_err(CommandError::from)
-    })
-    .await
-    .map_err(CommandError::background_task_failed)?
 }
 
 #[tauri::command]
