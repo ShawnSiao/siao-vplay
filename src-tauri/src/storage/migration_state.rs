@@ -13,6 +13,7 @@ const MIGRATION_FILE_NAME: &str = "storage-migration.json";
 
 #[derive(Debug)]
 pub(crate) struct MigrationRuntime {
+    pub(crate) users: usize,
     pub(crate) path: PathBuf,
     pub(crate) task: Option<StorageMigrationTask>,
     pub(crate) cancelled: Arc<AtomicBool>,
@@ -42,6 +43,7 @@ pub(crate) fn load_migration_runtime(
         persist_task(&path, task)?;
     }
     Ok(MigrationRuntime {
+        users: 0,
         path,
         task,
         cancelled: Arc::new(AtomicBool::new(false)),

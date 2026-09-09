@@ -85,7 +85,7 @@ impl StorageManager {
             .migration
             .lock()
             .map_err(|_| StorageError::StatePoisoned)?;
-        if runtime
+        if runtime.users > 0 || runtime
             .task
             .as_ref()
             .is_some_and(|current| current.status == StorageMigrationStatus::Running)
@@ -128,6 +128,7 @@ impl StorageManager {
             ) {
                 return Ok(task.clone());
             }
+            if runtime.users > 0 { return Err(StorageError::MigrationBusy); }
             task.status = StorageMigrationStatus::Running;
             task.error_code = None;
             task.error_message = None;

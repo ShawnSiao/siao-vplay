@@ -193,6 +193,10 @@ impl StorageManager {
             ));
         }
 
+        let runtime = self.migration.lock().map_err(|_| StorageError::StatePoisoned)?;
+        if runtime.users > 0 || runtime.task.as_ref().is_some_and(|task| task.status == super::StorageMigrationStatus::Running) {
+            return Err(StorageError::MigrationBusy);
+        }
         let mut state = self.write_state()?;
         if input.expected_revision != state.settings.revision {
             return Err(StorageError::RevisionConflict {

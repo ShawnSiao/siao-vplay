@@ -32,7 +32,7 @@ pub(crate) fn clear_playback_cache(
     }
     // Hold admission until cleanup finishes; starting a migration uses this same lock.
     let migration = storage.migration.lock().map_err(|_| StorageError::StatePoisoned)?;
-    if migration.task.as_ref().is_some_and(|task| task.status == super::StorageMigrationStatus::Running) {
+    if migration.users > 0 || migration.task.as_ref().is_some_and(|task| task.status == super::StorageMigrationStatus::Running) {
         return Err(StorageError::MigrationBusy);
     }
     database::ensure_idle(database_path)?;

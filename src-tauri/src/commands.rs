@@ -480,8 +480,10 @@ pub async fn import_remote_media_url(
     input: ImportRemoteMediaUrlInput,
 ) -> Result<Project, CommandError> {
     let store = store.inner().clone();
+    let usage = storage.acquire_usage()?;
     let remote_media_root = storage.remote_media_root_for_write()?;
     tauri::async_runtime::spawn_blocking(move || {
+        let _usage = usage;
         remote_media::import_remote_media_url(&store, &remote_media_root, input)
             .map_err(CommandError::from)
     })
@@ -516,8 +518,10 @@ pub async fn import_youtube_url(
     authorized_resolver_base: Option<String>,
 ) -> Result<Project, CommandError> {
     let store = store.inner().clone();
+    let usage = storage.acquire_usage()?;
     let remote_media_root = storage.remote_media_root_for_write()?;
     tauri::async_runtime::spawn_blocking(move || {
+        let _usage = usage;
         youtube_media::import_youtube_url_authorized(&store, &remote_media_root, input, authorized_resolver_base)
             .map_err(CommandError::from)
     })
@@ -580,6 +584,7 @@ pub fn delete_project(
     storage: State<'_, StorageManager>,
     project_id: String,
 ) -> Result<DeleteProjectResult, CommandError> {
+    let _usage = storage.acquire_usage()?;
     transcription::cancel_project_transcriptions(store.inner(), &project_id)?;
     codex_runner::cancel_project_translation_tasks(store.inner(), &project_id)?;
     codex_runner::cancel_project_explanation_tasks(store.inner(), &project_id)?;
@@ -776,8 +781,10 @@ pub async fn ensure_project_poster(
     project_id: String,
 ) -> Result<Project, CommandError> {
     let store = store.inner().clone();
+    let usage = storage.acquire_usage()?;
     let media_cache_root = storage.media_cache_root_for_write()?;
     let project = tauri::async_runtime::spawn_blocking(move || {
+        let _usage = usage;
         media::ensure_project_poster(&store, &media_cache_root, &project_id)
             .map_err(CommandError::from)
     })

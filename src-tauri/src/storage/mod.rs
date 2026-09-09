@@ -9,6 +9,7 @@ mod model;
 mod paths;
 mod settings;
 mod settings_io;
+mod usage;
 #[cfg(test)]
 mod settings_recovery_tests;
 
@@ -49,7 +50,7 @@ pub enum StorageError {
     StatePoisoned,
     #[error("数据库迁移操作失败：{0}")]
     Database(#[from] rusqlite::Error),
-    #[error("已有存储迁移正在执行")]
+    #[error("存储位置正被任务使用或维护，请等待完成或取消任务后重试")]
     MigrationBusy,
     #[error("找不到存储迁移任务")]
     MigrationNotFound,
