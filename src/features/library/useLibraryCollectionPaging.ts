@@ -43,13 +43,13 @@ export function useLibraryCollectionPaging(view: View, dispatch: Dispatch<Collec
   const scope = collectionId ? key(collectionId, view.selectedSeason) : null;
   const visible = pageState.scope === scope ? pageState : empty;
   const loadMore = async () => {
-    if (!collectionId || visible.nextOffset === null || view.collectionLoading || busy.current === sequence.current) return;
+    if (!collectionId || visible.nextOffset === null || view.collectionLoading || busy.current === sequence.current) return false;
     const current = ++sequence.current;
     busy.current = current;
     setPageState(previous => ({ ...previous, loadingMore: true, error: null }));
     try {
       const page = await listCollectionEpisodePage(collectionId, view.selectedSeason, visible.nextOffset, visible.snapshotToken);
-      if (current !== sequence.current) return;
+      if (current !== sequence.current) return false;
       const ids = [...view.currentEpisodes, ...page.items].map(item => item.projectId);
       if (page.snapshotToken !== visible.snapshotToken || page.totalCount !== visible.totalCount || new Set(ids).size !== ids.length) {
         throw new Error("合集已变化，请重新加载剧集");
@@ -57,8 +57,10 @@ export function useLibraryCollectionPaging(view: View, dispatch: Dispatch<Collec
       // Append to reducer-owned rows so concurrent watched-state changes survive.
       dispatch({ type: "collection_appended", collectionId, season: view.selectedSeason, episodes: page.items });
       setPageState(previous => ({ ...previous, nextOffset: page.nextOffset, loadingMore: false, error: null }));
+      return true;
     } catch (error) {
       if (current === sequence.current) setPageState(previous => ({ ...previous, loadingMore: false, error: commandError(error).message }));
+      return false;
     } finally { if (busy.current === current) busy.current = null; }
   };
   return { loadCollection, collectionPagination: {

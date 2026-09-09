@@ -57,6 +57,17 @@ cargo test --locked --release --lib --manifest-path src-tauri/Cargo.toml benchma
 
 临时数据库和文件随测试结束清理；每个查询重复测量 20 次，输出 JSON 格式的字节数、最小值、中位数、P95（最近秩法）和最大值，并检查返回字节数稳定。耗时包含查询和 JSON 序列化，不包含数据创建。首页和搜索先预热，分页与全量读取共享此前已访问的数据库缓存。这是单机连续采样，不代表冷启动或跨设备延迟分布，也不设置依赖机器性能的通过阈值。
 
+### 合集列表渲染检查
+
+浏览器用例预载 1,000 / 10,000 条合成剧集，检查每页最多渲染 24 行、键盘翻页及焦点。默认每种规模测量一次；以下命令在预热后分别连续测量 20 次：
+
+```powershell
+$env:SIAOVPLAY_LIBRARY_RENDER_BENCHMARK = "1"
+npx playwright test e2e/library-window.spec.ts --workers=1
+```
+
+输出耗时从页面导航开始，到自动检查确认列表并等待两次动画帧结束，包含浏览器和测试调度开销，不等同于首帧指标。数据已在前端夹具中，不覆盖数据库读取、真实媒体、应用内存峰值或原生 Windows 性能。
+
 ## 安装包
 
 ```powershell
