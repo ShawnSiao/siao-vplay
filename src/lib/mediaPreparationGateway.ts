@@ -26,5 +26,7 @@ export async function getMediaPreparation(requestId: string): Promise<MediaPrepa
   return value;
 }
 export async function cancelMediaPreparation(requestId: string): Promise<boolean> {
-  return invoke("cancel_media_preparation", { requestId });
+  const value = await invoke<unknown>("cancel_media_preparation", { requestId });
+  if (typeof value !== "boolean") throw new Error("取消视频准备的结果尚未确认，请重新读取任务状态。");
+  return value;
 }
