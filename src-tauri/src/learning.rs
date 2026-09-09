@@ -1238,6 +1238,7 @@ fn persist_learning_result(
         if changed != 1 {
             return Err(LearningError::InvalidTaskState(task.status.clone()));
         }
+        crate::external_result_delivery::record_completion(&transaction, "learning", &task.id)?;
         transaction.commit()?;
         Ok(())
     })();
@@ -2133,6 +2134,10 @@ mod tests {
         )
         .expect("manual result should apply");
 
+        let pending = crate::external_result_delivery::pending(&fixture.store).unwrap();
+        assert_eq!(pending.len(), 1);
+        assert_eq!(pending[0].task_id, task.id);
+        assert_eq!(pending[0].output_id, application.task.output_dictionary_entry_id);
         assert_eq!(application.task.status, "completed");
         assert_eq!(
             application.task.output_dictionary_entry_id.as_deref(),

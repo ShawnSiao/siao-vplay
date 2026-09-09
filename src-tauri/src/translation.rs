@@ -1207,6 +1207,7 @@ fn persist_translation_result(
         if project_updated != 1 {
             return Err(TranslationError::ProjectChanged);
         }
+        crate::external_result_delivery::record_completion(&transaction, "translation", &task.id)?;
         transaction.commit()?;
         Ok(())
     })();

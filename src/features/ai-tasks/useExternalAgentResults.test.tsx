@@ -4,12 +4,13 @@ import { expect, it, vi } from "vitest";
 import type { ExternalAgentResultUpdate } from "../../types";
 import { useExternalAgentResults } from "./useExternalAgentResults";
 
+const acknowledge = vi.fn(async () => undefined);
 const updates: ExternalAgentResultUpdate[] = [{ taskId: "task", projectId: "old-video", taskKind: "translation", status: "completed", outputId: "version", message: "private" }];
 it("delivers a consumed result to the latest handler when the video changes during reconciliation", async () => {
   let finish!: (value: ExternalAgentResultUpdate[]) => void;
   const reconcile = vi.fn(() => new Promise<ExternalAgentResultUpdate[]>(resolve => { finish = resolve; }));
   const oldHandler = vi.fn(); const currentHandler = vi.fn();
-  const { rerender } = renderHook(({ handler }) => useExternalAgentResults({ enabled: true, reconcile, onUpdates: handler }), { initialProps: { handler: oldHandler } });
+  const { rerender } = renderHook(({ handler }) => useExternalAgentResults({ enabled: true, reconcile, acknowledge, onUpdates: handler }), { initialProps: { handler: oldHandler } });
   rerender({ handler: currentHandler });
   await act(async () => finish(updates));
   expect(oldHandler).not.toHaveBeenCalled();
@@ -21,7 +22,7 @@ it("does not deliver results after unmount", async () => {
   let finish!: (value: ExternalAgentResultUpdate[]) => void;
   const reconcile = vi.fn(() => new Promise<ExternalAgentResultUpdate[]>(resolve => { finish = resolve; }));
   const handler = vi.fn();
-  const { unmount } = renderHook(() => useExternalAgentResults({ enabled: true, reconcile, onUpdates: handler }));
+  const { unmount } = renderHook(() => useExternalAgentResults({ enabled: true, reconcile, acknowledge, onUpdates: handler }));
   unmount();
   await act(async () => finish(updates));
   expect(handler).not.toHaveBeenCalled();
@@ -29,7 +30,7 @@ it("does not deliver results after unmount", async () => {
 
 it("does not restart the scan on unrelated render updates", async () => {
   const reconcile = vi.fn(async () => []);
-  const { rerender } = renderHook(() => useExternalAgentResults({ enabled: true, reconcile, onUpdates: () => undefined }));
+  const { rerender } = renderHook(() => useExternalAgentResults({ enabled: true, reconcile, acknowledge, onUpdates: () => undefined }));
   await waitFor(() => expect(reconcile).toHaveBeenCalledTimes(1));
   await act(async () => { rerender(); });
   expect(reconcile).toHaveBeenCalledTimes(1);
@@ -39,7 +40,7 @@ it("retains the in-flight result across StrictMode effect replay", async () => {
   let finish!: (value: ExternalAgentResultUpdate[]) => void;
   const reconcile = vi.fn(() => new Promise<ExternalAgentResultUpdate[]>(resolve => { finish = resolve; }));
   const handler = vi.fn();
-  renderHook(() => useExternalAgentResults({ enabled: true, reconcile, onUpdates: handler }), { wrapper: StrictMode });
+  renderHook(() => useExternalAgentResults({ enabled: true, reconcile, acknowledge, onUpdates: handler }), { wrapper: StrictMode });
   await act(async () => finish(updates));
   expect(handler).toHaveBeenCalledWith(updates, expect.any(Function));
   expect(reconcile).toHaveBeenCalledTimes(1);
@@ -49,7 +50,7 @@ it("invalidates asynchronous consumer work when disabled", async () => {
   let isActive!: () => boolean;
   const reconcile = vi.fn(async () => updates);
   const handler = vi.fn((_updates: ExternalAgentResultUpdate[], live: () => boolean) => { isActive = live; });
-  const { rerender } = renderHook(({ enabled }) => useExternalAgentResults({ enabled, reconcile, onUpdates: handler }), { initialProps: { enabled: true } });
+  const { rerender } = renderHook(({ enabled }) => useExternalAgentResults({ enabled, reconcile, acknowledge, onUpdates: handler }), { initialProps: { enabled: true } });
   await waitFor(() => expect(handler).toHaveBeenCalledTimes(1));
   expect(isActive()).toBe(true);
   rerender({ enabled: false });
@@ -62,7 +63,7 @@ it("serializes slow scans and resumes polling after an error", async () => {
   const first = new Promise<ExternalAgentResultUpdate[]>((_resolve, reject) => { fail = reject; });
   const reconcile = vi.fn().mockReturnValueOnce(first).mockResolvedValue(updates);
   const handler = vi.fn();
-  const { unmount } = renderHook(() => useExternalAgentResults({ enabled: true, reconcile, onUpdates: handler }));
+  const { unmount } = renderHook(() => useExternalAgentResults({ enabled: true, reconcile, acknowledge, onUpdates: handler }));
   try {
     await act(async () => { await vi.advanceTimersByTimeAsync(3_000); });
     expect(reconcile).toHaveBeenCalledTimes(1);
@@ -76,14 +77,17 @@ it("serializes slow scans and resumes polling after an error", async () => {
 
 it("retries a consumed batch after the consumer fails without reconciling it again", async () => {
   vi.useFakeTimers();
+  const acknowledge = vi.fn(async () => undefined);
   const reconcile = vi.fn().mockResolvedValueOnce(updates).mockResolvedValue([]);
   const handler = vi.fn().mockRejectedValueOnce(new Error("refresh failed")).mockResolvedValue(undefined);
-  const { unmount } = renderHook(() => useExternalAgentResults({ enabled: true, reconcile, onUpdates: handler }));
+  const { unmount } = renderHook(() => useExternalAgentResults({ enabled: true, reconcile, acknowledge, onUpdates: handler }));
   try {
     await act(async () => { await vi.advanceTimersByTimeAsync(0); });
     expect(handler).toHaveBeenCalledTimes(1);
+    expect(acknowledge).not.toHaveBeenCalled();
     await act(async () => { await vi.advanceTimersByTimeAsync(1_000); });
     expect(handler).toHaveBeenCalledTimes(2);
+    expect(acknowledge).toHaveBeenCalledTimes(1);
     expect(handler).toHaveBeenLastCalledWith(updates, expect.any(Function));
     expect(reconcile).toHaveBeenCalledTimes(1);
     await act(async () => { await vi.advanceTimersByTimeAsync(1_000); });
@@ -99,7 +103,7 @@ it("redelivers a batch whose asynchronous consumer was disabled before completio
   const reconcile = vi.fn().mockResolvedValueOnce(updates).mockResolvedValue([]);
   const firstHandler = vi.fn(() => new Promise<void>(resolve => { finish = resolve; }));
   const nextHandler = vi.fn(async () => undefined);
-  const { rerender, unmount } = renderHook(({ enabled, handler }) => useExternalAgentResults({ enabled, reconcile, onUpdates: handler }), {
+  const { rerender, unmount } = renderHook(({ enabled, handler }) => useExternalAgentResults({ enabled, reconcile, acknowledge, onUpdates: handler }), {
     initialProps: { enabled: true, handler: firstHandler },
   });
   try {
@@ -113,5 +117,23 @@ it("redelivers a batch whose asynchronous consumer was disabled before completio
     await act(async () => { await vi.advanceTimersByTimeAsync(1_000); });
     expect(reconcile).toHaveBeenCalledTimes(2);
     expect(nextHandler).toHaveBeenCalledTimes(1);
+  } finally { unmount(); vi.useRealTimers(); }
+});
+
+
+it("does not discard delivery until acknowledgement succeeds", async () => {
+  vi.useFakeTimers();
+  const reconcile = vi.fn().mockResolvedValue(updates);
+  const acknowledge = vi.fn().mockRejectedValueOnce(new Error("ack transport failed")).mockResolvedValue(undefined);
+  const handler = vi.fn();
+  const options = { enabled: true, reconcile, acknowledge, onUpdates: handler };
+  const { unmount } = renderHook(() => useExternalAgentResults(options));
+  try {
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    expect(acknowledge).toHaveBeenCalledWith(updates);
+    await act(async () => { await vi.advanceTimersByTimeAsync(1_000); });
+    expect(acknowledge).toHaveBeenCalledTimes(2);
+    expect(handler).toHaveBeenCalledTimes(2);
+    expect(reconcile).toHaveBeenCalledTimes(1);
   } finally { unmount(); vi.useRealTimers(); }
 });

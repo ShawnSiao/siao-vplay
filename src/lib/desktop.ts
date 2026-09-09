@@ -341,6 +341,12 @@ export async function reconcileExternalAgentResults(): Promise<
   );
 }
 
+export async function acknowledgeExternalAgentResults(updates: ExternalAgentResultUpdate[]): Promise<void> {
+  const completed = updates.filter(update => update.status === "completed");
+  if (!isDesktopApp || !completed.length) return;
+  await invoke<void>("acknowledge_external_agent_results", { updates: completed });
+}
+
 export async function openExternalResultDirectory(
   taskKind: ExternalAgentTaskKind,
   taskId: string,

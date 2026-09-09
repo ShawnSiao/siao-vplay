@@ -19,7 +19,7 @@ use crate::domain::{
 };
 use crate::library::migration::{self as library_migration, MigrationError};
 
-const CURRENT_SCHEMA_VERSION: i64 = 19;
+const CURRENT_SCHEMA_VERSION: i64 = 20;
 
 #[derive(Clone, Debug)]
 pub(crate) struct RemoteImportProvenance {
@@ -912,6 +912,9 @@ impl ProjectStore {
         )?;
         if current_version < 19 {
             crate::burn_migration::migrate_schema_19(connection, now_ms()?)?;
+        }
+        if current_version < 20 {
+            crate::external_result_delivery::migrate(connection, now_ms()?)?;
         }
         Ok(())
     }

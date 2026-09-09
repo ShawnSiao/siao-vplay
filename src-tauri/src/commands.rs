@@ -1346,6 +1346,16 @@ pub async fn reconcile_external_agent_results(
 }
 
 #[tauri::command]
+pub async fn acknowledge_external_agent_results(
+    store: State<'_, ProjectStore>, updates: Vec<ExternalAgentResultUpdate>,
+) -> Result<(), CommandError> {
+    let store = store.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::external_result_delivery::acknowledge(&store, &updates).map_err(CommandError::from)
+    }).await.map_err(CommandError::background_task_failed)?
+}
+
+#[tauri::command]
 pub async fn open_external_result_directory(
     store: State<'_, ProjectStore>,
     task_kind: String,

@@ -59,7 +59,7 @@ impl ExternalHandoffError {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ExternalAgentResultUpdate {
     pub task_kind: String,
@@ -81,10 +81,14 @@ struct ResultAttempt {
 pub fn reconcile_external_agent_results(
     store: &ProjectStore,
 ) -> Result<Vec<ExternalAgentResultUpdate>, ExternalHandoffError> {
-    Ok(reconcile_active_tasks_with(
+    let mut updates = reconcile_active_tasks_with(
         active_manual_tasks(store)?,
         |task| reconcile_external_agent_result(store, task),
-    ))
+    );
+    // Completions must come from the durable queue, including after a lost IPC response.
+    updates.retain(|update| update.status != "completed");
+    updates.extend(crate::external_result_delivery::pending(store)?);
+    Ok(updates)
 }
 
 fn reconcile_active_tasks_with<F>(

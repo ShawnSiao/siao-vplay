@@ -50,6 +50,7 @@ import {
   getSubtitleVersion,
   markProjectOpened,
   reconcileExternalAgentResults,
+  acknowledgeExternalAgentResults,
   relinkProjectMedia,
   setMainWindowMediaTitle,
 } from "./lib/desktop";
@@ -631,6 +632,7 @@ export default function App() {
   useExternalAgentResults({
     enabled: isDesktopApp,
     reconcile: reconcileExternalAgentResults,
+    acknowledge: acknowledgeExternalAgentResults,
     onUpdates: async (updates, isActive) => {
       const latest = updates.filter(update => update.status !== "validating").at(-1);
       if (latest) {

@@ -16,6 +16,7 @@ mod domain;
 mod database_upgrade;
 mod watch_state;
 mod external_handoff;
+mod external_result_delivery;
 mod instance_lock;
 mod learning;
 mod library;
@@ -374,6 +375,7 @@ pub fn run() {
             commands::delete_learning_card,
             commands::export_learning_cards,
             commands::reconcile_external_agent_results,
+            commands::acknowledge_external_agent_results,
             commands::open_external_result_directory,
             commands::export_subtitles,
             commands::start_subtitle_burn,

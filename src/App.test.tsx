@@ -120,6 +120,7 @@ const desktopMocks = vi.hoisted(() => ({
   cancelLearningTask: vi.fn(),
   resumeCodexLearningTask: vi.fn(),
   reconcileExternalAgentResults: vi.fn(),
+  acknowledgeExternalAgentResults: vi.fn(),
   openExternalResultDirectory: vi.fn(),
   createLearningCard: vi.fn(),
   getLearningCard: vi.fn(),
