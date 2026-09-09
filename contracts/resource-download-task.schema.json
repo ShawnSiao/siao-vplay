@@ -50,6 +50,14 @@
       "default": false,
       "type": "boolean"
     },
+    "generation": {
+      "default": 0,
+      "description": "Process-local root binding and mutation order, reissued when the store loads.",
+      "format": "uint64",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    },
     "id": {
       "type": "string"
     },
@@ -68,6 +76,13 @@
     },
     "resourceId": {
       "type": "string"
+    },
+    "revision": {
+      "default": 0,
+      "format": "uint64",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
     },
     "state": {
       "$ref": "#/$defs/ResourceDownloadTaskState"
@@ -89,6 +104,8 @@
     }
   },
   "required": [
+    "generation",
+    "revision",
     "id",
     "resourceId",
     "version",

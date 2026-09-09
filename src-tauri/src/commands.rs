@@ -35,7 +35,7 @@ use crate::{
     },
     resource_download::{
         self, CapabilityPreparation, PrepareLocalCapabilityInput, RemoveLocalResourceInput,
-        RepairLocalResourceInput, ResourceDownloadError, ResourceDownloadTask,
+        RepairLocalResourceInput, ResourceDownloadError, ResourceDownloadTask, ResourceDownloadSnapshot,
         ResourceDownloadTaskInput, ResourceRemovalResult,
     },
     resource_migration::{ConfirmLocalResourceOperationInput, ResourceMigrationError},
@@ -654,8 +654,8 @@ pub fn set_local_resource_profile(
 }
 
 #[tauri::command]
-pub fn list_resource_download_tasks() -> Result<Vec<ResourceDownloadTask>, CommandError> {
-    resource_download::list_tasks().map_err(Into::into)
+pub fn list_resource_download_tasks() -> Result<ResourceDownloadSnapshot, CommandError> {
+    resource_download::task_snapshot_list().map_err(Into::into)
 }
 
 #[tauri::command]

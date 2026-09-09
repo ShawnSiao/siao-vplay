@@ -902,3 +902,5 @@ export type SubtitleExport = {
 export type { SubtitleBurnMode, SubtitleBurnJob } from "./generated/subtitle-burn-job";
 
 export type { SubtitleBurnStyle } from "./generated/subtitle-burn-input";
+
+export type { ResourceDownloadSnapshot } from "./generated/resource-download-snapshot";

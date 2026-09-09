@@ -1,10 +1,10 @@
 import { useEffect, useLayoutEffect, useRef } from "react";
 import { getLocalResourceStatus, listResourceDownloadTasks } from "../../lib/desktop";
-import type { LocalResourceStatus, ResourceDownloadTask } from "../../types";
+import type { LocalResourceStatus, ResourceDownloadSnapshot } from "../../types";
 
 type Options = {
   enabled: boolean;
-  onSnapshot: (tasks: ResourceDownloadTask[], status: LocalResourceStatus) => void;
+  onSnapshot: (tasks: ResourceDownloadSnapshot, status: LocalResourceStatus) => void;
   onError: (cause: unknown) => void;
 };
 export function useResourcePolling({ enabled, onSnapshot, onError }: Options) {

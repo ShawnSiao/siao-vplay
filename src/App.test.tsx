@@ -794,7 +794,7 @@ beforeEach(() => {
     proxySource: "custom",
     proxyAddress: "http://127.0.0.1:7897",
   });
-  desktopMocks.listResourceDownloadTasks.mockResolvedValue([]);
+  desktopMocks.listResourceDownloadTasks.mockResolvedValue({ generation: 1, tasks: [] });
   desktopMocks.listenResourceDownloadTasks.mockResolvedValue(() => undefined);
   desktopMocks.chooseLocalResourceParent.mockResolvedValue(null);
   desktopMocks.planLocalResourceLocation.mockResolvedValue({

@@ -201,7 +201,7 @@ const initialTask: ResourceDownloadTask = {
   errorMessage: "下载已暂停",
   createdAtMs: 1,
   updatedAtMs: 2,
-  forceReinstall: false,
+  forceReinstall: false, generation: 1, revision: 1,
 };
 
 export function RuntimeHarness() {

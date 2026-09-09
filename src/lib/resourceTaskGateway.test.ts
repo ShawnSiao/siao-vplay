@@ -17,10 +17,10 @@ it.each([repairLocalResource, updateLocalResource])("rejects the wrong resource 
   mocks.invoke.mockResolvedValue({ ...task, resourceId: "other" }); await expect(action(task.resourceId)).rejects.toThrow();
 });
 it.each([{ state: "unknown" }, { downloadedBytes: -1 }, { totalBytes: Number.MAX_SAFE_INTEGER + 1 }, { pendingActionIds: null }, { forceReinstall: null }])("rejects malformed task lists %j", async patch => {
-  mocks.invoke.mockResolvedValue([{ ...task, ...patch }]); await expect(listResourceDownloadTasks()).rejects.toThrow();
+  mocks.invoke.mockResolvedValue({ generation: 1, tasks: [{ ...task, ...patch }] }); await expect(listResourceDownloadTasks()).rejects.toThrow();
 });
 it("rejects duplicate tasks", async () => {
-  mocks.invoke.mockResolvedValue([task, task]); await expect(listResourceDownloadTasks()).rejects.toThrow();
+  mocks.invoke.mockResolvedValue({ generation: 1, tasks: [task, task] }); await expect(listResourceDownloadTasks()).rejects.toThrow();
 });
 it.each([{ capabilityId: "other" }, { pendingActionId: "other" }, { state: "unknown" }, { readyResourceIds: ["outside"] }])("rejects a mismatched capability response %j", async patch => {
   mocks.invoke.mockResolvedValue({ capabilityId: "capability", pendingActionId: null, state: "preparing", resourceIds: ["resource"], readyResourceIds: [], taskIds: ["task"], ...patch });
@@ -36,7 +36,7 @@ it("does not deliver a malformed event to consumers", async () => {
 
 it.each(["queued", "downloading", "paused", "verifying", "installing", "completed", "failed", "cancelled"] as const)("accepts emitted task state %s", async state => {
   const value = { ...task, state, downloadedBytes: 200, totalBytes: 100 };
-  mocks.invoke.mockResolvedValue([value]); await expect(listResourceDownloadTasks()).resolves.toEqual([value]);
+  mocks.invoke.mockResolvedValue({ generation: 1, tasks: [value] }); await expect(listResourceDownloadTasks()).resolves.toEqual({ generation: 1, tasks: [value] });
 });
 it.each(["ready", "preparing"])("accepts matching preparation state %s and intent", async state => {
   const pendingActionId = "e27d7d81-d498-46f5-926d-ccf01df4be67";
@@ -53,7 +53,7 @@ it("continues delivering valid events after a rejected payload and returns unsub
 it("preserves the browser preview without requesting native services", async () => {
   Reflect.deleteProperty(window, "__TAURI_INTERNALS__");
   try {
-    await expect(listResourceDownloadTasks()).resolves.toEqual([]);
+    await expect(listResourceDownloadTasks()).resolves.toEqual({ generation: 0, tasks: [] });
     const stop = await listenResourceDownloadTasks(vi.fn(), vi.fn()); stop();
     expect(mocks.invoke).not.toHaveBeenCalled(); expect(mocks.listen).not.toHaveBeenCalled();
   } finally { Object.defineProperty(window, "__TAURI_INTERNALS__", { configurable: true, value: {} }); }
@@ -66,4 +66,12 @@ it.each([
 ])("rejects inconsistent readiness %j", async patch => {
   mocks.invoke.mockResolvedValue({ capabilityId: "capability", pendingActionId: null, resourceIds: ["resource"], ...patch });
   await expect(prepareLocalCapability("capability")).rejects.toThrow();
+});
+
+it("rejects a task from another binding in a snapshot", async () => {
+  mocks.invoke.mockResolvedValue({ generation: 2, tasks: [task] });
+  await expect(listResourceDownloadTasks()).rejects.toThrow("资源目录不匹配");
+});
+it.each([{ generation: -1 }, { revision: 1.5 }, { generation: Number.MAX_SAFE_INTEGER + 1 }])("rejects invalid sequence numbers %j", async patch => {
+  mocks.invoke.mockResolvedValue({ ...task, ...patch }); await expect(pauseResourceDownload(task.id)).rejects.toThrow();
 });

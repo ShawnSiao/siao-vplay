@@ -1,5 +1,6 @@
 mod contract;
-pub use contract::{ResourceDownloadTask, ResourceDownloadTaskState, CapabilityPreparation};
+mod ordering;
+pub use contract::{ResourceDownloadSnapshot, ResourceDownloadTask, ResourceDownloadTaskState, CapabilityPreparation};
 use std::{
     collections::{BTreeMap, HashMap},
     fs::{self, File, OpenOptions},
@@ -170,6 +171,7 @@ struct DownloadTaskStore {
 }
 
 struct DownloadManager {
+    generation: u64,
     root: Option<PathBuf>,
     tasks: BTreeMap<String, ResourceDownloadTask>,
 }
@@ -206,6 +208,13 @@ pub fn bind_configured_root() -> Result<(), ResourceDownloadError> {
 
 pub fn list_tasks() -> Result<Vec<ResourceDownloadTask>, ResourceDownloadError> {
     with_manager_read(|manager| Ok(manager.tasks.values().cloned().collect()))
+}
+
+pub fn task_snapshot_list() -> Result<ResourceDownloadSnapshot, ResourceDownloadError> {
+    with_manager_read(|manager| Ok(ResourceDownloadSnapshot {
+        generation: manager.generation,
+        tasks: manager.tasks.values().cloned().collect(),
+    }))
 }
 
 pub fn network_status() -> ResourceNetworkStatus {
@@ -524,6 +533,7 @@ fn with_manager_write<T>(
 impl DownloadManager {
     fn load(root: Option<PathBuf>) -> Result<Self, ResourceDownloadError> {
         let mut manager = Self {
+            generation: ordering::next_generation()?,
             root,
             tasks: BTreeMap::new(),
         };
@@ -542,11 +552,13 @@ impl DownloadManager {
                 )));
             }
             let mut discarded_invalid_task = false;
-            for task in store.tasks {
+            for mut task in store.tasks {
                 if validate_task_record(&task).is_err() || manager.tasks.contains_key(&task.id) {
                     discarded_invalid_task = true;
                     continue;
                 }
+                task.generation = manager.generation;
+                task.revision = 1;
                 manager.tasks.insert(task.id.clone(), task);
             }
             if discarded_invalid_task {
@@ -559,6 +571,7 @@ impl DownloadManager {
                 task.state = ResourceDownloadTaskState::Paused;
                 task.error_code = Some("interrupted".to_owned());
                 task.error_message = Some("应用上次退出后，下载等待继续".to_owned());
+                task.advance_revision()?;
                 task.updated_at_ms = now_ms();
                 recovered = true;
             }
@@ -606,6 +619,7 @@ impl DownloadManager {
                     ResourceDownloadTaskState::Completed | ResourceDownloadTaskState::Cancelled
                 )
         }) {
+            let previous = task.clone();
             if !task
                 .requested_by_capability_ids
                 .iter()
@@ -624,6 +638,7 @@ impl DownloadManager {
                 task.pending_action_ids.push(pending_action_id.to_owned());
                 task.pending_action_ids.sort();
             }
+            if *task != previous { task.advance_revision()?; task.updated_at_ms = now_ms(); }
             return Ok((task.id.clone(), false));
         }
         let artifact = resource
@@ -635,6 +650,8 @@ impl DownloadManager {
         self.tasks.insert(
             id.clone(),
             ResourceDownloadTask {
+                generation: self.generation,
+                revision: 1,
                 id: id.clone(),
                 resource_id: resource.id.clone(),
                 version: resource.version.clone(),
@@ -1536,17 +1553,7 @@ fn update_task(
     app: Option<&AppHandle>,
     update: impl FnOnce(&mut ResourceDownloadTask) -> Result<(), ResourceDownloadError>,
 ) -> Result<ResourceDownloadTask, ResourceDownloadError> {
-    let task = with_manager_write(|manager| {
-        let task = manager
-            .tasks
-            .get_mut(task_id)
-            .ok_or_else(|| ResourceDownloadError::TaskNotFound(task_id.to_owned()))?;
-        update(task)?;
-        task.updated_at_ms = now_ms();
-        let task = task.clone();
-        manager.persist()?;
-        Ok(task)
-    })?;
+    let task = with_manager_write(|manager| manager.update_task_record(task_id, update))?;
     emit_task(app, &task);
     Ok(task)
 }
@@ -2136,6 +2143,7 @@ mod tests {
             .expect("FFmpeg should have an artifact")
             .size;
         let task = ResourceDownloadTask {
+            generation: 0, revision: 0,
             id: task_id.to_owned(),
             resource_id: "ffmpeg-cpu".to_owned(),
             version,
@@ -2181,6 +2189,7 @@ mod tests {
             &DownloadTaskStore {
                 schema_version: TASK_STORE_SCHEMA_VERSION,
                 tasks: vec![ResourceDownloadTask {
+                    generation: 0, revision: 0,
                     id: "../outside".to_owned(),
                     resource_id: "ffmpeg-cpu".to_owned(),
                     version: "8.1".to_owned(),
@@ -2212,6 +2221,7 @@ mod tests {
         let resource = local_resources::resource_definition("ffmpeg-cpu")
             .expect("catalog resource should exist");
         let mut manager = DownloadManager {
+            generation: 1,
             root: Some(root.path().to_path_buf()),
             tasks: BTreeMap::new(),
         };

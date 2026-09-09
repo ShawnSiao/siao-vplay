@@ -29,7 +29,7 @@ export async function verifyDismissedResourceAction({ desktopMocks, readyLocalRe
     await act(async () => {
       notify({ id: "completed-resource", resourceId: "ffmpeg-cpu", version: "fixture", state: "completed", downloadedBytes: 1, totalBytes: 1,
         requestedByCapabilityIds: ["basic_media"], pendingActionIds: [], attempt: 1, errorCode: null, errorMessage: null,
-        createdAtMs: 1, updatedAtMs: 2, forceReinstall: false });
+        createdAtMs: 1, updatedAtMs: 2, forceReinstall: false, generation: 1, revision: 1 });
     });
     await screen.findByText(/\d+ 项本地功能已准备/);
     expect(desktopMocks.chooseLocalVideo).toHaveBeenCalledTimes(1);

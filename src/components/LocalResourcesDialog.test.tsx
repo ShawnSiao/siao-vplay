@@ -121,7 +121,7 @@ describe("LocalResourcesDialog", () => {
       errorMessage: null,
       createdAtMs: 1,
       updatedAtMs: 2,
-      forceReinstall: false,
+      forceReinstall: false, generation: 1, revision: 1,
     };
     const pauseTask = vi.fn().mockResolvedValue({ ...task, state: "paused" });
     const controller = makeController({

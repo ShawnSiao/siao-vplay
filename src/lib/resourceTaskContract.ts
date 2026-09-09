@@ -1,6 +1,7 @@
+import validateSnapshot from "../generated/resource-download-snapshot.validator.mjs";
 import validateTask from "../generated/resource-download-task.validator.mjs";
 import validatePreparation from "../generated/capability-preparation.validator.mjs";
-import type { ResourceDownloadTask, CapabilityPreparation } from "../types";
+import type { ResourceDownloadTask, ResourceDownloadSnapshot, CapabilityPreparation } from "../types";
 const validIds = (ids: string[]) => ids.every(id => id.trim()) && new Set(ids).size === ids.length;
 export function parseResourceTask(value: unknown, expected: { taskId?: string; resourceId?: string } = {}): ResourceDownloadTask {
   if (!validateTask(value) || !value.id.trim() || !value.resourceId.trim() || !value.version.trim() ||
@@ -24,5 +25,12 @@ export function parseCapabilityPreparation(value: unknown, capabilityId: string,
     (value.state === "preparing" && value.taskIds.length === 0)) {
     throw new Error("功能准备状态无效或与当前操作不匹配。");
   }
+  return value;
+}
+
+export function parseResourceSnapshot(value: unknown): ResourceDownloadSnapshot {
+  if (!validateSnapshot(value)) throw new Error("资源任务快照格式无效。");
+  parseResourceTasks(value.tasks);
+  if (value.tasks.some(task => task.generation !== value.generation)) throw new Error("资源任务与当前资源目录不匹配。");
   return value;
 }

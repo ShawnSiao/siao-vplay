@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useResourceMove } from "./useResourceMove";
+import { useResourceTaskState, type ResourceTaskMetric } from "./useResourceTaskState";
+export type { ResourceTaskMetric } from "./useResourceTaskState";
 import { useResourcePolling } from "./useResourcePolling";
 
 import {
@@ -63,11 +65,6 @@ const activeTaskStates = new Set<ResourceDownloadTask["state"]>([
   "installing",
 ]);
 
-export type ResourceTaskMetric = {
-  bytesPerSecond: number;
-  remainingSeconds: number | null;
-};
-
 export type LocalResourcesController = {
   catalog: LocalResourceCatalog | null;
   status: LocalResourceStatus | null;
@@ -123,92 +120,23 @@ export type LocalResourcesController = {
   ) => Promise<ResourceRemovalResult>;
 };
 
-type TaskObservation = {
-  bytes: number;
-  sampledAtMs: number;
-  bytesPerSecond: number;
-};
-
 export function useLocalResources(): LocalResourcesController {
   const [catalog, setCatalog] = useState<LocalResourceCatalog | null>(null);
   const [status, setStatus] = useState<LocalResourceStatus | null>(null);
-  const [tasks, setTasks] = useState<ResourceDownloadTask[]>([]);
-  const [taskMetrics, setTaskMetrics] = useState<
-    Record<string, ResourceTaskMetric>
-  >({});
+  const { tasks, taskMetrics, mergeTask, adoptSnapshot } = useResourceTaskState();
   const [networkStatus, setNetworkStatus] = useState<ResourceNetworkStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const initializedRef = useRef(false);
-  const observationsRef = useRef(new Map<string, TaskObservation>());
 
   const captureError = useCallback((cause: unknown) => {
     const message = commandError(cause).message;
     setError(message);
     return message;
   }, []);
-  const mergeTask = useCallback((nextTask: ResourceDownloadTask) => {
-    const sampledAtMs = Date.now();
-    const previous = observationsRef.current.get(nextTask.id);
-    let bytesPerSecond = previous?.bytesPerSecond ?? 0;
-    if (
-      previous &&
-      nextTask.state === "downloading" &&
-      nextTask.downloadedBytes >= previous.bytes
-    ) {
-      const elapsedMs = sampledAtMs - previous.sampledAtMs;
-      const byteDelta = nextTask.downloadedBytes - previous.bytes;
-      if (elapsedMs > 0 && byteDelta > 0) {
-        const currentSpeed = (byteDelta * 1_000) / elapsedMs;
-        bytesPerSecond =
-          bytesPerSecond > 0
-            ? bytesPerSecond * 0.65 + currentSpeed * 0.35
-            : currentSpeed;
-      }
-    }
-    if (nextTask.state !== "downloading") {
-      bytesPerSecond = 0;
-    }
-    observationsRef.current.set(nextTask.id, {
-      bytes: nextTask.downloadedBytes,
-      sampledAtMs,
-      bytesPerSecond,
-    });
-    const remainingBytes = Math.max(
-      0,
-      nextTask.totalBytes - nextTask.downloadedBytes,
-    );
-    setTaskMetrics((current) => ({
-      ...current,
-      [nextTask.id]: {
-        bytesPerSecond,
-        remainingSeconds:
-          bytesPerSecond > 0 ? remainingBytes / bytesPerSecond : null,
-      },
-    }));
-    setTasks((current) => {
-      const next = current.some((task) => task.id === nextTask.id)
-        ? current.map((task) =>
-            task.id === nextTask.id ? nextTask : task,
-          )
-        : [...current, nextTask];
-      return next.sort((left, right) => right.createdAtMs - left.createdAtMs);
-    });
-  }, []);
-
-  const replaceTasks = useCallback(
-    (nextTasks: ResourceDownloadTask[]) => {
-      setTasks([]);
-      for (const task of nextTasks) {
-        mergeTask(task);
-      }
-    },
-    [mergeTask],
-  );
-
   const resourceMove = useResourceMove(async () => {
     setStatus(await getLocalResourceStatus());
-    replaceTasks(await listResourceDownloadTasks());
+    adoptSnapshot(await listResourceDownloadTasks());
     setError(null);
   }, captureError);
 
@@ -229,7 +157,7 @@ export function useLocalResources(): LocalResourcesController {
       ]);
       setCatalog(nextCatalog);
       setStatus(nextStatus);
-      replaceTasks(nextTasks);
+      adoptSnapshot(nextTasks);
       setNetworkStatus(nextNetworkStatus);
       setError(null);
       initializedRef.current = true;
@@ -240,7 +168,7 @@ export function useLocalResources(): LocalResourcesController {
     } finally {
       setLoading(false);
     }
-  }, [captureError, replaceTasks]);
+  }, [captureError, adoptSnapshot]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -256,7 +184,7 @@ export function useLocalResources(): LocalResourcesController {
       if (!active) {
         return;
       }
-      mergeTask(task);
+      if (!mergeTask(task)) return;
       if (["completed", "failed", "cancelled"].includes(task.state)) {
         void getLocalResourceStatus()
           .then((nextStatus) => {
@@ -284,7 +212,7 @@ export function useLocalResources(): LocalResourcesController {
   useResourcePolling({
     enabled: tasks.some((task) => activeTaskStates.has(task.state)),
     onSnapshot: (nextTasks, nextStatus) => {
-      replaceTasks(nextTasks);
+      adoptSnapshot(nextTasks);
       setStatus(nextStatus);
     },
     onError: captureError,
@@ -389,7 +317,7 @@ export function useLocalResources(): LocalResourcesController {
       try {
         const nextStatus = await repairLocalResourceRoot();
         setStatus(nextStatus);
-        replaceTasks(await listResourceDownloadTasks());
+        adoptSnapshot(await listResourceDownloadTasks());
         setError(null);
         return nextStatus;
       } catch (cause) {
@@ -405,7 +333,7 @@ export function useLocalResources(): LocalResourcesController {
         }
         const nextStatus = await reconnectLocalResourceRoot(parentPath);
         setStatus(nextStatus);
-        replaceTasks(await listResourceDownloadTasks());
+        adoptSnapshot(await listResourceDownloadTasks());
         setError(null);
         return nextStatus;
       } catch (cause) {
@@ -523,7 +451,7 @@ export function useLocalResources(): LocalResourcesController {
           listResourceDownloadTasks(),
           getLocalResourceStatus(),
         ]);
-        replaceTasks(nextTasks);
+        adoptSnapshot(nextTasks);
         setStatus(nextStatus);
         setError(null);
         return preparation;

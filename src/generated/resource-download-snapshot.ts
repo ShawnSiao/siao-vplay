@@ -3,6 +3,11 @@
 export type ResourceDownloadTaskState =
   "queued" | "downloading" | "paused" | "verifying" | "installing" | "completed" | "failed" | "cancelled";
 
+export interface ResourceDownloadSnapshot {
+  generation: number;
+  tasks: ResourceDownloadTask[];
+  [k: string]: unknown;
+}
 export interface ResourceDownloadTask {
   attempt: number;
   createdAtMs: number;

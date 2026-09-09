@@ -31,6 +31,13 @@ impl ResourceDownloadTaskState {
 #[serde(rename_all = "camelCase")]
 #[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct ResourceDownloadTask {
+    /// Process-local root binding and mutation order, reissued when the store loads.
+    #[serde(default)]
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
+    pub generation: u64,
+    #[serde(default)]
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
+    pub revision: u64,
     pub id: String,
     pub resource_id: String,
     pub version: String,
@@ -72,3 +79,12 @@ pub struct CapabilityPreparation {
 #[schemars(rename_all = "snake_case")]
 #[expect(dead_code, reason = "Schema vocabulary for preparation state")]
 enum PreparationState { Ready, Preparing }
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
+pub struct ResourceDownloadSnapshot {
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
+    pub generation: u64,
+    pub tasks: Vec<ResourceDownloadTask>,
+}

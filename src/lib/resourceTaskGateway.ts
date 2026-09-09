@@ -1,15 +1,15 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import { parseResourceTask, parseResourceTasks, parseCapabilityPreparation } from "./resourceTaskContract";
-import type { ResourceDownloadTask, CapabilityPreparation } from "../types";
+import { parseResourceTask, parseResourceSnapshot, parseCapabilityPreparation } from "./resourceTaskContract";
+import type { ResourceDownloadTask, ResourceDownloadSnapshot, CapabilityPreparation } from "../types";
 
 export async function listResourceDownloadTasks(): Promise<
-  ResourceDownloadTask[]
+  ResourceDownloadSnapshot
 > {
   if (!("__TAURI_INTERNALS__" in window)) {
-    return [];
+    return { generation: 0, tasks: [] };
   }
-  return parseResourceTasks(await invoke<unknown>("list_resource_download_tasks"));
+  return parseResourceSnapshot(await invoke<unknown>("list_resource_download_tasks"));
 }
 
 export async function listenResourceDownloadTasks(listener: (task: ResourceDownloadTask) => void, onError: (cause: unknown) => void): Promise<UnlistenFn> {
