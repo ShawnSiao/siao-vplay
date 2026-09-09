@@ -161,7 +161,7 @@ type LibraryAction =
   | { type: "failed"; message: string }
   | { type: "set_section"; section: LibrarySection }
   | LibrarySectionAction
-  | { type: "collection_started"; season: number | null }
+  | { type: "collection_started" }
   | {
       type: "collection_loaded";
       detail: CollectionDetail;
@@ -324,7 +324,7 @@ function libraryReducer(state: LibraryState, action: LibraryAction): LibraryStat
     case "section_page_remove":
       return { ...state, sectionPages: reduceSectionPages(state.sectionPages, action) };
     case "collection_started":
-      return { ...state, collectionLoading: true, selectedSeason: action.season };
+      return { ...state, collectionLoading: true };
     case "collection_loaded":
       return {
         ...state,
@@ -798,7 +798,7 @@ export function useLibraryController() {
     async (collectionId: string, seasonNumber: number | null = null) => {
       const sequence = collectionRequestSequence.current + 1;
       collectionRequestSequence.current = sequence;
-      dispatch({ type: "collection_started", season: seasonNumber });
+      dispatch({ type: "collection_started" });
       try {
         const [detail, episodes] = await Promise.all([
           getCollectionDetail(collectionId),
