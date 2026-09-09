@@ -1976,7 +1976,7 @@ describe("App", () => {
       explanationTask.id,
     );
     fireEvent.click(screen.getByRole("button", { name: /手动选择 JSON/ }));
-    expect(await screen.findByText("explanation.json")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText("explanation.json")).toBeInTheDocument());
     fireEvent.click(screen.getByRole("button", { name: "检查并显示解释" }));
 
     await waitFor(() =>

@@ -19,7 +19,7 @@ it("retains recovery when files remain occupied", async () => {
   render(<ProjectCleanupNotice revision={0} />);
   fireEvent.click(await screen.findByRole("button", { name: "重试清理" }));
   expect(await screen.findByText(/仍有文件未清理/)).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "重试清理" })).toBeEnabled();
+  await waitFor(() => expect(screen.getByRole("button", { name: "重试清理" })).toBeEnabled());
 });
 it("allows a failed status read to be retried", async () => {
   mocks.getPendingProjectCleanup.mockRejectedValueOnce(new Error("unavailable")).mockResolvedValue(pending);
