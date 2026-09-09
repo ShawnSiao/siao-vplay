@@ -1,3 +1,4 @@
+import { useLibraryRecoveryPreview } from "./useLibraryRecoveryPreview";
 import { useLibraryFolderImport } from "./useLibraryFolderImport";
 import { useLibraryFolderScan } from "./useLibraryFolderScan";
 import { useLibrarySearch, type LibrarySearchAction } from "./useLibrarySearch";
@@ -34,9 +35,6 @@ import {
   deleteCollection,
   emptyLibraryHome,
   getLibraryHome,
-  inspectLibraryRescan,
-  inspectLibraryRootRebuild,
-  inspectLibraryRootRelocation,
   removeProjectFromCollection,
   revokeLibraryRoot,
   toCollectionSummary,
@@ -55,7 +53,6 @@ import {
 } from "./librarySectionState";
 import { useLibrarySectionPaging } from "./useLibrarySectionPaging";
 import {
-  draftCandidateItems,
   type LibraryImportDraftItem,
 } from "./libraryImportDraft";
 
@@ -707,7 +704,6 @@ export function useLibraryController() {
   const [state, dispatch] = useReducer(libraryReducer, initialState());
   const homeRequestSequence = useRef(0);
   const collectionRequestSequence = useRef(0);
-  const recoveryRequestSequence = useRef(0);
 
   const refresh = useCallback(async () => {
     const sequence = homeRequestSequence.current + 1;
@@ -880,78 +876,7 @@ export function useLibraryController() {
     failed: message => dispatch({ type: "scan_failed", message }),
     refreshFailed: message => dispatch({ type: "failed", message }),
   });
-  const inspectRootRescan = useCallback(async (rootId: string) => {
-    const sequence = recoveryRequestSequence.current + 1;
-    recoveryRequestSequence.current = sequence;
-    dispatch({ type: "recovery_started", stage: "inspecting_rescan", rootId });
-    try {
-      const preview = await inspectLibraryRescan(rootId);
-      if (recoveryRequestSequence.current === sequence) {
-        dispatch({
-          type: "rescan_preview",
-          preview,
-          items: draftCandidateItems(preview.newCandidates),
-        });
-      }
-      return preview;
-    } catch (error) {
-      if (recoveryRequestSequence.current === sequence) {
-        dispatch({ type: "recovery_failed", message: commandError(error).message });
-      }
-      return null;
-    }
-  }, []);
-
-  const inspectRootRebuild = useCallback(
-    async (rootId: string, newRootPath: string | null = null) => {
-      const sequence = recoveryRequestSequence.current + 1;
-      recoveryRequestSequence.current = sequence;
-      dispatch({ type: "recovery_started", stage: "inspecting_rebuild", rootId });
-      try {
-        const preview = await inspectLibraryRootRebuild({ rootId, newRootPath });
-        if (recoveryRequestSequence.current === sequence) {
-          dispatch({
-            type: "rebuild_preview",
-            preview,
-            items: draftCandidateItems(preview.newCandidates),
-          });
-        }
-        return preview;
-      } catch (error) {
-        if (recoveryRequestSequence.current === sequence) {
-          dispatch({ type: "recovery_failed", message: commandError(error).message });
-        }
-        return null;
-      }
-    },
-    [],
-  );
-
-  const inspectRootRelocation = useCallback(
-    async (rootId: string, newRootPath: string) => {
-      const sequence = recoveryRequestSequence.current + 1;
-      recoveryRequestSequence.current = sequence;
-      dispatch({ type: "recovery_started", stage: "inspecting_relocation", rootId });
-      try {
-        const preview = await inspectLibraryRootRelocation(rootId, newRootPath);
-        if (recoveryRequestSequence.current === sequence) {
-          dispatch({ type: "relocation_preview", preview });
-        }
-        return preview;
-      } catch (error) {
-        if (recoveryRequestSequence.current === sequence) {
-          dispatch({ type: "recovery_failed", message: commandError(error).message });
-        }
-        return null;
-      }
-    },
-    [],
-  );
-
-  const closeRecovery = useCallback(() => {
-    recoveryRequestSequence.current += 1;
-    dispatch({ type: "recovery_closed" });
-  }, []);
+  const { inspectRootRescan, inspectRootRebuild, inspectRootRelocation, closeRecovery } = useLibraryRecoveryPreview(dispatch);
 
   const updateRecoveryItem = useCallback(
     (
