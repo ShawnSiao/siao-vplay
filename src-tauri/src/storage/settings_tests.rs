@@ -154,3 +154,46 @@ fn managed_roots_with_files_require_migration() {
         StorageError::ManagedRootChangeRequiresMigration
     ));
 }
+
+
+#[test]
+fn failed_settings_write_keeps_live_revision_and_paths_unchanged() {
+    let directory = tempfile::tempdir().unwrap();
+    let manager = manager(directory.path());
+    let exports = directory.path().join("exports");
+    fs::create_dir(&exports).unwrap();
+    let before = serde_json::to_value(manager.get_settings().unwrap()).unwrap();
+    let actual_path = manager.read_state().unwrap().settings_path.clone();
+    // A regular file in place of the parent makes the first write fail without touching user files.
+    let blocked = directory.path().join("blocked-parent");
+    fs::write(&blocked, b"retain this sentinel").unwrap();
+    manager.write_state().unwrap().settings_path = blocked.join("storage-settings.json");
+    let mut input = save_input(1);
+    input.default_subtitle_export_directory = Some(path_string(&exports));
+    assert!(manager.save_settings(input).is_err());
+    let after = manager.get_settings().unwrap();
+    assert_eq!(after.revision, before["revision"].as_u64().unwrap());
+    assert_eq!(after.default_subtitle_export_directory, None);
+    assert_eq!(fs::read(&blocked).unwrap(), b"retain this sentinel");
+    manager.write_state().unwrap().settings_path = actual_path;
+    let mut retry = save_input(1);
+    retry.default_subtitle_export_directory = Some(path_string(&exports));
+    assert_eq!(manager.save_settings(retry).unwrap().revision, 2);
+    let reloaded = StorageManager::initialize(directory.path(), directory.path().join("default-data"), None).unwrap();
+    assert_eq!(reloaded.get_settings().unwrap().default_subtitle_export_directory,
+        manager.get_settings().unwrap().default_subtitle_export_directory);
+}
+
+
+#[test]
+fn settings_save_refuses_an_existing_directory_without_moving_it() {
+    let directory = tempfile::tempdir().unwrap();
+    let manager = manager(directory.path());
+    let target = manager.read_state().unwrap().settings_path.clone();
+    fs::create_dir(&target).unwrap();
+    fs::write(target.join("sentinel"), b"retain unrelated content").unwrap();
+    assert!(manager.save_settings(save_input(1)).is_err());
+    assert!(target.is_dir());
+    assert_eq!(fs::read(target.join("sentinel")).unwrap(), b"retain unrelated content");
+    assert_eq!(manager.get_settings().unwrap().revision, 1);
+}

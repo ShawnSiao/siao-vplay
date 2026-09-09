@@ -196,13 +196,14 @@ impl StorageManager {
         {
             return Err(StorageError::ManagedRootChangeRequiresMigration);
         }
-        state.settings.remote_media_root = remote_media_root;
-        state.settings.media_cache_root = media_cache_root;
-        state.settings.default_subtitle_export_directory = default_subtitle_export_directory;
-        state.settings.default_video_report_export_directory =
-            default_video_report_export_directory;
-        state.settings.revision = state.settings.revision.saturating_add(1);
-        persist_settings(&state.settings_path, &state.settings)?;
+        let mut next = state.settings.clone();
+        next.remote_media_root = remote_media_root;
+        next.media_cache_root = media_cache_root;
+        next.default_subtitle_export_directory = default_subtitle_export_directory;
+        next.default_video_report_export_directory = default_video_report_export_directory;
+        next.revision = next.revision.saturating_add(1);
+        persist_settings(&state.settings_path, &next)?;
+        state.settings = next;
         settings_view(&state)
     }
 
@@ -292,6 +293,14 @@ pub(crate) fn persist_settings(
     path: &Path,
     settings: &StorageSettingsFile,
 ) -> Result<(), StorageError> {
+    match fs::symlink_metadata(path) {
+        Ok(metadata) if !metadata.file_type().is_file() => {
+            return Err(StorageError::InvalidPath("存储配置路径不是普通文件，未修改原有内容".to_owned()));
+        }
+        Ok(_) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => return Err(error.into()),
+    }
     let suffix = Uuid::new_v4().simple().to_string();
     let temporary = path.with_file_name(format!(".{SETTINGS_FILE_NAME}.{suffix}.part"));
     let previous = path.with_file_name(format!(".{SETTINGS_FILE_NAME}.{suffix}.previous"));
@@ -307,7 +316,8 @@ pub(crate) fn persist_settings(
         return Err(error.into());
     }
     if previous.exists() {
-        fs::remove_file(previous)?;
+        // The new settings are already committed. A retained backup must not report a failed save.
+        let _ = fs::remove_file(previous);
     }
     Ok(())
 }
