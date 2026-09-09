@@ -26,16 +26,20 @@ impl LibraryRepository<'_> {
                     WHERE st.project_id = p.id AND st.role = 'translation'
                       AND st.language_code = 'zh-cn' AND st.current_version_id IS NOT NULL
                 ),
-                MIN(ci.collection_id), MIN(c.title), MIN(ci.season_number),
-                MIN(ci.episode_number), MIN(ci.absolute_order), MIN(ci.display_title),
-                MIN(ci.availability)
+                ci.collection_id, c.title, ci.season_number,
+                ci.episode_number, ci.absolute_order, ci.display_title,
+                ci.availability
              FROM projects p
              JOIN media_sources m ON m.project_id = p.id AND m.is_primary = 1
              JOIN playback_states ps ON ps.project_id = p.id
              LEFT JOIN collection_items ci ON ci.project_id = p.id
+                AND ci.collection_id = (
+                    SELECT member.collection_id FROM collection_items member
+                    WHERE member.project_id = p.id
+                    ORDER BY member.collection_id LIMIT 1
+                )
              LEFT JOIN collections c ON c.id = ci.collection_id
              WHERE ps.position_ms > 0 AND ps.completed_at_ms IS NULL
-             GROUP BY p.id
              ORDER BY p.last_opened_at_ms DESC, p.updated_at_ms DESC, p.id
              LIMIT ?1 OFFSET ?2",
         )?;

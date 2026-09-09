@@ -1,3 +1,29 @@
+fn assert_home_membership_context(continue_watching: bool) {
+    let fixture = Fixture::new();
+    let a = fixture.collection("Z collection");
+    let b = fixture.collection("A collection");
+    let (first, second) = if a.id < b.id { (&a, &b) } else { (&b, &a) };
+    let project = fixture.project("home-member.mp4");
+    fixture.add(first, &project, 9, 8, 7);
+    fixture.add(second, &project, 1, 2, 0);
+    fixture.service.store.connect().unwrap().execute(
+        "UPDATE playback_states SET position_ms = 1000 WHERE project_id = ?1", params![project.id],
+    ).unwrap();
+    let home = fixture.service.get_home().unwrap();
+    let rows = if continue_watching { home.continue_watching } else { home.recently_added };
+    assert_eq!(rows.len(), 1);
+    let row = &rows[0];
+    assert_eq!(row.collection_id.as_deref(), Some(first.id.as_str()));
+    assert_eq!(row.collection_title.as_deref(), Some(first.title.as_str()));
+    assert_eq!((row.season_number, row.episode_number, row.absolute_order), (Some(9), Some(8), Some(7)));
+}
+
+#[test]
+fn recent_media_preserves_one_membership_context() { assert_home_membership_context(false); }
+
+#[test]
+fn continue_media_preserves_one_membership_context() { assert_home_membership_context(true); }
+
 #[test]
 fn search_keeps_collection_identity_and_episode_context_together() {
     let fixture = Fixture::new();
