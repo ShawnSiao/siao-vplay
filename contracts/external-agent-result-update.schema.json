@@ -1,0 +1,54 @@
+{
+  "$defs": {
+    "ExternalAgentResultStatus": {
+      "enum": [
+        "validating",
+        "completed",
+        "rejected"
+      ],
+      "type": "string"
+    },
+    "ExternalAgentTaskKind": {
+      "enum": [
+        "translation",
+        "explanation",
+        "learning"
+      ],
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "message": {
+      "type": "string"
+    },
+    "outputId": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "projectId": {
+      "type": "string"
+    },
+    "status": {
+      "$ref": "#/$defs/ExternalAgentResultStatus"
+    },
+    "taskId": {
+      "type": "string"
+    },
+    "taskKind": {
+      "$ref": "#/$defs/ExternalAgentTaskKind"
+    }
+  },
+  "required": [
+    "taskKind",
+    "taskId",
+    "projectId",
+    "status",
+    "outputId",
+    "message"
+  ],
+  "title": "ExternalAgentResultUpdate",
+  "type": "object"
+}

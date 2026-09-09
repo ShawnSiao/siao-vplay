@@ -1,3 +1,4 @@
+export { reconcileExternalAgentResults, acknowledgeExternalAgentResults } from "./externalResultGateway";
 export { retryLocalResourceBinding, inspectLocalResourceBinding } from "./resourceLocationGateway";
 export { planLocalResourceLocation, planLocalResourceMove, moveLocalResourceRoot, inspectLocalResourceMigration, adoptLocalResources } from "./resourceMigrationGateway";
 export { getLocalResourceCatalog } from "./resourceCatalogGateway";
@@ -22,7 +23,6 @@ import { chooseConfiguredStorageDirectory } from "./storageDirectoryPicker";
 
 import type {
   DeleteProjectResult,
-  ExternalAgentResultUpdate,
   ExternalAgentTaskKind,
   LearningCard,
   LearningCardsExport,
@@ -328,23 +328,6 @@ export async function chooseLearningExportDirectory(): Promise<string | null> {
     title: "选择学习卡片导出位置",
   });
   return typeof selected === "string" ? selected : null;
-}
-
-export async function reconcileExternalAgentResults(): Promise<
-  ExternalAgentResultUpdate[]
-> {
-  if (!isDesktopApp) {
-    return [];
-  }
-  return invoke<ExternalAgentResultUpdate[]>(
-    "reconcile_external_agent_results",
-  );
-}
-
-export async function acknowledgeExternalAgentResults(updates: ExternalAgentResultUpdate[]): Promise<void> {
-  const completed = updates.filter(update => update.status === "completed");
-  if (!isDesktopApp || !completed.length) return;
-  await invoke<void>("acknowledge_external_agent_results", { updates: completed });
 }
 
 export async function openExternalResultDirectory(

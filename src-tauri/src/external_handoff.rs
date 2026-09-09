@@ -59,16 +59,9 @@ impl ExternalHandoffError {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ExternalAgentResultUpdate {
-    pub task_kind: String,
-    pub task_id: String,
-    pub project_id: String,
-    pub status: String,
-    pub output_id: Option<String>,
-    pub message: String,
-}
+#[path = "external_result_contract.rs"]
+mod contract;
+pub use contract::ExternalAgentResultUpdate;
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]

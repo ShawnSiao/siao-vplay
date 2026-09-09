@@ -556,19 +556,7 @@ export type { TranscriptionJob } from "./generated/transcription-job";
 export type { TranslationTask, TranslationValidation } from "./generated/translation-task";
 export type { TranslationApplication } from "./generated/translation-application";
 
-export type ExternalAgentTaskKind =
-  | "translation"
-  | "explanation"
-  | "learning";
-
-export type ExternalAgentResultUpdate = {
-  taskKind: ExternalAgentTaskKind;
-  taskId: string;
-  projectId: string;
-  status: "validating" | "completed" | "rejected";
-  outputId: string | null;
-  message: string;
-};
+export type { ExternalAgentTaskKind, ExternalAgentResultUpdate } from "./generated/external-agent-result-update";
 
 export type { CodexRuntimeStatus } from "./generated/codex-runtime-status";
 export type { AiTaskExecutionInfo } from "./generated/learning-task";

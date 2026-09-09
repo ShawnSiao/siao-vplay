@@ -52,3 +52,29 @@ test("one failed receipt does not block another completion in the App", async ({
   await expect.poll(() => page.evaluate(() => (window as unknown as { badAttempts: number }).badAttempts)).toBeGreaterThanOrEqual(2);
   await expect(page.getByText("后台结果已准备好", { exact: true })).toBeVisible();
 });
+
+
+test("invalid notification does not reach acknowledgement or block a valid result", async ({ page }) => {
+  await page.addInitScript(() => {
+    const state = window as unknown as { __TAURI_INTERNALS__: unknown; goodAcknowledged: boolean; invalidAcknowledgements: number; scans: number };
+    state.goodAcknowledged = false; state.invalidAcknowledgements = 0; state.scans = 0;
+    state.__TAURI_INTERNALS__ = { invoke: async (command: string, args?: { updates?: { taskId: string }[] }) => {
+      if (command === "reconcile_external_agent_results") {
+        state.scans++;
+        const good = { taskKind: "translation", taskId: "good", projectId: "other-project", status: "completed", outputId: "version", message: "已导入" };
+        return [{ ...good, taskId: "invalid", outputId: null }, ...(state.goodAcknowledged ? [] : [good])];
+      }
+      if (command === "acknowledge_external_agent_results") {
+        if (args?.updates?.some(update => update.taskId === "invalid")) state.invalidAcknowledgements++;
+        state.goodAcknowledged = args?.updates?.some(update => update.taskId === "good") ?? false;
+        return null;
+      }
+      throw new Error("测试环境未提供此服务");
+    } };
+  });
+  await page.goto("/");
+  await expect.poll(() => page.evaluate(() => (window as unknown as { goodAcknowledged: boolean }).goodAcknowledged)).toBe(true);
+  await expect.poll(() => page.evaluate(() => (window as unknown as { scans: number }).scans)).toBeGreaterThanOrEqual(2);
+  expect(await page.evaluate(() => (window as unknown as { invalidAcknowledgements: number }).invalidAcknowledgements)).toBe(0);
+  await expect(page.getByText("后台结果已准备好", { exact: true })).toBeVisible();
+});
