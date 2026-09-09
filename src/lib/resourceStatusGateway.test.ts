@@ -1,3 +1,4 @@
+import { resourceLocationPlan as plan } from "../test-fixtures/resourceLocation";
 import { afterAll, beforeEach, expect, it, vi } from "vitest";
 import { setupStatus } from "../test-fixtures/localResources";
 const mocks = vi.hoisted(() => {
@@ -9,7 +10,7 @@ import { getLocalResourceStatus, configureLocalResourceRoot, repairLocalResource
 afterAll(() => { Reflect.deleteProperty(window, "__TAURI_INTERNALS__"); });
 beforeEach(() => { mocks.invoke.mockReset(); });
 it.each([
-  () => getLocalResourceStatus(), () => configureLocalResourceRoot("W:\\fixture", true),
+  () => getLocalResourceStatus(), () => configureLocalResourceRoot(plan),
   () => repairLocalResourceRoot(), () => reconnectLocalResourceRoot("W:\\fixture"), () => setLocalResourceProfile("standard"),
 ])("rejects invalid status from every status-producing command", async read => {
   mocks.invoke.mockResolvedValue({ ...setupStatus, rootState: "invented" }); await expect(read()).rejects.toThrow();
@@ -49,9 +50,9 @@ it.each([
   mocks.invoke.mockResolvedValue(value); await expect(getLocalResourceNetworkStatus()).resolves.toEqual(value);
 });
 it("passes configuration confirmation and validates the selected profile", async () => {
-  mocks.invoke.mockResolvedValue(setupStatus);
-  await configureLocalResourceRoot("W:\\fixture", true);
-  expect(mocks.invoke).toHaveBeenCalledWith("configure_local_resource_root", { input: { parentPath: "W:\\fixture", confirmed: true } });
+  mocks.invoke.mockResolvedValue({ ...setupStatus, configured: true, rootState: "ready", selectedParent: plan.selectedParent, resourceRoot: plan.resourceRoot });
+  await configureLocalResourceRoot(plan);
+  expect(mocks.invoke).toHaveBeenCalledWith("configure_local_resource_root", { input: { parentPath: plan.selectedParent, resourceRoot: plan.resourceRoot, planFingerprint: plan.planFingerprint, confirmed: true } });
   mocks.invoke.mockResolvedValue({ ...setupStatus, preferredProfile: "fast" });
   await expect(setLocalResourceProfile("fast")).resolves.toHaveProperty("preferredProfile", "fast");
 });

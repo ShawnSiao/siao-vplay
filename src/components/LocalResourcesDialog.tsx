@@ -413,7 +413,8 @@ export function LocalResourcesDialog({
         if (!locationPlan) {
           throw new Error("需要先选择并核对保存位置。");
         }
-        const configured = await controller.confirmLocation(locationPlan.selectedParent);
+        const confirmedPlan = locationPlan; setLocationPlan(null);
+        const configured = await controller.confirmLocation(confirmedPlan);
         if (configured.preferredProfile !== selectedProfileId) {
           await controller.selectProfile(selectedProfileId);
         }
@@ -427,7 +428,8 @@ export function LocalResourcesDialog({
       if (!locationPlan) {
         throw new Error("请先选择保存位置。");
       }
-      await controller.confirmLocation(locationPlan.selectedParent);
+      const confirmedPlan = locationPlan; setLocationPlan(null);
+      await controller.confirmLocation(confirmedPlan);
       onNotice("本地功能保存位置已设置；需要其他能力时再按需下载。");
       onDismissFirstRun();
     });

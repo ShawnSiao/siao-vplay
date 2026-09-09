@@ -119,7 +119,7 @@ export function makeController(
       selectedParent: "W:\\SiaoVPlay",
       resourceRoot: "W:\\SiaoVPlay\\SiaoVPlay",
       parentExists: true,
-      resourceRootExists: false,
+      resourceRootExists: false, planFingerprint: "a".repeat(64),
       freeSpaceBytes: 500_000_000_000,
       confirmationRequired: true,
     }),

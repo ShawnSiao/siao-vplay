@@ -2,7 +2,7 @@
 "use strict";
 export const validate = validate20;
 export default validate20;
-const schema31 = {"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"confirmationRequired":{"type":"boolean"},"freeSpaceBytes":{"maximum":9007199254740991,"minimum":0,"type":["integer","null"]},"parentExists":{"type":"boolean"},"resourceRoot":{"type":"string"},"resourceRootExists":{"type":"boolean"},"selectedParent":{"type":"string"}},"required":["selectedParent","resourceRoot","parentExists","resourceRootExists","freeSpaceBytes","confirmationRequired"],"title":"LocalResourceLocationPlan","type":"object"};
+const schema31 = {"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"confirmationRequired":{"type":"boolean"},"freeSpaceBytes":{"maximum":9007199254740991,"minimum":0,"type":["integer","null"]},"parentExists":{"type":"boolean"},"planFingerprint":{"type":"string"},"resourceRoot":{"type":"string"},"resourceRootExists":{"type":"boolean"},"selectedParent":{"type":"string"}},"required":["planFingerprint","selectedParent","resourceRoot","parentExists","resourceRootExists","freeSpaceBytes","confirmationRequired"],"title":"LocalResourceLocationPlan","type":"object"};
 
 function validate20(data, {instancePath="", parentData, parentDataProperty, rootData=data, dynamicAnchors={}}={}){
 let vErrors = null;
@@ -17,7 +17,7 @@ evaluated0.items = undefined;
 if(errors === 0){
 if(data && typeof data == "object" && !Array.isArray(data)){
 let missing0;
-if(((((((data.selectedParent === undefined) && (missing0 = "selectedParent")) || ((data.resourceRoot === undefined) && (missing0 = "resourceRoot"))) || ((data.parentExists === undefined) && (missing0 = "parentExists"))) || ((data.resourceRootExists === undefined) && (missing0 = "resourceRootExists"))) || ((data.freeSpaceBytes === undefined) && (missing0 = "freeSpaceBytes"))) || ((data.confirmationRequired === undefined) && (missing0 = "confirmationRequired"))){
+if((((((((data.planFingerprint === undefined) && (missing0 = "planFingerprint")) || ((data.selectedParent === undefined) && (missing0 = "selectedParent"))) || ((data.resourceRoot === undefined) && (missing0 = "resourceRoot"))) || ((data.parentExists === undefined) && (missing0 = "parentExists"))) || ((data.resourceRootExists === undefined) && (missing0 = "resourceRootExists"))) || ((data.freeSpaceBytes === undefined) && (missing0 = "freeSpaceBytes"))) || ((data.confirmationRequired === undefined) && (missing0 = "confirmationRequired"))){
 validate20.errors = [{instancePath,schemaPath:"#/required",keyword:"required",params:{missingProperty: missing0},message:"must have required property '"+missing0+"'"}];
 return false;
 }
@@ -73,10 +73,10 @@ else {
 var valid0 = true;
 }
 if(valid0){
-if(data.resourceRoot !== undefined){
+if(data.planFingerprint !== undefined){
 const _errs7 = errors;
-if(typeof data.resourceRoot !== "string"){
-validate20.errors = [{instancePath:instancePath+"/resourceRoot",schemaPath:"#/properties/resourceRoot/type",keyword:"type",params:{type: "string"},message:"must be string"}];
+if(typeof data.planFingerprint !== "string"){
+validate20.errors = [{instancePath:instancePath+"/planFingerprint",schemaPath:"#/properties/planFingerprint/type",keyword:"type",params:{type: "string"},message:"must be string"}];
 return false;
 }
 var valid0 = _errs7 === errors;
@@ -85,10 +85,10 @@ else {
 var valid0 = true;
 }
 if(valid0){
-if(data.resourceRootExists !== undefined){
+if(data.resourceRoot !== undefined){
 const _errs9 = errors;
-if(typeof data.resourceRootExists !== "boolean"){
-validate20.errors = [{instancePath:instancePath+"/resourceRootExists",schemaPath:"#/properties/resourceRootExists/type",keyword:"type",params:{type: "boolean"},message:"must be boolean"}];
+if(typeof data.resourceRoot !== "string"){
+validate20.errors = [{instancePath:instancePath+"/resourceRoot",schemaPath:"#/properties/resourceRoot/type",keyword:"type",params:{type: "string"},message:"must be string"}];
 return false;
 }
 var valid0 = _errs9 === errors;
@@ -97,16 +97,29 @@ else {
 var valid0 = true;
 }
 if(valid0){
-if(data.selectedParent !== undefined){
+if(data.resourceRootExists !== undefined){
 const _errs11 = errors;
-if(typeof data.selectedParent !== "string"){
-validate20.errors = [{instancePath:instancePath+"/selectedParent",schemaPath:"#/properties/selectedParent/type",keyword:"type",params:{type: "string"},message:"must be string"}];
+if(typeof data.resourceRootExists !== "boolean"){
+validate20.errors = [{instancePath:instancePath+"/resourceRootExists",schemaPath:"#/properties/resourceRootExists/type",keyword:"type",params:{type: "boolean"},message:"must be boolean"}];
 return false;
 }
 var valid0 = _errs11 === errors;
 }
 else {
 var valid0 = true;
+}
+if(valid0){
+if(data.selectedParent !== undefined){
+const _errs13 = errors;
+if(typeof data.selectedParent !== "string"){
+validate20.errors = [{instancePath:instancePath+"/selectedParent",schemaPath:"#/properties/selectedParent/type",keyword:"type",params:{type: "string"},message:"must be string"}];
+return false;
+}
+var valid0 = _errs13 === errors;
+}
+else {
+var valid0 = true;
+}
 }
 }
 }
@@ -123,4 +136,4 @@ return false;
 validate20.errors = vErrors;
 return errors === 0;
 }
-validate20.evaluated = {"props":{"confirmationRequired":true,"freeSpaceBytes":true,"parentExists":true,"resourceRoot":true,"resourceRootExists":true,"selectedParent":true},"dynamicProps":false,"dynamicItems":false};
+validate20.evaluated = {"props":{"confirmationRequired":true,"freeSpaceBytes":true,"parentExists":true,"planFingerprint":true,"resourceRoot":true,"resourceRootExists":true,"selectedParent":true},"dynamicProps":false,"dynamicItems":false};

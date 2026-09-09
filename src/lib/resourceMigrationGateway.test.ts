@@ -4,7 +4,7 @@ const mocks = vi.hoisted(() => ({ invoke: vi.fn() }));
 vi.mock("@tauri-apps/api/core", () => ({ invoke: mocks.invoke }));
 beforeEach(() => mocks.invoke.mockReset());
 const location = { selectedParent: "W:/new", resourceRoot: "W:/new/SiaoVPlay", parentExists: true,
-  resourceRootExists: false, freeSpaceBytes: null, confirmationRequired: true };
+  resourceRootExists: false, planFingerprint: "a".repeat(64), freeSpaceBytes: null, confirmationRequired: true };
 const movePlan = { planFingerprint: "a".repeat(64), previousRoot: "W:/old", selectedParent: location.selectedParent, resourceRoot: location.resourceRoot,
   bytesToCopy: 10, fileCount: 1, freeSpaceBytes: null, crossVolume: false, destinationExists: false, confirmationRequired: true };
 const moved = { planFingerprint: "a".repeat(64), requestId: "request-1", previousRoot: "W:/old", currentRoot: location.resourceRoot, copiedBytes: 10, verifiedFileCount: 1,

@@ -1,3 +1,5 @@
+mod location_confirmation;
+pub use location_confirmation::configure as configure_confirmed_location;
 mod catalog_contract;
 pub use catalog_contract::{LocalResourceCatalog, ResourceDefinition, ResourceArtifact};
 #[cfg(test)]
@@ -49,6 +51,8 @@ pub enum LocalResourceError {
     NotInitialized,
     #[error("需要先确认资源存储目录")]
     ConfirmationRequired,
+    #[error("保存位置计划已变化，请重新选择并核对保存位置")]
+    LocationPlanChanged,
     #[error("资源存储父目录无效：{0}")]
     InvalidParent(String),
     #[error("资源目录当前不可用：{0}")]
@@ -98,6 +102,8 @@ pub struct PlanLocalResourceLocationInput {
 #[serde(rename_all = "camelCase")]
 pub struct ConfigureLocalResourceRootInput {
     pub parent_path: String,
+    pub resource_root: String,
+    pub plan_fingerprint: String,
     pub confirmed: bool,
 }
 
@@ -118,6 +124,7 @@ pub struct SetLocalResourceProxyInput {
 #[serde(rename_all = "camelCase")]
 #[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct LocalResourceLocationPlan {
+    pub plan_fingerprint: String,
     pub selected_parent: String,
     pub resource_root: String,
     pub parent_exists: bool,
@@ -421,18 +428,6 @@ impl LocalResourceManager {
         })
     }
 
-    fn plan_location(&self, parent: &str) -> Result<LocalResourceLocationPlan, LocalResourceError> {
-        let (parent, root) = resolve_selected_location(parent)?;
-        Ok(LocalResourceLocationPlan {
-            selected_parent: path_string(&parent),
-            resource_root: path_string(&root),
-            parent_exists: true,
-            resource_root_exists: root.is_dir(),
-            free_space_bytes: available_space(&parent),
-            confirmation_required: true,
-        })
-    }
-
     fn configure_location(
         &mut self,
         parent: &str,
@@ -442,6 +437,9 @@ impl LocalResourceManager {
             return Err(LocalResourceError::ConfirmationRequired);
         }
         let (parent, root) = resolve_selected_location(parent)?;
+        self.configure_resolved_location(parent, root)
+    }
+    fn configure_resolved_location(&mut self, parent: PathBuf, root: PathBuf) -> Result<LocalResourceStatus, LocalResourceError> {
         fs::create_dir_all(&root)?;
         for relative in RESOURCE_SUBDIRECTORIES {
             fs::create_dir_all(root.join(relative))?;

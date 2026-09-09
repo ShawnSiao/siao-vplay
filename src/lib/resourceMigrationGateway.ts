@@ -6,7 +6,7 @@ function invalid(): never { throw new Error("资源迁移结果无效，请重�
 export async function planLocalResourceLocation(parentPath: string) {
   const value = await invoke<unknown>("plan_local_resource_location", { input: { parentPath } });
   const { default: validate } = await import("../generated/local-resource-location-plan.validator.mjs");
-  if (!validate(value) || !value.confirmationRequired || !value.parentExists ||
+  if (!validate(value) || !/^[a-f0-9]{64}$/.test(value.planFingerprint) || !value.confirmationRequired || !value.parentExists ||
       !nonblank(value.selectedParent) || !nonblank(value.resourceRoot)) invalid();
   return value;
 }

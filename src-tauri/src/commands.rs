@@ -339,6 +339,7 @@ impl From<LocalResourceError> for CommandError {
     fn from(error: LocalResourceError) -> Self {
         let code = match &error {
             LocalResourceError::NotInitialized => "local_resource_not_initialized",
+            LocalResourceError::LocationPlanChanged => "local_resource_location_plan_changed",
             LocalResourceError::ConfirmationRequired => "local_resource_confirmation_required",
             LocalResourceError::InvalidParent(_) => "local_resource_parent_invalid",
             LocalResourceError::RootUnavailable(_) => "root_unavailable",
@@ -623,7 +624,7 @@ pub fn plan_local_resource_location(
 pub fn configure_local_resource_root(
     input: ConfigureLocalResourceRootInput,
 ) -> Result<LocalResourceStatus, CommandError> {
-    let status = local_resources::configure_location(&input.parent_path, input.confirmed)?;
+    let status = local_resources::configure_confirmed_location(&input)?;
     resource_download::bind_configured_root()?;
     runtime::sync_managed_root()?;
     Ok(status)

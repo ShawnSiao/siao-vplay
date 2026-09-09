@@ -16,6 +16,9 @@
     "parentExists": {
       "type": "boolean"
     },
+    "planFingerprint": {
+      "type": "string"
+    },
     "resourceRoot": {
       "type": "string"
     },
@@ -27,6 +30,7 @@
     }
   },
   "required": [
+    "planFingerprint",
     "selectedParent",
     "resourceRoot",
     "parentExists",

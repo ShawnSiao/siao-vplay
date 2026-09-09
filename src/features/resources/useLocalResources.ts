@@ -80,7 +80,7 @@ export type LocalResourcesController = {
   refresh: () => Promise<LocalResourceStatus>;
   clearError: () => void;
   chooseLocation: () => Promise<LocalResourceLocationPlan | null>;
-  confirmLocation: (parentPath: string) => Promise<LocalResourceStatus>;
+  confirmLocation: (plan: LocalResourceLocationPlan) => Promise<LocalResourceStatus>;
   chooseExistingResources: () => Promise<{
     sourcePath: string;
     preview: ResourceMigrationPreview;
@@ -293,9 +293,9 @@ export function useLocalResources(): LocalResourcesController {
         throw cause;
       }
     },
-    confirmLocation: async (parentPath) => {
+    confirmLocation: async (plan) => {
       try {
-        const nextStatus = await configureLocalResourceRoot(parentPath, true);
+        const nextStatus = await configureLocalResourceRoot(plan);
         setStatus(nextStatus);
         setError(null);
         return setStatus(nextStatus);

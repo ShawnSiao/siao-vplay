@@ -23,7 +23,7 @@ export function RuntimeView({ controller }: { controller: LocalResourcesControll
   return (
     <LocalResourcesDialog
       controller={controller}
-      firstRun={false}
+      firstRun={new URLSearchParams(window.location.search).has("firstRun")}
       pendingAction={pendingAction}
       previewMode={false}
       onClose={() => undefined}

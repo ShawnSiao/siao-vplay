@@ -76,7 +76,7 @@ describe("LocalResourcesDialog", () => {
     );
     await waitFor(() =>
       expect(controller.confirmLocation).toHaveBeenCalledWith(
-        "W:\\SiaoVPlay",
+        expect.objectContaining({ selectedParent: "W:\\SiaoVPlay", planFingerprint: "a".repeat(64) }),
       ),
     );
     expect(controller.prepareCapability).not.toHaveBeenCalled();
