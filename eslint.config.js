@@ -1,3 +1,4 @@
+import { ipcImportRule } from "./tools/ipc-import-rule.mjs";
 import js from "@eslint/js";
 import globals from "globals";
 import reactHooks from "eslint-plugin-react-hooks";
@@ -30,11 +31,14 @@ export default tseslint.config(
     }
   },
   {
-    files: ["src/lib/*Gateway.ts", "src/lib/subtitleMetadata.ts", "src/lib/aiExecutionRequest.ts", "src/lib/subtitleBodyContract.ts", "src/lib/translationContract.ts"],
+    files: ["src/lib/**/*.{ts,tsx}", "src/types.ts"],
+    ignores: ["src/lib/**/*.{test,spec}.{ts,tsx}"],
+    plugins: { architecture: { rules: { "ipc-imports": ipcImportRule } } },
     rules: {
+      "architecture/ipc-imports": "error",
       "no-restricted-imports": ["error", {
         patterns: [{
-          group: ["**/features/**", "**/components/**", "**/desktop", "**/desktop.ts", "react", "react-dom", "react-dom/**"],
+          group: ["**/features/**", "**/components/**", "**/desktop", "**/desktop.*", "react", "react/**", "react-dom", "react-dom/**"],
           message: "IPC gateways depend on wire contracts and transport, not UI or the desktop facade."
         }]
       }]
@@ -45,7 +49,7 @@ export default tseslint.config(
     rules: {
       "no-restricted-imports": ["error", {
         patterns: [{
-          group: ["**/components/**", "**/environment-settings/**", "**/playback/**", "**/desktop", "**/desktop.ts"],
+          group: ["**/components/**", "**/environment-settings/**", "**/playback/**", "**/desktop", "**/desktop.*"],
           message: "Capability intent state receives resource status and actions; it must not depend on UI or the desktop facade."
         }]
       }]

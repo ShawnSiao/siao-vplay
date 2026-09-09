@@ -19,10 +19,7 @@ export interface AnalysisPromptTemplate {
   updatedAtMs: number;
 }
 
-export interface PromptSelection {
-  templateId: string;
-  oneTimeRequirements: string;
-}
+export type { PromptSelection } from "../../types";
 
 export interface PromptSnapshot {
   schemaVersion: number;

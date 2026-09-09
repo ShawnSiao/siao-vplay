@@ -1,6 +1,6 @@
 import validateTask from "../generated/learning-task.validator.mjs";
 import validateApplication from "../generated/learning-application.validator.mjs";
-import { requireLearningResult } from "../features/learning/learningResult";
+import { requireLearningResult } from "./learningResult";
 import type { LearningTask, LearningApplication } from "../types";
 export function parseLearningTask(value: unknown, expected: { taskId?: string; projectId?: string; handoffKind?: LearningTask["handoffKind"] } = {}): LearningTask {
   if (!validateTask(value) || !value.id.trim() || !value.projectId.trim() || !value.sourceVersionId.trim() ||

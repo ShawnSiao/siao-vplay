@@ -2071,7 +2071,7 @@ describe("App", () => {
       ),
     );
     fireEvent.click(screen.getByRole("button", { name: /手动选择 JSON/ }));
-    expect(await screen.findByText("learning.json")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText("learning.json")).toBeInTheDocument());
     fireEvent.click(screen.getByRole("button", { name: "检查并显示词义" }));
 
     expect(

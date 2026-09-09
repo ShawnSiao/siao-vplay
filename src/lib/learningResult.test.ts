@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { dictionaryEntryFixture as entry } from "../../test-fixtures/dictionary";
+import { dictionaryEntryFixture as entry } from "../test-fixtures/dictionary";
 import { requireLearningResult } from "./learningResult";
 const task = { id: entry.taskId, projectId: entry.projectId, sourceVersionId: entry.sourceVersionId,
   translationVersionId: entry.translationVersionId, sourceSegmentId: entry.sourceSegmentId, selectedText: entry.selectedText,

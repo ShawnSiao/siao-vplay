@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 
-import type { StorageSettings } from "../../types";
+import type { StorageSettings } from "../types";
 
 export type StorageDirectoryKind = "subtitle" | "video" | "report";
 

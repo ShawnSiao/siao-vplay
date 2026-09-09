@@ -1,3 +1,8 @@
+export interface PromptSelection {
+  templateId: string;
+  oneTimeRequirements: string;
+}
+
 export type { ExplanationFrame, ExplanationTask, ExplanationMaterialSummary } from "./generated/explanation-task";
 export type { Explanation, ExplanationEntry } from "./generated/explanation";
 export type { ExplanationApplication } from "./generated/explanation-application";
@@ -8,7 +13,7 @@ import type {
   LibraryItemAvailability,
   LibraryRootStatus,
   LibraryRootSummary,
-} from "./features/library/libraryTypes";
+} from "./lib/libraryTypes";
 
 export type {
   CollectionDetail,
@@ -27,7 +32,7 @@ export type {
   LibrarySectionPage,
   ListLibrarySectionInput,
   SeasonSummary,
-} from "./features/library/libraryTypes";
+} from "./lib/libraryTypes";
 
 export type AppStatus = {
   appName: string;

@@ -3,7 +3,7 @@ import { parseSummaryTask, parseSummaryTasks } from "./taskContract";
 import { invoke } from "@tauri-apps/api/core";
 export { previewSummaryDispatch } from "./dispatchGateway";
 
-import { chooseConfiguredStorageDirectory } from "../storage/directoryPicker";
+import { chooseConfiguredStorageDirectory } from "../../lib/storageDirectoryPicker";
 
 import type {
   PrepareSummaryTaskInput,

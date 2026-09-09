@@ -1,6 +1,6 @@
 import { useLearningPolling } from "../features/learning/useLearningPolling";
 import { findLearningHistory } from "../features/learning/learningHistory";
-import { requireLearningResult } from "../features/learning/learningResult";
+import { requireLearningResult } from "../lib/learningResult";
 import { AiTaskDispatchConfirm } from "../features/ai-tasks/AiTaskDispatchConfirm";
 import { executeLearningDispatch, previewTaskDispatch, type TaskDispatchPreview } from "../features/ai-tasks/taskDispatch";
 import { useEffect, useMemo, useRef, useState } from "react";

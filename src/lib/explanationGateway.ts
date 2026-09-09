@@ -1,13 +1,13 @@
 import { invoke } from "@tauri-apps/api/core";
 import { parseExplanation, parseExplanationApplication, parseExplanationTask, parseExplanationTasks, parseExplanations } from "./explanationContract";
-import type { Explanation, ExplanationTask, ExplanationApplication } from "../types";
+import type { Explanation, ExplanationTask, ExplanationApplication, PromptSelection } from "../types";
 
 export async function prepareExplanationTask(
   projectId: string,
   handoffKind: "manual" | "codex",
   playbackCutoffMs: number,
   includeFrames: boolean,
-  promptSelection: import("../features/analysis/types").PromptSelection,
+  promptSelection: PromptSelection,
 ): Promise<ExplanationTask> {
   return parseExplanationTask(await invoke<unknown>("prepare_explanation_task", {
     input: { projectId, handoffKind, playbackCutoffMs, includeFrames, promptSelection },

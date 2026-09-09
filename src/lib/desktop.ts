@@ -1,3 +1,4 @@
+export { commandError } from "./commandError";
 export { prepareExplanationTask, getExplanationTask, listExplanationTasks, readExplanationPrompt, openExplanationMaterials, getExplanation, listExplanations, importExplanationResult, startCodexExplanationTask, cancelExplanationTask, resumeCodexExplanationTask } from "./explanationGateway";
 export { prepareLearningTask, getLearningTask, listLearningTasks, readLearningPrompt, importLearningResult, startCodexLearningTask, cancelLearningTask, resumeCodexLearningTask } from "./learningGateway";
 export { getDictionaryEntry, listDictionaryEntries } from "./dictionaryGateway";
@@ -11,13 +12,12 @@ import { open } from "@tauri-apps/plugin-dialog";
 
 import { supportedVideoExtensions } from "./mediaFiles";
 import { browserStatus } from "./appMetadata";
-import { chooseConfiguredStorageDirectory } from "../features/storage/directoryPicker";
+import { chooseConfiguredStorageDirectory } from "./storageDirectoryPicker";
 
 import type {
   AppStatus,
   CapabilityPreparation,
   DeleteProjectResult,
-  DesktopCommandError,
   ExternalAgentResultUpdate,
   ExternalAgentTaskKind,
   LearningCard,
@@ -78,24 +78,6 @@ const browserResourceCapabilities = [
     requiresCapabilityIds: [],
   },
 ];
-
-export function commandError(error: unknown): DesktopCommandError {
-  if (
-    typeof error === "object" &&
-    error !== null &&
-    "code" in error &&
-    "message" in error
-  ) {
-    return {
-      code: String(error.code),
-      message: String(error.message),
-    };
-  }
-  if (error instanceof Error) {
-    return { code: "unexpected_error", message: error.message };
-  }
-  return { code: "unexpected_error", message: String(error) };
-}
 
 export async function getAppStatus(): Promise<AppStatus> {
   if (!isDesktopApp) {

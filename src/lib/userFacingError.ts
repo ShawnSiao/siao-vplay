@@ -1,5 +1,5 @@
 import type { DesktopCommandError } from "../types";
-import { commandError } from "./desktop";
+import { commandError } from "./commandError";
 
 export type ErrorContext =
   | "library"

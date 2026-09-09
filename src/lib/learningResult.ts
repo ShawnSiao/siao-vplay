@@ -1,5 +1,5 @@
-import { parseDictionaryEntry } from "../../lib/dictionaryContract";
-import type { DictionaryEntry, LearningTask } from "../../types";
+import { parseDictionaryEntry } from "./dictionaryContract";
+import type { DictionaryEntry, LearningTask } from "../types";
 type Context = Pick<LearningTask, "id" | "projectId" | "sourceVersionId" | "translationVersionId" | "sourceSegmentId" |
   "selectedText" | "selectionKind" | "playbackPositionMs" | "outputDictionaryEntryId">;
 export function requireLearningResult(value: unknown, task: Context): DictionaryEntry {
