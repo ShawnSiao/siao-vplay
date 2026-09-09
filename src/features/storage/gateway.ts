@@ -63,8 +63,14 @@ export function openStorageLocation(kind: StorageLocationKind): Promise<void> {
   return invoke("open_storage_location", { input: { kind } });
 }
 
-export function clearPlaybackCache(): Promise<{ reclaimedBytes: number }> {
-  return invoke("clear_playback_cache", { input: { confirmed: true } });
+export async function clearPlaybackCache(): Promise<{ reclaimedBytes: number }> {
+  const value = await invoke<unknown>("clear_playback_cache", { input: { confirmed: true } });
+  if (!value || typeof value !== "object" || !("reclaimedBytes" in value) ||
+      typeof value.reclaimedBytes !== "number" || !Number.isSafeInteger(value.reclaimedBytes) ||
+      value.reclaimedBytes < 0) {
+    throw new Error("清理结果尚未确认，请刷新存储状态后检查。");
+  }
+  return { reclaimedBytes: value.reclaimedBytes };
 }
 
 export function restartAfterStorageMigration(): Promise<never> {
