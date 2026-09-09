@@ -388,30 +388,7 @@ impl<'connection> LibraryRepository<'connection> {
     }
 
     pub(crate) fn list_collection_summaries(&self) -> Result<Vec<CollectionSummary>, LibraryError> {
-        let mut statement = self.connection.prepare(
-            "SELECT
-                c.id, c.kind, c.title, c.root_id, c.system_key, c.poster_path,
-                c.sort_mode, c.auto_play_next, c.last_opened_at_ms,
-                c.created_at_ms, c.updated_at_ms,
-                COUNT(ci.project_id) AS item_count,
-                COUNT(DISTINCT ci.season_number) AS season_count,
-                COALESCE(SUM(CASE WHEN ps.completed_at_ms IS NOT NULL THEN 1 ELSE 0 END), 0)
-                    AS watched_count,
-                SUM(ps.duration_ms) AS total_duration_ms
-             FROM collections c
-             LEFT JOIN collection_items ci ON ci.collection_id = c.id
-             LEFT JOIN playback_states ps ON ps.project_id = ci.project_id
-             GROUP BY c.id
-             ORDER BY
-                CASE WHEN c.system_key = 'watch_later' THEN 1 ELSE 0 END,
-                COALESCE(c.last_opened_at_ms, 0) DESC,
-                c.updated_at_ms DESC,
-                c.title COLLATE NOCASE,
-                c.id",
-        )?;
-        statement
-            .query_and_then([], map_collection_summary)?
-            .collect()
+        self.list_collection_summary_window(-1, 0, None)
     }
 
     pub(crate) fn get_collection_detail(
@@ -475,39 +452,7 @@ impl<'connection> LibraryRepository<'connection> {
     }
 
     pub(crate) fn list_roots(&self) -> Result<Vec<LibraryRootSummary>, LibraryError> {
-        let mut statement = self.connection.prepare(
-            "SELECT
-                lr.id, lr.path, lr.display_name, lr.availability,
-                lr.last_scanned_at_ms,
-                (SELECT COUNT(DISTINCT root_item.project_id)
-                 FROM library_root_items root_item
-                 WHERE root_item.root_id = lr.id),
-                COUNT(DISTINCT CASE WHEN c.system_key IS NULL THEN c.id END)
-             FROM library_roots lr
-             LEFT JOIN collections c ON c.root_id = lr.id
-             LEFT JOIN collection_items ci ON ci.collection_id = c.id
-             GROUP BY lr.id
-             ORDER BY lr.display_name COLLATE NOCASE, lr.id",
-        )?;
-        statement
-            .query_map([], |row| {
-                let path: String = row.get(1)?;
-                Ok(LibraryRootSummary {
-                    id: row.get(0)?,
-                    path: path.clone(),
-                    display_name: row.get(2)?,
-                    availability: if Path::new(&path).is_dir() {
-                        "available".to_owned()
-                    } else {
-                        "offline".to_owned()
-                    },
-                    last_scanned_at_ms: row.get(4)?,
-                    item_count: row.get(5)?,
-                    status: LibraryRootStatus::from_collection_count(row.get(6)?),
-                })
-            })?
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(Into::into)
+        self.list_root_window(-1, 0)
     }
 
     pub(crate) fn get_root(&self, root_id: &str) -> Result<LibraryRootRecord, LibraryError> {
@@ -1302,7 +1247,7 @@ fn map_collection(row: &Row<'_>) -> rusqlite::Result<Collection> {
     })
 }
 
-fn map_collection_summary(row: &Row<'_>) -> Result<CollectionSummary, LibraryError> {
+pub(super) fn map_collection_summary(row: &Row<'_>) -> Result<CollectionSummary, LibraryError> {
     Ok(CollectionSummary {
         collection: map_collection(row)?,
         item_count: row.get(11)?,
