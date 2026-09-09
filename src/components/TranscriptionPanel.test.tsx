@@ -220,3 +220,40 @@ it("hides the previous project's existing task immediately on switching", async 
   rerender(<TranscriptionPanel {...props} projectId="other" />);
   expect(screen.queryByRole("button", { name: "取消生成" })).not.toBeInTheDocument();
 });
+
+it("retries a failed task read and clears only its recovered polling error", async () => {
+  desktopMocks.listTranscriptionJobs.mockResolvedValue([savedJob]);
+  desktopMocks.getTranscriptionJob.mockRejectedValueOnce(new Error("状态读取暂时失败")).mockResolvedValue({ ...savedJob, progress: 0.6 });
+  render(<TranscriptionPanel {...props} />);
+  expect(await screen.findByText("状态读取暂时失败", {}, { timeout: 2500 })).toBeInTheDocument();
+  await waitFor(() => expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "60"), { timeout: 2500 });
+  expect(screen.queryByText("状态读取暂时失败")).not.toBeInTheDocument();
+});
+it.each(["cancelled", "transcribing"] as const)("preserves %s cancellation against a batched transcription poll", async (status) => {
+  desktopMocks.listTranscriptionJobs.mockResolvedValue([savedJob]);
+  let finishPoll!: (value: TranscriptionJob) => void;
+  let finishCancel!: (value: TranscriptionJob) => void;
+  desktopMocks.getTranscriptionJob.mockImplementation(() => new Promise(resolve => { finishPoll = resolve; }));
+  desktopMocks.cancelTranscriptionJob.mockImplementation(() => new Promise(resolve => { finishCancel = resolve; }));
+  render(<TranscriptionPanel {...props} />);
+  await waitFor(() => expect(finishPoll).toBeTypeOf("function"), { timeout: 2500 });
+  fireEvent.click(screen.getByRole("button", { name: "取消生成" }));
+  await act(async () => {
+    finishCancel({ ...savedJob, status, stage: status === "cancelled" ? "cancelled" : "cancelling" });
+    await Promise.resolve(); finishPoll(savedJob); await Promise.resolve();
+  });
+  expect(screen.queryByRole("button", { name: "取消生成" })).not.toBeInTheDocument();
+  if (status === "cancelled") expect(screen.getByRole("button", { name: "重新开始" })).toBeInTheDocument();
+  else expect(screen.getByRole("button", { name: "正在停止…" })).toBeDisabled();
+});
+
+it("does not hide a cancellation failure when polling succeeds", async () => {
+  desktopMocks.listTranscriptionJobs.mockResolvedValue([savedJob]);
+  desktopMocks.getTranscriptionJob.mockResolvedValue({ ...savedJob, progress: 0.6 });
+  desktopMocks.cancelTranscriptionJob.mockRejectedValue(new Error("取消请求失败"));
+  render(<TranscriptionPanel {...props} />);
+  fireEvent.click(await screen.findByRole("button", { name: "取消生成" }));
+  expect(await screen.findByText("取消请求失败")).toBeInTheDocument();
+  await waitFor(() => expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "60"), { timeout: 2500 });
+  expect(screen.getByText("取消请求失败")).toBeInTheDocument();
+});

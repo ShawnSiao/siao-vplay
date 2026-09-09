@@ -1,3 +1,4 @@
+import { useTaskPolling, taskPollingIntervals } from "../features/ai-tasks/useTaskPolling";
 import { useEffect, useRef, useState } from "react";
 
 import {
@@ -42,6 +43,8 @@ const activeStatuses = new Set<TranscriptionJob["status"]>([
   "transcribing",
   "validating",
 ]);
+
+const shouldPollTranscription = (job: TranscriptionJob) => activeStatuses.has(job.status);
 
 const profileOptions = [
   { id: "standard", modelKind: "small", title: "标准识别（推荐）" },
@@ -206,29 +209,20 @@ export function TranscriptionPanel({
     }
   }, [job, onJobTracked]);
 
-  useEffect(() => {
-    if (!job || !activeStatuses.has(job.status)) {
-      return undefined;
-    }
-    let active = true;
-    const timer = window.setTimeout(() => {
-      void getTranscriptionJob(job.id)
-        .then((nextJob) => {
-          if (active) {
-            setJob(nextJob);
-          }
-        })
-        .catch((cause: unknown) => {
-          if (active) {
-            setError(userFacingError(cause));
-          }
-        });
-    }, 900);
-    return () => {
-      active = false;
-      window.clearTimeout(timer);
-    };
-  }, [job]);
+  const [pollFailure, setPollFailure] = useState<{ jobId: string; projectId: string; message: string } | null>(null);
+  useTaskPolling({ projectId, task: job, read: getTranscriptionJob, shouldPoll: shouldPollTranscription,
+    intervalMs: taskPollingIntervals.transcription,
+    onTask: next => {
+      setJob(current => {
+        if (!current || current.id !== next.id || current.projectId !== next.projectId || !activeStatuses.has(current.status)) return current;
+        if (current.stage === "cancelling" && next.stage !== "cancelling" && activeStatuses.has(next.status)) return current;
+        return next;
+      });
+      setPollFailure(null);
+    },
+    onError: cause => { if (job) setPollFailure({ jobId: job.id, projectId, message: userFacingError(cause) }); },
+  });
+  const taskError = error ?? (job && activeStatuses.has(job.status) && pollFailure?.jobId === job.id && pollFailure.projectId === projectId ? pollFailure.message : null);
 
   useEffect(() => {
     const versionId = job?.subtitleVersionId;
@@ -383,10 +377,10 @@ export function TranscriptionPanel({
             <button
               className="button quiet"
               type="button"
-              disabled={operation !== null}
+              disabled={operation !== null || job.stage === "cancelling"}
               onClick={() => void cancel()}
             >
-              {operation === "cancel" ? "正在停止…" : "取消生成"}
+              {operation === "cancel" || job.stage === "cancelling" ? "正在停止…" : "取消生成"}
             </button>
           </>
         ) : null}
@@ -411,10 +405,10 @@ export function TranscriptionPanel({
           </div>
         ) : null}
         {bootstrapNotice}
-        {error ? (
+        {taskError ? (
           <div className="notice danger transcription-error" role="alert">
             <strong>字幕生成未继续</strong>
-            <p>{error}</p>
+            <p>{taskError}</p>
           </div>
         ) : null}
       </section>
