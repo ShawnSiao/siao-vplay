@@ -1,3 +1,7 @@
+mod persistence;
+use persistence::persist_json;
+#[cfg(test)]
+mod persistence_tests;
 mod status_contract;
 pub use status_contract::{LocalResourceRootState, LocalResourceCapabilityState, LocalResourceCapabilityStatus, LocalResourceStatus};
 use std::{
@@ -530,11 +534,11 @@ impl LocalResourceManager {
         if !confirmed {
             return Err(LocalResourceError::ConfirmationRequired);
         }
-        let configuration = self
+        let mut configuration = self
             .configuration
-            .as_mut()
+            .clone()
             .ok_or(LocalResourceError::ConfirmationRequired)?;
-        let root = configuration_root(configuration);
+        let root = configuration_root(&configuration);
         let root_was_missing = !root.exists();
         fs::create_dir_all(&root)?;
         for relative in RESOURCE_SUBDIRECTORIES {
@@ -543,7 +547,8 @@ impl LocalResourceManager {
         verify_writable(&root.join("state"))?;
         if root_was_missing {
             configuration.active_resources.clear();
-            persist_json(&self.config_path, configuration)?;
+            persist_json(&self.config_path, &configuration)?;
+            self.configuration = Some(configuration);
         }
         self.status()
     }
@@ -583,24 +588,27 @@ impl LocalResourceManager {
         {
             return Err(LocalResourceError::UnknownProfile(profile_id.to_owned()));
         }
-        let configuration = self
+        let mut configuration = self
             .configuration
-            .as_mut()
+            .clone()
             .ok_or(LocalResourceError::ConfirmationRequired)?;
         configuration.preferred_profile = profile_id.to_owned();
-        persist_json(&self.config_path, configuration)?;
+        persist_json(&self.config_path, &configuration)?;
+        self.configuration = Some(configuration.clone());
         self.status()
     }
 
     #[cfg(test)]
     fn set_proxy_url(&mut self, proxy_url: Option<&str>) -> Result<(), LocalResourceError> {
         let normalized = normalize_proxy_url(proxy_url)?;
-        let configuration = self
+        let mut configuration = self
             .configuration
-            .as_mut()
+            .clone()
             .ok_or(LocalResourceError::ConfirmationRequired)?;
         configuration.proxy_url = normalized;
-        persist_json(&self.config_path, configuration)
+        persist_json(&self.config_path, &configuration)?;
+        self.configuration = Some(configuration);
+        Ok(())
     }
 
     fn status(&self) -> Result<LocalResourceStatus, LocalResourceError> {
@@ -794,9 +802,9 @@ impl LocalResourceManager {
     }
 
     fn activate_receipt(&mut self, mut receipt: ResourceReceipt) -> Result<(), LocalResourceError> {
-        let configuration = self
+        let mut configuration = self
             .configuration
-            .as_mut()
+            .clone()
             .ok_or_else(|| LocalResourceError::ResourceNotReady(receipt.resource_id.clone()))?;
         validate_receipt(&receipt, &receipt.resource_id, &receipt.version)?;
         if receipt.health_status != "passed" {
@@ -806,7 +814,7 @@ impl LocalResourceManager {
             )));
         }
         receipt.activated_at_ms = Some(now_ms());
-        let receipt_directory = configuration_root(configuration)
+        let receipt_directory = configuration_root(&configuration)
             .join("receipts")
             .join(&receipt.resource_id);
         fs::create_dir_all(&receipt_directory)?;
@@ -817,7 +825,9 @@ impl LocalResourceManager {
         configuration
             .active_resources
             .insert(receipt.resource_id.clone(), receipt.version.clone());
-        persist_json(&self.config_path, configuration)
+        persist_json(&self.config_path, &configuration)?;
+        self.configuration = Some(configuration);
+        Ok(())
     }
 
     fn active_receipt(
@@ -881,12 +891,13 @@ impl LocalResourceManager {
         let Some(receipt) = receipt else {
             return Ok(None);
         };
-        let configuration = self.configuration.as_mut().ok_or_else(|| {
+        let mut configuration = self.configuration.clone().ok_or_else(|| {
             LocalResourceError::ResourceNotReady(format!("{resource_id} 尚未配置"))
         })?;
         configuration.active_resources.remove(resource_id);
-        persist_json(&self.config_path, configuration)?;
-        let receipt_path = configuration_root(configuration)
+        persist_json(&self.config_path, &configuration)?;
+        self.configuration = Some(configuration.clone());
+        let receipt_path = configuration_root(&configuration)
             .join("receipts")
             .join(resource_id)
             .join(format!("{}.json", receipt.version));
@@ -1419,34 +1430,6 @@ fn verify_writable(directory: &Path) -> Result<(), LocalResourceError> {
     Ok(())
 }
 
-fn persist_json(path: &Path, value: &impl Serialize) -> Result<(), LocalResourceError> {
-    let parent = path
-        .parent()
-        .ok_or_else(|| LocalResourceError::FileSystem(io::Error::other("配置路径没有父目录")))?;
-    fs::create_dir_all(parent)?;
-    let part_path = path.with_extension("json.part");
-    let backup_path = path.with_extension("json.bak");
-    let mut file = File::create(&part_path)?;
-    serde_json::to_writer_pretty(&mut file, value)?;
-    file.write_all(b"\n")?;
-    file.sync_all()?;
-    if path.exists() {
-        if backup_path.exists() {
-            fs::remove_file(&backup_path)?;
-        }
-        fs::rename(path, &backup_path)?;
-    }
-    if let Err(error) = fs::rename(&part_path, path) {
-        if backup_path.exists() {
-            let _ = fs::rename(&backup_path, path);
-        }
-        return Err(error.into());
-    }
-    if backup_path.exists() {
-        fs::remove_file(backup_path)?;
-    }
-    Ok(())
-}
 
 #[cfg(windows)]
 fn available_space(path: &Path) -> Option<u64> {
