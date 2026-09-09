@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "detachedCollectionCount": {
+      "format": "uint64",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "preservedProjectCount": {
+      "format": "uint64",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "rootId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "rootId",
+    "detachedCollectionCount",
+    "preservedProjectCount"
+  ],
+  "title": "LibraryRootRevokeResult",
+  "type": "object"
+}

@@ -258,11 +258,7 @@ export type LibraryRootRebuildResult = {
   changedItemCount: number;
 };
 
-export type LibraryRootRevokeResult = {
-  rootId: string;
-  detachedCollectionCount: number;
-  preservedProjectCount: number;
-};
+export type { LibraryRootRevokeResult } from "./generated/library-root-revoke-result";
 
 export type MediaArtifactStatus =
   | "queued"

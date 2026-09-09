@@ -8,6 +8,7 @@ import { readEpisodeNeighbors } from "../../lib/episodeNeighborsGateway";
 import { subscribeLibraryScanProgress } from "../../lib/libraryScanProgressGateway";
 import { readLibraryScanPreview } from "../../lib/libraryScanPreviewGateway";
 import { importLibraryPreview } from "../../lib/libraryImportGateway";
+import { revokeRoot } from "../../lib/libraryRootRevokeGateway";
 import { invokeProject } from "../../lib/projectGateway";
 import { invoke } from "@tauri-apps/api/core";
 import type { UnlistenFn } from "@tauri-apps/api/event";
@@ -222,7 +223,7 @@ export async function applyLibraryRootRebuild(
 export async function revokeLibraryRoot(
   rootId: string,
 ): Promise<LibraryRootRevokeResult> {
-  return invoke<LibraryRootRevokeResult>("revoke_library_root", { rootId });
+  return revokeRoot(rootId);
 }
 
 export async function inspectLibraryRootRelocation(
