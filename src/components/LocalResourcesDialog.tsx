@@ -1,3 +1,5 @@
+import { confirmLocationPlan } from "../features/resources/confirmLocationPlan";
+import { ResourceBindingRecovery } from "../features/resources/ResourceBindingRecovery";
 import { adoptionFeedback } from "../features/resources/adoptionFeedback";
 import { cleanupFeedback } from "../features/resources/cleanupFeedback";
 import { ResourceMaintenanceNotice } from "../features/resources/ResourceMaintenanceNotice";
@@ -173,7 +175,7 @@ export function LocalResourcesDialog({
     .filter((capability): capability is LocalResourceCapabilityStatus =>
       Boolean(capability),
     );
-  const selectionCanPrepare =
+  const selectionCanPrepare = !controller.bindingRecovery &&
     selectedCapabilities.length > 0 &&
     selectedCapabilities.every(capabilityInstallable) &&
     selectedCapabilities.some(
@@ -270,14 +272,15 @@ export function LocalResourcesDialog({
 
   const repairRoot = () =>
     runAction("repair-root", async () => {
-      await controller.repairRoot();
+      const result = await controller.repairRoot();
+      if (result.bindingError) return;
       onNotice("资源目录结构已修复，媒体库和项目数据未改变。");
     });
 
   const reconnectRoot = () =>
     runAction("reconnect-root", async () => {
       const result = await controller.reconnectRoot();
-      if (result) {
+      if (result && !result.bindingError) {
         onNotice("已重新连接并验证现有资源目录。");
       }
     });
@@ -410,11 +413,8 @@ export function LocalResourcesDialog({
   const confirmAndPrepare = () =>
     runAction("prepare", async () => {
       if (!status?.configured) {
-        if (!locationPlan) {
-          throw new Error("需要先选择并核对保存位置。");
-        }
-        const confirmedPlan = locationPlan; setLocationPlan(null);
-        const configured = await controller.confirmLocation(confirmedPlan);
+        const configured = await confirmLocationPlan(locationPlan, () => setLocationPlan(null), controller.confirmLocation);
+        if (configured.bindingError) return;
         if (configured.preferredProfile !== selectedProfileId) {
           await controller.selectProfile(selectedProfileId);
         }
@@ -425,11 +425,8 @@ export function LocalResourcesDialog({
 
   const confirmFirstRunLocation = () =>
     runAction("first-run-location", async () => {
-      if (!locationPlan) {
-        throw new Error("请先选择保存位置。");
-      }
-      const confirmedPlan = locationPlan; setLocationPlan(null);
-      await controller.confirmLocation(confirmedPlan);
+      const result = await confirmLocationPlan(locationPlan, () => setLocationPlan(null), controller.confirmLocation);
+      if (result.bindingError) return;
       onNotice("本地功能保存位置已设置；需要其他能力时再按需下载。");
       onDismissFirstRun();
     });
@@ -511,7 +508,11 @@ export function LocalResourcesDialog({
           </div>
         ) : null}
 
-        {firstRun && !pendingAction ? (
+        <ResourceBindingRecovery result={controller.bindingRecovery} busy={busyAction !== null} onRetry={() => void runAction("retry-binding", async () => {
+          const result = await controller.retryBinding();
+          if (!result.bindingError) { onNotice("保存位置已保留，资源任务状态已恢复。"); if (firstRun) onDismissFirstRun(); }
+        })} />
+        {firstRun && !pendingAction && !controller.bindingRecovery ? (
           <section className="local-resources-welcome" aria-labelledby="resource-welcome-title">
             <h3 id="resource-welcome-title">选择本地功能的保存位置</h3>
             <p>

@@ -1,3 +1,4 @@
+export { retryLocalResourceBinding, inspectLocalResourceBinding } from "./resourceLocationGateway";
 export { planLocalResourceLocation, planLocalResourceMove, moveLocalResourceRoot, inspectLocalResourceMigration, adoptLocalResources } from "./resourceMigrationGateway";
 export { getLocalResourceCatalog } from "./resourceCatalogGateway";
 export { getLocalResourceDiagnostics } from "./resourceDiagnosticsGateway";

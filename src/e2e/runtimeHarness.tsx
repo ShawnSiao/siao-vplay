@@ -1,3 +1,4 @@
+import { locationResult } from "../test-fixtures/resourceLocation";
 import { catalog } from "./runtimeCatalog";
 import { StrictMode, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
@@ -69,6 +70,7 @@ export function RuntimeHarness() {
   const [cancellingMove, setCancellingMove] = useState(false);
   const controller = useMemo<LocalResourcesController>(
     () => ({
+      bindingRecovery: null, retryBinding: async () => locationResult(status),
       catalog,
       status,
       tasks,
@@ -85,7 +87,7 @@ export function RuntimeHarness() {
       refresh: async () => status,
       clearError: () => undefined,
       chooseLocation: async () => null,
-      confirmLocation: async () => status,
+      confirmLocation: async () => locationResult(status),
       chooseExistingResources: async () => null,
       adoptResources: async () => ({
         resourceRoot: status.resourceRoot ?? "", planFingerprint: "a".repeat(64), requestId: "preview-request",
@@ -107,8 +109,8 @@ export function RuntimeHarness() {
         crossVolume: false,
         previousRootRetained: true,
       }),
-      repairRoot: async () => status,
-      reconnectRoot: async () => status,
+      repairRoot: async () => locationResult(status),
+      reconnectRoot: async () => locationResult(status),
       planCleanup: async () => ({
         planFingerprint: "a".repeat(64),
         resourceIds: [],

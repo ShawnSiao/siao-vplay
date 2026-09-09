@@ -1,6 +1,6 @@
 use crate::{
     commands::CommandError,
-    local_resources::{LocalResourceStatus, PlanLocalResourceLocationInput},
+    local_resources::PlanLocalResourceLocationInput,
     resource_migration::{
         self, AdoptLocalResourcesInput, CleanupUnusedResourcesInput, InspectResourceMigrationInput,
         LocalResourceMovePlan, LocalResourceMoveResult, MoveLocalResourceRootInput,
@@ -56,7 +56,7 @@ pub fn cancel_local_resource_move(request_id: String) -> Result<bool, CommandErr
 #[tauri::command]
 pub async fn reconnect_local_resource_root(
     input: ReconnectLocalResourceRootInput,
-) -> Result<LocalResourceStatus, CommandError> {
+) -> Result<crate::resource_location::ResourceLocationResult, CommandError> {
     run(move || resource_migration::reconnect_resource_root(input).map_err(Into::into)).await
 }
 

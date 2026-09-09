@@ -52,6 +52,7 @@ fn committed_schemas_match_rust() {
     check_translation_schemas();
     check_schema("resource-download-task", &serialized_schema::<crate::resource_download::ResourceDownloadTask>());
     check_schema("resource-download-snapshot", &serialized_schema::<crate::resource_download::ResourceDownloadSnapshot>());
+    check_schema("resource-location-result", &serialized_schema::<crate::resource_location::ResourceLocationResult>());
     check_schema("local-resource-status", &serialized_schema::<crate::local_resources::LocalResourceStatus>());
     check_schema("resource-removal-result", &serialized_schema::<crate::resource_download::ResourceRemovalResult>());
     check_schema("resource-rollback-result", &serialized_schema::<crate::resource_diagnostics::ResourceRollbackResult>());

@@ -1,6 +1,6 @@
 mod binding;
 use binding::task_paths;
-pub use binding::bind_configured_root;
+pub use binding::{bind_configured_root, initialize_for_startup};
 #[cfg(test)]
 mod binding_tests;
 mod contract;
@@ -194,6 +194,7 @@ enum DownloadOutcome {
 static DOWNLOAD_MANAGER: OnceLock<RwLock<DownloadManager>> = OnceLock::new();
 static ACTIVE_CONTROLS: OnceLock<Mutex<HashMap<String, Arc<DownloadControl>>>> = OnceLock::new();
 
+#[cfg(test)]
 pub fn initialize() -> Result<(), ResourceDownloadError> {
     bind_configured_root()
 }

@@ -1,3 +1,4 @@
+import { locationResult } from "./test-fixtures/resourceLocation";
 import { createLearningTaskFixture } from "./test-fixtures/learning";
 import { verifyBackgroundTranscription } from "./appTranscriptionCompletionTest";
 import { verifyDismissedResourceAction, verifySelectedResourceResume } from "./appResourcePreparationTest";
@@ -818,7 +819,7 @@ beforeEach(() => {
     confirmationRequired: true,
   });
   desktopMocks.configureLocalResourceRoot.mockResolvedValue(
-    readyLocalResourceStatus,
+    locationResult(readyLocalResourceStatus),
   );
   desktopMocks.setLocalResourceProfile.mockResolvedValue(
     readyLocalResourceStatus,

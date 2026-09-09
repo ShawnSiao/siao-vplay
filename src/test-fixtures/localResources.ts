@@ -1,3 +1,4 @@
+import { locationResult } from "./resourceLocation";
 import { vi } from "vitest";
 import type { LocalResourcesController } from "../features/resources/useLocalResources";
 import type { LocalResourceCatalog, LocalResourceStatus } from "../types";
@@ -102,6 +103,7 @@ export function makeController(
   overrides: Partial<LocalResourcesController> = {},
 ): LocalResourcesController {
   return {
+    bindingRecovery: null, retryBinding: vi.fn(),
     catalog,
     status: setupStatus,
     tasks: [],
@@ -124,6 +126,7 @@ export function makeController(
       confirmationRequired: true,
     }),
     confirmLocation: vi.fn().mockResolvedValue({
+      ...locationResult(setupStatus),
       ...setupStatus,
       snapshotRevision: 1,
       configured: true,

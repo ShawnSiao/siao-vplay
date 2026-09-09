@@ -116,7 +116,7 @@ pub fn move_resource_root(
 
 pub fn reconnect_resource_root(
     input: ReconnectLocalResourceRootInput,
-) -> Result<crate::local_resources::LocalResourceStatus, ResourceMigrationError> {
+) -> Result<crate::resource_location::ResourceLocationResult, ResourceMigrationError> {
     let _maintenance = crate::resource_leases::maintain_all()?;
     if !input.confirmed {
         return Err(ResourceMigrationError::ConfirmationRequired);
@@ -167,8 +167,7 @@ pub fn reconnect_resource_root(
             .as_ref()
             .and_then(|configuration| configuration.proxy_url.clone()),
     })?;
-    resource_download::bind_configured_root()?;
-    Ok(status)
+    crate::resource_location::finish(status)
 }
 
 pub fn cleanup_unused_resources(

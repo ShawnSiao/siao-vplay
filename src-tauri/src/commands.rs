@@ -624,19 +624,19 @@ pub fn plan_local_resource_location(
 #[tauri::command]
 pub fn configure_local_resource_root(
     input: ConfigureLocalResourceRootInput,
-) -> Result<LocalResourceStatus, CommandError> {
+) -> Result<crate::resource_location::ResourceLocationResult, CommandError> {
+    let _maintenance = crate::resource_leases::maintain_all().map_err(LocalResourceError::from)?;
     let status = local_resources::configure_confirmed_location(&input)?;
-    resource_download::bind_configured_root()?;
-    Ok(status)
+    crate::resource_location::finish(status).map_err(Into::into)
 }
 
 #[tauri::command]
 pub fn repair_local_resource_root(
     input: ConfirmLocalResourceOperationInput,
-) -> Result<LocalResourceStatus, CommandError> {
+) -> Result<crate::resource_location::ResourceLocationResult, CommandError> {
+    let _maintenance = crate::resource_leases::maintain_all().map_err(LocalResourceError::from)?;
     let status = local_resources::repair_configured_root(input.confirmed)?;
-    resource_download::bind_configured_root()?;
-    Ok(status)
+    crate::resource_location::finish(status).map_err(Into::into)
 }
 
 
@@ -1481,4 +1481,13 @@ fn allow_learning_screenshot(app: &AppHandle, card: &LearningCard) -> Result<(),
 #[tauri::command]
 pub fn get_public_resolver_disclosure() -> Result<crate::x_resolver_policy::ResolverDisclosure, CommandError> {
     crate::x_resolver_policy::disclosure().map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn retry_local_resource_binding(input: crate::resource_location::RetryResourceBindingInput) -> Result<crate::resource_location::ResourceLocationResult, CommandError> {
+    crate::resource_location::retry(input).map_err(Into::into)
+}
+#[tauri::command]
+pub fn inspect_local_resource_binding() -> Result<crate::resource_location::ResourceLocationResult, CommandError> {
+    crate::resource_location::inspect().map_err(Into::into)
 }

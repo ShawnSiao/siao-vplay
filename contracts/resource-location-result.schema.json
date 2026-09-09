@@ -1,0 +1,281 @@
+{
+  "$defs": {
+    "LocalResourceCapabilityState": {
+      "enum": [
+        "setup_required",
+        "not_ready",
+        "preparing",
+        "ready",
+        "repair_required",
+        "root_unavailable",
+        "update_available"
+      ],
+      "type": "string"
+    },
+    "LocalResourceCapabilityStatus": {
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "missingResourceIds": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "requiredResourceIds": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "state": {
+          "$ref": "#/$defs/LocalResourceCapabilityState"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "state",
+        "requiredResourceIds",
+        "missingResourceIds"
+      ],
+      "type": "object"
+    },
+    "LocalResourceRootState": {
+      "enum": [
+        "setup_required",
+        "ready",
+        "root_unavailable",
+        "repair_required"
+      ],
+      "type": "string"
+    },
+    "ResourceDownloadSnapshot": {
+      "properties": {
+        "generation": {
+          "format": "uint64",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "tasks": {
+          "items": {
+            "$ref": "#/$defs/ResourceDownloadTask"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "generation",
+        "tasks"
+      ],
+      "type": "object"
+    },
+    "ResourceDownloadTask": {
+      "properties": {
+        "attempt": {
+          "format": "uint32",
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "createdAtMs": {
+          "format": "int64",
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": "integer"
+        },
+        "downloadedBytes": {
+          "format": "uint64",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "errorCode": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "errorMessage": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "forceReinstall": {
+          "default": false,
+          "type": "boolean"
+        },
+        "generation": {
+          "default": 0,
+          "description": "Process-local root binding and mutation order, reissued when the store loads.",
+          "format": "uint64",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "id": {
+          "type": "string"
+        },
+        "pendingActionIds": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "requestedByCapabilityIds": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "resourceId": {
+          "type": "string"
+        },
+        "revision": {
+          "default": 0,
+          "format": "uint64",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "state": {
+          "$ref": "#/$defs/ResourceDownloadTaskState"
+        },
+        "totalBytes": {
+          "format": "uint64",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "updatedAtMs": {
+          "format": "int64",
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": "integer"
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "generation",
+        "revision",
+        "id",
+        "resourceId",
+        "version",
+        "state",
+        "downloadedBytes",
+        "totalBytes",
+        "requestedByCapabilityIds",
+        "pendingActionIds",
+        "attempt",
+        "errorCode",
+        "errorMessage",
+        "createdAtMs",
+        "updatedAtMs",
+        "forceReinstall"
+      ],
+      "type": "object"
+    },
+    "ResourceDownloadTaskState": {
+      "enum": [
+        "queued",
+        "downloading",
+        "paused",
+        "verifying",
+        "installing",
+        "completed",
+        "failed",
+        "cancelled"
+      ],
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "bindingError": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "capabilities": {
+      "items": {
+        "$ref": "#/$defs/LocalResourceCapabilityStatus"
+      },
+      "type": "array"
+    },
+    "configurationFingerprint": {
+      "type": "string"
+    },
+    "configured": {
+      "type": "boolean"
+    },
+    "freeSpaceBytes": {
+      "format": "uint64",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "preferredProfile": {
+      "type": "string"
+    },
+    "resourceRoot": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "rootState": {
+      "$ref": "#/$defs/LocalResourceRootState"
+    },
+    "selectedParent": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "snapshotRevision": {
+      "description": "Orders snapshots within one backend process; not stored in user configuration.",
+      "format": "uint64",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "taskSnapshot": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ResourceDownloadSnapshot"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "required": [
+    "snapshotRevision",
+    "configured",
+    "selectedParent",
+    "resourceRoot",
+    "rootState",
+    "freeSpaceBytes",
+    "preferredProfile",
+    "capabilities",
+    "configurationFingerprint",
+    "bindingError",
+    "taskSnapshot"
+  ],
+  "title": "ResourceLocationResult",
+  "type": "object"
+}

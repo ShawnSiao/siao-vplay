@@ -1,4 +1,4 @@
-import { resourceLocationPlan as plan } from "../test-fixtures/resourceLocation";
+import { locationResult, resourceLocationPlan as plan } from "../test-fixtures/resourceLocation";
 import { afterAll, beforeEach, expect, it, vi } from "vitest";
 import { setupStatus } from "../test-fixtures/localResources";
 const mocks = vi.hoisted(() => {
@@ -50,7 +50,7 @@ it.each([
   mocks.invoke.mockResolvedValue(value); await expect(getLocalResourceNetworkStatus()).resolves.toEqual(value);
 });
 it("passes configuration confirmation and validates the selected profile", async () => {
-  mocks.invoke.mockResolvedValue({ ...setupStatus, configured: true, rootState: "ready", selectedParent: plan.selectedParent, resourceRoot: plan.resourceRoot });
+  mocks.invoke.mockResolvedValue(locationResult({ ...setupStatus, configured: true, rootState: "ready", selectedParent: plan.selectedParent, resourceRoot: plan.resourceRoot }));
   await configureLocalResourceRoot(plan);
   expect(mocks.invoke).toHaveBeenCalledWith("configure_local_resource_root", { input: { parentPath: plan.selectedParent, resourceRoot: plan.resourceRoot, planFingerprint: plan.planFingerprint, confirmed: true } });
   mocks.invoke.mockResolvedValue({ ...setupStatus, preferredProfile: "fast" });

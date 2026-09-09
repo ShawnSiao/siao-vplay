@@ -31,6 +31,7 @@ mod remote_media;
 mod resource_diagnostics;
 mod resource_commands;
 mod resource_download;
+mod resource_location;
 mod resource_migration;
 mod resource_usage;
 mod resource_leases;
@@ -174,7 +175,7 @@ pub fn run() {
             local_resources::initialize(&data_directory)?;
             let legacy_proxy = local_resources::configured_proxy_url();
             ai::initialize(&data_directory, legacy_proxy.as_deref())?;
-            resource_download::initialize()?;
+            resource_download::initialize_for_startup()?;
             runtime::initialize(&data_directory)?;
             let database_path = data_directory.join("projects").join("siaovplay.db");
             let store = ProjectStore::open(database_path)?;
@@ -242,6 +243,8 @@ pub fn run() {
             commands::get_local_resource_status,
             commands::plan_local_resource_location,
             commands::configure_local_resource_root,
+            commands::retry_local_resource_binding,
+            commands::inspect_local_resource_binding,
             commands::repair_local_resource_root,
             commands::set_local_resource_profile,
             ai::commands::get_local_resource_network_status,

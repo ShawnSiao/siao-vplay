@@ -696,3 +696,5 @@ export type { SubtitleBurnMode, SubtitleBurnJob } from "./generated/subtitle-bur
 export type { SubtitleBurnStyle } from "./generated/subtitle-burn-input";
 
 export type { ResourceDownloadSnapshot } from "./generated/resource-download-snapshot";
+
+export type ResourceLocationResult = import("./generated/resource-location-result").ResourceLocationResult;

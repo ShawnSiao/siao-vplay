@@ -56,3 +56,10 @@ pub(super) fn task_paths(task_id: &str) -> Result<(PathBuf, PathBuf), ResourceDo
         ))
     })
 }
+
+pub fn initialize_for_startup() -> Result<(), ResourceDownloadError> {
+    match bind_configured_root() {
+        Err(ResourceDownloadError::BindingUnavailable(_)) => Ok(()),
+        result => result,
+    }
+}
