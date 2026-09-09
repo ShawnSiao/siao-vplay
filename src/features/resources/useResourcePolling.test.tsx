@@ -23,7 +23,7 @@ function deferred() {
   return { promise, resolve, reject };
 }
 beforeEach(() => {
-  vi.useFakeTimers(); mocks.profile.mockReset(); mocks.network.mockReset(); mocks.network.mockResolvedValue({ mode: "direct", proxySource: "direct", proxyAddress: null }); mocks.list.mockReset(); mocks.status.mockReset(); mocks.listen.mockReset();
+  vi.useFakeTimers(); mocks.profile.mockReset(); mocks.network.mockReset(); mocks.network.mockResolvedValue({ snapshotRevision: 1, mode: "direct", proxySource: "direct", proxyAddress: null }); mocks.list.mockReset(); mocks.status.mockReset(); mocks.listen.mockReset();
   mocks.list.mockResolvedValue({ generation: 1, tasks: [task] }); mocks.status.mockResolvedValue(setupStatus); mocks.listen.mockResolvedValue(vi.fn());
 });
 afterEach(() => { vi.useRealTimers(); });
@@ -115,7 +115,7 @@ it("keeps resources available but never fabricates direct networking after a fai
   expect(view.result.current.status).toEqual(setupStatus);
   expect(view.result.current.networkStatus).toBeNull();
   expect(view.result.current.error).toContain("network status unavailable");
-  mocks.network.mockResolvedValue({ mode: "proxy", proxySource: "environment", proxyAddress: null });
+  mocks.network.mockResolvedValue({ snapshotRevision: 1, mode: "proxy", proxySource: "environment", proxyAddress: null });
   await act(async () => { await view.result.current.refresh(); });
   expect(view.result.current.networkStatus?.proxySource).toBe("environment");
   expect(view.result.current.error).toBeNull(); view.unmount();

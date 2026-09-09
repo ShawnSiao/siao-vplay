@@ -7,5 +7,6 @@ export interface ResourceNetworkStatus {
   mode: NetworkMode;
   proxyAddress: string | null;
   proxySource: ProxySource;
+  snapshotRevision: number;
   [k: string]: unknown;
 }

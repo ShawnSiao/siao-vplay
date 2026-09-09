@@ -2,7 +2,7 @@
 "use strict";
 export const validate = validate20;
 export default validate20;
-const schema31 = {"$defs":{"NetworkMode":{"enum":["direct","proxy"],"type":"string"},"ProxySource":{"enum":["custom","environment","windows_system","direct"],"type":"string"}},"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"mode":{"$ref":"#/$defs/NetworkMode"},"proxyAddress":{"type":["string","null"]},"proxySource":{"$ref":"#/$defs/ProxySource"}},"required":["mode","proxySource","proxyAddress"],"title":"ResourceNetworkStatus","type":"object"};
+const schema31 = {"$defs":{"NetworkMode":{"enum":["direct","proxy"],"type":"string"},"ProxySource":{"enum":["custom","environment","windows_system","direct"],"type":"string"}},"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"mode":{"$ref":"#/$defs/NetworkMode"},"proxyAddress":{"type":["string","null"]},"proxySource":{"$ref":"#/$defs/ProxySource"},"snapshotRevision":{"maximum":9007199254740991,"minimum":1,"type":"integer"}},"required":["snapshotRevision","mode","proxySource","proxyAddress"],"title":"ResourceNetworkStatus","type":"object"};
 const schema32 = {"enum":["direct","proxy"],"type":"string"};
 const schema33 = {"enum":["custom","environment","windows_system","direct"],"type":"string"};
 
@@ -19,7 +19,7 @@ evaluated0.items = undefined;
 if(errors === 0){
 if(data && typeof data == "object" && !Array.isArray(data)){
 let missing0;
-if((((data.mode === undefined) && (missing0 = "mode")) || ((data.proxySource === undefined) && (missing0 = "proxySource"))) || ((data.proxyAddress === undefined) && (missing0 = "proxyAddress"))){
+if(((((data.snapshotRevision === undefined) && (missing0 = "snapshotRevision")) || ((data.mode === undefined) && (missing0 = "mode"))) || ((data.proxySource === undefined) && (missing0 = "proxySource"))) || ((data.proxyAddress === undefined) && (missing0 = "proxyAddress"))){
 validate20.errors = [{instancePath,schemaPath:"#/required",keyword:"required",params:{missingProperty: missing0},message:"must have required property '"+missing0+"'"}];
 return false;
 }
@@ -70,6 +70,34 @@ var valid0 = _errs6 === errors;
 else {
 var valid0 = true;
 }
+if(valid0){
+if(data.snapshotRevision !== undefined){
+let data3 = data.snapshotRevision;
+const _errs9 = errors;
+if(!(((typeof data3 == "number") && (!(data3 % 1) && !isNaN(data3))) && (isFinite(data3)))){
+validate20.errors = [{instancePath:instancePath+"/snapshotRevision",schemaPath:"#/properties/snapshotRevision/type",keyword:"type",params:{type: "integer"},message:"must be integer"}];
+return false;
+}
+if(errors === _errs9){
+if((typeof data3 == "number") && (isFinite(data3))){
+if(data3 > 9007199254740991 || isNaN(data3)){
+validate20.errors = [{instancePath:instancePath+"/snapshotRevision",schemaPath:"#/properties/snapshotRevision/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"}];
+return false;
+}
+else {
+if(data3 < 1 || isNaN(data3)){
+validate20.errors = [{instancePath:instancePath+"/snapshotRevision",schemaPath:"#/properties/snapshotRevision/minimum",keyword:"minimum",params:{comparison: ">=", limit: 1},message:"must be >= 1"}];
+return false;
+}
+}
+}
+}
+var valid0 = _errs9 === errors;
+}
+else {
+var valid0 = true;
+}
+}
 }
 }
 }
@@ -82,4 +110,4 @@ return false;
 validate20.errors = vErrors;
 return errors === 0;
 }
-validate20.evaluated = {"props":{"mode":true,"proxyAddress":true,"proxySource":true},"dynamicProps":false,"dynamicItems":false};
+validate20.evaluated = {"props":{"mode":true,"proxyAddress":true,"proxySource":true,"snapshotRevision":true},"dynamicProps":false,"dynamicItems":false};

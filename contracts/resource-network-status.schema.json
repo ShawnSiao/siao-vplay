@@ -30,9 +30,16 @@
     },
     "proxySource": {
       "$ref": "#/$defs/ProxySource"
+    },
+    "snapshotRevision": {
+      "format": "uint64",
+      "maximum": 9007199254740991,
+      "minimum": 1,
+      "type": "integer"
     }
   },
   "required": [
+    "snapshotRevision",
     "mode",
     "proxySource",
     "proxyAddress"

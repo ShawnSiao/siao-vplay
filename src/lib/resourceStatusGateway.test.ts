@@ -25,10 +25,10 @@ it("rejects a different selected profile", async () => {
   mocks.invoke.mockResolvedValue(setupStatus); await expect(setLocalResourceProfile("fast")).rejects.toThrow();
 });
 it.each([getLocalResourceNetworkStatus, () => setLocalResourceProxy(null)])("rejects unknown network sources", async read => {
-  mocks.invoke.mockResolvedValue({ mode: "proxy", proxySource: "invented", proxyAddress: null }); await expect(read()).rejects.toThrow();
+  mocks.invoke.mockResolvedValue({ snapshotRevision: 1, mode: "proxy", proxySource: "invented", proxyAddress: null }); await expect(read()).rejects.toThrow();
 });
 it("rejects contradictory direct/proxy state", async () => {
-  mocks.invoke.mockResolvedValue({ mode: "direct", proxySource: "custom", proxyAddress: "http://127.0.0.1:8080" });
+  mocks.invoke.mockResolvedValue({ snapshotRevision: 1, mode: "direct", proxySource: "custom", proxyAddress: "http://127.0.0.1:8080" });
   await expect(getLocalResourceNetworkStatus()).rejects.toThrow();
 });
 
@@ -41,10 +41,10 @@ it.each(["setup_required", "not_ready", "preparing", "ready", "repair_required",
   mocks.invoke.mockResolvedValue(value); await expect(getLocalResourceStatus()).resolves.toEqual(value);
 });
 it.each([
-  { mode: "direct", proxySource: "direct", proxyAddress: null },
-  { mode: "proxy", proxySource: "environment", proxyAddress: null },
-  { mode: "proxy", proxySource: "windows_system", proxyAddress: "http://127.0.0.1:8080" },
-  { mode: "proxy", proxySource: "custom", proxyAddress: "http://127.0.0.1:8080" },
+  { snapshotRevision: 1, mode: "direct", proxySource: "direct", proxyAddress: null },
+  { snapshotRevision: 1, mode: "proxy", proxySource: "environment", proxyAddress: null },
+  { snapshotRevision: 1, mode: "proxy", proxySource: "windows_system", proxyAddress: "http://127.0.0.1:8080" },
+  { snapshotRevision: 1, mode: "proxy", proxySource: "custom", proxyAddress: "http://127.0.0.1:8080" },
 ])("accepts network source $proxySource", async value => {
   mocks.invoke.mockResolvedValue(value); await expect(getLocalResourceNetworkStatus()).resolves.toEqual(value);
 });

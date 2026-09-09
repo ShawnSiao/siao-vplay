@@ -210,7 +210,7 @@ pub fn task_snapshot_list() -> Result<ResourceDownloadSnapshot, ResourceDownload
 }
 
 pub fn network_status() -> Result<ResourceNetworkStatus, ai::AiError> {
-    ai::network::settings().map(Into::into)
+    ai::network::observed_settings().map(Into::into)
 }
 
 pub(crate) fn has_active_tasks() -> Result<bool, ResourceDownloadError> {

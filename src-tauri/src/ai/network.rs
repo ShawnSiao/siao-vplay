@@ -1,6 +1,6 @@
 use std::{
     path::{Path, PathBuf},
-    sync::{Mutex, OnceLock},
+    sync::{Mutex, OnceLock, atomic::{AtomicU64, Ordering}},
 };
 
 use reqwest::{
@@ -17,6 +17,17 @@ use super::{
 
 const SETTINGS_FILE_NAME: &str = "network-settings.json";
 const SETTINGS_SCHEMA_VERSION: u32 = 1;
+static OBSERVATION: AtomicU64 = AtomicU64::new(0);
+pub struct NetworkObservation {
+    pub revision: u64,
+    pub settings: NetworkSettings,
+}
+fn observe(settings: NetworkSettings) -> Result<NetworkObservation, AiError> {
+    let revision = OBSERVATION.fetch_update(Ordering::SeqCst, Ordering::SeqCst,
+        |value| value.checked_add(1).filter(|next| *next <= 9_007_199_254_740_991))
+        .map_err(|_| AiError::ConfigurationRead)? + 1;
+    Ok(NetworkObservation { revision, settings })
+}
 static STORE: OnceLock<NetworkStore> = OnceLock::new();
 
 pub struct NetworkStore {
@@ -72,11 +83,19 @@ impl NetworkStore {
     }
 
     pub fn snapshot(&self) -> Result<NetworkSettings, AiError> {
+        self.snapshot_observed().map(|value| value.settings)
+    }
+
+    pub fn snapshot_observed(&self) -> Result<NetworkObservation, AiError> {
         let _guard = self.mutation_lock.lock().map_err(|_| AiError::ConfigurationRead)?;
-        Ok(snapshot_from_settings(self.load()?))
+        observe(snapshot_from_settings(self.load()?))
     }
 
     pub fn set(&self, input: SetNetworkSettingsInput) -> Result<NetworkSettings, AiError> {
+        self.set_observed(input).map(|value| value.settings)
+    }
+
+    fn set_observed(&self, input: SetNetworkSettingsInput) -> Result<NetworkObservation, AiError> {
         let _guard = self
             .mutation_lock
             .lock()
@@ -89,12 +108,17 @@ impl NetworkStore {
         settings.revision = settings.revision.checked_add(1)
             .filter(|revision| *revision <= 9_007_199_254_740_991).ok_or(AiError::ConfigurationWrite)?;
         self.persist(&settings)?;
-        Ok(snapshot_from_settings(settings))
+        observe(snapshot_from_settings(settings))
     }
 
+    #[cfg(test)]
     pub fn set_compat(&self, proxy_url: Option<&str>) -> Result<NetworkSettings, AiError> {
+        self.set_compat_observed(proxy_url).map(|value| value.settings)
+    }
+
+    fn set_compat_observed(&self, proxy_url: Option<&str>) -> Result<NetworkObservation, AiError> {
         let revision = self.load()?.revision;
-        self.set(SetNetworkSettingsInput {
+        self.set_observed(SetNetworkSettingsInput {
             expected_revision: revision,
             custom_proxy_url: proxy_url.map(str::to_owned),
         })
@@ -134,8 +158,12 @@ pub fn set_settings(input: SetNetworkSettingsInput) -> Result<NetworkSettings, A
     store()?.set(input)
 }
 
-pub fn set_custom_proxy_compat(proxy_url: Option<&str>) -> Result<NetworkSettings, AiError> {
-    store()?.set_compat(proxy_url)
+pub fn observed_settings() -> Result<NetworkObservation, AiError> {
+    store()?.snapshot_observed()
+}
+
+pub fn set_custom_proxy_compat(proxy_url: Option<&str>) -> Result<NetworkObservation, AiError> {
+    store()?.set_compat_observed(proxy_url)
 }
 
 fn resolve_proxy(store: Option<&NetworkStore>) -> Result<(Option<String>, &'static str), AiError> {

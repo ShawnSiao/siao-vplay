@@ -480,7 +480,7 @@ describe("LocalResourcesDialog", () => {
       rootState: "ready",
     };
     const setProxy = vi.fn().mockResolvedValue({
-      mode: "proxy",
+      snapshotRevision: 1, mode: "proxy",
       proxySource: "custom",
       proxyAddress: "http://127.0.0.1:8899",
     });

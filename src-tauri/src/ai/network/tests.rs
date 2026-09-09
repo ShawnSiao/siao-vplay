@@ -104,11 +104,22 @@ fn conflicts_and_exhausted_revisions_never_overwrite_current_settings() {
 fn set_acknowledgement_and_resource_status_describe_the_written_settings() {
     let data = tempdir().unwrap(); let store = NetworkStore::new(data.path().join(SETTINGS_FILE_NAME));
     let first = store.set_compat(Some(" http://127.0.0.1:7897/ ")).unwrap();
-    let resource_status: crate::resource_download::ResourceNetworkStatus = first.clone().into();
+    let resource_status: crate::resource_download::ResourceNetworkStatus = super::observe(first.clone()).unwrap().into();
     assert_eq!(resource_status.proxy_source, "custom");
     assert_eq!(resource_status.proxy_address.as_deref(), Some("http://127.0.0.1:7897"));
     let second = store.set_compat(Some("http://127.0.0.1:7898")).unwrap();
     assert_eq!(first.custom_proxy_url.as_deref(), Some("http://127.0.0.1:7897"));
     assert_eq!(second.custom_proxy_url.as_deref(), Some("http://127.0.0.1:7898"));
     assert_eq!(second.revision, first.revision + 1);
+}
+
+#[test]
+fn observations_advance_without_changing_persisted_revision() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = NetworkStore::new(dir.path().join("network-settings.json"));
+    let first = store.snapshot_observed().unwrap();
+    let second = store.snapshot_observed().unwrap();
+    assert!(second.revision > first.revision);
+    assert_eq!(first.settings.revision, second.settings.revision);
+    assert!(!store.path.exists());
 }

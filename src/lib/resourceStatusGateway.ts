@@ -64,7 +64,7 @@ export async function setLocalResourceProfile(
 
 export async function getLocalResourceNetworkStatus(): Promise<ResourceNetworkStatus> {
   if (!isDesktopApp) {
-    return { mode: "direct", proxySource: "direct", proxyAddress: null };
+    return { snapshotRevision: ++browserSnapshotRevision, mode: "direct", proxySource: "direct", proxyAddress: null };
   }
   return parseResourceNetworkStatus(await invoke<unknown>("get_local_resource_network_status"));
 }

@@ -26,7 +26,7 @@ test("late status from the first completion cannot undo a newer ready capability
           if (revision === 2) return new Promise(resolve => { state.finishStale = () => resolve(status(2, false)); });
           return status(revision, revision >= 3);
         }
-        if (command === "get_local_resource_network_status") return { mode: "direct", proxySource: "direct", proxyAddress: null };
+        if (command === "get_local_resource_network_status") return { snapshotRevision: 1, mode: "direct", proxySource: "direct", proxyAddress: null };
         if (command === "list_resource_download_tasks") return { generation: 1, tasks: [task, { ...task, id: "other" }] };
         throw new Error(`Unexpected fixture IPC: ${command}`);
       },

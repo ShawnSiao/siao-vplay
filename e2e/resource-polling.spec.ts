@@ -16,7 +16,7 @@ for (const { multiple, failedNetwork } of [{ multiple: false, failedNetwork: fal
       if (command === "get_local_resource_status") return { snapshotRevision: 1, configured: true, selectedParent: null, resourceRoot: null, rootState: "ready",
         freeSpaceBytes: null, preferredProfile: "standard", capabilities: [] };
       if (command === "get_local_resource_network_status" && failedNetwork) throw new Error("fixture network state unavailable");
-      if (command === "get_local_resource_network_status") return { mode: "direct", proxySource: "direct", proxyAddress: null };
+      if (command === "get_local_resource_network_status") return { snapshotRevision: 1, mode: "direct", proxySource: "direct", proxyAddress: null };
       if (command === "list_resource_download_tasks") {
         if (++state.reads === 1) return { generation: 1, tasks };
         return new Promise(resolve => { state.finish = () => resolve({ generation: 1, tasks }); });

@@ -93,6 +93,8 @@ pub struct ResourceDownloadSnapshot {
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct ResourceNetworkStatus {
+    #[cfg_attr(test, schemars(range(min = 1, max = 9007199254740991_u64)))]
+    pub snapshot_revision: u64,
     #[cfg_attr(test, schemars(with = "NetworkMode"))]
     pub mode: String,
     #[cfg_attr(test, schemars(with = "ProxySource"))]
@@ -111,8 +113,9 @@ enum NetworkMode { Direct, Proxy }
 #[expect(dead_code, reason = "Serialized network source vocabulary")]
 enum ProxySource { Custom, Environment, WindowsSystem, Direct }
 
-impl From<crate::ai::types::NetworkSettings> for ResourceNetworkStatus {
-    fn from(settings: crate::ai::types::NetworkSettings) -> Self {
-        Self { mode: settings.effective_mode, proxy_source: settings.effective_source, proxy_address: settings.effective_proxy_address }
+impl From<crate::ai::network::NetworkObservation> for ResourceNetworkStatus {
+    fn from(observation: crate::ai::network::NetworkObservation) -> Self {
+        let settings = observation.settings;
+        Self { snapshot_revision: observation.revision, mode: settings.effective_mode, proxy_source: settings.effective_source, proxy_address: settings.effective_proxy_address }
     }
 }

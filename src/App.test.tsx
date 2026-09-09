@@ -787,12 +787,12 @@ beforeEach(() => {
   desktopMocks.getLocalResourceCatalog.mockResolvedValue(localResourceCatalog);
   desktopMocks.getLocalResourceStatus.mockResolvedValue(readyLocalResourceStatus);
   desktopMocks.getLocalResourceNetworkStatus.mockResolvedValue({
-    mode: "proxy",
+    snapshotRevision: 1, mode: "proxy",
     proxySource: "windows_system",
     proxyAddress: "http://127.0.0.1:7897",
   });
   desktopMocks.setLocalResourceProxy.mockResolvedValue({
-    mode: "proxy",
+    snapshotRevision: 1, mode: "proxy",
     proxySource: "custom",
     proxyAddress: "http://127.0.0.1:7897",
   });
