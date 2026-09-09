@@ -90,20 +90,28 @@ where
 }
 
 fn copy_file(source: &Path, destination: &Path) -> Result<(), StorageError> {
-    let temporary = destination.with_extension("siaovplay-migration-part");
-    if temporary.exists() {
-        fs::remove_file(&temporary)?;
-    }
+    let temporary = destination.with_file_name(format!(
+        ".siaovplay-migration-{}.part",
+        uuid::Uuid::new_v4().simple()
+    ));
     let mut reader = fs::File::open(source)?;
-    let mut writer = fs::File::create(&temporary)?;
-    std::io::copy(&mut reader, &mut writer)?;
-    writer.flush()?;
-    writer.sync_all()?;
-    if destination.exists() {
-        fs::remove_file(destination)?;
+    let mut writer = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&temporary)?;
+    let result = (|| -> Result<(), StorageError> {
+        std::io::copy(&mut reader, &mut writer)?;
+        writer.flush()?;
+        writer.sync_all()?;
+        drop(writer);
+        // Replace only after the copy is durable; do not delete an old destination first.
+        fs::rename(&temporary, destination)?;
+        Ok(())
+    })();
+    if result.is_err() {
+        let _ = fs::remove_file(&temporary);
     }
-    fs::rename(temporary, destination)?;
-    Ok(())
+    result
 }
 
 fn file_sha256(path: &Path) -> Result<String, StorageError> {
@@ -169,6 +177,67 @@ mod tests {
             fs::read(destination.join("projects/file.txt")).unwrap(),
             b"content"
         );
+    }
+
+    #[test]
+    fn temporary_suffix_is_a_valid_user_filename() {
+        let directory = tempfile::tempdir().unwrap();
+        let source = directory.path().join("source");
+        let destination = directory.path().join("destination");
+        fs::create_dir_all(&source).unwrap();
+        for (name, content) in [
+            ("asset.siaovplay-migration-part", "first"),
+            ("asset.txt", "second"),
+        ] {
+            fs::write(source.join(name), content).unwrap();
+        }
+        let entries = scan_files(&source, None).unwrap();
+        copy_and_verify(&entries, &destination, &AtomicBool::new(false), |_, _| {
+            Ok(())
+        })
+        .unwrap();
+        for (name, content) in [
+            ("asset.siaovplay-migration-part", "first"),
+            ("asset.txt", "second"),
+        ] {
+            assert_eq!(fs::read_to_string(source.join(name)).unwrap(), content);
+            assert_eq!(fs::read_to_string(destination.join(name)).unwrap(), content);
+        }
+        assert_eq!(fs::read_dir(destination).unwrap().count(), 2);
+    }
+
+    #[test]
+    fn failed_publication_cleans_only_its_own_temporary_file() {
+        let directory = tempfile::tempdir().unwrap();
+        let source = directory.path().join("source.txt");
+        let target = directory.path().join("destination");
+        fs::write(&source, "source").unwrap();
+        fs::create_dir(&target).unwrap();
+        fs::write(target.join("retained.txt"), "retained").unwrap();
+        let unrelated = directory
+            .path()
+            .join("destination.siaovplay-migration-part");
+        fs::write(&unrelated, "unrelated").unwrap();
+        assert!(copy_file(&source, &target).is_err());
+        assert_eq!(fs::read_to_string(&source).unwrap(), "source");
+        assert_eq!(
+            fs::read_to_string(target.join("retained.txt")).unwrap(),
+            "retained"
+        );
+        assert_eq!(fs::read_to_string(unrelated).unwrap(), "unrelated");
+        assert_eq!(fs::read_dir(directory.path()).unwrap().count(), 3);
+    }
+
+    #[test]
+    fn retry_replaces_an_existing_destination() {
+        let directory = tempfile::tempdir().unwrap();
+        let source = directory.path().join("source.txt");
+        let target = directory.path().join("destination.txt");
+        fs::write(&source, "new").unwrap();
+        fs::write(&target, "old").unwrap();
+        copy_file(&source, &target).unwrap();
+        assert_eq!(fs::read_to_string(target).unwrap(), "new");
+        assert_eq!(fs::read_dir(directory.path()).unwrap().count(), 2);
     }
 
     #[test]
