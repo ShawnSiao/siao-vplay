@@ -113,3 +113,6 @@ mod app_data_recovery_tests;
 
 #[cfg(test)]
 mod startup_owner_tests;
+
+#[cfg(test)]
+mod maintenance_conflict_tests;
