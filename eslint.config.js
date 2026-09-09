@@ -30,7 +30,7 @@ export default tseslint.config(
     }
   },
   {
-    files: ["src/lib/*Gateway.ts", "src/lib/subtitleMetadata.ts", "src/lib/aiExecutionRequest.ts"],
+    files: ["src/lib/*Gateway.ts", "src/lib/subtitleMetadata.ts", "src/lib/aiExecutionRequest.ts", "src/lib/subtitleBodyContract.ts"],
     rules: {
       "no-restricted-imports": ["error", {
         patterns: [{

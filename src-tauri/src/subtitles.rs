@@ -1,3 +1,5 @@
+#[cfg(test)]
+mod wire_schema;
 pub(crate) mod metadata;
 mod read;
 pub use read::{get_subtitle_version, list_current_subtitle_versions, list_subtitle_versions};
@@ -111,6 +113,7 @@ pub struct SubtitleCue {
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub enum SubtitleIssueSeverity {
     Error,
     Warning,
@@ -118,6 +121,7 @@ pub enum SubtitleIssueSeverity {
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub enum SubtitleIssueCode {
     EmptyText,
     InvalidTiming,
@@ -132,16 +136,20 @@ pub enum SubtitleIssueCode {
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct SubtitlePreflightIssue {
     pub code: SubtitleIssueCode,
     pub severity: SubtitleIssueSeverity,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub ordinal: Option<usize>,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub related_ordinal: Option<usize>,
     pub message: String,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub enum SubtitlePreflightStatus {
     Ready,
     Warning,
@@ -150,14 +158,22 @@ pub enum SubtitlePreflightStatus {
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct SubtitlePreflightReport {
     pub status: SubtitlePreflightStatus,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub segment_count: usize,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub error_count: usize,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub warning_count: usize,
+    #[cfg_attr(test, schemars(range(min = -9007199254740991_i64, max = 9007199254740991_i64)))]
     pub first_start_ms: Option<i64>,
+    #[cfg_attr(test, schemars(range(min = -9007199254740991_i64, max = 9007199254740991_i64)))]
     pub last_end_ms: Option<i64>,
+    #[cfg_attr(test, schemars(range(min = -9007199254740991_i64, max = 9007199254740991_i64)))]
     pub media_duration_ms: Option<i64>,
+    #[cfg_attr(test, schemars(range(min = 0, max = 1)))]
     pub coverage_ratio: Option<f64>,
     pub issues: Vec<SubtitlePreflightIssue>,
 }
@@ -226,47 +242,65 @@ pub struct ImportEmbeddedSubtitleInput {
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct SubtitleWord {
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub ordinal: usize,
+    #[cfg_attr(test, schemars(range(min = -9007199254740991_i64, max = 9007199254740991_i64)))]
     pub start_ms: i64,
+    #[cfg_attr(test, schemars(range(min = -9007199254740991_i64, max = 9007199254740991_i64)))]
     pub end_ms: i64,
     pub text: String,
+    #[cfg_attr(test, schemars(range(min = 0, max = 1)))]
     pub confidence: Option<f64>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct SubtitleSegment {
     pub id: String,
     pub lineage_id: String,
     pub source_segment_id: Option<String>,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub ordinal: usize,
+    #[cfg_attr(test, schemars(range(min = -9007199254740991_i64, max = 9007199254740991_i64)))]
     pub start_ms: i64,
+    #[cfg_attr(test, schemars(range(min = -9007199254740991_i64, max = 9007199254740991_i64)))]
     pub end_ms: i64,
     pub text: String,
+    #[cfg_attr(test, schemars(range(min = 0, max = 1)))]
     pub confidence: Option<f64>,
+    #[cfg_attr(test, schemars(with = "Option<wire_schema::SubtitleCorrection>"))]
     pub issue_kind: Option<String>,
     pub words: Vec<SubtitleWord>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct SubtitleVersion {
     pub id: String,
     pub track_id: String,
     pub project_id: String,
+    #[cfg_attr(test, schemars(with = "metadata::SubtitleTrackRole"))]
     pub role: String,
+    #[cfg_attr(test, schemars(range(min = -9007199254740991_i64, max = 9007199254740991_i64)))]
     pub version_number: i64,
+    #[cfg_attr(test, schemars(with = "metadata::SubtitleRevisionStatus"))]
     pub status: String,
+    #[cfg_attr(test, schemars(with = "wire_schema::SubtitleSource"))]
     pub source_kind: String,
     pub source_label: String,
     pub source_sha256: String,
     pub media_sha256: String,
     pub language_code: String,
+    #[cfg_attr(test, schemars(range(min = -9007199254740991_i64, max = 9007199254740991_i64)))]
     pub project_revision: i64,
     pub parent_version_id: Option<String>,
     pub source_task_id: Option<String>,
     pub preflight: SubtitlePreflightReport,
+    #[cfg_attr(test, schemars(range(min = -9007199254740991_i64, max = 9007199254740991_i64)))]
     pub created_at_ms: i64,
     pub is_current: bool,
     pub segments: Vec<SubtitleSegment>,

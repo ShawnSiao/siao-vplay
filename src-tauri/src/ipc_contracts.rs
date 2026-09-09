@@ -48,6 +48,7 @@ fn committed_schemas_match_rust() {
     check_schema("network-settings", &network);
     check_ai_service_schemas();
     check_transcription_schema();
+    check_subtitle_body_schema();
     use crate::ai::types::{AiExecutionKind, AiExecutionPreview};
     let mut preview = serialized_schema::<AiExecutionPreview>();
     preview["examples"] = serde_json::json!([
@@ -152,4 +153,32 @@ fn check_transcription_schema() {
     }
     schema["examples"] = examples.into();
     check_schema("transcription-job", &schema);
+}
+
+fn check_subtitle_body_schema() {
+    use crate::subtitles::*;
+    let mut schema = serialized_schema::<SubtitleVersion>();
+    let example = SubtitleVersion {
+        id: "v".into(), track_id: "track".into(), project_id: "p".into(), role: "original".into(),
+        version_number: 1, status: "draft".into(), source_kind: "transcription".into(), source_label: "Test".into(),
+        source_sha256: "a".repeat(64), media_sha256: "b".repeat(64), language_code: "en".into(), project_revision: 2,
+        parent_version_id: None, source_task_id: Some("task".into()), created_at_ms: 1, is_current: true,
+        preflight: SubtitlePreflightReport { status: SubtitlePreflightStatus::Ready, segment_count: 1, error_count: 0, warning_count: 0,
+            first_start_ms: Some(0), last_end_ms: Some(1000), media_duration_ms: Some(2000), coverage_ratio: Some(0.5), issues: vec![] },
+        segments: vec![SubtitleSegment { id: "segment".into(), lineage_id: "lineage".into(), source_segment_id: None,
+            ordinal: 0, start_ms: 0, end_ms: 1000, text: "Hello".into(), confidence: None, issue_kind: None,
+            words: vec![SubtitleWord { ordinal: 0, start_ms: 0, end_ms: 500, text: "Hello".into(), confidence: Some(0.9) }] }],
+    };
+    let mut examples = Vec::new();
+    for role in ["original", "translation"] {
+        for status in ["draft", "ready", "rejected"] {
+            for source in ["imported_file", "embedded", "transcription", "agent_translation"] {
+                let mut sample = example.clone();
+                sample.role = role.into(); sample.status = status.into(); sample.source_kind = source.into();
+                examples.push(serde_json::to_value(sample).unwrap());
+            }
+        }
+    }
+    schema["examples"] = examples.into();
+    check_schema("subtitle-version", &schema);
 }

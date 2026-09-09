@@ -1,3 +1,5 @@
+import type { SubtitlePreflightReport, SubtitleVersion } from "./generated/subtitle-version";
+export type { SubtitleIssueSeverity, SubtitleIssueCode, SubtitlePreflightIssue, SubtitlePreflightReport, SubtitleWord, SubtitleSegment, SubtitleVersion } from "./generated/subtitle-version";
 import type {
   CollectionDetail,
   LibraryItemAvailability,
@@ -758,39 +760,6 @@ export type SubtitleCue = {
   confidence: number | null;
 };
 
-export type SubtitleIssueSeverity = "error" | "warning";
-
-export type SubtitleIssueCode =
-  | "empty_text"
-  | "invalid_timing"
-  | "out_of_order"
-  | "out_of_bounds"
-  | "overlap"
-  | "long_gap"
-  | "duration_too_short"
-  | "duration_too_long"
-  | "reading_speed_high";
-
-export type SubtitlePreflightIssue = {
-  code: SubtitleIssueCode;
-  severity: SubtitleIssueSeverity;
-  ordinal: number | null;
-  relatedOrdinal: number | null;
-  message: string;
-};
-
-export type SubtitlePreflightReport = {
-  status: "ready" | "warning" | "blocked";
-  segmentCount: number;
-  errorCount: number;
-  warningCount: number;
-  firstStartMs: number | null;
-  lastEndMs: number | null;
-  mediaDurationMs: number | null;
-  coverageRatio: number | null;
-  issues: SubtitlePreflightIssue[];
-};
-
 export type SubtitleImportPreview = {
   format: SubtitleFileFormat;
   sourceLabel: string;
@@ -809,22 +778,6 @@ export type EmbeddedSubtitlePreview = SubtitleImportPreview & {
   embeddedLanguage: string | null;
 };
 
-export type SubtitleWord = {
-  ordinal: number;
-  startMs: number;
-  endMs: number;
-  text: string;
-  confidence: number | null;
-};
-
-export type SubtitleSegment = SubtitleCue & {
-  id: string;
-  lineageId: string;
-  sourceSegmentId: string | null;
-  issueKind: "missing" | "duplicate" | "incorrect" | null;
-  words: SubtitleWord[];
-};
-
 export type SubtitleSegmentEdit = {
   segmentId: string;
   text?: string;
@@ -834,31 +787,6 @@ export type SubtitleSegmentEdit = {
 export type SubtitleGlobalReplacement = {
   findText: string;
   replaceText: string;
-};
-
-export type SubtitleVersion = {
-  id: string;
-  trackId: string;
-  projectId: string;
-  role: "original" | "translation";
-  versionNumber: number;
-  status: "draft" | "ready" | "rejected";
-  sourceKind:
-    | "imported_file"
-    | "embedded"
-    | "transcription"
-    | "agent_translation";
-  sourceLabel: string;
-  sourceSha256: string;
-  mediaSha256: string;
-  languageCode: string;
-  projectRevision: number;
-  parentVersionId: string | null;
-  sourceTaskId: string | null;
-  preflight: SubtitlePreflightReport;
-  createdAtMs: number;
-  isCurrent: boolean;
-  segments: SubtitleSegment[];
 };
 
 export type TranscriptionRuntimeOption = {

@@ -10,7 +10,8 @@ function normalizeNumericFormats(value) {
     delete value.format;
   }
   if (value.format === "double") {
-    if (value.type !== "number" || !Number.isFinite(value.minimum) || !Number.isFinite(value.maximum) || value.minimum > value.maximum) {
+    const numberType = value.type === "number" || (Array.isArray(value.type) && value.type.length === 2 && value.type.includes("number") && value.type.includes("null"));
+    if (!numberType || !Number.isFinite(value.minimum) || !Number.isFinite(value.maximum) || value.minimum > value.maximum) {
       throw new Error("IPC double requires explicit finite numeric bounds");
     }
     delete value.format;

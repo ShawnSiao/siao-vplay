@@ -4,11 +4,12 @@ test("history read failure can be retried and the loaded revision dialog closes 
   page.on("pageerror", (error) => errors.push(error.message));
   await page.goto("/e2e/player.html?subtitle-history");
   await page.evaluate(() => {
-    const state = window as unknown as { historyFixture: Record<string, unknown>; historyFail: boolean; __TAURI_INTERNALS__: unknown };
+    const state = window as unknown as { historyFixture: Record<string, unknown>; historyFail: boolean; historyMalformed: boolean; __TAURI_INTERNALS__: unknown };
     state.historyFail = true;
+    state.historyMalformed = true;
     state.__TAURI_INTERNALS__ = { invoke: async (command: string, input: { includeHistory: boolean }) => {
       if (state.historyFail) throw new Error("历史读取暂时失败");
-      if (command === "list_subtitle_versions" && input.includeHistory === false) return [state.historyFixture];
+      if (command === "list_subtitle_versions" && input.includeHistory === false) return [state.historyMalformed ? { ...state.historyFixture, preflight: {} } : state.historyFixture];
       if (command === "list_subtitle_version_metadata") {
         const metadata = Object.fromEntries(Object.entries(state.historyFixture).filter(([key]) => ["id", "trackId", "projectId", "role", "versionNumber", "status", "sourceLabel", "languageCode", "createdAtMs", "isCurrent"].includes(key)));
         return [{ ...metadata, segmentCount: (state.historyFixture.segments as unknown[]).length }, { ...metadata, id: "historical-version", isCurrent: false, segmentCount: 75 }];
@@ -19,6 +20,9 @@ test("history read failure can be retried and the loaded revision dialog closes 
   await page.getByRole("button", { name: "修正字幕", exact: true }).click();
   await expect(page.getByRole("alert")).toHaveText("历史读取暂时失败");
   await page.evaluate(() => { (window as unknown as { historyFail: boolean }).historyFail = false; });
+  await page.getByRole("button", { name: "重新读取", exact: true }).click();
+  await expect(page.getByRole("alert")).toContainText("字幕版本格式无效");
+  await page.evaluate(() => { (window as unknown as { historyMalformed: boolean }).historyMalformed = false; });
   await page.getByRole("button", { name: "重新读取", exact: true }).click();
   await expect(page.getByRole("dialog", { name: "轻量字幕修正" })).toBeVisible();
   const segments = page.getByRole("tab", { name: "逐句修正", exact: true });

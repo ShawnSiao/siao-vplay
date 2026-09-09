@@ -1,0 +1,1623 @@
+{
+  "$defs": {
+    "SubtitleCorrection": {
+      "enum": [
+        "missing",
+        "duplicate",
+        "incorrect"
+      ],
+      "type": "string"
+    },
+    "SubtitleIssueCode": {
+      "enum": [
+        "empty_text",
+        "invalid_timing",
+        "out_of_order",
+        "out_of_bounds",
+        "overlap",
+        "long_gap",
+        "duration_too_short",
+        "duration_too_long",
+        "reading_speed_high"
+      ],
+      "type": "string"
+    },
+    "SubtitleIssueSeverity": {
+      "enum": [
+        "error",
+        "warning"
+      ],
+      "type": "string"
+    },
+    "SubtitlePreflightIssue": {
+      "properties": {
+        "code": {
+          "$ref": "#/$defs/SubtitleIssueCode"
+        },
+        "message": {
+          "type": "string"
+        },
+        "ordinal": {
+          "format": "uint",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "relatedOrdinal": {
+          "format": "uint",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "severity": {
+          "$ref": "#/$defs/SubtitleIssueSeverity"
+        }
+      },
+      "required": [
+        "code",
+        "severity",
+        "ordinal",
+        "relatedOrdinal",
+        "message"
+      ],
+      "type": "object"
+    },
+    "SubtitlePreflightReport": {
+      "properties": {
+        "coverageRatio": {
+          "format": "double",
+          "maximum": 1,
+          "minimum": 0,
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "errorCount": {
+          "format": "uint",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "firstStartMs": {
+          "format": "int64",
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "issues": {
+          "items": {
+            "$ref": "#/$defs/SubtitlePreflightIssue"
+          },
+          "type": "array"
+        },
+        "lastEndMs": {
+          "format": "int64",
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "mediaDurationMs": {
+          "format": "int64",
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "segmentCount": {
+          "format": "uint",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "status": {
+          "$ref": "#/$defs/SubtitlePreflightStatus"
+        },
+        "warningCount": {
+          "format": "uint",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "status",
+        "segmentCount",
+        "errorCount",
+        "warningCount",
+        "firstStartMs",
+        "lastEndMs",
+        "mediaDurationMs",
+        "coverageRatio",
+        "issues"
+      ],
+      "type": "object"
+    },
+    "SubtitlePreflightStatus": {
+      "enum": [
+        "ready",
+        "warning",
+        "blocked"
+      ],
+      "type": "string"
+    },
+    "SubtitleRevisionStatus": {
+      "enum": [
+        "draft",
+        "ready",
+        "rejected"
+      ],
+      "type": "string"
+    },
+    "SubtitleSegment": {
+      "properties": {
+        "confidence": {
+          "format": "double",
+          "maximum": 1,
+          "minimum": 0,
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "endMs": {
+          "format": "int64",
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": "integer"
+        },
+        "id": {
+          "type": "string"
+        },
+        "issueKind": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SubtitleCorrection"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "lineageId": {
+          "type": "string"
+        },
+        "ordinal": {
+          "format": "uint",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "sourceSegmentId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "startMs": {
+          "format": "int64",
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": "integer"
+        },
+        "text": {
+          "type": "string"
+        },
+        "words": {
+          "items": {
+            "$ref": "#/$defs/SubtitleWord"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "lineageId",
+        "sourceSegmentId",
+        "ordinal",
+        "startMs",
+        "endMs",
+        "text",
+        "confidence",
+        "issueKind",
+        "words"
+      ],
+      "type": "object"
+    },
+    "SubtitleSource": {
+      "enum": [
+        "imported_file",
+        "embedded",
+        "transcription",
+        "agent_translation"
+      ],
+      "type": "string"
+    },
+    "SubtitleTrackRole": {
+      "enum": [
+        "original",
+        "translation"
+      ],
+      "type": "string"
+    },
+    "SubtitleWord": {
+      "properties": {
+        "confidence": {
+          "format": "double",
+          "maximum": 1,
+          "minimum": 0,
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "endMs": {
+          "format": "int64",
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": "integer"
+        },
+        "ordinal": {
+          "format": "uint",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "startMs": {
+          "format": "int64",
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": "integer"
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "ordinal",
+        "startMs",
+        "endMs",
+        "text",
+        "confidence"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "examples": [
+    {
+      "createdAtMs": 1,
+      "id": "v",
+      "isCurrent": true,
+      "languageCode": "en",
+      "mediaSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "parentVersionId": null,
+      "preflight": {
+        "coverageRatio": 0.5,
+        "errorCount": 0,
+        "firstStartMs": 0,
+        "issues": [],
+        "lastEndMs": 1000,
+        "mediaDurationMs": 2000,
+        "segmentCount": 1,
+        "status": "ready",
+        "warningCount": 0
+      },
+      "projectId": "p",
+      "projectRevision": 2,
+      "role": "original",
+      "segments": [
+        {
+          "confidence": null,
+          "endMs": 1000,
+          "id": "segment",
+          "issueKind": null,
+          "lineageId": "lineage",
+          "ordinal": 0,
+          "sourceSegmentId": null,
+          "startMs": 0,
+          "text": "Hello",
+          "words": [
+            {
+              "confidence": 0.9,
+              "endMs": 500,
+              "ordinal": 0,
+              "startMs": 0,
+              "text": "Hello"
+            }
+          ]
+        }
+      ],
+      "sourceKind": "imported_file",
+      "sourceLabel": "Test",
+      "sourceSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "sourceTaskId": "task",
+      "status": "draft",
+      "trackId": "track",
+      "versionNumber": 1
+    },
+    {
+      "createdAtMs": 1,
+      "id": "v",
+      "isCurrent": true,
+      "languageCode": "en",
+      "mediaSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "parentVersionId": null,
+      "preflight": {
+        "coverageRatio": 0.5,
+        "errorCount": 0,
+        "firstStartMs": 0,
+        "issues": [],
+        "lastEndMs": 1000,
+        "mediaDurationMs": 2000,
+        "segmentCount": 1,
+        "status": "ready",
+        "warningCount": 0
+      },
+      "projectId": "p",
+      "projectRevision": 2,
+      "role": "original",
+      "segments": [
+        {
+          "confidence": null,
+          "endMs": 1000,
+          "id": "segment",
+          "issueKind": null,
+          "lineageId": "lineage",
+          "ordinal": 0,
+          "sourceSegmentId": null,
+          "startMs": 0,
+          "text": "Hello",
+          "words": [
+            {
+              "confidence": 0.9,
+              "endMs": 500,
+              "ordinal": 0,
+              "startMs": 0,
+              "text": "Hello"
+            }
+          ]
+        }
+      ],
+      "sourceKind": "embedded",
+      "sourceLabel": "Test",
+      "sourceSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "sourceTaskId": "task",
+      "status": "draft",
+      "trackId": "track",
+      "versionNumber": 1
+    },
+    {
+      "createdAtMs": 1,
+      "id": "v",
+      "isCurrent": true,
+      "languageCode": "en",
+      "mediaSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "parentVersionId": null,
+      "preflight": {
+        "coverageRatio": 0.5,
+        "errorCount": 0,
+        "firstStartMs": 0,
+        "issues": [],
+        "lastEndMs": 1000,
+        "mediaDurationMs": 2000,
+        "segmentCount": 1,
+        "status": "ready",
+        "warningCount": 0
+      },
+      "projectId": "p",
+      "projectRevision": 2,
+      "role": "original",
+      "segments": [
+        {
+          "confidence": null,
+          "endMs": 1000,
+          "id": "segment",
+          "issueKind": null,
+          "lineageId": "lineage",
+          "ordinal": 0,
+          "sourceSegmentId": null,
+          "startMs": 0,
+          "text": "Hello",
+          "words": [
+            {
+              "confidence": 0.9,
+              "endMs": 500,
+              "ordinal": 0,
+              "startMs": 0,
+              "text": "Hello"
+            }
+          ]
+        }
+      ],
+      "sourceKind": "transcription",
+      "sourceLabel": "Test",
+      "sourceSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "sourceTaskId": "task",
+      "status": "draft",
+      "trackId": "track",
+      "versionNumber": 1
+    },
+    {
+      "createdAtMs": 1,
+      "id": "v",
+      "isCurrent": true,
+      "languageCode": "en",
+      "mediaSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "parentVersionId": null,
+      "preflight": {
+        "coverageRatio": 0.5,
+        "errorCount": 0,
+        "firstStartMs": 0,
+        "issues": [],
+        "lastEndMs": 1000,
+        "mediaDurationMs": 2000,
+        "segmentCount": 1,
+        "status": "ready",
+        "warningCount": 0
+      },
+      "projectId": "p",
+      "projectRevision": 2,
+      "role": "original",
+      "segments": [
+        {
+          "confidence": null,
+          "endMs": 1000,
+          "id": "segment",
+          "issueKind": null,
+          "lineageId": "lineage",
+          "ordinal": 0,
+          "sourceSegmentId": null,
+          "startMs": 0,
+          "text": "Hello",
+          "words": [
+            {
+              "confidence": 0.9,
+              "endMs": 500,
+              "ordinal": 0,
+              "startMs": 0,
+              "text": "Hello"
+            }
+          ]
+        }
+      ],
+      "sourceKind": "agent_translation",
+      "sourceLabel": "Test",
+      "sourceSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "sourceTaskId": "task",
+      "status": "draft",
+      "trackId": "track",
+      "versionNumber": 1
+    },
+    {
+      "createdAtMs": 1,
+      "id": "v",
+      "isCurrent": true,
+      "languageCode": "en",
+      "mediaSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "parentVersionId": null,
+      "preflight": {
+        "coverageRatio": 0.5,
+        "errorCount": 0,
+        "firstStartMs": 0,
+        "issues": [],
+        "lastEndMs": 1000,
+        "mediaDurationMs": 2000,
+        "segmentCount": 1,
+        "status": "ready",
+        "warningCount": 0
+      },
+      "projectId": "p",
+      "projectRevision": 2,
+      "role": "original",
+      "segments": [
+        {
+          "confidence": null,
+          "endMs": 1000,
+          "id": "segment",
+          "issueKind": null,
+          "lineageId": "lineage",
+          "ordinal": 0,
+          "sourceSegmentId": null,
+          "startMs": 0,
+          "text": "Hello",
+          "words": [
+            {
+              "confidence": 0.9,
+              "endMs": 500,
+              "ordinal": 0,
+              "startMs": 0,
+              "text": "Hello"
+            }
+          ]
+        }
+      ],
+      "sourceKind": "imported_file",
+      "sourceLabel": "Test",
+      "sourceSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "sourceTaskId": "task",
+      "status": "ready",
+      "trackId": "track",
+      "versionNumber": 1
+    },
+    {
+      "createdAtMs": 1,
+      "id": "v",
+      "isCurrent": true,
+      "languageCode": "en",
+      "mediaSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "parentVersionId": null,
+      "preflight": {
+        "coverageRatio": 0.5,
+        "errorCount": 0,
+        "firstStartMs": 0,
+        "issues": [],
+        "lastEndMs": 1000,
+        "mediaDurationMs": 2000,
+        "segmentCount": 1,
+        "status": "ready",
+        "warningCount": 0
+      },
+      "projectId": "p",
+      "projectRevision": 2,
+      "role": "original",
+      "segments": [
+        {
+          "confidence": null,
+          "endMs": 1000,
+          "id": "segment",
+          "issueKind": null,
+          "lineageId": "lineage",
+          "ordinal": 0,
+          "sourceSegmentId": null,
+          "startMs": 0,
+          "text": "Hello",
+          "words": [
+            {
+              "confidence": 0.9,
+              "endMs": 500,
+              "ordinal": 0,
+              "startMs": 0,
+              "text": "Hello"
+            }
+          ]
+        }
+      ],
+      "sourceKind": "embedded",
+      "sourceLabel": "Test",
+      "sourceSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "sourceTaskId": "task",
+      "status": "ready",
+      "trackId": "track",
+      "versionNumber": 1
+    },
+    {
+      "createdAtMs": 1,
+      "id": "v",
+      "isCurrent": true,
+      "languageCode": "en",
+      "mediaSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "parentVersionId": null,
+      "preflight": {
+        "coverageRatio": 0.5,
+        "errorCount": 0,
+        "firstStartMs": 0,
+        "issues": [],
+        "lastEndMs": 1000,
+        "mediaDurationMs": 2000,
+        "segmentCount": 1,
+        "status": "ready",
+        "warningCount": 0
+      },
+      "projectId": "p",
+      "projectRevision": 2,
+      "role": "original",
+      "segments": [
+        {
+          "confidence": null,
+          "endMs": 1000,
+          "id": "segment",
+          "issueKind": null,
+          "lineageId": "lineage",
+          "ordinal": 0,
+          "sourceSegmentId": null,
+          "startMs": 0,
+          "text": "Hello",
+          "words": [
+            {
+              "confidence": 0.9,
+              "endMs": 500,
+              "ordinal": 0,
+              "startMs": 0,
+              "text": "Hello"
+            }
+          ]
+        }
+      ],
+      "sourceKind": "transcription",
+      "sourceLabel": "Test",
+      "sourceSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "sourceTaskId": "task",
+      "status": "ready",
+      "trackId": "track",
+      "versionNumber": 1
+    },
+    {
+      "createdAtMs": 1,
+      "id": "v",
+      "isCurrent": true,
+      "languageCode": "en",
+      "mediaSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "parentVersionId": null,
+      "preflight": {
+        "coverageRatio": 0.5,
+        "errorCount": 0,
+        "firstStartMs": 0,
+        "issues": [],
+        "lastEndMs": 1000,
+        "mediaDurationMs": 2000,
+        "segmentCount": 1,
+        "status": "ready",
+        "warningCount": 0
+      },
+      "projectId": "p",
+      "projectRevision": 2,
+      "role": "original",
+      "segments": [
+        {
+          "confidence": null,
+          "endMs": 1000,
+          "id": "segment",
+          "issueKind": null,
+          "lineageId": "lineage",
+          "ordinal": 0,
+          "sourceSegmentId": null,
+          "startMs": 0,
+          "text": "Hello",
+          "words": [
+            {
+              "confidence": 0.9,
+              "endMs": 500,
+              "ordinal": 0,
+              "startMs": 0,
+              "text": "Hello"
+            }
+          ]
+        }
+      ],
+      "sourceKind": "agent_translation",
+      "sourceLabel": "Test",
+      "sourceSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "sourceTaskId": "task",
+      "status": "ready",
+      "trackId": "track",
+      "versionNumber": 1
+    },
+    {
+      "createdAtMs": 1,
+      "id": "v",
+      "isCurrent": true,
+      "languageCode": "en",
+      "mediaSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "parentVersionId": null,
+      "preflight": {
+        "coverageRatio": 0.5,
+        "errorCount": 0,
+        "firstStartMs": 0,
+        "issues": [],
+        "lastEndMs": 1000,
+        "mediaDurationMs": 2000,
+        "segmentCount": 1,
+        "status": "ready",
+        "warningCount": 0
+      },
+      "projectId": "p",
+      "projectRevision": 2,
+      "role": "original",
+      "segments": [
+        {
+          "confidence": null,
+          "endMs": 1000,
+          "id": "segment",
+          "issueKind": null,
+          "lineageId": "lineage",
+          "ordinal": 0,
+          "sourceSegmentId": null,
+          "startMs": 0,
+          "text": "Hello",
+          "words": [
+            {
+              "confidence": 0.9,
+              "endMs": 500,
+              "ordinal": 0,
+              "startMs": 0,
+              "text": "Hello"
+            }
+          ]
+        }
+      ],
+      "sourceKind": "imported_file",
+      "sourceLabel": "Test",
+      "sourceSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "sourceTaskId": "task",
+      "status": "rejected",
+      "trackId": "track",
+      "versionNumber": 1
+    },
+    {
+      "createdAtMs": 1,
+      "id": "v",
+      "isCurrent": true,
+      "languageCode": "en",
+      "mediaSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "parentVersionId": null,
+      "preflight": {
+        "coverageRatio": 0.5,
+        "errorCount": 0,
+        "firstStartMs": 0,
+        "issues": [],
+        "lastEndMs": 1000,
+        "mediaDurationMs": 2000,
+        "segmentCount": 1,
+        "status": "ready",
+        "warningCount": 0
+      },
+      "projectId": "p",
+      "projectRevision": 2,
+      "role": "original",
+      "segments": [
+        {
+          "confidence": null,
+          "endMs": 1000,
+          "id": "segment",
+          "issueKind": null,
+          "lineageId": "lineage",
+          "ordinal": 0,
+          "sourceSegmentId": null,
+          "startMs": 0,
+          "text": "Hello",
+          "words": [
+            {
+              "confidence": 0.9,
+              "endMs": 500,
+              "ordinal": 0,
+              "startMs": 0,
+              "text": "Hello"
+            }
+          ]
+        }
+      ],
+      "sourceKind": "embedded",
+      "sourceLabel": "Test",
+      "sourceSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "sourceTaskId": "task",
+      "status": "rejected",
+      "trackId": "track",
+      "versionNumber": 1
+    },
+    {
+      "createdAtMs": 1,
+      "id": "v",
+      "isCurrent": true,
+      "languageCode": "en",
+      "mediaSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "parentVersionId": null,
+      "preflight": {
+        "coverageRatio": 0.5,
+        "errorCount": 0,
+        "firstStartMs": 0,
+        "issues": [],
+        "lastEndMs": 1000,
+        "mediaDurationMs": 2000,
+        "segmentCount": 1,
+        "status": "ready",
+        "warningCount": 0
+      },
+      "projectId": "p",
+      "projectRevision": 2,
+      "role": "original",
+      "segments": [
+        {
+          "confidence": null,
+          "endMs": 1000,
+          "id": "segment",
+          "issueKind": null,
+          "lineageId": "lineage",
+          "ordinal": 0,
+          "sourceSegmentId": null,
+          "startMs": 0,
+          "text": "Hello",
+          "words": [
+            {
+              "confidence": 0.9,
+              "endMs": 500,
+              "ordinal": 0,
+              "startMs": 0,
+              "text": "Hello"
+            }
+          ]
+        }
+      ],
+      "sourceKind": "transcription",
+      "sourceLabel": "Test",
+      "sourceSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "sourceTaskId": "task",
+      "status": "rejected",
+      "trackId": "track",
+      "versionNumber": 1
+    },
+    {
+      "createdAtMs": 1,
+      "id": "v",
+      "isCurrent": true,
+      "languageCode": "en",
+      "mediaSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "parentVersionId": null,
+      "preflight": {
+        "coverageRatio": 0.5,
+        "errorCount": 0,
+        "firstStartMs": 0,
+        "issues": [],
+        "lastEndMs": 1000,
+        "mediaDurationMs": 2000,
+        "segmentCount": 1,
+        "status": "ready",
+        "warningCount": 0
+      },
+      "projectId": "p",
+      "projectRevision": 2,
+      "role": "original",
+      "segments": [
+        {
+          "confidence": null,
+          "endMs": 1000,
+          "id": "segment",
+          "issueKind": null,
+          "lineageId": "lineage",
+          "ordinal": 0,
+          "sourceSegmentId": null,
+          "startMs": 0,
+          "text": "Hello",
+          "words": [
+            {
+              "confidence": 0.9,
+              "endMs": 500,
+              "ordinal": 0,
+              "startMs": 0,
+              "text": "Hello"
+            }
+          ]
+        }
+      ],
+      "sourceKind": "agent_translation",
+      "sourceLabel": "Test",
+      "sourceSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "sourceTaskId": "task",
+      "status": "rejected",
+      "trackId": "track",
+      "versionNumber": 1
+    },
+    {
+      "createdAtMs": 1,
+      "id": "v",
+      "isCurrent": true,
+      "languageCode": "en",
+      "mediaSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "parentVersionId": null,
+      "preflight": {
+        "coverageRatio": 0.5,
+        "errorCount": 0,
+        "firstStartMs": 0,
+        "issues": [],
+        "lastEndMs": 1000,
+        "mediaDurationMs": 2000,
+        "segmentCount": 1,
+        "status": "ready",
+        "warningCount": 0
+      },
+      "projectId": "p",
+      "projectRevision": 2,
+      "role": "translation",
+      "segments": [
+        {
+          "confidence": null,
+          "endMs": 1000,
+          "id": "segment",
+          "issueKind": null,
+          "lineageId": "lineage",
+          "ordinal": 0,
+          "sourceSegmentId": null,
+          "startMs": 0,
+          "text": "Hello",
+          "words": [
+            {
+              "confidence": 0.9,
+              "endMs": 500,
+              "ordinal": 0,
+              "startMs": 0,
+              "text": "Hello"
+            }
+          ]
+        }
+      ],
+      "sourceKind": "imported_file",
+      "sourceLabel": "Test",
+      "sourceSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "sourceTaskId": "task",
+      "status": "draft",
+      "trackId": "track",
+      "versionNumber": 1
+    },
+    {
+      "createdAtMs": 1,
+      "id": "v",
+      "isCurrent": true,
+      "languageCode": "en",
+      "mediaSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "parentVersionId": null,
+      "preflight": {
+        "coverageRatio": 0.5,
+        "errorCount": 0,
+        "firstStartMs": 0,
+        "issues": [],
+        "lastEndMs": 1000,
+        "mediaDurationMs": 2000,
+        "segmentCount": 1,
+        "status": "ready",
+        "warningCount": 0
+      },
+      "projectId": "p",
+      "projectRevision": 2,
+      "role": "translation",
+      "segments": [
+        {
+          "confidence": null,
+          "endMs": 1000,
+          "id": "segment",
+          "issueKind": null,
+          "lineageId": "lineage",
+          "ordinal": 0,
+          "sourceSegmentId": null,
+          "startMs": 0,
+          "text": "Hello",
+          "words": [
+            {
+              "confidence": 0.9,
+              "endMs": 500,
+              "ordinal": 0,
+              "startMs": 0,
+              "text": "Hello"
+            }
+          ]
+        }
+      ],
+      "sourceKind": "embedded",
+      "sourceLabel": "Test",
+      "sourceSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "sourceTaskId": "task",
+      "status": "draft",
+      "trackId": "track",
+      "versionNumber": 1
+    },
+    {
+      "createdAtMs": 1,
+      "id": "v",
+      "isCurrent": true,
+      "languageCode": "en",
+      "mediaSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "parentVersionId": null,
+      "preflight": {
+        "coverageRatio": 0.5,
+        "errorCount": 0,
+        "firstStartMs": 0,
+        "issues": [],
+        "lastEndMs": 1000,
+        "mediaDurationMs": 2000,
+        "segmentCount": 1,
+        "status": "ready",
+        "warningCount": 0
+      },
+      "projectId": "p",
+      "projectRevision": 2,
+      "role": "translation",
+      "segments": [
+        {
+          "confidence": null,
+          "endMs": 1000,
+          "id": "segment",
+          "issueKind": null,
+          "lineageId": "lineage",
+          "ordinal": 0,
+          "sourceSegmentId": null,
+          "startMs": 0,
+          "text": "Hello",
+          "words": [
+            {
+              "confidence": 0.9,
+              "endMs": 500,
+              "ordinal": 0,
+              "startMs": 0,
+              "text": "Hello"
+            }
+          ]
+        }
+      ],
+      "sourceKind": "transcription",
+      "sourceLabel": "Test",
+      "sourceSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "sourceTaskId": "task",
+      "status": "draft",
+      "trackId": "track",
+      "versionNumber": 1
+    },
+    {
+      "createdAtMs": 1,
+      "id": "v",
+      "isCurrent": true,
+      "languageCode": "en",
+      "mediaSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "parentVersionId": null,
+      "preflight": {
+        "coverageRatio": 0.5,
+        "errorCount": 0,
+        "firstStartMs": 0,
+        "issues": [],
+        "lastEndMs": 1000,
+        "mediaDurationMs": 2000,
+        "segmentCount": 1,
+        "status": "ready",
+        "warningCount": 0
+      },
+      "projectId": "p",
+      "projectRevision": 2,
+      "role": "translation",
+      "segments": [
+        {
+          "confidence": null,
+          "endMs": 1000,
+          "id": "segment",
+          "issueKind": null,
+          "lineageId": "lineage",
+          "ordinal": 0,
+          "sourceSegmentId": null,
+          "startMs": 0,
+          "text": "Hello",
+          "words": [
+            {
+              "confidence": 0.9,
+              "endMs": 500,
+              "ordinal": 0,
+              "startMs": 0,
+              "text": "Hello"
+            }
+          ]
+        }
+      ],
+      "sourceKind": "agent_translation",
+      "sourceLabel": "Test",
+      "sourceSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "sourceTaskId": "task",
+      "status": "draft",
+      "trackId": "track",
+      "versionNumber": 1
+    },
+    {
+      "createdAtMs": 1,
+      "id": "v",
+      "isCurrent": true,
+      "languageCode": "en",
+      "mediaSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "parentVersionId": null,
+      "preflight": {
+        "coverageRatio": 0.5,
+        "errorCount": 0,
+        "firstStartMs": 0,
+        "issues": [],
+        "lastEndMs": 1000,
+        "mediaDurationMs": 2000,
+        "segmentCount": 1,
+        "status": "ready",
+        "warningCount": 0
+      },
+      "projectId": "p",
+      "projectRevision": 2,
+      "role": "translation",
+      "segments": [
+        {
+          "confidence": null,
+          "endMs": 1000,
+          "id": "segment",
+          "issueKind": null,
+          "lineageId": "lineage",
+          "ordinal": 0,
+          "sourceSegmentId": null,
+          "startMs": 0,
+          "text": "Hello",
+          "words": [
+            {
+              "confidence": 0.9,
+              "endMs": 500,
+              "ordinal": 0,
+              "startMs": 0,
+              "text": "Hello"
+            }
+          ]
+        }
+      ],
+      "sourceKind": "imported_file",
+      "sourceLabel": "Test",
+      "sourceSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "sourceTaskId": "task",
+      "status": "ready",
+      "trackId": "track",
+      "versionNumber": 1
+    },
+    {
+      "createdAtMs": 1,
+      "id": "v",
+      "isCurrent": true,
+      "languageCode": "en",
+      "mediaSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "parentVersionId": null,
+      "preflight": {
+        "coverageRatio": 0.5,
+        "errorCount": 0,
+        "firstStartMs": 0,
+        "issues": [],
+        "lastEndMs": 1000,
+        "mediaDurationMs": 2000,
+        "segmentCount": 1,
+        "status": "ready",
+        "warningCount": 0
+      },
+      "projectId": "p",
+      "projectRevision": 2,
+      "role": "translation",
+      "segments": [
+        {
+          "confidence": null,
+          "endMs": 1000,
+          "id": "segment",
+          "issueKind": null,
+          "lineageId": "lineage",
+          "ordinal": 0,
+          "sourceSegmentId": null,
+          "startMs": 0,
+          "text": "Hello",
+          "words": [
+            {
+              "confidence": 0.9,
+              "endMs": 500,
+              "ordinal": 0,
+              "startMs": 0,
+              "text": "Hello"
+            }
+          ]
+        }
+      ],
+      "sourceKind": "embedded",
+      "sourceLabel": "Test",
+      "sourceSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "sourceTaskId": "task",
+      "status": "ready",
+      "trackId": "track",
+      "versionNumber": 1
+    },
+    {
+      "createdAtMs": 1,
+      "id": "v",
+      "isCurrent": true,
+      "languageCode": "en",
+      "mediaSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "parentVersionId": null,
+      "preflight": {
+        "coverageRatio": 0.5,
+        "errorCount": 0,
+        "firstStartMs": 0,
+        "issues": [],
+        "lastEndMs": 1000,
+        "mediaDurationMs": 2000,
+        "segmentCount": 1,
+        "status": "ready",
+        "warningCount": 0
+      },
+      "projectId": "p",
+      "projectRevision": 2,
+      "role": "translation",
+      "segments": [
+        {
+          "confidence": null,
+          "endMs": 1000,
+          "id": "segment",
+          "issueKind": null,
+          "lineageId": "lineage",
+          "ordinal": 0,
+          "sourceSegmentId": null,
+          "startMs": 0,
+          "text": "Hello",
+          "words": [
+            {
+              "confidence": 0.9,
+              "endMs": 500,
+              "ordinal": 0,
+              "startMs": 0,
+              "text": "Hello"
+            }
+          ]
+        }
+      ],
+      "sourceKind": "transcription",
+      "sourceLabel": "Test",
+      "sourceSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "sourceTaskId": "task",
+      "status": "ready",
+      "trackId": "track",
+      "versionNumber": 1
+    },
+    {
+      "createdAtMs": 1,
+      "id": "v",
+      "isCurrent": true,
+      "languageCode": "en",
+      "mediaSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "parentVersionId": null,
+      "preflight": {
+        "coverageRatio": 0.5,
+        "errorCount": 0,
+        "firstStartMs": 0,
+        "issues": [],
+        "lastEndMs": 1000,
+        "mediaDurationMs": 2000,
+        "segmentCount": 1,
+        "status": "ready",
+        "warningCount": 0
+      },
+      "projectId": "p",
+      "projectRevision": 2,
+      "role": "translation",
+      "segments": [
+        {
+          "confidence": null,
+          "endMs": 1000,
+          "id": "segment",
+          "issueKind": null,
+          "lineageId": "lineage",
+          "ordinal": 0,
+          "sourceSegmentId": null,
+          "startMs": 0,
+          "text": "Hello",
+          "words": [
+            {
+              "confidence": 0.9,
+              "endMs": 500,
+              "ordinal": 0,
+              "startMs": 0,
+              "text": "Hello"
+            }
+          ]
+        }
+      ],
+      "sourceKind": "agent_translation",
+      "sourceLabel": "Test",
+      "sourceSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "sourceTaskId": "task",
+      "status": "ready",
+      "trackId": "track",
+      "versionNumber": 1
+    },
+    {
+      "createdAtMs": 1,
+      "id": "v",
+      "isCurrent": true,
+      "languageCode": "en",
+      "mediaSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "parentVersionId": null,
+      "preflight": {
+        "coverageRatio": 0.5,
+        "errorCount": 0,
+        "firstStartMs": 0,
+        "issues": [],
+        "lastEndMs": 1000,
+        "mediaDurationMs": 2000,
+        "segmentCount": 1,
+        "status": "ready",
+        "warningCount": 0
+      },
+      "projectId": "p",
+      "projectRevision": 2,
+      "role": "translation",
+      "segments": [
+        {
+          "confidence": null,
+          "endMs": 1000,
+          "id": "segment",
+          "issueKind": null,
+          "lineageId": "lineage",
+          "ordinal": 0,
+          "sourceSegmentId": null,
+          "startMs": 0,
+          "text": "Hello",
+          "words": [
+            {
+              "confidence": 0.9,
+              "endMs": 500,
+              "ordinal": 0,
+              "startMs": 0,
+              "text": "Hello"
+            }
+          ]
+        }
+      ],
+      "sourceKind": "imported_file",
+      "sourceLabel": "Test",
+      "sourceSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "sourceTaskId": "task",
+      "status": "rejected",
+      "trackId": "track",
+      "versionNumber": 1
+    },
+    {
+      "createdAtMs": 1,
+      "id": "v",
+      "isCurrent": true,
+      "languageCode": "en",
+      "mediaSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "parentVersionId": null,
+      "preflight": {
+        "coverageRatio": 0.5,
+        "errorCount": 0,
+        "firstStartMs": 0,
+        "issues": [],
+        "lastEndMs": 1000,
+        "mediaDurationMs": 2000,
+        "segmentCount": 1,
+        "status": "ready",
+        "warningCount": 0
+      },
+      "projectId": "p",
+      "projectRevision": 2,
+      "role": "translation",
+      "segments": [
+        {
+          "confidence": null,
+          "endMs": 1000,
+          "id": "segment",
+          "issueKind": null,
+          "lineageId": "lineage",
+          "ordinal": 0,
+          "sourceSegmentId": null,
+          "startMs": 0,
+          "text": "Hello",
+          "words": [
+            {
+              "confidence": 0.9,
+              "endMs": 500,
+              "ordinal": 0,
+              "startMs": 0,
+              "text": "Hello"
+            }
+          ]
+        }
+      ],
+      "sourceKind": "embedded",
+      "sourceLabel": "Test",
+      "sourceSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "sourceTaskId": "task",
+      "status": "rejected",
+      "trackId": "track",
+      "versionNumber": 1
+    },
+    {
+      "createdAtMs": 1,
+      "id": "v",
+      "isCurrent": true,
+      "languageCode": "en",
+      "mediaSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "parentVersionId": null,
+      "preflight": {
+        "coverageRatio": 0.5,
+        "errorCount": 0,
+        "firstStartMs": 0,
+        "issues": [],
+        "lastEndMs": 1000,
+        "mediaDurationMs": 2000,
+        "segmentCount": 1,
+        "status": "ready",
+        "warningCount": 0
+      },
+      "projectId": "p",
+      "projectRevision": 2,
+      "role": "translation",
+      "segments": [
+        {
+          "confidence": null,
+          "endMs": 1000,
+          "id": "segment",
+          "issueKind": null,
+          "lineageId": "lineage",
+          "ordinal": 0,
+          "sourceSegmentId": null,
+          "startMs": 0,
+          "text": "Hello",
+          "words": [
+            {
+              "confidence": 0.9,
+              "endMs": 500,
+              "ordinal": 0,
+              "startMs": 0,
+              "text": "Hello"
+            }
+          ]
+        }
+      ],
+      "sourceKind": "transcription",
+      "sourceLabel": "Test",
+      "sourceSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "sourceTaskId": "task",
+      "status": "rejected",
+      "trackId": "track",
+      "versionNumber": 1
+    },
+    {
+      "createdAtMs": 1,
+      "id": "v",
+      "isCurrent": true,
+      "languageCode": "en",
+      "mediaSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "parentVersionId": null,
+      "preflight": {
+        "coverageRatio": 0.5,
+        "errorCount": 0,
+        "firstStartMs": 0,
+        "issues": [],
+        "lastEndMs": 1000,
+        "mediaDurationMs": 2000,
+        "segmentCount": 1,
+        "status": "ready",
+        "warningCount": 0
+      },
+      "projectId": "p",
+      "projectRevision": 2,
+      "role": "translation",
+      "segments": [
+        {
+          "confidence": null,
+          "endMs": 1000,
+          "id": "segment",
+          "issueKind": null,
+          "lineageId": "lineage",
+          "ordinal": 0,
+          "sourceSegmentId": null,
+          "startMs": 0,
+          "text": "Hello",
+          "words": [
+            {
+              "confidence": 0.9,
+              "endMs": 500,
+              "ordinal": 0,
+              "startMs": 0,
+              "text": "Hello"
+            }
+          ]
+        }
+      ],
+      "sourceKind": "agent_translation",
+      "sourceLabel": "Test",
+      "sourceSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "sourceTaskId": "task",
+      "status": "rejected",
+      "trackId": "track",
+      "versionNumber": 1
+    }
+  ],
+  "properties": {
+    "createdAtMs": {
+      "format": "int64",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+    },
+    "id": {
+      "type": "string"
+    },
+    "isCurrent": {
+      "type": "boolean"
+    },
+    "languageCode": {
+      "type": "string"
+    },
+    "mediaSha256": {
+      "type": "string"
+    },
+    "parentVersionId": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "preflight": {
+      "$ref": "#/$defs/SubtitlePreflightReport"
+    },
+    "projectId": {
+      "type": "string"
+    },
+    "projectRevision": {
+      "format": "int64",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+    },
+    "role": {
+      "$ref": "#/$defs/SubtitleTrackRole"
+    },
+    "segments": {
+      "items": {
+        "$ref": "#/$defs/SubtitleSegment"
+      },
+      "type": "array"
+    },
+    "sourceKind": {
+      "$ref": "#/$defs/SubtitleSource"
+    },
+    "sourceLabel": {
+      "type": "string"
+    },
+    "sourceSha256": {
+      "type": "string"
+    },
+    "sourceTaskId": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "status": {
+      "$ref": "#/$defs/SubtitleRevisionStatus"
+    },
+    "trackId": {
+      "type": "string"
+    },
+    "versionNumber": {
+      "format": "int64",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "id",
+    "trackId",
+    "projectId",
+    "role",
+    "versionNumber",
+    "status",
+    "sourceKind",
+    "sourceLabel",
+    "sourceSha256",
+    "mediaSha256",
+    "languageCode",
+    "projectRevision",
+    "parentVersionId",
+    "sourceTaskId",
+    "preflight",
+    "createdAtMs",
+    "isCurrent",
+    "segments"
+  ],
+  "title": "SubtitleVersion",
+  "type": "object"
+}

@@ -42,3 +42,9 @@ test("normalizes bounded Rust doubles without weakening numeric validation", () 
     assert.throws(() => prepareRuntimeSchema({ ...field, ...patch }), /finite numeric bounds/);
   }
 });
+
+test("retains nullable double shape and rejects nonnumeric alternatives", () => {
+  const field = { type: ["number", "null"], format: "double", minimum: 0, maximum: 1 };
+  assert.deepEqual(prepareRuntimeSchema(field), { type: ["number", "null"], minimum: 0, maximum: 1 });
+  assert.throws(() => prepareRuntimeSchema({ ...field, type: ["number", "string"] }), /finite numeric bounds/);
+});
