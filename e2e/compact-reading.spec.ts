@@ -21,7 +21,7 @@ test("drawer puts content after one context row and tabs, with reading settings 
   await page.evaluate(() => {
     (window as unknown as { __TAURI_INTERNALS__: unknown }).__TAURI_INTERNALS__ = {
       invoke: async (command: string) => {
-        if (command === "get_codex_runtime_status") return { available: false };
+        if (command === "get_codex_runtime_status") return { available: false, authenticated: false, supported: false, version: null, minimumVersion: "0.100.0", authMode: null, errorCode: "codex_runtime_unavailable", errorMessage: "未找到 Codex" };
         if (command === "get_ai_service_settings") return { schemaVersion: 1, revision: 0, providerCatalog: { schemaVersion: 1, providers: [] }, services: [], defaultServiceId: null };
         if (["list_explanation_tasks", "list_explanations", "list_analysis_prompt_templates"].includes(command)) return [];
         throw new Error(`Unexpected fixture IPC: ${command}`);

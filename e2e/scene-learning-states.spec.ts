@@ -19,7 +19,7 @@ for (const kind of ["learning", "explanation"]) {
           const host = window as unknown as { __TAURI_INTERNALS__: unknown; failRead: boolean };
           host.failRead = state === "failed";
           host.__TAURI_INTERNALS__ = { invoke: async (command: string) => {
-            if (command === "get_codex_runtime_status") return { available: false };
+            if (command === "get_codex_runtime_status") return { available: false, authenticated: false, supported: false, version: null, minimumVersion: "0.100.0", authMode: null, errorCode: "codex_runtime_unavailable", errorMessage: "未找到 Codex" };
             if (command === "get_ai_service_settings") return { schemaVersion: 1, revision: 0, providerCatalog: { schemaVersion: 1, providers: [] }, services: [], defaultServiceId: null };
             if (command === `list_${kind}_tasks`) {
               if (state === "loading") return new Promise(() => {});

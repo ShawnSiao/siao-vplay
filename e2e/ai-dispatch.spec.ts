@@ -24,7 +24,7 @@ for (const kind of ["explanation", "learning"] as const) {
       state.sends = [];
       state.__TAURI_INTERNALS__ = { invoke: async (command: string, args: unknown) => {
         switch (command) {
-          case "get_codex_runtime_status": return { available: true, authenticated: true, supported: true };
+          case "get_codex_runtime_status": return { available: true, authenticated: true, supported: true, version: "codex-cli 0.100.0", minimumVersion: "0.100.0", authMode: "chatgpt", errorCode: null, errorMessage: null };
           case "get_ai_service_settings": return { schemaVersion: 1, revision: 0, providerCatalog: { schemaVersion: 1, providers: [] }, services: [], defaultServiceId: null };
           case "list_explanation_tasks": case "list_explanations": case "list_learning_tasks":
           case "list_dictionary_entries": case "list_learning_cards": case "list_analysis_prompt_templates": case "list_speech_voices": return [];

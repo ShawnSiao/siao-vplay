@@ -5,7 +5,7 @@ for (const zoom of [1, 1.25, 1.5]) {
   test(`AI sending explanations remain readable at CSS layout scale ${zoom}`, async ({ page }) => {
     await page.addInitScript(() => {
       (window as unknown as { __TAURI_INTERNALS__: unknown }).__TAURI_INTERNALS__ = { invoke: async (command: string) => {
-        if (command === "get_codex_runtime_status") return { available: true, authenticated: true, supported: true };
+        if (command === "get_codex_runtime_status") return { available: true, authenticated: true, supported: true, version: "codex-cli 0.100.0", minimumVersion: "0.100.0", authMode: "chatgpt", errorCode: null, errorMessage: null };
         if (command === "get_ai_service_settings") return { schemaVersion: 1, revision: 0, providerCatalog: { schemaVersion: 1, providers: [] }, services: [], defaultServiceId: null };
         if (["list_learning_tasks", "list_dictionary_entries", "list_learning_cards", "list_speech_voices"].includes(command)) return [];
         throw new Error(`Unexpected fixture IPC: ${command}`);
@@ -39,7 +39,7 @@ test("sending explanations fit the actual narrow learning drawer", async ({ page
   await page.getByRole("button", { name: "更多", exact: true }).waitFor();
   await page.evaluate(() => {
     (window as unknown as { __TAURI_INTERNALS__: unknown }).__TAURI_INTERNALS__ = { invoke: async (command: string) => {
-      if (command === "get_codex_runtime_status") return { available: true, authenticated: true, supported: true };
+      if (command === "get_codex_runtime_status") return { available: true, authenticated: true, supported: true, version: "codex-cli 0.100.0", minimumVersion: "0.100.0", authMode: "chatgpt", errorCode: null, errorMessage: null };
       if (command === "get_ai_service_settings") return { schemaVersion: 1, revision: 0, providerCatalog: { schemaVersion: 1, providers: [] }, services: [], defaultServiceId: null };
       if (["list_learning_tasks", "list_dictionary_entries", "list_learning_cards", "list_speech_voices"].includes(command)) return [];
       throw new Error(`Unexpected fixture IPC: ${command}`);

@@ -596,16 +596,7 @@ export type ExternalAgentResultUpdate = {
   message: string;
 };
 
-export type CodexRuntimeStatus = {
-  available: boolean;
-  authenticated: boolean;
-  supported: boolean;
-  version: string | null;
-  authMode: "chatgpt" | "api_key" | null;
-  minimumVersion: string;
-  errorCode: string | null;
-  errorMessage: string | null;
-};
+export type { CodexRuntimeStatus } from "./generated/codex-runtime-status";
 export type { AiTaskExecutionInfo } from "./generated/learning-task";
 
 export type StorageSettings = {

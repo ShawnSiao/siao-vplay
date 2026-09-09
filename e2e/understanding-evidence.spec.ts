@@ -5,6 +5,7 @@ import { createUnderstandingFixtures } from "../src/test-fixtures/understanding"
 test("understanding loads original evidence, retries reads and pauses before seeking", async ({ page }) => {
   const { explanationTask: task, explanation } = createUnderstandingFixtures({ projectId: "e2e-project", sourceVersionId: "e2e-original", translationVersionId: "", sourceSegmentId: "e2e-original-segment" });
   task.playbackCutoffMs = explanation.playbackCutoffMs = 15_000;
+  task.frames[0].timestampMs = 14_000;
   explanation.materialSummary.endMs = 15_000;
   task.status = "completed"; task.outputExplanationId = explanation.id;
   const errors: string[] = [];
@@ -14,7 +15,7 @@ test("understanding loads original evidence, retries reads and pauses before see
     const state = window as unknown as { __TAURI_INTERNALS__: unknown; evidenceReads: number };
     state.__TAURI_INTERNALS__ = { invoke: async (command: string) => {
       switch (command) {
-        case "get_codex_runtime_status": return { available: false };
+        case "get_codex_runtime_status": return { available: false, authenticated: false, supported: false, version: null, minimumVersion: "0.100.0", authMode: null, errorCode: "codex_runtime_unavailable", errorMessage: "未找到 Codex" };
         case "get_ai_service_settings": return { schemaVersion: 1, revision: 0, providerCatalog: { schemaVersion: 1, providers: [] }, services: [], defaultServiceId: null };
         case "list_explanation_tasks": return [task];
         case "list_explanations": return [explanation];

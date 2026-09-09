@@ -13,7 +13,7 @@ test("translation prepares without sending and confirms the actual range before 
     state.sends = [];
     state.__TAURI_INTERNALS__ = { invoke: async (command: string, args: unknown) => {
       switch (command) {
-        case "get_codex_runtime_status": return { available: true, authenticated: true, supported: true };
+        case "get_codex_runtime_status": return { available: true, authenticated: true, supported: true, version: "codex-cli 0.100.0", minimumVersion: "0.100.0", authMode: "chatgpt", errorCode: null, errorMessage: null };
         case "get_ai_service_settings": return { schemaVersion: 1, revision: 0, providerCatalog: { schemaVersion: 1, providers: [] }, services: [], defaultServiceId: null };
         case "list_translation_tasks": return [];
         case "prepare_translation_task": return task;

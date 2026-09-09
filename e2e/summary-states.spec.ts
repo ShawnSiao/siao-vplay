@@ -14,7 +14,7 @@ for (const width of [480, 960, 1440]) {
         host.__TAURI_INTERNALS__ = { invoke: async (command: string) => {
           switch (command) {
             case "get_ai_service_settings": return { schemaVersion: 1, revision: 0, providerCatalog: { schemaVersion: 1, providers: [] }, services: [], defaultServiceId: null };
-            case "get_codex_runtime_status": return { available: false };
+            case "get_codex_runtime_status": return { available: false, authenticated: false, supported: false, version: null, minimumVersion: "0.100.0", authMode: null, errorCode: "codex_runtime_unavailable", errorMessage: "未找到 Codex" };
             case "list_summary_tasks": return state === "loading" ? new Promise(() => {}) : state === "failed" ? [task] : [];
             case "list_video_summaries": return state === "long" ? [summary] : [];
             default: throw new Error(`Unexpected fixture IPC: ${command}`);

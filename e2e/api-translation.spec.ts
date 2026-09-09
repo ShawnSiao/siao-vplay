@@ -14,7 +14,7 @@ test("API translation confirms the receiver and retries without requiring Codex"
     let current = task;
     state.__TAURI_INTERNALS__ = { invoke: async (command: string, args: unknown) => {
       switch (command) {
-        case "get_codex_runtime_status": return { available: false, authenticated: false, supported: false };
+        case "get_codex_runtime_status": return { available: false, authenticated: false, supported: false, version: null, minimumVersion: "0.100.0", authMode: null, errorCode: "codex_runtime_unavailable", errorMessage: "未找到 Codex" };
         case "get_ai_service_settings": return { schemaVersion: 1, revision: 3, providerCatalog: { schemaVersion: 1, providers: [] }, defaultServiceId: "service-1", services: [{ id: "service-1", providerId: "openai", protocol: "openai_responses", baseUrl: "https://translation.example.invalid/v1", connectionState: "ready", isDefault: true, displayName: "测试翻译服务", modelId: "translation-model", credentialState: "stored", revision: 3, capabilities: { understanding: true, learning: true, vision: false } }] };
         case "list_translation_tasks": return [];
         case "prepare_api_translation": state.preparations.push(args); return current;

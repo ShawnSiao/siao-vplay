@@ -15,7 +15,7 @@ test("completed translation can recover a failed local read without sending agai
     state.reads = 0; state.unexpected = [];
     state.__TAURI_INTERNALS__ = { invoke: async (command: string) => {
       switch (command) {
-        case "get_codex_runtime_status": return { available: false };
+        case "get_codex_runtime_status": return { available: false, authenticated: false, supported: false, version: null, minimumVersion: "0.100.0", authMode: null, errorCode: "codex_runtime_unavailable", errorMessage: "未找到 Codex" };
         case "get_ai_service_settings": return { schemaVersion: 1, revision: 0, providerCatalog: { schemaVersion: 1, providers: [] }, services: [], defaultServiceId: null };
         case "list_translation_tasks": return [task];
         case "list_subtitle_versions":

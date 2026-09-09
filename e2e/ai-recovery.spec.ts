@@ -16,7 +16,7 @@ for (const kind of ["explanation", "learning"] as const) {
       state.sends = [];
       state.__TAURI_INTERNALS__ = { invoke: async (command: string, args: unknown) => {
         switch (command) {
-          case "get_codex_runtime_status": return { available: true, authenticated: true, supported: true };
+          case "get_codex_runtime_status": return { available: true, authenticated: true, supported: true, version: "codex-cli 0.100.0", minimumVersion: "0.100.0", authMode: "chatgpt", errorCode: null, errorMessage: null };
           case "get_ai_service_settings": return { schemaVersion: 1, revision: 0, providerCatalog: { schemaVersion: 1, providers: [] }, services: [], defaultServiceId: null };
           case "list_explanation_tasks": return kind === "explanation" ? [task] : [];
           case "list_learning_tasks": return kind === "learning" ? [task] : [];
@@ -51,7 +51,7 @@ test("completed understanding can retry a failed result read without sending aga
     const state = window as unknown as { __TAURI_INTERNALS__: unknown };
     state.__TAURI_INTERNALS__ = { invoke: async (command: string) => {
       switch (command) {
-        case "get_codex_runtime_status": return { available: true, authenticated: true, supported: true };
+        case "get_codex_runtime_status": return { available: true, authenticated: true, supported: true, version: "codex-cli 0.100.0", minimumVersion: "0.100.0", authMode: "chatgpt", errorCode: null, errorMessage: null };
         case "get_ai_service_settings": return { schemaVersion: 1, revision: 0, providerCatalog: { schemaVersion: 1, providers: [] }, services: [], defaultServiceId: null };
         case "list_explanation_tasks": return [{ ...task, status: "running" }];
         case "list_explanations": case "list_analysis_prompt_templates": return [];

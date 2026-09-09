@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "authMode": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "authenticated": {
+      "type": "boolean"
+    },
+    "available": {
+      "type": "boolean"
+    },
+    "errorCode": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "errorMessage": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "minimumVersion": {
+      "type": "string"
+    },
+    "supported": {
+      "type": "boolean"
+    },
+    "version": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "required": [
+    "available",
+    "authenticated",
+    "supported",
+    "version",
+    "authMode",
+    "minimumVersion",
+    "errorCode",
+    "errorMessage"
+  ],
+  "title": "CodexRuntimeStatus",
+  "type": "object"
+}

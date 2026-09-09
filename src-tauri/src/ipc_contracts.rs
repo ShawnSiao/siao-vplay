@@ -46,6 +46,7 @@ fn committed_schemas_match_rust() {
             effective_mode: "custom".into(), effective_source: "custom".into(), effective_proxy_address: Some("127.0.0.1:7890".into()) },
     ]);
     check_schema("network-settings", &network);
+    check_schema("codex-runtime-status", &serialized_schema::<crate::codex_runner::CodexRuntimeStatus>());
     check_ai_service_schemas();
     check_transcription_schema();
     check_subtitle_body_schema();

@@ -119,6 +119,7 @@ pub struct StartCodexTranslationInput {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct CodexRuntimeStatus {
     pub available: bool,
     pub authenticated: bool,

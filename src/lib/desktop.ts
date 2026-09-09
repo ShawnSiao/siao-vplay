@@ -37,7 +37,6 @@ import type {
   SubtitleExportFormat,
   SubtitleExportMode,
   TranscriptionRuntimeStatus,
-  CodexRuntimeStatus,
 } from "../types";
 
 export const isDesktopApp = "__TAURI_INTERNALS__" in window;
@@ -307,9 +306,7 @@ export async function chooseTranslationResultFile(): Promise<string | null> {
 
 
 
-export async function getCodexRuntimeStatus(): Promise<CodexRuntimeStatus> {
-  return invoke<CodexRuntimeStatus>("get_codex_runtime_status");
-}
+export { getCodexRuntimeStatus } from "./codexRuntimeGateway";
 
 
 
