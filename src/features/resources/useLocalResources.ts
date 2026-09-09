@@ -1,3 +1,4 @@
+import { commandError } from "../../lib/commandError";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useResourceNetworkState } from "./useResourceNetworkState";
 import { useResourceFeedback } from "./useResourceFeedback";
@@ -241,6 +242,25 @@ export function useLocalResources(): LocalResourcesController {
     [captureError, mergeTask, setError],
   );
 
+  async function cleanupResources<T>(operation: () => Promise<T>): Promise<T> {
+    let result: T;
+    try {
+      result = await operation();
+    } catch (cause) {
+      captureError(cause);
+      throw cause;
+    }
+    setError(null);
+    const finishRead = beginRead("refresh");
+    try {
+      setStatus(await getLocalResourceStatus());
+      finishRead();
+    } catch (cause) {
+      finishRead(new Error(`清理结果已保留，资源状态刷新失败：${commandError(cause).message}`));
+    }
+    return result;
+  }
+
   return {
     catalog,
     status,
@@ -357,17 +377,7 @@ export function useLocalResources(): LocalResourcesController {
         throw cause;
       }
     },
-    cleanupUnused: async (planFingerprint) => {
-      try {
-        const result = await cleanupUnusedResources(planFingerprint);
-        setStatus(await getLocalResourceStatus());
-        setError(null);
-        return result;
-      } catch (cause) {
-        captureError(cause);
-        throw cause;
-      }
-    },
+    cleanupUnused: (planFingerprint) => cleanupResources(() => cleanupUnusedResources(planFingerprint)),
     loadDiagnostics: async () => {
       const finishRead = beginRead("diagnostics");
       try {
@@ -415,17 +425,7 @@ export function useLocalResources(): LocalResourcesController {
         throw cause;
       }
     },
-    cleanupOldVersions: async (planFingerprint) => {
-      try {
-        const result = await cleanupOldResourceVersions(planFingerprint);
-        setStatus(await getLocalResourceStatus());
-        setError(null);
-        return result;
-      } catch (cause) {
-        captureError(cause);
-        throw cause;
-      }
-    },
+    cleanupOldVersions: (planFingerprint) => cleanupResources(() => cleanupOldResourceVersions(planFingerprint)),
     selectProfile: async (profileId) => {
       try {
         const nextStatus = await setLocalResourceProfile(profileId);

@@ -292,8 +292,11 @@ export function LocalResourcesDialog({
   const confirmCleanup = () =>
     runAction("cleanup-unused", async () => {
       if (!cleanupPlan) throw new Error("请先检查清理清单。");
-      const result = await controller.cleanupUnused(cleanupPlan.planFingerprint);
+      const plan = cleanupPlan;
       setCleanupPlan(null);
+      setOldVersionCleanupPlan(null);
+      setDiagnostics(null);
+      const result = await controller.cleanupUnused(plan.planFingerprint);
       onNotice(
         result.removedResourceIds.length > 0
           ? `已清理 ${result.removedResourceIds.length} 项未使用资源。`
@@ -376,9 +379,11 @@ export function LocalResourcesDialog({
   const confirmOldVersionCleanup = () =>
     runAction("cleanup-old-versions", async () => {
       if (!oldVersionCleanupPlan) throw new Error("请先检查旧版本清理清单。");
-      const result = await controller.cleanupOldVersions(oldVersionCleanupPlan.planFingerprint);
+      const plan = oldVersionCleanupPlan;
       setOldVersionCleanupPlan(null);
+      setCleanupPlan(null);
       setDiagnostics(null);
+      const result = await controller.cleanupOldVersions(plan.planFingerprint);
       onNotice(
         result.removedVersions.length > 0
           ? `已清理 ${result.removedVersions.length} 个旧资源版本。`
