@@ -29,14 +29,12 @@ import type {
   LearningCard,
   LearningCardsExport,
   MediaPreparation,
-  MediaRuntimeStatus,
   Project,
   RemoteMediaPreview,
   RuntimeCatalog,
   SubtitleExport,
   SubtitleExportFormat,
   SubtitleExportMode,
-  TranscriptionRuntimeStatus,
 } from "../types";
 
 export const isDesktopApp = "__TAURI_INTERNALS__" in window;
@@ -58,18 +56,7 @@ export async function setMainWindowMediaTitle(
   await invoke("set_main_window_media_title", { mediaTitle });
 }
 
-export async function getMediaRuntimeStatus(): Promise<MediaRuntimeStatus> {
-  if (!isDesktopApp) {
-    return {
-      available: false,
-      ffmpegPath: null,
-      ffprobePath: null,
-      version: null,
-      errorMessage: "浏览器预览不运行本地媒体工具",
-    };
-  }
-  return invoke<MediaRuntimeStatus>("get_media_runtime_status");
-}
+
 
 export async function chooseLocalResourceParent(): Promise<string | null> {
   if (!isDesktopApp) {
@@ -269,17 +256,7 @@ export async function deleteProject(
   return invoke<DeleteProjectResult>("delete_project", { projectId });
 }
 
-export async function getTranscriptionRuntimeStatus(): Promise<TranscriptionRuntimeStatus> {
-  if (!isDesktopApp) {
-    return {
-      available: false,
-      preferredBackend: null,
-      runtimes: [],
-      models: [],
-    };
-  }
-  return invoke<TranscriptionRuntimeStatus>("get_transcription_runtime_status");
-}
+
 
 export { startTranscription, getTranscriptionJob, listTranscriptionJobs, cancelTranscriptionJob, resumeTranscriptionJob } from "./transcriptionGateway";
 
@@ -452,3 +429,5 @@ export async function exportSubtitles(
 export function playbackUrl(path: string): string {
   return isDesktopApp ? convertFileSrc(path) : "";
 }
+
+export { getMediaRuntimeStatus, getTranscriptionRuntimeStatus } from "./localRuntimeGateway";

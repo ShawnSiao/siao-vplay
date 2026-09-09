@@ -206,6 +206,7 @@ pub struct TranscriptionJobInput {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct TranscriptionRuntimeOption {
     pub backend: String,
     pub available: bool,
@@ -216,6 +217,7 @@ pub struct TranscriptionRuntimeOption {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct TranscriptionModelStatus {
     pub model_kind: String,
     pub available: bool,
@@ -225,6 +227,7 @@ pub struct TranscriptionModelStatus {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct TranscriptionRuntimeStatus {
     pub available: bool,
     pub preferred_backend: Option<String>,

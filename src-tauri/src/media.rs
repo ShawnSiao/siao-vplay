@@ -150,6 +150,7 @@ pub struct MediaPreparation {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct MediaRuntimeStatus {
     pub available: bool,
     pub ffmpeg_path: Option<String>,

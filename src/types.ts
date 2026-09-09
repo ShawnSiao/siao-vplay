@@ -412,13 +412,7 @@ export type MediaPreparation = {
   reusedProxy: boolean;
 };
 
-export type MediaRuntimeStatus = {
-  available: boolean;
-  ffmpegPath: string | null;
-  ffprobePath: string | null;
-  version: string | null;
-  errorMessage: string | null;
-};
+
 
 export type RuntimeSettings = {
   storageRoot: string | null;
@@ -557,25 +551,11 @@ export type SubtitleGlobalReplacement = {
   replaceText: string;
 };
 
-export type TranscriptionRuntimeOption = {
-  backend: "vulkan" | "cpu";
-  available: boolean;
-  version: string | null;
-  errorMessage: string | null;
-};
 
-export type TranscriptionModelStatus = {
-  modelKind: "small" | "base";
-  available: boolean;
-  errorMessage: string | null;
-};
 
-export type TranscriptionRuntimeStatus = {
-  available: boolean;
-  preferredBackend: "vulkan" | "cpu" | null;
-  runtimes: TranscriptionRuntimeOption[];
-  models: TranscriptionModelStatus[];
-};
+
+
+
 
 export type { TranscriptionJob } from "./generated/transcription-job";
 
@@ -689,3 +669,6 @@ export type { SubtitleBurnStyle } from "./generated/subtitle-burn-input";
 export type { ResourceDownloadSnapshot } from "./generated/resource-download-snapshot";
 
 export type ResourceLocationResult = import("./generated/resource-location-result").ResourceLocationResult;
+
+export type { MediaRuntimeStatus } from "./generated/media-runtime-status";
+export type { TranscriptionRuntimeStatus, TranscriptionRuntimeOption, TranscriptionModelStatus } from "./generated/transcription-runtime-status";
