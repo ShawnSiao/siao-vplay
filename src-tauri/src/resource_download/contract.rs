@@ -110,3 +110,9 @@ enum NetworkMode { Direct, Proxy }
 #[schemars(rename_all = "snake_case")]
 #[expect(dead_code, reason = "Serialized network source vocabulary")]
 enum ProxySource { Custom, Environment, WindowsSystem, Direct }
+
+impl From<crate::ai::types::NetworkSettings> for ResourceNetworkStatus {
+    fn from(settings: crate::ai::types::NetworkSettings) -> Self {
+        Self { mode: settings.effective_mode, proxy_source: settings.effective_source, proxy_address: settings.effective_proxy_address }
+    }
+}

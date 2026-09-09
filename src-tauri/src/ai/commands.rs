@@ -11,7 +11,7 @@ use super::{
 };
 use crate::{
     learning::LearningTask,
-    local_resources::{self, SetLocalResourceProxyInput},
+    local_resources::SetLocalResourceProxyInput,
     resource_download::{self, ResourceNetworkStatus},
     store::ProjectStore,
     understanding::ExplanationTask,
@@ -135,22 +135,16 @@ pub fn set_network_settings(
 }
 
 #[tauri::command]
-pub fn get_local_resource_network_status() -> ResourceNetworkStatus {
-    resource_download::network_status()
+pub fn get_local_resource_network_status() -> Result<ResourceNetworkStatus, AiCommandError> {
+    resource_download::network_status().map_err(Into::into)
 }
 
 #[tauri::command]
 pub fn set_local_resource_proxy(
     input: SetLocalResourceProxyInput,
 ) -> Result<ResourceNetworkStatus, AiCommandError> {
-    local_resources::set_proxy_url(input.proxy_url.as_deref()).map_err(|error| AiCommandError {
-        code: "local_resource_proxy_invalid",
-        message: error.to_string(),
-        retryable: false,
-        provider_request_id: None,
-    })?;
-    network::set_custom_proxy_compat(input.proxy_url.as_deref()).map_err(AiCommandError::from)?;
-    Ok(resource_download::network_status())
+    network::set_custom_proxy_compat(input.proxy_url.as_deref())
+        .map(Into::into).map_err(Into::into)
 }
 
 #[tauri::command]

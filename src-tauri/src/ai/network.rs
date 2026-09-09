@@ -40,9 +40,10 @@ impl NetworkStore {
                 revision: 0,
                 custom_proxy_url: None,
             });
-        if settings.schema_version != SETTINGS_SCHEMA_VERSION {
+        if settings.schema_version != SETTINGS_SCHEMA_VERSION || settings.revision > 9_007_199_254_740_991 {
             return Err(AiError::ConfigurationRead);
         }
+        normalize_proxy_url(settings.custom_proxy_url.as_deref()).map_err(|_| AiError::ConfigurationRead)?;
         Ok(settings)
     }
 
@@ -65,21 +66,14 @@ impl NetworkStore {
         })
     }
 
+    pub fn effective_proxy(&self) -> Result<(Option<String>, &'static str), AiError> {
+        let _guard = self.mutation_lock.lock().map_err(|_| AiError::ConfigurationRead)?;
+        Ok(effective_proxy_from(self.load()?.custom_proxy_url))
+    }
+
     pub fn snapshot(&self) -> Result<NetworkSettings, AiError> {
-        let settings = self.load()?;
-        let (proxy_address, source) = effective_proxy_from(settings.custom_proxy_url.clone());
-        Ok(NetworkSettings {
-            schema_version: settings.schema_version,
-            revision: settings.revision,
-            custom_proxy_url: settings.custom_proxy_url,
-            effective_mode: if proxy_address.is_some() || source == "environment" {
-                "proxy".to_owned()
-            } else {
-                "direct".to_owned()
-            },
-            effective_source: source.to_owned(),
-            effective_proxy_address: proxy_address,
-        })
+        let _guard = self.mutation_lock.lock().map_err(|_| AiError::ConfigurationRead)?;
+        Ok(snapshot_from_settings(self.load()?))
     }
 
     pub fn set(&self, input: SetNetworkSettingsInput) -> Result<NetworkSettings, AiError> {
@@ -92,10 +86,10 @@ impl NetworkStore {
             return Err(AiError::RevisionConflict);
         }
         settings.custom_proxy_url = normalize_proxy_url(input.custom_proxy_url.as_deref())?;
-        settings.revision += 1;
+        settings.revision = settings.revision.checked_add(1)
+            .filter(|revision| *revision <= 9_007_199_254_740_991).ok_or(AiError::ConfigurationWrite)?;
         self.persist(&settings)?;
-        drop(_guard);
-        self.snapshot()
+        Ok(snapshot_from_settings(settings))
     }
 
     pub fn set_compat(&self, proxy_url: Option<&str>) -> Result<NetworkSettings, AiError> {
@@ -104,6 +98,18 @@ impl NetworkStore {
             expected_revision: revision,
             custom_proxy_url: proxy_url.map(str::to_owned),
         })
+    }
+}
+
+fn snapshot_from_settings(settings: NetworkSettingsFile) -> NetworkSettings {
+    let (proxy_address, source) = effective_proxy_from(settings.custom_proxy_url.clone());
+    NetworkSettings {
+        schema_version: settings.schema_version,
+        revision: settings.revision,
+        custom_proxy_url: settings.custom_proxy_url,
+        effective_mode: if proxy_address.is_some() || source == "environment" { "proxy" } else { "direct" }.to_owned(),
+        effective_source: source.to_owned(),
+        effective_proxy_address: proxy_address,
     }
 }
 
@@ -132,16 +138,24 @@ pub fn set_custom_proxy_compat(proxy_url: Option<&str>) -> Result<NetworkSetting
     store()?.set_compat(proxy_url)
 }
 
-pub fn effective_proxy() -> (Option<String>, &'static str) {
-    let custom = store()
-        .and_then(NetworkStore::load)
-        .ok()
-        .and_then(|settings| settings.custom_proxy_url);
-    effective_proxy_from(custom)
+fn resolve_proxy(store: Option<&NetworkStore>) -> Result<(Option<String>, &'static str), AiError> {
+    match store {
+        Some(store) => store.effective_proxy(),
+        // Before initialization there is no stored choice; initialized read failures propagate.
+        None => Ok(effective_proxy_from(None)),
+    }
+}
+
+fn proxy_read_error(_: AiError) -> String {
+    "无法读取网络设置，已停止连接；请检查设置后重试".to_owned()
 }
 
 pub fn apply_to_client(builder: ClientBuilder) -> Result<ClientBuilder, String> {
-    let (proxy_url, source) = effective_proxy();
+    apply_to_client_from(builder, STORE.get())
+}
+
+fn apply_to_client_from(builder: ClientBuilder, store: Option<&NetworkStore>) -> Result<ClientBuilder, String> {
+    let (proxy_url, source) = resolve_proxy(store).map_err(proxy_read_error)?;
     if let Some(proxy_url) = proxy_url {
         let proxy = Proxy::all(&proxy_url).map_err(|_| "代理地址无效".to_owned())?;
         Ok(builder.proxy(proxy))
@@ -158,10 +172,12 @@ pub fn build_client(builder: ClientBuilder) -> Result<Client, String> {
         .map_err(|_| "无法创建网络连接".to_owned())
 }
 
-pub(crate) fn build_async_client(
-    mut builder: reqwest::ClientBuilder,
-) -> Result<reqwest::Client, String> {
-    let (proxy_url, source) = effective_proxy();
+pub(crate) fn build_async_client(builder: reqwest::ClientBuilder) -> Result<reqwest::Client, String> {
+    build_async_client_from(builder, STORE.get())
+}
+
+fn build_async_client_from(mut builder: reqwest::ClientBuilder, store: Option<&NetworkStore>) -> Result<reqwest::Client, String> {
+    let (proxy_url, source) = resolve_proxy(store).map_err(proxy_read_error)?;
     if let Some(proxy_url) = proxy_url {
         builder = builder.proxy(Proxy::all(&proxy_url).map_err(|_| "代理地址无效".to_owned())?);
     } else if source != "environment" {
@@ -259,36 +275,4 @@ fn parse_windows_proxy_server(raw: &str) -> Option<String> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use tempfile::tempdir;
-
-    #[test]
-    fn validates_proxy_and_migrates_legacy_setting_once() {
-        let data = tempdir().expect("tempdir");
-        let store = NetworkStore::new(data.path().join(SETTINGS_FILE_NAME));
-        store
-            .migrate_legacy_proxy(Some("http://127.0.0.1:7897"))
-            .expect("migration");
-        let snapshot = store.snapshot().expect("snapshot");
-        assert_eq!(snapshot.revision, 1);
-        assert_eq!(
-            snapshot.custom_proxy_url.as_deref(),
-            Some("http://127.0.0.1:7897")
-        );
-        assert!(normalize_proxy_url(Some("http://user:secret@proxy.example")).is_err());
-    }
-
-    #[test]
-    fn windows_proxy_parser_prefers_https_and_normalizes_address() {
-        assert_eq!(
-            parse_windows_proxy_server("http=127.0.0.1:8080;https=127.0.0.1:7897"),
-            Some("http://127.0.0.1:7897".to_owned())
-        );
-        assert_eq!(
-            parse_windows_proxy_server("http://proxy.example:3128"),
-            Some("http://proxy.example:3128".to_owned())
-        );
-        assert_eq!(parse_windows_proxy_server("socks=127.0.0.1:1080"), None);
-    }
-}
+mod tests;

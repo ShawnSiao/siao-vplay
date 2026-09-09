@@ -209,17 +209,8 @@ pub fn task_snapshot_list() -> Result<ResourceDownloadSnapshot, ResourceDownload
     }))
 }
 
-pub fn network_status() -> ResourceNetworkStatus {
-    let (proxy_url, proxy_source) = effective_proxy();
-    ResourceNetworkStatus {
-        mode: if proxy_url.is_some() || proxy_source == "environment" {
-            "proxy".to_owned()
-        } else {
-            "direct".to_owned()
-        },
-        proxy_source: proxy_source.to_owned(),
-        proxy_address: proxy_url,
-    }
+pub fn network_status() -> Result<ResourceNetworkStatus, ai::AiError> {
+    ai::network::settings().map(Into::into)
 }
 
 pub(crate) fn has_active_tasks() -> Result<bool, ResourceDownloadError> {
@@ -880,9 +871,6 @@ fn build_download_client() -> Result<Client, ResourceDownloadError> {
     ai::network::build_client(builder).map_err(ResourceDownloadError::Network)
 }
 
-pub(crate) fn effective_proxy() -> (Option<String>, &'static str) {
-    ai::network::effective_proxy()
-}
 
 fn download_artifact(
     client: &Client,
@@ -2347,6 +2335,8 @@ mod tests {
             .map(PathBuf::from)
             .expect("SIAOVPLAY_PROXY_DOWNLOAD_ROOT is required");
         fs::create_dir_all(&evidence_root).expect("evidence root should create");
+        ai::network::initialize(&evidence_root.join("network-settings"), None)
+            .expect("isolated network settings should initialize");
         let resource = local_resources::resource_definition("whisper-cpu")
             .expect("Whisper CPU resource should exist");
         let artifact = resource
@@ -2377,7 +2367,7 @@ mod tests {
         fs::write(
             evidence_root.join("proxy-download-evidence.json"),
             serde_json::to_vec_pretty(&serde_json::json!({
-                "network": network_status(),
+                "network": network_status().expect("network status should read"),
                 "resourceId": resource.id,
                 "version": resource.version,
                 "artifactSize": artifact.size,

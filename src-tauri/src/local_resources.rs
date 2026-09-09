@@ -298,10 +298,6 @@ pub(crate) fn configured_proxy_url() -> Option<String> {
     configuration_snapshot().and_then(|configuration| configuration.proxy_url)
 }
 
-pub fn set_proxy_url(proxy_url: Option<&str>) -> Result<(), LocalResourceError> {
-    with_manager_write(|manager| manager.set_proxy_url(proxy_url))
-}
-
 pub fn resolve_entrypoint(resource_id: &str, entrypoint: &str) -> Option<PathBuf> {
     MANAGER
         .get()
@@ -595,6 +591,7 @@ impl LocalResourceManager {
         self.status()
     }
 
+    #[cfg(test)]
     fn set_proxy_url(&mut self, proxy_url: Option<&str>) -> Result<(), LocalResourceError> {
         let normalized = normalize_proxy_url(proxy_url)?;
         let configuration = self
