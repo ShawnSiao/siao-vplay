@@ -5,6 +5,39 @@ use crate::{
     store::{ProjectStore, StoreError},
 };
 use rusqlite::{Connection, Transaction, params};
+use std::sync::{Arc, Mutex};
+
+#[derive(Clone, Default)]
+pub(crate) struct DeliveryQueue(Arc<Mutex<Option<DeliveryCursor>>>);
+
+#[derive(Clone)]
+struct DeliveryCursor {
+    created_at_ms: i64,
+    task_kind: String,
+    task_id: String,
+}
+
+impl DeliveryQueue {
+    pub(crate) fn next_pending(
+        &self,
+        store: &ProjectStore,
+    ) -> Result<Vec<ExternalAgentResultUpdate>, StoreError> {
+        let mut cursor = self
+            .0
+            .lock()
+            .map_err(|_| StoreError::Validation("外部结果读取状态不可用，请重启应用".into()))?;
+        let mut page = pending_after(store, cursor.as_ref())?;
+        if page.is_empty() && cursor.is_some() {
+            page = pending_after(store, None)?;
+        }
+        *cursor = page.last().map(|(created_at_ms, update)| DeliveryCursor {
+            created_at_ms: *created_at_ms,
+            task_kind: update.task_kind.clone(),
+            task_id: update.task_id.clone(),
+        });
+        Ok(page.into_iter().map(|(_, update)| update).collect())
+    }
+}
 
 pub(crate) fn migrate(connection: &mut Connection, timestamp: i64) -> rusqlite::Result<()> {
     let transaction = connection.transaction()?;
@@ -50,28 +83,47 @@ pub(crate) fn record_completion(
     Ok(())
 }
 
+#[cfg(test)]
 pub(crate) fn pending(store: &ProjectStore) -> Result<Vec<ExternalAgentResultUpdate>, StoreError> {
+    DeliveryQueue::default().next_pending(store)
+}
+
+fn pending_after(
+    store: &ProjectStore,
+    after: Option<&DeliveryCursor>,
+) -> Result<Vec<(i64, ExternalAgentResultUpdate)>, StoreError> {
     let connection = store.connect()?;
     let mut statement = connection.prepare(
-        "SELECT task_kind,task_id,project_id,output_id
-        FROM external_result_deliveries ORDER BY created_at_ms,task_kind,task_id LIMIT 100",
+        "SELECT created_at_ms,task_kind,task_id,project_id,output_id
+         FROM external_result_deliveries WHERE (created_at_ms,task_kind,task_id) > (?1,?2,?3)
+         ORDER BY created_at_ms,task_kind,task_id LIMIT 100",
     )?;
-    let rows = statement.query_map([], |row| {
-        let kind: String = row.get(0)?;
-        let label = match kind.as_str() {
-            "translation" => "字幕翻译",
-            "explanation" => "场景解释",
-            _ => "词义结果",
-        };
-        Ok(ExternalAgentResultUpdate {
-            task_kind: kind,
-            task_id: row.get(1)?,
-            project_id: row.get(2)?,
-            status: "completed".into(),
-            output_id: Some(row.get(3)?),
-            message: format!("已导入外部 Agent 返回的{label}"),
-        })
-    })?;
+    let rows = statement.query_map(
+        params![
+            after.map_or(i64::MIN, |cursor| cursor.created_at_ms),
+            after.map_or("", |cursor| cursor.task_kind.as_str()),
+            after.map_or("", |cursor| cursor.task_id.as_str()),
+        ],
+        |row| {
+            let kind: String = row.get(1)?;
+            let label = match kind.as_str() {
+                "translation" => "字幕翻译",
+                "explanation" => "场景解释",
+                _ => "词义结果",
+            };
+            Ok((
+                row.get(0)?,
+                ExternalAgentResultUpdate {
+                    task_kind: kind,
+                    task_id: row.get(2)?,
+                    project_id: row.get(3)?,
+                    status: "completed".into(),
+                    output_id: Some(row.get(4)?),
+                    message: format!("已导入外部 Agent 返回的{label}"),
+                },
+            ))
+        },
+    )?;
     Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
 }
 

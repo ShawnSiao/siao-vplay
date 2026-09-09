@@ -24,7 +24,15 @@ export function useExternalAgentResults({ enabled, reconcile, acknowledge, onUpd
       if (scanning.current) return;
       scanning.current = true;
       try {
-        const updates = pending.current ?? await reconcile();
+        let fresh: ExternalAgentResultUpdate[] = [];
+        try { fresh = await reconcile(); } catch {
+          // A failed scan must not discard previously consumed transient notices.
+        }
+        const merged = new Map<string, ExternalAgentResultUpdate>();
+        for (const update of [...(pending.current ?? []), ...fresh]) {
+          merged.set(JSON.stringify([update.taskKind, update.taskId]), update);
+        }
+        const updates = [...merged.values()];
         pending.current = updates.length ? updates : null;
         if (live.current && updates.length) {
           const identity = lifetime.current;
@@ -39,13 +47,16 @@ export function useExternalAgentResults({ enabled, reconcile, acknowledge, onUpd
                 pending.current = remaining.length ? remaining : null;
               }
             } catch {
-              // Retry only this item; independent results still get delivered and acknowledged.
+              // Completed results replay from the durable queue; do not accumulate failed pages.
+              if (isActive() && update.status === "completed") {
+                const remaining = pending.current?.filter(candidate => candidate !== update) ?? [];
+                pending.current = remaining.length ? remaining : null;
+              }
             }
           }
         }
       } catch {
-        // Keep at most one consumed batch until the active consumer succeeds.
-        // Completed results also remain durable until acknowledgement succeeds.
+        // Unprocessed notices remain pending; completed results remain durable until acknowledged.
       } finally { scanning.current = false; }
     };
     void poll();

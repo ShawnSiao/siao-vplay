@@ -75,10 +75,10 @@ it("serializes slow scans and resumes polling after an error", async () => {
 });
 
 
-it("retries a consumed batch after the consumer fails without reconciling it again", async () => {
+it("retries a durable completion on the next scan after the consumer fails", async () => {
   vi.useFakeTimers();
   const acknowledge = vi.fn(async () => undefined);
-  const reconcile = vi.fn().mockResolvedValueOnce(updates).mockResolvedValue([]);
+  const reconcile = vi.fn().mockResolvedValueOnce(updates).mockResolvedValueOnce(updates).mockResolvedValue([]);
   const handler = vi.fn().mockRejectedValueOnce(new Error("refresh failed")).mockResolvedValue(undefined);
   const { unmount } = renderHook(() => useExternalAgentResults({ enabled: true, reconcile, acknowledge, onUpdates: handler }));
   try {
@@ -89,9 +89,9 @@ it("retries a consumed batch after the consumer fails without reconciling it aga
     expect(handler).toHaveBeenCalledTimes(2);
     expect(acknowledge).toHaveBeenCalledTimes(1);
     expect(handler).toHaveBeenLastCalledWith(updates, expect.any(Function));
-    expect(reconcile).toHaveBeenCalledTimes(1);
-    await act(async () => { await vi.advanceTimersByTimeAsync(1_000); });
     expect(reconcile).toHaveBeenCalledTimes(2);
+    await act(async () => { await vi.advanceTimersByTimeAsync(1_000); });
+    expect(reconcile).toHaveBeenCalledTimes(3);
     expect(handler).toHaveBeenCalledTimes(2);
   } finally { unmount(); vi.useRealTimers(); }
 });
@@ -113,9 +113,9 @@ it("redelivers a batch whose asynchronous consumer was disabled before completio
     rerender({ enabled: true, handler: nextHandler });
     await act(async () => { await vi.advanceTimersByTimeAsync(0); });
     expect(nextHandler).toHaveBeenCalledWith(updates, expect.any(Function));
-    expect(reconcile).toHaveBeenCalledTimes(1);
-    await act(async () => { await vi.advanceTimersByTimeAsync(1_000); });
     expect(reconcile).toHaveBeenCalledTimes(2);
+    await act(async () => { await vi.advanceTimersByTimeAsync(1_000); });
+    expect(reconcile).toHaveBeenCalledTimes(3);
     expect(nextHandler).toHaveBeenCalledTimes(1);
   } finally { unmount(); vi.useRealTimers(); }
 });
@@ -134,7 +134,7 @@ it("does not discard delivery until acknowledgement succeeds", async () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(1_000); });
     expect(acknowledge).toHaveBeenCalledTimes(2);
     expect(handler).toHaveBeenCalledTimes(2);
-    expect(reconcile).toHaveBeenCalledTimes(1);
+    expect(reconcile).toHaveBeenCalledTimes(2);
   } finally { unmount(); vi.useRealTimers(); }
 });
 
@@ -142,7 +142,7 @@ it("does not discard delivery until acknowledgement succeeds", async () => {
 it.each(["consumer", "acknowledgement"])("delivers independent results despite a persistent %s failure", async (failure) => {
   vi.useFakeTimers();
   const independent = { ...updates[0], taskId: "independent", projectId: "other-video" };
-  const reconcile = vi.fn().mockResolvedValueOnce([...updates, independent]).mockResolvedValue([]);
+  const reconcile = vi.fn().mockResolvedValueOnce([...updates, independent]).mockResolvedValue(updates);
   const acknowledge = vi.fn(async (batch: ExternalAgentResultUpdate[]) => {
     if (failure === "acknowledgement" && batch[0].taskId === "task") throw new Error("ack failed");
   });
@@ -156,5 +156,52 @@ it.each(["consumer", "acknowledgement"])("delivers independent results despite a
     await act(async () => { await vi.advanceTimersByTimeAsync(2_000); });
     expect(acknowledge.mock.calls.filter(([batch]) => batch[0].taskId === "independent")).toHaveLength(1);
     expect(handler.mock.calls.filter(([batch]) => batch[0].taskId === "task")).toHaveLength(3);
+  } finally { unmount(); vi.useRealTimers(); }
+});
+
+
+it("continues scanning for new completions while an older result keeps failing", async () => {
+  vi.useFakeTimers();
+  const next = { ...updates[0], taskId: "new-task" };
+  const reconcile = vi.fn().mockResolvedValueOnce(updates).mockResolvedValue([next]);
+  const acknowledge = vi.fn(async () => undefined);
+  const handler = vi.fn(async (batch: ExternalAgentResultUpdate[]) => {
+    if (batch[0].taskId === "task") throw new Error("persistent failure");
+  });
+  const { unmount } = renderHook(() => useExternalAgentResults({ enabled: true, reconcile, acknowledge, onUpdates: handler }));
+  try {
+    await act(async () => { await vi.advanceTimersByTimeAsync(1_000); });
+    expect(reconcile).toHaveBeenCalledTimes(2);
+    expect(acknowledge).toHaveBeenCalledWith([next]);
+  } finally { unmount(); vi.useRealTimers(); }
+});
+
+
+it("replaces a failed transient notice with the newer completed state of the same task", async () => {
+  vi.useFakeTimers();
+  const transient: ExternalAgentResultUpdate = { ...updates[0], status: "validating", outputId: null };
+  const reconcile = vi.fn().mockResolvedValueOnce([transient]).mockResolvedValue(updates);
+  const acknowledge = vi.fn(async () => undefined);
+  const handler = vi.fn().mockRejectedValueOnce(new Error("temporary consumer failure")).mockResolvedValue(undefined);
+  const { unmount } = renderHook(() => useExternalAgentResults({ enabled: true, reconcile, acknowledge, onUpdates: handler }));
+  try {
+    await act(async () => { await vi.advanceTimersByTimeAsync(1_000); });
+    expect(handler).toHaveBeenCalledTimes(2);
+    expect(handler).toHaveBeenLastCalledWith(updates, expect.any(Function));
+    expect(acknowledge).toHaveBeenCalledWith(updates);
+  } finally { unmount(); vi.useRealTimers(); }
+});
+
+it("still retries consumed transient notices when the next scan fails", async () => {
+  vi.useFakeTimers();
+  const transient: ExternalAgentResultUpdate = { ...updates[0], status: "rejected", outputId: null };
+  const reconcile = vi.fn().mockResolvedValueOnce([transient]).mockRejectedValue(new Error("scan failed"));
+  const acknowledge = vi.fn(async () => undefined);
+  const handler = vi.fn().mockRejectedValueOnce(new Error("consumer failed")).mockResolvedValue(undefined);
+  const { unmount } = renderHook(() => useExternalAgentResults({ enabled: true, reconcile, acknowledge, onUpdates: handler }));
+  try {
+    await act(async () => { await vi.advanceTimersByTimeAsync(1_000); });
+    expect(handler).toHaveBeenCalledTimes(2);
+    expect(acknowledge).toHaveBeenCalledWith([transient]);
   } finally { unmount(); vi.useRealTimers(); }
 });

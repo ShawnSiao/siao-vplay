@@ -190,6 +190,7 @@ pub fn run() {
             summary::recover_summary_tasks(&store)?;
             burn::recover_subtitle_burn_jobs(&store)?;
             app.manage(store);
+            app.manage(external_result_delivery::DeliveryQueue::default());
             app.manage(storage);
             app.manage(StartupMediaPath(resolve_startup_media_path()));
             app.manage(library::LibraryPreviewStore::default());

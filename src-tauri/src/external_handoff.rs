@@ -73,6 +73,7 @@ struct ResultAttempt {
 
 pub fn reconcile_external_agent_results(
     store: &ProjectStore,
+    delivery: &crate::external_result_delivery::DeliveryQueue,
 ) -> Result<Vec<ExternalAgentResultUpdate>, ExternalHandoffError> {
     let mut updates = reconcile_active_tasks_with(
         active_manual_tasks(store)?,
@@ -80,7 +81,7 @@ pub fn reconcile_external_agent_results(
     );
     // Completions must come from the durable queue, including after a lost IPC response.
     updates.retain(|update| update.status != "completed");
-    updates.extend(crate::external_result_delivery::pending(store)?);
+    updates.extend(delivery.next_pending(store)?);
     Ok(updates)
 }
 

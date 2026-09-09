@@ -1336,10 +1336,12 @@ pub async fn export_learning_cards(
 #[tauri::command]
 pub async fn reconcile_external_agent_results(
     store: State<'_, ProjectStore>,
+    delivery: State<'_, crate::external_result_delivery::DeliveryQueue>,
 ) -> Result<Vec<ExternalAgentResultUpdate>, CommandError> {
     let store = store.inner().clone();
+    let delivery = delivery.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
-        external_handoff::reconcile_external_agent_results(&store).map_err(CommandError::from)
+        external_handoff::reconcile_external_agent_results(&store, &delivery).map_err(CommandError::from)
     })
     .await
     .map_err(CommandError::background_task_failed)?

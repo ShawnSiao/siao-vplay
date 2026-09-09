@@ -109,7 +109,8 @@ fn completed_result_replays_after_reopening_when_delivery_was_lost() {
     .unwrap();
     let reopened = ProjectStore::open(fixture.store.database_path()).unwrap();
     for _ in 0..2 {
-        let replay = super::reconcile_external_agent_results(&reopened).unwrap();
+        let replay =
+            super::reconcile_external_agent_results(&reopened, &Default::default()).unwrap();
         assert_eq!(
             replay.len(),
             1,
@@ -118,12 +119,12 @@ fn completed_result_replays_after_reopening_when_delivery_was_lost() {
         assert_eq!(replay[0].task_id, task.id);
         assert_eq!(replay[0].output_id, application.task.output_version_id);
     }
-    let receipt = super::reconcile_external_agent_results(&reopened).unwrap();
+    let receipt = super::reconcile_external_agent_results(&reopened, &Default::default()).unwrap();
     let mut wrong = receipt.clone();
     wrong[0].output_id = Some("wrong-version".into());
     crate::external_result_delivery::acknowledge(&reopened, &wrong).unwrap();
     assert_eq!(
-        super::reconcile_external_agent_results(&reopened)
+        super::reconcile_external_agent_results(&reopened, &Default::default())
             .unwrap()
             .len(),
         1
@@ -135,7 +136,7 @@ fn completed_result_replays_after_reopening_when_delivery_was_lost() {
             .is_err()
     );
     assert_eq!(
-        super::reconcile_external_agent_results(&reopened)
+        super::reconcile_external_agent_results(&reopened, &Default::default())
             .unwrap()
             .len(),
         1
@@ -143,7 +144,7 @@ fn completed_result_replays_after_reopening_when_delivery_was_lost() {
     crate::external_result_delivery::acknowledge(&reopened, &receipt).unwrap();
     crate::external_result_delivery::acknowledge(&reopened, &receipt).unwrap();
     assert!(
-        super::reconcile_external_agent_results(&reopened)
+        super::reconcile_external_agent_results(&reopened, &Default::default())
             .unwrap()
             .is_empty()
     );
@@ -207,7 +208,7 @@ fn version_19_upgrade_preserves_assets_without_replaying_historical_completions(
     fixture.store.connect().unwrap().execute_batch("DROP TABLE external_result_deliveries; DELETE FROM schema_migrations WHERE version=20;").unwrap();
     let reopened = ProjectStore::open(fixture.store.database_path()).unwrap();
     assert!(
-        super::reconcile_external_agent_results(&reopened)
+        super::reconcile_external_agent_results(&reopened, &Default::default())
             .unwrap()
             .is_empty()
     );
@@ -238,4 +239,41 @@ fn version_19_upgrade_preserves_assets_without_replaying_historical_completions(
         crate::database_upgrade::check_version(&reopened.connect().unwrap(), 19),
         Err(crate::store::StoreError::UnsupportedSchema { .. })
     ));
+}
+
+#[test]
+fn pending_receipts_beyond_the_first_hundred_are_reachable_without_acknowledgement() {
+    let fixture = crate::translation::fixture::TranslationFixture::new();
+    let connection = fixture.store.connect().unwrap();
+    for index in 0..205 {
+        connection
+            .execute(
+                "INSERT INTO external_result_deliveries VALUES ('translation',?1,?2,?1,1)",
+                rusqlite::params![format!("task-{index:04}"), fixture.project_id],
+            )
+            .unwrap();
+    }
+    let delivery = crate::external_result_delivery::DeliveryQueue::default();
+    let mut seen = std::collections::HashSet::new();
+    for _ in 0..3 {
+        let page = super::reconcile_external_agent_results(&fixture.store, &delivery).unwrap();
+        assert!(page.len() <= 100);
+        seen.extend(page.into_iter().map(|update| update.task_id));
+    }
+    assert_eq!(
+        seen.len(),
+        205,
+        "unacknowledged early pages must not starve later results"
+    );
+    let wrapped = super::reconcile_external_agent_results(&fixture.store, &delivery).unwrap();
+    assert_eq!(wrapped.len(), 100);
+    assert_eq!(wrapped[0].task_id, "task-0000");
+    crate::external_result_delivery::acknowledge(&fixture.store, &wrapped).unwrap();
+    let next = super::reconcile_external_agent_results(&fixture.store, &delivery).unwrap();
+    assert_eq!(next[0].task_id, "task-0100");
+    let fresh = crate::external_result_delivery::DeliveryQueue::default();
+    assert_eq!(
+        fresh.next_pending(&fixture.store).unwrap()[0].task_id,
+        "task-0100"
+    );
 }
