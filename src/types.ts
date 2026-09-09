@@ -448,14 +448,7 @@ export type RuntimeCatalog = {
 
 export type { LocalResourceRootState, LocalResourceCapabilityState, LocalResourceCapabilityStatus, LocalResourceStatus } from "./generated/local-resource-status";
 
-export type LocalResourceLocationPlan = {
-  selectedParent: string;
-  resourceRoot: string;
-  parentExists: boolean;
-  resourceRootExists: boolean;
-  freeSpaceBytes: number | null;
-  confirmationRequired: boolean;
-};
+export type { LocalResourceLocationPlan } from "./generated/local-resource-location-plan";
 
 export type { ResourceArtifact as LocalResourceArtifact, ResourceDefinition as LocalResourceDefinition, LocalResourceCatalog } from "./generated/local-resource-catalog";
 
@@ -467,56 +460,13 @@ export type { CapabilityPreparation } from "./generated/capability-preparation";
 
 export type { ResourceRemovalResult } from "./generated/resource-removal-result";
 
-export type ResourceMigrationSource = {
-  kind: "selected_directory";
-  path: string;
-};
+export type { ResourceMigrationPreview, ResourceMigrationSource, ResourceMigrationCandidate } from "./generated/resource-migration-preview";
 
-export type ResourceMigrationCandidate = {
-  sourceKind: ResourceMigrationSource["kind"];
-  sourceRoot: string;
-  resourceId: string;
-  resourcePath: string;
-  state: "verified" | "rejected";
-  reusableBytes: number;
-  message: string | null;
-};
+export type { ResourceAdoptionResult } from "./generated/resource-adoption-result";
 
-export type ResourceMigrationPreview = {
-  sources: ResourceMigrationSource[];
-  candidates: ResourceMigrationCandidate[];
-  verifiedResourceIds: string[];
-  reusableBytes: number;
-  rejectedCount: number;
-};
+export type { LocalResourceMovePlan } from "./generated/local-resource-move-plan";
 
-export type ResourceAdoptionResult = {
-  adoptedResourceIds: string[];
-  alreadyActiveResourceIds: string[];
-  rejectedResourceIds: string[];
-  reusableBytes: number;
-};
-
-export type LocalResourceMovePlan = {
-  previousRoot: string;
-  selectedParent: string;
-  resourceRoot: string;
-  bytesToCopy: number;
-  fileCount: number;
-  freeSpaceBytes: number | null;
-  crossVolume: boolean;
-  destinationExists: boolean;
-  confirmationRequired: boolean;
-};
-
-export type LocalResourceMoveResult = {
-  previousRoot: string;
-  currentRoot: string;
-  copiedBytes: number;
-  verifiedFileCount: number;
-  crossVolume: boolean;
-  previousRootRetained: boolean;
-};
+export type { LocalResourceMoveResult } from "./generated/local-resource-move-result";
 
 export type { UnusedResourceCleanupPlan } from "./generated/unused-resource-cleanup-plan";
 

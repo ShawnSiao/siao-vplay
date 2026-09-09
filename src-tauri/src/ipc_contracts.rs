@@ -62,6 +62,11 @@ fn committed_schemas_match_rust() {
     let mut catalog = serialized_schema::<crate::local_resources::LocalResourceCatalog>();
     catalog["examples"] = serde_json::json!([crate::local_resources::catalog().unwrap()]);
     check_schema("local-resource-catalog", &catalog);
+    check_schema("local-resource-location-plan", &serialized_schema::<crate::local_resources::LocalResourceLocationPlan>());
+    check_schema("resource-migration-preview", &serialized_schema::<crate::resource_migration::ResourceMigrationPreview>());
+    check_schema("resource-adoption-result", &serialized_schema::<crate::resource_migration::ResourceAdoptionResult>());
+    check_schema("local-resource-move-plan", &serialized_schema::<crate::resource_migration::LocalResourceMovePlan>());
+    check_schema("local-resource-move-result", &serialized_schema::<crate::resource_migration::LocalResourceMoveResult>());
     check_schema("local-resource-diagnostics", &serialized_schema::<crate::resource_diagnostics::LocalResourceDiagnostics>());
     check_schema("resource-network-status", &serialized_schema::<crate::resource_download::ResourceNetworkStatus>());
     check_schema("capability-preparation", &serialized_schema::<crate::resource_download::CapabilityPreparation>());

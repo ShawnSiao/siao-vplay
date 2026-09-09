@@ -116,11 +116,13 @@ pub struct SetLocalResourceProxyInput {
 
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct LocalResourceLocationPlan {
     pub selected_parent: String,
     pub resource_root: String,
     pub parent_exists: bool,
     pub resource_root_exists: bool,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub free_space_bytes: Option<u64>,
     pub confirmation_required: bool,
 }

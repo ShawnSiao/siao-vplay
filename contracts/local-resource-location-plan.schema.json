@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "confirmationRequired": {
+      "type": "boolean"
+    },
+    "freeSpaceBytes": {
+      "format": "uint64",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "parentExists": {
+      "type": "boolean"
+    },
+    "resourceRoot": {
+      "type": "string"
+    },
+    "resourceRootExists": {
+      "type": "boolean"
+    },
+    "selectedParent": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "selectedParent",
+    "resourceRoot",
+    "parentExists",
+    "resourceRootExists",
+    "freeSpaceBytes",
+    "confirmationRequired"
+  ],
+  "title": "LocalResourceLocationPlan",
+  "type": "object"
+}

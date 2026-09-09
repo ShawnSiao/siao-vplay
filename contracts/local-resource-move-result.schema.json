@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "copiedBytes": {
+      "format": "uint64",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "crossVolume": {
+      "type": "boolean"
+    },
+    "currentRoot": {
+      "type": "string"
+    },
+    "previousRoot": {
+      "type": "string"
+    },
+    "previousRootRetained": {
+      "type": "boolean"
+    },
+    "verifiedFileCount": {
+      "format": "uint",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "previousRoot",
+    "currentRoot",
+    "copiedBytes",
+    "verifiedFileCount",
+    "crossVolume",
+    "previousRootRetained"
+  ],
+  "title": "LocalResourceMoveResult",
+  "type": "object"
+}

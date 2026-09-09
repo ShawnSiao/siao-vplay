@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "bytesToCopy": {
+      "format": "uint64",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "confirmationRequired": {
+      "type": "boolean"
+    },
+    "crossVolume": {
+      "type": "boolean"
+    },
+    "destinationExists": {
+      "type": "boolean"
+    },
+    "fileCount": {
+      "format": "uint",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "freeSpaceBytes": {
+      "format": "uint64",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "previousRoot": {
+      "type": "string"
+    },
+    "resourceRoot": {
+      "type": "string"
+    },
+    "selectedParent": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "previousRoot",
+    "selectedParent",
+    "resourceRoot",
+    "bytesToCopy",
+    "fileCount",
+    "freeSpaceBytes",
+    "crossVolume",
+    "destinationExists",
+    "confirmationRequired"
+  ],
+  "title": "LocalResourceMovePlan",
+  "type": "object"
+}

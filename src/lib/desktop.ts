@@ -1,3 +1,4 @@
+export { planLocalResourceLocation, planLocalResourceMove, moveLocalResourceRoot, inspectLocalResourceMigration, adoptLocalResources } from "./resourceMigrationGateway";
 export { getLocalResourceCatalog } from "./resourceCatalogGateway";
 export { getLocalResourceDiagnostics } from "./resourceDiagnosticsGateway";
 export { planUnusedResourceCleanup, cleanupUnusedResources, removeLocalResource, rollbackLocalResource, planOldResourceVersionCleanup, cleanupOldResourceVersions } from "./resourceMaintenanceGateway";
@@ -26,16 +27,11 @@ import type {
   ExternalAgentTaskKind,
   LearningCard,
   LearningCardsExport,
-  LocalResourceLocationPlan,
-  LocalResourceMovePlan,
-  LocalResourceMoveResult,
   MediaPreparation,
   MediaRuntimeStatus,
   Project,
   RemoteMediaPreview,
   RuntimeCatalog,
-  ResourceAdoptionResult,
-  ResourceMigrationPreview,
   SubtitleExport,
   SubtitleExportFormat,
   SubtitleExportMode,
@@ -86,64 +82,6 @@ export async function chooseLocalResourceParent(): Promise<string | null> {
   });
   return typeof selected === "string" ? selected : null;
 }
-
-export async function planLocalResourceLocation(
-  parentPath: string,
-): Promise<LocalResourceLocationPlan> {
-  return invoke<LocalResourceLocationPlan>("plan_local_resource_location", {
-    input: { parentPath },
-  });
-}
-
-
-
-export async function inspectLocalResourceMigration(
-  sourcePath?: string,
-): Promise<ResourceMigrationPreview> {
-  return invoke<ResourceMigrationPreview>("inspect_local_resource_migration", {
-    input: {
-      sourcePath: sourcePath ?? null,
-      sourceKind: sourcePath ? "selected_directory" : null,
-    },
-  });
-}
-
-export async function adoptLocalResources(
-  sourcePath?: string,
-): Promise<ResourceAdoptionResult> {
-  return invoke<ResourceAdoptionResult>("adopt_local_resources", {
-    input: {
-      sourcePath: sourcePath ?? null,
-      sourceKind: sourcePath ? "selected_directory" : null,
-      confirmed: true,
-    },
-  });
-}
-
-export async function planLocalResourceMove(
-  parentPath: string,
-): Promise<LocalResourceMovePlan> {
-  return invoke<LocalResourceMovePlan>("plan_local_resource_move", {
-    input: { parentPath },
-  });
-}
-
-export async function moveLocalResourceRoot(
-  parentPath: string,
-  requestId: string,
-): Promise<LocalResourceMoveResult> {
-  return invoke<LocalResourceMoveResult>("move_local_resource_root", {
-    input: { parentPath, confirmed: true },
-    requestId,
-  });
-}
-
-
-
-
-
-
-
 
 export async function getLocalResourceDiagnosticSummary(): Promise<string> {
   return invoke<string>("get_local_resource_diagnostic_summary");

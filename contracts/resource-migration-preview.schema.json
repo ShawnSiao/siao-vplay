@@ -1,0 +1,102 @@
+{
+  "$defs": {
+    "ResourceMigrationCandidate": {
+      "properties": {
+        "message": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "resourceId": {
+          "type": "string"
+        },
+        "resourcePath": {
+          "type": "string"
+        },
+        "reusableBytes": {
+          "format": "uint64",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "sourceKind": {
+          "type": "string"
+        },
+        "sourceRoot": {
+          "type": "string"
+        },
+        "state": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "sourceKind",
+        "sourceRoot",
+        "resourceId",
+        "resourcePath",
+        "state",
+        "reusableBytes",
+        "message"
+      ],
+      "type": "object"
+    },
+    "ResourceMigrationSource": {
+      "properties": {
+        "kind": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "path"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "candidates": {
+      "items": {
+        "$ref": "#/$defs/ResourceMigrationCandidate"
+      },
+      "type": "array"
+    },
+    "rejectedCount": {
+      "format": "uint",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "reusableBytes": {
+      "format": "uint64",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "sources": {
+      "items": {
+        "$ref": "#/$defs/ResourceMigrationSource"
+      },
+      "type": "array"
+    },
+    "verifiedResourceIds": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "sources",
+    "candidates",
+    "verifiedResourceIds",
+    "reusableBytes",
+    "rejectedCount"
+  ],
+  "title": "ResourceMigrationPreview",
+  "type": "object"
+}

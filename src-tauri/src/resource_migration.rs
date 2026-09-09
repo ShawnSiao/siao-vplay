@@ -1,3 +1,8 @@
+mod contracts;
+pub use contracts::{
+    LocalResourceMovePlan, LocalResourceMoveResult, ResourceAdoptionResult,
+    ResourceMigrationCandidate, ResourceMigrationPreview, ResourceMigrationSource,
+};
 mod maintenance;
 pub(crate) mod move_control;
 mod move_io;
@@ -100,74 +105,11 @@ pub struct AdoptLocalResourcesInput {
     pub confirmed: bool,
 }
 
-#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub struct ResourceMigrationSource {
-    pub kind: String,
-    pub path: String,
-}
-
-#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub struct ResourceMigrationCandidate {
-    pub source_kind: String,
-    pub source_root: String,
-    pub resource_id: String,
-    pub resource_path: String,
-    pub state: String,
-    pub reusable_bytes: u64,
-    pub message: Option<String>,
-}
-
-#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub struct ResourceMigrationPreview {
-    pub sources: Vec<ResourceMigrationSource>,
-    pub candidates: Vec<ResourceMigrationCandidate>,
-    pub verified_resource_ids: Vec<String>,
-    pub reusable_bytes: u64,
-    pub rejected_count: usize,
-}
-
-#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub struct ResourceAdoptionResult {
-    pub adopted_resource_ids: Vec<String>,
-    pub already_active_resource_ids: Vec<String>,
-    pub rejected_resource_ids: Vec<String>,
-    pub reusable_bytes: u64,
-}
-
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MoveLocalResourceRootInput {
     pub parent_path: String,
     pub confirmed: bool,
-}
-
-#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub struct LocalResourceMovePlan {
-    pub previous_root: String,
-    pub selected_parent: String,
-    pub resource_root: String,
-    pub bytes_to_copy: u64,
-    pub file_count: usize,
-    pub free_space_bytes: Option<u64>,
-    pub cross_volume: bool,
-    pub destination_exists: bool,
-    pub confirmation_required: bool,
-}
-
-#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub struct LocalResourceMoveResult {
-    pub previous_root: String,
-    pub current_root: String,
-    pub copied_bytes: u64,
-    pub verified_file_count: usize,
-    pub cross_volume: bool,
-    pub previous_root_retained: bool,
 }
 
 #[derive(Clone, Debug, Deserialize)]
