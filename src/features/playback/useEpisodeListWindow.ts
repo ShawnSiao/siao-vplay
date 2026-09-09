@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { LibraryMediaSummary } from "../../types";
 import { libraryViewPolicy } from "../library/libraryViewPolicy";
-export function useEpisodeListWindow(scope: string, episodes: LibraryMediaSummary[], projectId: string) {
+export function useEpisodeListWindow(scope: string, episodes: LibraryMediaSummary[], projectId: string, pageOffset?: number) {
   const size = libraryViewPolicy.episodeRenderPageSize;
   const currentIndex = episodes.findIndex(episode => episode.projectId === projectId);
   const [selection, setSelection] = useState<{ scope: string; start: number } | null>(null);
@@ -24,7 +24,7 @@ export function useEpisodeListWindow(scope: string, episodes: LibraryMediaSummar
     if (busy.current !== null) return;
     const current = ++intent.current;
     busy.current = current;
-    try { if (await read() && current === intent.current) show(Math.floor(episodes.length / size) * size); }
+    try { if (await read() && current === intent.current) show(pageOffset === undefined ? Math.floor(episodes.length / size) * size : 0); }
     finally { if (busy.current === current) busy.current = null; }
   };
   return { listRef, start, items: episodes.slice(start, start + size),

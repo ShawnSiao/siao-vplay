@@ -20,6 +20,7 @@ export type EpisodePlaybackContext = {
 export type EpisodeNavigationState = {
   detail: CollectionDetail | null;
   episodes: LibraryMediaSummary[];
+  currentEpisode?: LibraryMediaSummary | null;
   neighbors: EpisodeNeighbors;
   loading: boolean;
   error: string | null;
@@ -105,6 +106,6 @@ export function useEpisodeNavigation(
   }, [refresh]);
 
   const visibleState = state.scope === scope ? state : { ...initialState, loading: scope !== null };
-  return { state: { ...visibleState, episodes: pages.items, loading: visibleState.loading || pages.loading }, refresh,
+  return { state: { ...visibleState, episodes: pages.items, currentEpisode: pages.currentEpisode, loading: visibleState.loading || pages.loading }, refresh,
     pagination: { ...pages, reload: () => { pages.reload(); void refresh(); } } };
 }

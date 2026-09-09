@@ -99,6 +99,7 @@ export function PlayerAuxiliaryDrawer({
           pagination={episodePagination}
           detail={episodeNavigation.detail}
           episodes={episodeNavigation.episodes}
+          currentEpisode={episodeNavigation.currentEpisode}
           neighbors={episodeNavigation.neighbors}
           loading={episodeNavigation.loading}
           error={episodeNavigation.error}

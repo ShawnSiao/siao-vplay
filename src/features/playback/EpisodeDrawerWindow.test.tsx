@@ -30,3 +30,21 @@ it("resets the window to a new project's page", () => {
   expect(screen.getByText("视频 episode-1")).toBeVisible();
   expect(screen.queryByText("视频 episode-49")).toBeNull();
 });
+it("keeps the playing episode header independent from the visible server page", () => {
+  const props = propsFor(24);
+  render(<EpisodeDrawer {...props} currentEpisode={{ ...mediaSummary("episode-73"),
+    episodeTitle: "播放中的第七十三集", seasonNumber: 1, episodeNumber: 73,
+  }} />);
+  expect(screen.getByText("第 1 季 · 第 73 集")).toBeVisible();
+  expect(screen.getByText(/播放中的第七十三集/)).toBeVisible();
+});
+it("routes a failed previous-page retry to the failed read rather than next page", () => {
+  const props = propsFor(24), retry = vi.fn().mockResolvedValue(false), loadMore = vi.fn();
+  render(<EpisodeDrawer {...props} pagination={{ items: props.episodes, offset: 24, totalCount: 100,
+    nextOffset: 48, loading: false, error: "读取失败", retry, loadMore, reload: vi.fn(), loadPrevious: vi.fn(),
+  }} />);
+  fireEvent.click(screen.getByRole("button", { name: "重试读取剧集" }));
+  expect(retry).toHaveBeenCalledOnce();
+  expect(loadMore).not.toHaveBeenCalled();
+  expect(screen.queryByRole("button", { name: "下一页剧集" })).toBeNull();
+});

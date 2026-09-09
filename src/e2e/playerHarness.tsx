@@ -217,10 +217,15 @@ export function PlayerHarness() {
   const pagedEpisodes = new URLSearchParams(window.location.search).has("episodePages");
   const countParam = new URLSearchParams(window.location.search).get("episodeCount");
   const accumulatedCount = countParam === "1000" || countParam === "10000" ? Number(countParam) : 0;
+  const bounded = new URLSearchParams(window.location.search).has("boundedEpisodes");
+  const [episodeOffset, setEpisodeOffset] = useState(0);
   const [loadedMore, setLoadedMore] = useState(false);
   const [pageError, setPageError] = useState(false);
   const [pageAttempt, setPageAttempt] = useState(0);
-  const episodeItems = accumulatedCount ? Array.from({ length: accumulatedCount }, (_, index) => episodeSummary(index === 0 ? project.id : `episode-${index + 1}`, index + 1, `第 ${index + 1} 集`)) : [episodeSummary(project.id, 1, "站台相遇"), episodeSummary(nextEpisode.projectId, 2, nextEpisode.displayTitle)]
+  const episodeItems = accumulatedCount ? Array.from({ length: bounded ? Math.min(24, accumulatedCount - episodeOffset) : accumulatedCount }, (_, row) => {
+    const index = row + (bounded ? episodeOffset : 0);
+    return episodeSummary(index === 0 ? project.id : `episode-${index + 1}`, index + 1, `第 ${index + 1} 集`);
+  }) : [episodeSummary(project.id, 1, "站台相遇"), episodeSummary(nextEpisode.projectId, 2, nextEpisode.displayTitle)]
     .slice(0, pagedEpisodes && !loadedMore ? 1 : 2);
 
   const [drawerTab, setDrawerTab] = useState<ShellDrawerTab | null>(null);
@@ -312,11 +317,18 @@ export function PlayerHarness() {
         episodeNavigation={{
           detail: accumulatedCount ? { ...collectionDetail, summary: { ...collectionDetail.summary, itemCount: accumulatedCount } } : collectionDetail,
           episodes: episodeItems,
+          currentEpisode: bounded ? episodeSummary(project.id, 1, "站台相遇") : undefined,
           neighbors: { previous: null, next: nextEpisode },
           loading: false,
           error: null,
         }}
-        episodePagination={pagedEpisodes ? {
+        episodePagination={bounded ? {
+          items: episodeItems, totalCount: accumulatedCount, offset: episodeOffset,
+          nextOffset: episodeOffset + 24 < accumulatedCount ? episodeOffset + 24 : null, loading: false, error: null,
+          loadMore: async () => { setEpisodeOffset(value => value + 24); return true; },
+          loadPrevious: async () => { setEpisodeOffset(value => Math.max(0, value - 24)); return true; },
+          reload: () => setEpisodeOffset(0),
+        } : pagedEpisodes ? {
           items: episodeItems, totalCount: accumulatedCount || 2, nextOffset: accumulatedCount || loadedMore ? null : 1, loading: false,
           error: pageError ? "读取暂时失败" : null,
           loadMore: async () => { if (pageAttempt === 0) { setPageError(true); setPageAttempt(1); return false; } else { setLoadedMore(true); setPageError(false); return true; } },

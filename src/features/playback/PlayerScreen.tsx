@@ -145,7 +145,7 @@ export function PlayerScreen({
     useFullscreenControlVisibility(fullscreen);
   const currentEpisode = episodeNavigation.episodes.find(
     (episode) => episode.projectId === project.id,
-  );
+  ) ?? (episodeNavigation.currentEpisode?.projectId === project.id ? episodeNavigation.currentEpisode : null);
   const drawerContextLabel =
     currentEpisode?.seasonNumber !== null &&
     currentEpisode?.seasonNumber !== undefined &&

@@ -15,6 +15,7 @@ type EpisodeDrawerProps = {
   mediaTitle?: string;
   detail: CollectionDetail | null;
   episodes: LibraryMediaSummary[];
+  currentEpisode?: LibraryMediaSummary | null;
   neighbors: EpisodeNeighbors;
   loading: boolean;
   error: string | null;
@@ -40,6 +41,7 @@ export function EpisodeDrawer({
   mediaTitle,
   detail,
   episodes,
+  currentEpisode: retainedCurrentEpisode,
   neighbors,
   loading,
   error,
@@ -48,7 +50,10 @@ export function EpisodeDrawer({
   playbackDurationMs,
   onSwitch,
 }: EpisodeDrawerProps) {
-  const { listRef, start, items, previous, next, loadMore } = useEpisodeListWindow(`${detail?.summary.id ?? "none"}:${projectId}`, episodes, projectId);
+  const { listRef, start, items, previous, next, loadMore } = useEpisodeListWindow(`${detail?.summary.id ?? "none"}:${projectId}`, episodes, projectId, pagination?.offset);
+  const displayStart = (pagination?.offset ?? 0) + start;
+  const previousPage = previous ?? (pagination?.offset && pagination.loadPrevious
+    ? () => { void loadMore(pagination.loadPrevious!); } : undefined);
   const paginated = Boolean(pagination || previous || next);
   if (loading && !detail) {
     return <div className="player-drawer-empty"><span className="spinner" /><strong>正在读取剧集</strong></div>;
@@ -61,7 +66,8 @@ export function EpisodeDrawer({
     return <div className="player-drawer-empty"><strong>这是单个视频</strong><p>从剧集详情打开单集后，这里会显示当前季和上一集／下一集。</p></div>;
   }
 
-  const currentEpisode = episodes.find((episode) => episode.projectId === projectId);
+  const currentEpisode = episodes.find((episode) => episode.projectId === projectId)
+    ?? (retainedCurrentEpisode?.projectId === projectId ? retainedCurrentEpisode : null);
   const currentPositionMs = playbackPositionMs;
   const currentDurationMs = playbackDurationMs ?? currentEpisode?.durationMs ?? null;
   const progressPercent = currentDurationMs
@@ -159,13 +165,15 @@ export function EpisodeDrawer({
       </div>
       {paginated ? <div className="episode-pagination">
         <p role="status">{pagination?.loading ? "正在读取剧集…" : pagination?.error && episodes.length === 0
-          ? "未能读取剧集" : `已显示 ${start ? `${start + 1}–${start + items.length}` : items.length} / ${pagination?.totalCount ?? episodes.length} 集`}</p>
+          ? "未能读取剧集" : `已显示 ${displayStart ? `${displayStart + 1}–${displayStart + items.length}` : items.length} / ${pagination?.totalCount ?? episodes.length} 集`}</p>
         {pagination?.error ? <p role="alert">{pagination.error}</p> : null}
-        {previous || next || (pagination && (pagination.nextOffset !== null || pagination.error)) ? <div className="episode-pagination-actions">
-        {previous ? <button type="button" className="button quiet" onClick={previous}>上一页剧集</button> : null}
+        {previousPage || next || (pagination && (pagination.nextOffset !== null || pagination.error)) ? <div className="episode-pagination-actions">
+        {previousPage ? <button type="button" className="button quiet" disabled={pagination?.offset !== undefined && pagination.loading} onClick={previousPage}>上一页剧集</button> : null}
         {next ? <button type="button" className="button quiet" onClick={next}>下一页剧集</button> : null}
-        {pagination && !next && pagination.nextOffset !== null ? <button type="button" className="button quiet" disabled={pagination.loading}
-          onClick={() => { void loadMore(pagination.loadMore); }}>{pagination.error ? "重试加载更多" : "加载更多剧集"}</button> : null}
+        {pagination?.error && pagination.retry ? <button type="button" className="button quiet" disabled={pagination.loading}
+          onClick={() => { void loadMore(pagination.retry!); }}>重试读取剧集</button> : null}
+        {pagination && !next && pagination.nextOffset !== null && !(pagination.error && pagination.retry) ? <button type="button" className="button quiet" disabled={pagination.loading}
+          onClick={() => { void loadMore(pagination.loadMore); }}>{pagination.error ? "重试加载更多" : pagination.offset !== undefined ? "下一页剧集" : "加载更多剧集"}</button> : null}
         {pagination?.error ? <button type="button" className="button quiet" disabled={pagination.loading}
           onClick={pagination.reload}>重新加载剧集</button> : null}
         </div> : null}
