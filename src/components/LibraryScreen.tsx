@@ -1,4 +1,5 @@
 import type { LibraryCollectionPagination } from "../features/library/useLibraryCollectionPaging";
+import type { CollectionOverviewReader } from "../features/library/useCollectionOverviewPages";
 import { useState } from "react";
 
 import { LibraryFoldersView } from "../features/library/components/LibraryFoldersView";
@@ -21,6 +22,7 @@ import { LibraryImportDialog } from "./LibraryImportDialog";
 import "../features/library/library.css";
 
 type LibraryScreenProps = {
+  readCollections?: CollectionOverviewReader;
   home: LibraryHome;
   section: LibrarySection;
   sectionPages: LibrarySectionPages;
@@ -89,7 +91,7 @@ export function LibraryScreen(props: LibraryScreenProps) {
       reload: () => props.onReloadSection(section) };
   };
   const commonMediaProps = {
-    collections: props.home.collections,
+    readCollections: props.readCollections,
     mutationPending: props.mutationPending,
     onOpen: props.onOpen,
     onRelink: props.onRelink,

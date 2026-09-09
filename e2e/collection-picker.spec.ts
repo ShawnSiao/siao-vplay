@@ -1,0 +1,48 @@
+import { expect, test } from "@playwright/test";
+
+test("classification picker remains bounded and recovers across search, scope and paging", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", error => errors.push(error.message));
+  page.on("console", message => { if (message.type() === "error") errors.push(message.text()); });
+  await page.setViewportSize({ width: 960, height: 640 });
+  await page.goto("/e2e/library.html?collectionCount=1000&picker-retry=1");
+  await page.getByRole("button", { name: "媒体库：未分类视频" }).click();
+  const trigger = page.getByLabel("雨站台 1 的更多操作", { exact: true });
+  await trigger.click();
+  await page.getByRole("menuitem", { name: "加入合集…" }).click();
+  const dialog = page.getByRole("dialog", { name: "加入合集", exact: true });
+  await expect(dialog.getByRole("button", { name: /^加入「/ })).toHaveCount(24);
+  expect(await dialog.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
+  expect(await dialog.getByRole("button", { name: "下一页", exact: true }).evaluate(element => {
+    const box = element.getBoundingClientRect();
+    const body = element.closest(".dialog-body")!.getBoundingClientRect();
+    return box.top >= body.top && box.bottom <= body.bottom;
+  })).toBe(true);
+  await page.screenshot({ path: "designs/open-source-readiness/collection-picker-960.png" });
+  await dialog.locator(".collection-picker-results").evaluate(element => { element.scrollTop = element.scrollHeight; });
+  await dialog.getByRole("button", { name: "下一页", exact: true }).click();
+  await expect(dialog.getByRole("alert")).toContainText("读取暂时失败");
+  await dialog.getByRole("button", { name: "重试读取" }).click();
+  await expect(dialog.getByRole("button", { name: "加入「自建合集 25」", exact: true })).toBeVisible();
+  expect(await dialog.locator(".collection-picker-results").evaluate(element => element.scrollTop)).toBe(0);
+  await expect(dialog.getByRole("button", { name: /^加入「/ })).toHaveCount(24);
+  await dialog.getByRole("button", { name: "上一页", exact: true }).click();
+  await expect(dialog.getByRole("button", { name: "加入「自建合集 1」", exact: true })).toBeVisible();
+  await dialog.getByRole("textbox", { name: "搜索合集" }).fill("自建合集 1000");
+  await dialog.getByRole("button", { name: "搜索", exact: true }).click();
+  await expect(dialog.getByRole("button", { name: /^加入「/ })).toHaveCount(1);
+  await dialog.getByRole("textbox", { name: "搜索合集" }).fill("");
+  await dialog.getByRole("combobox", { name: "合集类型" }).selectOption("true");
+  await expect(dialog.getByRole("button", { name: /^加入「/ })).toHaveCount(2);
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+  await expect(trigger).toBeFocused();
+  await trigger.press("Enter");
+  await page.getByRole("menuitem", { name: "加入合集…" }).click();
+  await dialog.getByRole("combobox", { name: "合集类型" }).selectOption("true");
+  await dialog.getByRole("button", { name: "加入「文件夹合集 1」" }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByText("雨站台 1", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "继续 雨站台 2", exact: true })).toBeFocused();
+  expect(errors).toEqual([]);
+});

@@ -1,6 +1,7 @@
 import { PagedMediaList } from "./PagedMediaList";
 import type { LibraryCollectionPagination } from "../useLibraryCollectionPaging";
-import type { CollectionSummary, LibraryMediaSummary } from "../../../types";
+import type { LibraryMediaSummary } from "../../../types";
+import type { CollectionOverviewReader } from "../useCollectionOverviewPages";
 import type { LibrarySectionPageState } from "../useLibraryController";
 import { LibraryMediaItem } from "./LibraryMediaItem";
 
@@ -8,7 +9,7 @@ type LibraryMediaListViewProps = {
   kind: "watch_later" | "unclassified";
   page: LibrarySectionPageState;
   pagination?: LibraryCollectionPagination;
-  collections: CollectionSummary[];
+  readCollections?: CollectionOverviewReader;
   mutationPending: boolean;
   onRetry: () => void;
   onLoadMore: () => Promise<boolean>;

@@ -198,7 +198,8 @@ test("direct media lists remove successful classification changes", async ({ pag
   await expect(page.getByRole("heading", { name: "未分类" })).toBeVisible();
   await expect(page.getByText("共 12 个视频，已加载 12 个。")).toBeVisible();
   await page.getByLabel("雨站台 1 的更多操作").click();
-  await page.getByRole("menuitem", { name: "加入「周末电影」" }).click();
+  await page.getByRole("menuitem", { name: "加入合集…" }).click();
+  await page.getByRole("button", { name: "加入「周末电影」" }).click();
   await expect(page.getByText("共 11 个视频，已加载 11 个。")).toBeVisible();
   await expect(page.getByText("雨站台 1", { exact: true })).toHaveCount(0);
 });

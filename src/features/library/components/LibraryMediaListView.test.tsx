@@ -60,7 +60,8 @@ function renderList(
       loadingMore: false,
       error: null,
     },
-    collections: [collection],
+    readCollections: vi.fn().mockResolvedValue({ scope: "collections", rootLinked: false, query: "", offset: 0,
+      snapshotToken: "a".repeat(64), totalCount: 1, nextOffset: null, items: [collection] }),
     mutationPending: false,
     onRetry: vi.fn(),
     onLoadMore: vi.fn(),
@@ -79,6 +80,18 @@ function renderList(
 }
 
 describe("LibraryMediaListView", () => {
+  it("keeps classification menus bounded and reads only when the picker opens", async () => {
+    const readCollections = vi.fn().mockResolvedValue({ scope: "collections", rootLinked: false, query: "", offset: 0,
+      snapshotToken: "a".repeat(64), totalCount: 1000, nextOffset: 24,
+      items: Array.from({ length: 24 }, (_, i) => ({ ...collection, id: `c-${i}`, title: `合集 ${i}` })) });
+    renderList("unclassified", { readCollections });
+    fireEvent.click(screen.getByRole("button", { name: "雨站台 的更多操作" }));
+    expect(screen.queryAllByRole("menuitem").length).toBeLessThan(10);
+    expect(readCollections).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("menuitem", { name: "加入合集…" }));
+    await screen.findByRole("button", { name: "加入「合集 0」" });
+    expect(screen.getAllByRole("button", { name: /^加入「/ })).toHaveLength(24);
+  });
   it("offers an explicit watched-state correction independent of playback position", () => {
     const props = renderList("unclassified");
     fireEvent.click(screen.getByRole("button", { name: "雨站台 的更多操作" }));
@@ -99,7 +112,7 @@ describe("LibraryMediaListView", () => {
     expect(props.onSetWatchLater).toHaveBeenCalledWith("project", false);
   });
 
-  it("offers unclassified classification actions and preserves rows on append errors", () => {
+  it("offers unclassified classification actions and preserves rows on append errors", async () => {
     const onLoadMore = vi.fn();
     const props = renderList("unclassified", {
       onLoadMore,
@@ -116,7 +129,8 @@ describe("LibraryMediaListView", () => {
 
     expect(screen.getByText("雨站台")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "雨站台 的更多操作" }));
-    fireEvent.click(screen.getByRole("menuitem", { name: "加入「周末电影」" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "加入合集…" }));
+    fireEvent.click(await screen.findByRole("button", { name: "加入「周末电影」" }));
     expect(props.onAddToCollection).toHaveBeenCalledWith("collection", "project");
     expect(screen.getByRole("alert")).toHaveTextContent("网络暂时不可用");
     fireEvent.click(screen.getByRole("button", { name: "重试加载" }));

@@ -221,7 +221,6 @@ function CollectionDetailView(props: LibrarySeriesViewProps) {
                 <LibraryMediaItem
                   key={media.projectId}
                   media={media}
-                  collections={props.home.collections}
                   context={{
                     kind: "collection",
                     collectionId: summary.id,
