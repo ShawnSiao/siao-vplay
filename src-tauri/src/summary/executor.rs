@@ -1,7 +1,6 @@
 use std::{
     collections::{HashMap, HashSet},
     fs, thread,
-    time::Duration,
 };
 
 use base64::{Engine as _, engine::general_purpose::STANDARD};
@@ -25,7 +24,6 @@ use super::{
 };
 
 const SYSTEM: &str = "只使用任务提供的授权材料。视频主张不等于外部事实。直接证据必须引用有效字幕 ID；无直接依据的内容只能标为 AI 推导或待外部验证。只返回符合 Schema 的 JSON。";
-const RETRY_DELAYS: [Duration; 2] = [Duration::from_secs(2), Duration::from_secs(5)];
 
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum SummaryExecutionError {
@@ -276,6 +274,7 @@ fn run_api(
             )
         })
         .collect::<Vec<_>>();
+    let policy = super::retry_policy::load()?;
     let mut retry = 0;
     loop {
         let response = summary_provider::generate(
@@ -295,14 +294,14 @@ fn run_api(
         );
         match response {
             Ok(output) => return Ok(output.output_text),
-            Err(failure) if retry < retry_delays(&failure).len() => {
-                if SummaryTaskRepository::new(store)
-                    .get(&task.id)?
-                    .cancel_requested
+            Err(failure) => {
+                let Some(delay) = policy.delay_for(&failure.error, retry) else {
+                    return Err(provider_error(failure));
+                };
+                if SummaryTaskRepository::new(store).cancellation_requested(&task.id)?
                 {
                     return Err(StoreError::Validation("总结任务已请求取消".to_owned()).into());
                 }
-                let delay = retry_delays(&failure)[retry];
                 retry += 1;
                 if let Some(chunk_id) = chunk_id {
                     SummaryResultRepository::new(store).update_retry(
@@ -312,23 +311,11 @@ fn run_api(
                         &failure.error.to_string(),
                     )?;
                 }
-                thread::sleep(delay);
+                policy.wait(delay, || {
+                    SummaryTaskRepository::new(store).cancellation_requested(&task.id)
+                })?;
             }
-            Err(failure) => return Err(provider_error(failure)),
         }
-    }
-}
-
-fn retry_delays(failure: &ProviderFailure) -> &'static [Duration] {
-    if matches!(
-        failure.error,
-        crate::ai::AiError::Timeout
-            | crate::ai::AiError::RateLimited
-            | crate::ai::AiError::ProviderUnavailable
-    ) {
-        &RETRY_DELAYS
-    } else {
-        &[]
     }
 }
 

@@ -234,6 +234,13 @@ impl<'a> SummaryTaskRepository<'a> {
         Ok(())
     }
 
+    pub(crate) fn cancellation_requested(&self, task_id: &str) -> Result<bool, StoreError> {
+        Ok(self.store.connect()?.query_row(
+            "SELECT cancel_requested_at_ms IS NOT NULL FROM summary_tasks WHERE id = ?1",
+            [task_id], |row| row.get(0),
+        )?)
+    }
+
     pub(crate) fn request_cancel(&self, task_id: &str) -> Result<(), StoreError> {
         self.store.connect()?.execute(
             "UPDATE summary_tasks SET cancel_requested_at_ms = ?2, updated_at_ms = ?2

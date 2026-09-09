@@ -1,5 +1,4 @@
 use super::*;
-use crate::ai::AiError;
 
 #[test]
 fn cancelled_summary_never_attempts_to_resolve_or_send_to_a_provider() {
@@ -22,26 +21,23 @@ fn cancelled_summary_never_attempts_to_resolve_or_send_to_a_provider() {
 }
 
 #[test]
-fn retries_only_transient_provider_failures() {
-    for error in [
-        AiError::Timeout,
-        AiError::RateLimited,
-        AiError::ProviderUnavailable,
-    ] {
-        assert_eq!(
-            retry_delays(&ProviderFailure {
-                error,
-                provider_request_id: None
-            })
-            .len(),
-            2
-        );
-    }
-    assert!(
-        retry_delays(&ProviderFailure {
-            error: AiError::Unauthorized,
-            provider_request_id: None
-        })
-        .is_empty()
-    );
+fn backoff_observes_persisted_cancellation_without_loading_task_chunks() {
+    use std::time::{Duration, Instant};
+    let (_directory, store, task) = super::super::test_support::prepared_summary();
+    let repository = SummaryTaskRepository::new(&store);
+    assert!(!repository.cancellation_requested(&task.id).unwrap());
+    let start = Instant::now();
+    let mut checks = 0;
+    let result = super::super::retry_policy::load()
+        .unwrap()
+        .wait(Duration::from_secs(2), || {
+            checks += 1;
+            if checks == 2 {
+                repository.request_cancel(&task.id)?;
+            }
+            repository.cancellation_requested(&task.id)
+        });
+    assert!(result.is_err());
+    assert!(start.elapsed() < Duration::from_secs(1));
+    assert!(repository.cancellation_requested("missing-task").is_err());
 }

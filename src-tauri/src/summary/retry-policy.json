@@ -1,0 +1,5 @@
+{
+  "schemaVersion": 1,
+  "retryDelaysSeconds": [2, 5],
+  "cancellationPollMs": 100
+}

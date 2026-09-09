@@ -23,6 +23,7 @@ mod repository;
 mod result_model;
 mod result_repository;
 mod result_validation;
+mod retry_policy;
 mod schema;
 mod task_repository;
 mod verified_materials;
