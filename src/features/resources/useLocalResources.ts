@@ -149,17 +149,17 @@ export function useLocalResources(): LocalResourcesController {
         getLocalResourceCatalog(),
         getLocalResourceStatus(),
         listResourceDownloadTasks(),
-        getLocalResourceNetworkStatus().catch(() => ({
-          mode: "direct" as const,
-          proxySource: "direct" as const,
-          proxyAddress: null,
-        })),
+        getLocalResourceNetworkStatus().then(
+          value => ({ ok: true as const, value }),
+          cause => ({ ok: false as const, cause }),
+        ),
       ]);
       setCatalog(nextCatalog);
       setStatus(nextStatus);
       adoptSnapshot(nextTasks);
-      setNetworkStatus(nextNetworkStatus);
-      setError(null);
+      setNetworkStatus(nextNetworkStatus.ok ? nextNetworkStatus.value : null);
+      if (nextNetworkStatus.ok) setError(null);
+      else captureError(nextNetworkStatus.cause);
       initializedRef.current = true;
       return nextStatus;
     } catch (cause) {

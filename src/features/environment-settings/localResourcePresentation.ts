@@ -54,7 +54,7 @@ export function networkSourceLabel(
   if (source === "custom") return "使用指定代理";
   if (source === "environment") return "使用应用启动环境中的代理";
   if (source === "windows_system") return "跟随 Windows 系统代理";
-  return "当前直连";
+  return source === "direct" ? "当前直连" : "网络状态未确认";
 }
 
 export const capabilityDescriptions: Record<string, string> = {

@@ -52,6 +52,8 @@ fn committed_schemas_match_rust() {
     check_translation_schemas();
     check_schema("resource-download-task", &serialized_schema::<crate::resource_download::ResourceDownloadTask>());
     check_schema("resource-download-snapshot", &serialized_schema::<crate::resource_download::ResourceDownloadSnapshot>());
+    check_schema("local-resource-status", &serialized_schema::<crate::local_resources::LocalResourceStatus>());
+    check_schema("resource-network-status", &serialized_schema::<crate::resource_download::ResourceNetworkStatus>());
     check_schema("capability-preparation", &serialized_schema::<crate::resource_download::CapabilityPreparation>());
     check_schema("subtitle-burn-input", &serialized_schema::<crate::burn::StartSubtitleBurnInput>());
     check_schema("subtitle-burn-job", &serialized_schema::<crate::burn::SubtitleBurnJob>());

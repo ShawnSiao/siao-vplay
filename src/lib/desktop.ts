@@ -1,3 +1,5 @@
+export { getLocalResourceStatus, configureLocalResourceRoot, repairLocalResourceRoot, reconnectLocalResourceRoot, setLocalResourceProfile, getLocalResourceNetworkStatus, setLocalResourceProxy } from "./resourceStatusGateway";
+import { browserResourceCapabilities } from "./resourceBrowserCapabilities";
 export { listResourceDownloadTasks, listenResourceDownloadTasks, prepareLocalCapability, pauseResourceDownload, resumeResourceDownload, cancelResourceDownload, retryResourceDownload, repairLocalResource, updateLocalResource } from "./resourceTaskGateway";
 export { startSubtitleBurn, getSubtitleBurnJob, listSubtitleBurnJobs, cancelSubtitleBurnJob, resumeSubtitleBurnJob } from "./burnGateway";
 export { commandError } from "./commandError";
@@ -27,13 +29,11 @@ import type {
   LocalResourceMovePlan,
   LocalResourceMoveResult,
   LocalResourceDiagnostics,
-  LocalResourceStatus,
   MediaPreparation,
   MediaRuntimeStatus,
   Project,
   RemoteMediaPreview,
   RuntimeCatalog,
-  ResourceNetworkStatus,
   ResourceAdoptionResult,
   ResourceMigrationPreview,
   ResourceRemovalResult,
@@ -51,29 +51,6 @@ import type {
 
 export const isDesktopApp = "__TAURI_INTERNALS__" in window;
 
-const browserResourceCapabilities = [
-  {
-    id: "basic_media",
-    title: "基础视频支持",
-    resourceIds: ["ffmpeg-cpu"],
-    profileIds: [],
-    requiresCapabilityIds: [],
-  },
-  {
-    id: "url_import",
-    title: "在线视频导入",
-    resourceIds: ["ffmpeg-cpu", "yt-dlp"],
-    profileIds: [],
-    requiresCapabilityIds: [],
-  },
-  {
-    id: "local_transcription",
-    title: "本地字幕识别",
-    resourceIds: ["ffmpeg-cpu", "whisper-cpu"],
-    profileIds: ["fast", "standard"],
-    requiresCapabilityIds: [],
-  },
-];
 
 export async function getAppStatus(): Promise<AppStatus> {
   if (!isDesktopApp) {
@@ -228,26 +205,6 @@ export async function getLocalResourceCatalog(): Promise<LocalResourceCatalog> {
   return invoke<LocalResourceCatalog>("get_local_resource_catalog");
 }
 
-export async function getLocalResourceStatus(): Promise<LocalResourceStatus> {
-  if (!isDesktopApp) {
-    return {
-      configured: false,
-      selectedParent: null,
-      resourceRoot: null,
-      rootState: "setup_required",
-      freeSpaceBytes: null,
-      preferredProfile: "standard",
-      capabilities: browserResourceCapabilities.map((capability) => ({
-        id: capability.id,
-        title: capability.title,
-        state: "setup_required" as const,
-        requiredResourceIds: capability.resourceIds,
-        missingResourceIds: capability.resourceIds,
-      })),
-    };
-  }
-  return invoke<LocalResourceStatus>("get_local_resource_status");
-}
 
 export async function chooseLocalResourceParent(): Promise<string | null> {
   if (!isDesktopApp) {
@@ -269,20 +226,7 @@ export async function planLocalResourceLocation(
   });
 }
 
-export async function configureLocalResourceRoot(
-  parentPath: string,
-  confirmed: boolean,
-): Promise<LocalResourceStatus> {
-  return invoke<LocalResourceStatus>("configure_local_resource_root", {
-    input: { parentPath, confirmed },
-  });
-}
 
-export async function repairLocalResourceRoot(): Promise<LocalResourceStatus> {
-  return invoke<LocalResourceStatus>("repair_local_resource_root", {
-    input: { confirmed: true },
-  });
-}
 
 export async function inspectLocalResourceMigration(
   sourcePath?: string,
@@ -325,13 +269,6 @@ export async function moveLocalResourceRoot(
   });
 }
 
-export async function reconnectLocalResourceRoot(
-  parentPath: string,
-): Promise<LocalResourceStatus> {
-  return invoke<LocalResourceStatus>("reconnect_local_resource_root", {
-    input: { parentPath, confirmed: true },
-  });
-}
 
 export async function planUnusedResourceCleanup(): Promise<UnusedResourceCleanupPlan> {
   return invoke<UnusedResourceCleanupPlan>("plan_unused_resource_cleanup");
@@ -343,32 +280,8 @@ export async function cleanupUnusedResources(): Promise<UnusedResourceCleanupRes
   });
 }
 
-export async function setLocalResourceProfile(
-  profileId: string,
-): Promise<LocalResourceStatus> {
-  if (!isDesktopApp) {
-    const status = await getLocalResourceStatus();
-    return { ...status, preferredProfile: profileId };
-  }
-  return invoke<LocalResourceStatus>("set_local_resource_profile", {
-    input: { profileId },
-  });
-}
 
-export async function getLocalResourceNetworkStatus(): Promise<ResourceNetworkStatus> {
-  if (!isDesktopApp) {
-    return { mode: "direct", proxySource: "direct", proxyAddress: null };
-  }
-  return invoke<ResourceNetworkStatus>("get_local_resource_network_status");
-}
 
-export async function setLocalResourceProxy(
-  proxyUrl: string | null,
-): Promise<ResourceNetworkStatus> {
-  return invoke<ResourceNetworkStatus>("set_local_resource_proxy", {
-    input: { proxyUrl },
-  });
-}
 
 export async function removeLocalResource(
   resourceId: string,

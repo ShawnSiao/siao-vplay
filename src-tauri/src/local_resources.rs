@@ -1,3 +1,5 @@
+mod status_contract;
+pub use status_contract::{LocalResourceRootState, LocalResourceCapabilityState, LocalResourceCapabilityStatus, LocalResourceStatus};
 use std::{
     collections::{BTreeMap, BTreeSet},
     fs::{self, File},
@@ -182,50 +184,6 @@ pub struct SetLocalResourceProfileInput {
 pub struct SetLocalResourceProxyInput {
     #[serde(default)]
     pub proxy_url: Option<String>,
-}
-
-#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum LocalResourceRootState {
-    SetupRequired,
-    Ready,
-    RootUnavailable,
-    RepairRequired,
-}
-
-#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-#[allow(dead_code)]
-pub enum LocalResourceCapabilityState {
-    SetupRequired,
-    NotReady,
-    Preparing,
-    Ready,
-    RepairRequired,
-    RootUnavailable,
-    UpdateAvailable,
-}
-
-#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub struct LocalResourceCapabilityStatus {
-    pub id: String,
-    pub title: String,
-    pub state: LocalResourceCapabilityState,
-    pub required_resource_ids: Vec<String>,
-    pub missing_resource_ids: Vec<String>,
-}
-
-#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub struct LocalResourceStatus {
-    pub configured: bool,
-    pub selected_parent: Option<String>,
-    pub resource_root: Option<String>,
-    pub root_state: LocalResourceRootState,
-    pub free_space_bytes: Option<u64>,
-    pub preferred_profile: String,
-    pub capabilities: Vec<LocalResourceCapabilityStatus>,
 }
 
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]

@@ -88,3 +88,25 @@ pub struct ResourceDownloadSnapshot {
     pub generation: u64,
     pub tasks: Vec<ResourceDownloadTask>,
 }
+
+#[cfg_attr(test, derive(schemars::JsonSchema))]
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ResourceNetworkStatus {
+    #[cfg_attr(test, schemars(with = "NetworkMode"))]
+    pub mode: String,
+    #[cfg_attr(test, schemars(with = "ProxySource"))]
+    pub proxy_source: String,
+    pub proxy_address: Option<String>,
+}
+
+#[cfg(test)]
+#[derive(schemars::JsonSchema)]
+#[schemars(rename_all = "snake_case")]
+#[expect(dead_code, reason = "Serialized network mode vocabulary")]
+enum NetworkMode { Direct, Proxy }
+#[cfg(test)]
+#[derive(schemars::JsonSchema)]
+#[schemars(rename_all = "snake_case")]
+#[expect(dead_code, reason = "Serialized network source vocabulary")]
+enum ProxySource { Custom, Environment, WindowsSystem, Direct }

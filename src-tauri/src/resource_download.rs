@@ -1,6 +1,6 @@
 mod contract;
 mod ordering;
-pub use contract::{ResourceDownloadSnapshot, ResourceDownloadTask, ResourceDownloadTaskState, CapabilityPreparation};
+pub use contract::{ResourceNetworkStatus, ResourceDownloadSnapshot, ResourceDownloadTask, ResourceDownloadTaskState, CapabilityPreparation};
 use std::{
     collections::{BTreeMap, HashMap},
     fs::{self, File, OpenOptions},
@@ -118,14 +118,6 @@ impl ResourceDownloadError {
             Self::ResourceBusy(_) => "local_resource_busy",
         }
     }
-}
-
-#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub struct ResourceNetworkStatus {
-    pub mode: String,
-    pub proxy_source: String,
-    pub proxy_address: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize)]

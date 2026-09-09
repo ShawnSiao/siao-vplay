@@ -1,3 +1,4 @@
+import type { LocalResourceRootState } from "./generated/local-resource-status";
 export interface PromptSelection {
   templateId: string;
   oneTimeRequirements: string;
@@ -446,38 +447,7 @@ export type RuntimeCatalog = {
   components: RuntimeComponent[];
 };
 
-export type LocalResourceRootState =
-  | "setup_required"
-  | "ready"
-  | "root_unavailable"
-  | "repair_required";
-
-export type LocalResourceCapabilityState =
-  | "setup_required"
-  | "not_ready"
-  | "preparing"
-  | "ready"
-  | "repair_required"
-  | "root_unavailable"
-  | "update_available";
-
-export type LocalResourceCapabilityStatus = {
-  id: string;
-  title: string;
-  state: LocalResourceCapabilityState;
-  requiredResourceIds: string[];
-  missingResourceIds: string[];
-};
-
-export type LocalResourceStatus = {
-  configured: boolean;
-  selectedParent: string | null;
-  resourceRoot: string | null;
-  rootState: LocalResourceRootState;
-  freeSpaceBytes: number | null;
-  preferredProfile: string;
-  capabilities: LocalResourceCapabilityStatus[];
-};
+export type { LocalResourceRootState, LocalResourceCapabilityState, LocalResourceCapabilityStatus, LocalResourceStatus } from "./generated/local-resource-status";
 
 export type LocalResourceLocationPlan = {
   selectedParent: string;
@@ -542,11 +512,7 @@ export type LocalResourceCatalog = {
 
 export type { ResourceDownloadTaskState, ResourceDownloadTask } from "./generated/resource-download-task";
 
-export type ResourceNetworkStatus = {
-  mode: "direct" | "proxy";
-  proxySource: "custom" | "environment" | "windows_system" | "direct";
-  proxyAddress: string | null;
-};
+export type { ResourceNetworkStatus } from "./generated/resource-network-status";
 
 export type { CapabilityPreparation } from "./generated/capability-preparation";
 

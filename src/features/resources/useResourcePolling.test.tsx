@@ -5,11 +5,11 @@ import { createResourceTaskFixture } from "../../test-fixtures/resourceTask";
 import type { ResourceDownloadTask, ResourceDownloadSnapshot } from "../../types";
 import { useResourcePolling } from "./useResourcePolling";
 import { useLocalResources } from "./useLocalResources";
-const mocks = vi.hoisted(() => ({ list: vi.fn(), status: vi.fn(), listen: vi.fn() }));
+const mocks = vi.hoisted(() => ({ list: vi.fn(), status: vi.fn(), listen: vi.fn(), network: vi.fn() }));
 vi.mock("../../lib/desktop", async importOriginal => ({
   ...await importOriginal<typeof import("../../lib/desktop")>(),
   getLocalResourceCatalog: async () => catalog,
-  getLocalResourceNetworkStatus: async () => ({ mode: "direct", proxySource: "direct", proxyAddress: null }),
+  getLocalResourceNetworkStatus: mocks.network,
   getLocalResourceStatus: mocks.status,
   listResourceDownloadTasks: mocks.list,
   listenResourceDownloadTasks: mocks.listen,
@@ -22,7 +22,7 @@ function deferred() {
   return { promise, resolve, reject };
 }
 beforeEach(() => {
-  vi.useFakeTimers(); mocks.list.mockReset(); mocks.status.mockReset(); mocks.listen.mockReset();
+  vi.useFakeTimers(); mocks.network.mockReset(); mocks.network.mockResolvedValue({ mode: "direct", proxySource: "direct", proxyAddress: null }); mocks.list.mockReset(); mocks.status.mockReset(); mocks.listen.mockReset();
   mocks.list.mockResolvedValue({ generation: 1, tasks: [task] }); mocks.status.mockResolvedValue(setupStatus); mocks.listen.mockResolvedValue(vi.fn());
 });
 afterEach(() => { vi.useRealTimers(); });
@@ -106,4 +106,16 @@ it("rejects an older event even when wall-clock timestamps are identical", async
   await act(async () => mocks.listen.mock.calls[0][0](newer));
   await act(async () => mocks.listen.mock.calls[0][0]({ ...newer, revision: 2, downloadedBytes: 40 }));
   expect(view.result.current.tasks).toEqual([newer]); view.unmount();
+});
+
+it("keeps resources available but never fabricates direct networking after a failed read", async () => {
+  mocks.network.mockRejectedValue(new Error("network status unavailable"));
+  const view = await setup();
+  expect(view.result.current.status).toEqual(setupStatus);
+  expect(view.result.current.networkStatus).toBeNull();
+  expect(view.result.current.error).toContain("network status unavailable");
+  mocks.network.mockResolvedValue({ mode: "proxy", proxySource: "environment", proxyAddress: null });
+  await act(async () => { await view.result.current.refresh(); });
+  expect(view.result.current.networkStatus?.proxySource).toBe("environment");
+  expect(view.result.current.error).toBeNull(); view.unmount();
 });
