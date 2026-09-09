@@ -1,3 +1,4 @@
+import { requireExplanationResult } from "../lib/explanationContract";
 import { useExplanationPolling } from "../features/analysis/useExplanationPolling";
 import { AiTaskDispatchConfirm } from "../features/ai-tasks/AiTaskDispatchConfirm";
 import { executeExplanationDispatch, previewTaskDispatch, type TaskDispatchPreview } from "../features/ai-tasks/taskDispatch";
@@ -209,6 +210,7 @@ export function CurrentScenePanel({
     void getExplanation(task.outputExplanationId)
       .then((value) => {
         if (!active) return;
+        requireExplanationResult(value, task);
         handledCompletionRef.current = task.id;
         setError(null);
         setFactsExpanded(false);
@@ -373,6 +375,7 @@ export function CurrentScenePanel({
     setError(null);
     try {
       const application = await importExplanationResult(task.id, resultPath);
+      requireExplanationResult(application.explanation, task);
       handledCompletionRef.current = task.id;
       setFactsExpanded(false);
       setInterpretationExpanded(false);

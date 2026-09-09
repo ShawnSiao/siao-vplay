@@ -1,3 +1,5 @@
+mod contract;
+pub use contract::{ExplanationFrame, ExplanationTask, Explanation, ExplanationApplication};
 use std::{
     collections::BTreeMap,
     fs,
@@ -23,7 +25,7 @@ use crate::{
     store::{ProjectStore, StoreError},
     subtitles::{self, SubtitleError, SubtitleSegment, SubtitleVersion},
     summary::{AnalysisTaskType, PromptSelection, PromptSnapshot, PromptTemplateRepository},
-    understanding_v2::{self, ExplanationEntry, ExplanationMaterialSummary},
+    understanding_v2::{self, ExplanationMaterialSummary},
 };
 
 const MAX_FRAME_BYTES: u64 = 8 * 1024 * 1024;
@@ -136,70 +138,7 @@ pub struct ImportExplanationResultInput {
     pub result_path: String,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ExplanationFrame {
-    pub id: String,
-    pub ordinal: usize,
-    pub timestamp_ms: i64,
-    pub path: String,
-    pub sha256: String,
-}
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ExplanationTask {
-    pub id: String,
-    pub project_id: String,
-    pub handoff_kind: String,
-    pub execution: AiTaskExecutionInfo,
-    pub protocol_version: String,
-    pub status: String,
-    pub stage: String,
-    pub progress: f64,
-    pub receiver_label: String,
-    pub material_scope: Vec<String>,
-    pub source_version_id: String,
-    pub translation_version_id: Option<String>,
-    pub authorized_segment_ids: Vec<String>,
-    pub playback_cutoff_ms: i64,
-    pub scene_start_ms: i64,
-    pub expected_project_revision: i64,
-    pub output_explanation_id: Option<String>,
-    pub error_code: Option<String>,
-    pub error_message: Option<String>,
-    pub created_at_ms: i64,
-    pub updated_at_ms: i64,
-    pub started_at_ms: Option<i64>,
-    pub completed_at_ms: Option<i64>,
-    pub frames: Vec<ExplanationFrame>,
-    pub material_summary: ExplanationMaterialSummary,
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Explanation {
-    pub id: String,
-    pub project_id: String,
-    pub task_id: String,
-    pub source_version_id: String,
-    pub translation_version_id: Option<String>,
-    pub playback_cutoff_ms: i64,
-    pub scene_start_ms: i64,
-    pub protocol_version: String,
-    pub material_summary: ExplanationMaterialSummary,
-    pub confirmed_facts: Vec<ExplanationEntry>,
-    pub possible_interpretations: Vec<ExplanationEntry>,
-    pub withheld_reason: Option<String>,
-    pub created_at_ms: i64,
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ExplanationApplication {
-    pub task: ExplanationTask,
-    pub explanation: Explanation,
-}
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]

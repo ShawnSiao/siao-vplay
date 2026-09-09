@@ -43,7 +43,9 @@ for (const kind of ["explanation", "learning"] as const) {
 
 test("completed understanding can retry a failed result read without sending again", async ({ page }) => {
   const { explanationTask: task, explanation } = createUnderstandingFixtures({ projectId: "e2e-project", sourceVersionId: "e2e-original", translationVersionId: "", sourceSegmentId: "e2e-original-segment" });
-  explanation.playbackCutoffMs = 15_000;
+  task.playbackCutoffMs = explanation.playbackCutoffMs = 15_000;
+  task.frames[0].timestampMs = 14_750;
+  task.materialSummary.endMs = 15_000;
   await page.addInitScript(({ task, explanation }) => {
     let reads = 0;
     const state = window as unknown as { __TAURI_INTERNALS__: unknown };

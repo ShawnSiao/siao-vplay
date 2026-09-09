@@ -1,3 +1,6 @@
+export type { ExplanationFrame, ExplanationTask, ExplanationMaterialSummary } from "./generated/explanation-task";
+export type { Explanation, ExplanationEntry } from "./generated/explanation";
+export type { ExplanationApplication } from "./generated/explanation-application";
 import type { SubtitlePreflightReport } from "./generated/subtitle-version";
 export type { SubtitleIssueSeverity, SubtitleIssueCode, SubtitlePreflightIssue, SubtitlePreflightReport, SubtitleWord, SubtitleSegment, SubtitleVersion } from "./generated/subtitle-version";
 import type {
@@ -839,14 +842,6 @@ export type CodexRuntimeStatus = {
   errorMessage: string | null;
 };
 export type { AiTaskExecutionInfo } from "./generated/learning-task";
-import type { AiTaskExecutionInfo } from "./generated/learning-task";
-export type ExplanationFrame = {
-  id: string;
-  ordinal: number;
-  timestampMs: number;
-  path: string;
-  sha256: string;
-};
 
 export type StorageSettings = {
   revision: number;
@@ -874,75 +869,6 @@ export type SaveStorageSettingsInput = {
   mediaCacheRoot: string | null;
   defaultSubtitleExportDirectory: string | null;
   defaultVideoReportExportDirectory: string | null;
-};
-
-export type ExplanationMaterialSummary = {
-  subtitleCount: number;
-  frameCount: number;
-  startMs: number;
-  endMs: number;
-};
-
-export type ExplanationEntry = {
-  text: string;
-  subtitleSegmentIds: string[];
-  frameIds: string[];
-};
-
-export type ExplanationTask = {
-  id: string;
-  projectId: string;
-  handoffKind: "manual" | "codex" | "api";
-  execution?: AiTaskExecutionInfo;
-  protocolVersion: string;
-  status:
-    | "awaiting_external_result"
-    | "queued"
-    | "running"
-    | "validating"
-    | "completed"
-    | "failed"
-    | "cancelled"
-    | "interrupted";
-  stage: string;
-  progress: number;
-  receiverLabel: string;
-  materialScope: string[];
-  sourceVersionId: string;
-  translationVersionId: string | null;
-  authorizedSegmentIds: string[];
-  playbackCutoffMs: number;
-  sceneStartMs: number;
-  expectedProjectRevision: number;
-  outputExplanationId: string | null;
-  errorCode: string | null;
-  errorMessage: string | null;
-  createdAtMs: number;
-  updatedAtMs: number;
-  startedAtMs: number | null;
-  completedAtMs: number | null;
-  frames: ExplanationFrame[];
-  materialSummary: ExplanationMaterialSummary;
-};
-export type Explanation = {
-  id: string;
-  projectId: string;
-  taskId: string;
-  sourceVersionId: string;
-  translationVersionId: string | null;
-  playbackCutoffMs: number;
-  sceneStartMs: number;
-  protocolVersion: string;
-  materialSummary: ExplanationMaterialSummary;
-  confirmedFacts: ExplanationEntry[];
-  possibleInterpretations: ExplanationEntry[];
-  withheldReason: string | null;
-  createdAtMs: number;
-};
-
-export type ExplanationApplication = {
-  task: ExplanationTask;
-  explanation: Explanation;
 };
 
 export type LearningSelectionKind = "word" | "phrase" | "sentence";

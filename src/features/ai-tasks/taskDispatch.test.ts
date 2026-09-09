@@ -50,6 +50,7 @@ describe("confirmed AI dispatch", () => {
     const preview = taskDispatchFixture(task);
     preview.execution = { kind: "api", serviceConfigId: "service", modelId: "model" };
     preview.authorization.serviceRevision = 3;
+    mocks.invoke.mockResolvedValue({ ...task, handoffKind: "api", execution: { ...task.execution, kind: "api", serviceConfigId: "service", serviceRevision: 3, modelId: "model" } });
     await executeExplanationDispatch(task, preview);
     expect(mocks.invoke).toHaveBeenCalledWith("resume_explanation_task", { input: {
       taskId: task.id, execution: preview.execution, authorization: preview.authorization, confirmationSha256: preview.confirmationSha256,
