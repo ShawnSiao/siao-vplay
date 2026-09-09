@@ -58,7 +58,7 @@ fn apply_database(intent: &CommitIntent) -> Result<(), StorageError> {
     if intent.task.area == StorageArea::MediaCache && intent.task.mode == StorageMigrationMode::Rebuild {
         transaction.execute_batch("UPDATE media_sources SET poster_path = NULL; DELETE FROM media_artifacts;")?;
     } else {
-        database::rewrite_paths_in_transaction(&transaction, intent.task.area, Path::new(&intent.task.source_root), Path::new(&intent.task.destination_root))?;
+        database::relocate_copied_paths_in_transaction(&transaction, Path::new(&intent.task.source_root), Path::new(&intent.task.destination_root))?;
     }
     transaction.execute_batch("CREATE TABLE IF NOT EXISTS storage_migration_commits (task_id TEXT PRIMARY KEY, intent_json TEXT NOT NULL);")?;
     transaction.execute("INSERT INTO storage_migration_commits (task_id, intent_json) VALUES (?1, ?2)", params![intent.task.id, serde_json::to_string(intent)?])?;

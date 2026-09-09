@@ -2,9 +2,9 @@ use std::{fs, path::Path, time::Duration};
 
 use rusqlite::{Connection, OpenFlags, backup::{Backup, StepResult}, params};
 
-use super::{StorageArea, StorageError};
+use super::StorageError;
 
-const APP_PATH_COLUMNS: &[(&str, &str, bool)] = &[
+const COPIED_PATH_COLUMNS: &[(&str, &str, bool)] = &[
     ("media_sources", "locator", false),
     ("media_sources", "poster_path", false),
     ("media_artifacts", "path", false),
@@ -69,34 +69,25 @@ pub(crate) fn verify_database(path: &Path) -> Result<(), StorageError> {
     Ok(())
 }
 
-pub(crate) fn rewrite_managed_paths(
+pub(crate) fn relocate_copied_paths(
     database: &Path,
-    area: StorageArea,
     source: &Path,
     destination: &Path,
 ) -> Result<(), StorageError> {
     let mut connection = Connection::open(database)?;
     let transaction = connection.transaction()?;
-    rewrite_paths_in_transaction(&transaction, area, source, destination)?;
+    relocate_copied_paths_in_transaction(&transaction, source, destination)?;
     transaction.commit()?;
     verify_database(database)
 }
 
-pub(super) fn rewrite_paths_in_transaction(connection: &Connection, area: StorageArea, source: &Path, destination: &Path) -> Result<(), StorageError> {
-    let columns: &[(&str, &str, bool)] = match area {
-        StorageArea::AppData => APP_PATH_COLUMNS,
-        StorageArea::RemoteMedia => &[("media_sources", "locator", false)],
-        StorageArea::MediaCache => &[
-            ("media_sources", "poster_path", false),
-            ("media_artifacts", "path", false),
-        ],
-    };
-    for (table, column, json) in columns {
+pub(super) fn relocate_copied_paths_in_transaction(connection: &Connection, source: &Path, destination: &Path) -> Result<(), StorageError> {
+    // Keep known references under the copied root together across storage areas.
+    // Rebuild bypasses this function so original-file references remain intact.
+    for (table, column, json) in COPIED_PATH_COLUMNS {
         rewrite_column(connection, table, column, *json, source, destination)?;
     }
-    if area == StorageArea::AppData {
-        crate::library::relocate_roots_in_transaction(connection, source, destination)?;
-    }
+    crate::library::relocate_roots_in_transaction(connection, source, destination)?;
     Ok(())
 }
 
@@ -271,9 +262,8 @@ mod tests {
             )
             .unwrap();
         drop(connection);
-        rewrite_managed_paths(
+        relocate_copied_paths(
             &database,
-            StorageArea::RemoteMedia,
             Path::new("C:\\old\\remote"),
             Path::new("W:\\media"),
         )

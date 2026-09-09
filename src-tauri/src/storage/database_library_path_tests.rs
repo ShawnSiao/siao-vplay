@@ -20,13 +20,7 @@ fn app_data_relocation_updates_library_roots_and_preserves_external_roots() {
     root(&connection, "external", &external);
     let poster = source.join("media-cache/poster.jpg");
     connection.execute("INSERT INTO collections(id,kind,title,root_id,poster_path,created_at_ms,updated_at_ms) VALUES ('folder','folder','folder','internal',?1,0,0)", [poster.to_string_lossy().as_ref()]).unwrap();
-    rewrite_managed_paths(
-        store.database_path(),
-        StorageArea::AppData,
-        &source,
-        &destination,
-    )
-    .unwrap();
+    relocate_copied_paths(store.database_path(), &source, &destination).unwrap();
     let (path, key): (String, String) = connection
         .query_row(
             "SELECT path,path_key FROM library_roots WHERE id='internal'",
@@ -61,13 +55,7 @@ fn app_data_relocation_updates_library_roots_and_preserves_external_roots() {
         destination.join("media-cache/poster.jpg").to_string_lossy()
     );
     // Reverse the path transform on the isolated DB; stable IDs and links survive.
-    rewrite_managed_paths(
-        store.database_path(),
-        StorageArea::AppData,
-        &destination,
-        &source,
-    )
-    .unwrap();
+    relocate_copied_paths(store.database_path(), &destination, &source).unwrap();
     assert_eq!(
         connection
             .query_row(
@@ -104,15 +92,7 @@ fn root_identity_collision_rolls_back_all_path_rewrites() {
         .to_string_lossy()
         .into_owned();
     connection.execute("INSERT INTO collections(id,kind,title,poster_path,created_at_ms,updated_at_ms) VALUES ('manual','manual','manual',?1,0,0)", [&poster]).unwrap();
-    assert!(
-        rewrite_managed_paths(
-            store.database_path(),
-            StorageArea::AppData,
-            &source,
-            &destination
-        )
-        .is_err()
-    );
+    assert!(relocate_copied_paths(store.database_path(), &source, &destination).is_err());
     assert_eq!(
         connection
             .query_row(

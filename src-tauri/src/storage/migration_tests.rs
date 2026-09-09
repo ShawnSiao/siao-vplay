@@ -224,3 +224,6 @@ mod receipt_recovery_tests;
 
 #[path = "migration_library_roundtrip_tests.rs"]
 mod library_roundtrip_tests;
+
+#[path = "migration_area_reference_tests.rs"]
+mod area_reference_tests;

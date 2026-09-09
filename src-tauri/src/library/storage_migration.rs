@@ -27,7 +27,12 @@ pub(crate) fn relocate_roots_in_transaction(
         let Ok(relative) = Path::new(&old_path).strip_prefix(source) else {
             continue;
         };
-        let next = destination.join(relative);
+        // Joining an empty path adds a trailing separator and changes path_key.
+        let next = if relative.as_os_str().is_empty() {
+            destination.to_path_buf()
+        } else {
+            destination.join(relative)
+        };
         connection.execute(
             "UPDATE library_roots SET path=?1,path_key=?2 WHERE id=?3",
             params![next.to_string_lossy(), path_key(&next), id],
