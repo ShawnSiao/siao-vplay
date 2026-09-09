@@ -1,5 +1,6 @@
 import type { LibraryCollectionPagination } from "../features/library/useLibraryCollectionPaging";
 import type { CollectionOverviewReader } from "../features/library/useCollectionOverviewPages";
+import type { RootOverviewReader } from "../features/library/useRootOverviewPages";
 import { useState } from "react";
 
 import { LibraryFoldersView } from "../features/library/components/LibraryFoldersView";
@@ -23,6 +24,7 @@ import "../features/library/library.css";
 
 type LibraryScreenProps = {
   readCollections?: CollectionOverviewReader;
+  readRoots?: RootOverviewReader;
   home: LibraryHome;
   section: LibrarySection;
   sectionPages: LibrarySectionPages;
@@ -164,7 +166,8 @@ export function LibraryScreen(props: LibraryScreenProps) {
 
         {props.section === "folders" && !props.currentCollection ? (
           <LibraryFoldersView
-            folders={props.home.folders}
+            readRoots={props.readRoots}
+            refreshKey={props.home}
             onImportFolder={props.onImportFolder}
             onRescanRoot={props.onRescanRoot}
             onRelocateRoot={props.onRelocateRoot}

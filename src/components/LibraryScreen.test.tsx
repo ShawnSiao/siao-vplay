@@ -86,6 +86,11 @@ function renderScreen(
     },
   } satisfies React.ComponentProps<typeof LibraryScreen>["sectionPages"];
   const props: React.ComponentProps<typeof LibraryScreen> = {
+      readRoots: async input => {
+        const items = overrides.home?.folders ?? [];
+        return { scope: "roots", offset: input.offset, snapshotToken: "a".repeat(64), totalCount: items.length,
+          nextOffset: input.offset + 24 < items.length ? input.offset + 24 : null, items: items.slice(input.offset, input.offset + 24) };
+      },
       home: home(),
       section: "home",
       sectionPages,
@@ -197,7 +202,7 @@ describe("LibraryScreen library lifecycle", () => {
     expect(screen.getByText(/已保留 1 个视频项目/)).toHaveAttribute("role", "status");
   });
 
-  it("shows orphaned folders with rebuild and revoke actions only", () => {
+  it("shows orphaned folders with rebuild and revoke actions only", async () => {
     const onRebuildRoot = vi.fn();
     const onRevokeRoot = vi.fn();
     renderScreen({
@@ -217,7 +222,7 @@ describe("LibraryScreen library lifecycle", () => {
       onRevokeRoot,
     });
 
-    expect(screen.getByText("待重建")).toBeInTheDocument();
+    expect(await screen.findByText("待重建")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "重建剧集 Rain" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Rain 的文件夹操作" }));
     expect(screen.getByRole("menuitem", { name: "撤销授权" })).toBeInTheDocument();

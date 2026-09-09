@@ -3,9 +3,9 @@
   .library-screen .library-series-preview-grid,
   .library-screen .library-series-grid,
   .library-screen .library-recent-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  .library-screen .library-folder-row { grid-template-columns: 38px minmax(160px, 1fr) auto auto; }
+  .library-screen .library-folder-row { grid-template-columns: 38px minmax(120px, 1fr) auto auto auto; }
   .library-screen .library-folder-description { display: none; }
-  .library-screen .library-folder-row-actions { grid-column: 2 / -1; justify-self: end; }
+  .library-screen .library-folder-row-actions { grid-column: auto; justify-self: end; }
 }
 
 @media (max-width: 980px) {
@@ -21,6 +21,8 @@
 }
 
 @media (max-width: 760px) {
+  .library-screen .library-folder-row { grid-template-columns: 38px minmax(0, 1fr) auto auto; }
+  .library-screen .library-folder-row-actions { grid-column: 2 / -1; }
   .library-screen .library-page-heading { align-items: flex-start; flex-direction: column; }
   .library-screen .library-continue-hero { grid-template-columns: 64px minmax(0, 1fr); }
   .library-screen .library-continue-visual { min-height: 64px; }

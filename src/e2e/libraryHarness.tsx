@@ -1,5 +1,6 @@
 import { useSectionWindowPreview } from "./useSectionWindowPreview";
 import { collectionPickerFixture } from "./collectionPickerFixture";
+import { rootOverviewFixture } from "./rootOverviewFixture";
 import { useLibraryPagesPreview } from "./useLibraryPagesPreview";
 import { ActivityPreview } from "./ActivityPreview";
 import { ProjectCleanupNotice } from "../components/ProjectCleanupNotice";
@@ -123,6 +124,7 @@ const libraryHome: LibraryHome = {
 };
 
 const readCollections = collectionPickerFixture(libraryHome.collections[0]);
+const readRoots = rootOverviewFixture(libraryHome.folders[0]);
 const unresolvedItem: LibraryImportDraftItem = {
   candidateId: "e2e-folder-candidate",
   relativePath: "Special.mp4",
@@ -255,6 +257,7 @@ export function LibraryHarness() {
       {new URLSearchParams(location.search).has("cleanup") ? <ProjectCleanupNotice revision={0} /> : null}
       <LibraryScreen
         readCollections={readCollections}
+        readRoots={readRoots}
         home={visibleHome}
         section={section}
         sectionPages={sectionWindow?.pages ?? {

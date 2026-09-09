@@ -1,9 +1,14 @@
 import { MenuPopover } from "../../../components/MenuPopover";
 import { formatRecentTime } from "../../../lib/format";
 import type { LibraryRootSummary } from "../../../types";
+import { useRootOverviewPages, type RootOverviewReader } from "../useRootOverviewPages";
+import { OverviewPagination } from "./OverviewPagination";
+import { useRootOverviewFocus } from "../useRootOverviewFocus";
+import "./overview-pagination.css";
 
 type LibraryFoldersViewProps = {
-  folders: LibraryRootSummary[];
+  readRoots?: RootOverviewReader;
+  refreshKey?: unknown;
   onImportFolder: () => void;
   onRescanRoot: (rootId: string) => void;
   onRelocateRoot: (rootId: string) => void;
@@ -15,6 +20,12 @@ type FolderAction = {
   label: string;
   run: () => void;
 };
+
+function runFromMenu(button: HTMLButtonElement, action: () => void) {
+  // A dialog must capture the visible trigger, not the menu item being hidden.
+  button.closest(".menu-popover")?.querySelector<HTMLButtonElement>(".menu-popover-trigger")?.focus();
+  action();
+}
 
 function folderState(folder: LibraryRootSummary): {
   label: string;
@@ -57,8 +68,10 @@ function FolderRow({
   onRelocateRoot,
   onRebuildRoot,
   onRequestRevoke,
-}: Omit<LibraryFoldersViewProps, "folders" | "onImportFolder"> & {
+  disabled,
+}: Omit<LibraryFoldersViewProps, "readRoots" | "refreshKey" | "onImportFolder"> & {
   folder: LibraryRootSummary;
+  disabled: boolean;
 }) {
   const state = folderState(folder);
   let primary: FolderAction | null = null;
@@ -76,10 +89,10 @@ function FolderRow({
   }
 
   return (
-    <article className="library-folder-row">
+    <article className="library-folder-row" data-root-id={folder.id}>
       <span className="library-folder-icon" aria-hidden="true">▰</span>
       <span className="library-folder-copy">
-        <strong>{folder.displayName}</strong>
+        <strong title={folder.displayName}>{folder.displayName}</strong>
         <small title={folder.path}>{folder.path}</small>
       </span>
       <span className="library-folder-count">{folder.itemCount} 集</span>
@@ -90,6 +103,7 @@ function FolderRow({
           <button
             className="library-primary-action"
             type="button"
+            disabled={disabled}
             aria-label={`${primary.label} ${folder.displayName}`}
             onClick={primary.run}
           >
@@ -103,12 +117,12 @@ function FolderRow({
             panelClassName="library-row-menu-panel"
           >
               {folder.status === "linked" && folder.availability === "available" ? (
-                <button type="button" role="menuitem" onClick={() => onRelocateRoot(folder.id)}>
+                <button type="button" role="menuitem" disabled={disabled} onClick={event => runFromMenu(event.currentTarget, () => onRelocateRoot(folder.id))}>
                   更换位置
                 </button>
               ) : null}
               {folder.status === "linked" && folder.availability === "offline" ? (
-                <button type="button" role="menuitem" onClick={() => onRescanRoot(folder.id)}>
+                <button type="button" role="menuitem" disabled={disabled} onClick={event => runFromMenu(event.currentTarget, () => onRescanRoot(folder.id))}>
                   检查离线状态
                 </button>
               ) : null}
@@ -116,7 +130,8 @@ function FolderRow({
                 className="danger"
                 type="button"
                 role="menuitem"
-                onClick={() => onRequestRevoke(folder.id)}
+                disabled={disabled}
+                onClick={event => runFromMenu(event.currentTarget, () => onRequestRevoke(folder.id))}
               >
                 撤销授权
               </button>
@@ -128,8 +143,11 @@ function FolderRow({
 }
 
 export function LibraryFoldersView(props: LibraryFoldersViewProps) {
+  const pages = useRootOverviewPages(props.readRoots, props.refreshKey);
+  const folders = pages.page?.items ?? [];
+  const { root, onFocusCapture } = useRootOverviewFocus(pages.page, pages.loading);
   return (
-    <div className="library-page library-folders-page">
+    <div ref={root} tabIndex={-1} onFocusCapture={onFocusCapture} className="library-page library-folders-page">
       <header className="library-page-heading">
         <div>
           <p className="library-eyebrow">媒体库</p>
@@ -146,20 +164,23 @@ export function LibraryFoldersView(props: LibraryFoldersViewProps) {
             <h2 id="folders-heading">授权文件夹</h2>
             <p>只保存根目录和相对路径，不复制或修改视频。</p>
           </div>
-          <span>{props.folders.length} 个</span>
+          <span>{pages.page ? `${pages.page.totalCount} 个` : ""}</span>
         </div>
-        {props.folders.length ? (
+        {folders.length ? (
           <div className="library-folder-list">
-            {props.folders.map((folder) => (
-              <FolderRow key={folder.id} folder={folder} {...props} />
+            {folders.map((folder) => (
+              <FolderRow key={folder.id} folder={folder} {...props} disabled={pages.loading || Boolean(pages.error)} />
             ))}
           </div>
-        ) : (
+        ) : !pages.loading && !pages.error ? (
           <div className="library-empty-panel">
             <strong>还没有授权文件夹</strong>
             <p>添加文件夹后会先预检识别结果，再确认导入。</p>
           </div>
-        )}
+        ) : null}
+        <OverviewPagination offset={pages.page?.offset ?? 0} count={folders.length} totalCount={pages.page?.totalCount ?? null}
+          hasNext={pages.page?.nextOffset != null} loading={pages.loading} error={pages.error}
+          onNext={pages.next} onPrevious={pages.previous} onRetry={pages.retry} onReload={pages.reload} />
       </section>
     </div>
   );
