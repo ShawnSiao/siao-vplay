@@ -34,13 +34,7 @@ export type {
   SeasonSummary,
 } from "./lib/libraryTypes";
 
-export type AppStatus = {
-  appName: string;
-  version: string;
-  platform: string;
-  dataDirectory: string;
-  startupMediaPath: string | null;
-};
+export type { AppStatus } from "./generated/app-status";
 
 export type ProjectStatus = "ready" | "needs_relink";
 

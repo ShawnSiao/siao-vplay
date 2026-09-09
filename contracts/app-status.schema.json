@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "appName": {
+      "type": "string"
+    },
+    "dataDirectory": {
+      "type": "string"
+    },
+    "platform": {
+      "type": "string"
+    },
+    "startupMediaPath": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "version": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "appName",
+    "version",
+    "platform",
+    "dataDirectory",
+    "startupMediaPath"
+  ],
+  "title": "AppStatus",
+  "type": "object"
+}

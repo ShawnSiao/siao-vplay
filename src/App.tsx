@@ -120,6 +120,7 @@ export default function App() {
   const [sessionId, setSessionId] = useState(0);
   const startupMediaHandledRef = useRef(false);
   const [appStatus, setAppStatus] = useState<AppStatus | null>(null);
+  const [startupError, setStartupError] = useState<string | null>(null);
   const [libraryError, setLibraryError] = useState<string | null>(null);
   const [activeProject, setActiveProject] = useState<Project | null>(null);
   const [episodeContext, setEpisodeContext] =
@@ -178,11 +179,12 @@ export default function App() {
       .then((status) => {
         if (active) {
           setAppStatus(status);
+          setStartupError(null);
         }
       })
-      .catch((error: unknown) => {
+      .catch(() => {
         if (active) {
-          setLibraryError(userFacingCommandError(error, "library"));
+          setStartupError("应用启动信息读取失败，请重新启动应用。");
         }
       });
     return () => {
@@ -736,6 +738,7 @@ export default function App() {
         onDeliverSubtitles={() => setDeliveryDialogOpen(true)}
         onOpenSettings={settingsNavigation.openDefault}
       >
+        {startupError ? <div className="notice danger" role="alert">{startupError}</div> : null}
         {screen === "library" ? (
           <LibraryScreen
             home={libraryState.home}

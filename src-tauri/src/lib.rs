@@ -66,6 +66,7 @@ use tauri::{Manager, State};
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 struct AppStatus {
     app_name: &'static str,
     version: &'static str,

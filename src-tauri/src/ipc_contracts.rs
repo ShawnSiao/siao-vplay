@@ -49,6 +49,7 @@ fn committed_schemas_match_rust() {
     check_schema("codex-runtime-status", &serialized_schema::<crate::codex_runner::CodexRuntimeStatus>());
     check_schema("media-runtime-status", &serialized_schema::<crate::media::MediaRuntimeStatus>());
     check_schema("transcription-runtime-status", &serialized_schema::<crate::transcription::TranscriptionRuntimeStatus>());
+    check_schema("app-status", &serialized_schema::<crate::AppStatus>());
     check_ai_service_schemas();
     check_transcription_schema();
     check_subtitle_body_schema();

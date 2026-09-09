@@ -18,11 +18,9 @@ import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 
 import { supportedVideoExtensions } from "./mediaFiles";
-import { browserStatus } from "./appMetadata";
 import { chooseConfiguredStorageDirectory } from "./storageDirectoryPicker";
 
 import type {
-  AppStatus,
   DeleteProjectResult,
   ExternalAgentResultUpdate,
   ExternalAgentTaskKind,
@@ -40,12 +38,7 @@ import type {
 export const isDesktopApp = "__TAURI_INTERNALS__" in window;
 
 
-export async function getAppStatus(): Promise<AppStatus> {
-  if (!isDesktopApp) {
-    return browserStatus;
-  }
-  return invoke<AppStatus>("get_app_status");
-}
+export { getAppStatus } from "./appStatusGateway";
 
 export async function setMainWindowMediaTitle(
   mediaTitle: string | null,

@@ -1,3 +1,4 @@
+import { verifyRejectedStartupStatus } from "./appStartupStatusTest";
 import { locationResult } from "./test-fixtures/resourceLocation";
 import { createLearningTaskFixture } from "./test-fixtures/learning";
 import { verifyBackgroundTranscription } from "./appTranscriptionCompletionTest";
@@ -3117,3 +3118,5 @@ it.each(["cancelled", "running"] as const)("preserves burn %s cancellation and r
   fireEvent.click(screen.getByRole("button", { name: /最近一次烧录/ }));
   expect(screen.getByRole("heading", { name: "任务已取消" })).toBeInTheDocument();
 });
+
+it("shows a rejected application startup status without opening a startup path", () => verifyRejectedStartupStatus(desktopMocks));
