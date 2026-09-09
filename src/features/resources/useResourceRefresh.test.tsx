@@ -52,7 +52,7 @@ it("does not hide a newer operation failure when an older refresh succeeds", asy
   mocks.proxy.mockRejectedValue(new Error("proxy save failed"));
   await act(async () => { await view.result.current.setProxy(proxy.proxyAddress).catch(() => undefined); });
   await act(async () => { old.resolve(setupStatus); await refreshing; });
-  expect(view.result.current.error).toContain("proxy save failed"); view.unmount();
+  expect(view.result.current.error).toContain("proxy save failed"); expect(view.result.current.canRetryRead).toBe(false); view.unmount();
 });
 it("keeps initial loading until the latest refresh finishes", async () => {
   const first = deferred<LocalResourceStatus>(); const second = deferred<LocalResourceStatus>();

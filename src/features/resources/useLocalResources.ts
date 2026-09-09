@@ -76,6 +76,7 @@ export type LocalResourcesController = {
   networkStatus: ResourceNetworkStatus | null;
   loading: boolean;
   error: string | null;
+  canRetryRead?: boolean;
   refresh: () => Promise<LocalResourceStatus>;
   clearError: () => void;
   chooseLocation: () => Promise<LocalResourceLocationPlan | null>;
@@ -129,16 +130,22 @@ export function useLocalResources(): LocalResourcesController {
   const { tasks, taskMetrics, mergeTask, adoptSnapshot } = useResourceTaskState();
   const { networkStatus, setNetworkStatus, networkRevision, invalidateNetwork } = useResourceNetworkState();
   const [loading, setLoading] = useState(true);
-  const { error, setError, captureError, beginRead } = useResourceFeedback();
+  const { error, canRetryRead, setError, captureError, beginRead } = useResourceFeedback();
   const initializedRef = useRef(false);
   const refreshAttempt = useRef(0);
   const proxyAttempt = useRef(0);
   useEffect(() => () => { refreshAttempt.current++; }, []);
 
   const resourceMove = useResourceMove(async () => {
-    setStatus(await getLocalResourceStatus());
-    adoptSnapshot(await listResourceDownloadTasks());
     setError(null);
+    const finishRead = beginRead("refresh");
+    try {
+      setStatus(await getLocalResourceStatus());
+      adoptSnapshot(await listResourceDownloadTasks());
+      finishRead();
+    } catch (cause) {
+      finishRead(new Error(`移动已完成，资源状态刷新失败：${commandError(cause).message}。请重新读取资源状态。`));
+    }
   }, captureError);
 
   const refresh = useCallback(async () => {
@@ -263,6 +270,7 @@ export function useLocalResources(): LocalResourcesController {
 
   return {
     catalog,
+    canRetryRead,
     status,
     tasks,
     taskMetrics,

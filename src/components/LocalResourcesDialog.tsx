@@ -263,8 +263,9 @@ export function LocalResourcesDialog({
       if (!movePlan) {
         return;
       }
-      await controller.moveLocation(movePlan.selectedParent);
+      const parentPath = movePlan.selectedParent;
       setMovePlan(null);
+      await controller.moveLocation(parentPath);
       onNotice("资源已复制、校验并切换到新位置；原目录仍保留，可确认后自行清理。");
     });
 
@@ -505,7 +506,7 @@ export function LocalResourcesDialog({
           <div className="notice danger" role="alert">
             <strong>本地功能未完成准备</strong>
             <p>{localError ?? controller.error}</p>
-            {controller.error && (!catalog || !status) ? <button className="button quiet" type="button" disabled={controller.loading || busyAction !== null} onClick={() => void runAction("refresh", controller.refresh)}>重新读取资源状态</button> : null}
+            {controller.error && (controller.canRetryRead || !catalog || !status) ? <button className="button quiet" type="button" disabled={controller.loading || busyAction !== null} onClick={() => void runAction("refresh", controller.refresh)}>重新读取资源状态</button> : null}
           </div>
         ) : null}
 

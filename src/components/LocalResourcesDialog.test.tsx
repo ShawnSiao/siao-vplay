@@ -624,3 +624,29 @@ describe("LocalResourcesDialog", () => {
     await waitFor(() => expect(updateResource).toHaveBeenCalledWith("yt-dlp"));
   });
 });
+
+it("expires a move confirmation after a failed attempt", async () => {
+  const moveLocation = vi.fn().mockRejectedValue(new Error("copy interrupted"));
+  const chooseMoveLocation = vi.fn().mockResolvedValue({ previousRoot: "W:/old", selectedParent: "W:/new",
+    resourceRoot: "W:/new/SiaoVPlay", bytesToCopy: 10, fileCount: 1, freeSpaceBytes: 100,
+    crossVolume: false, destinationExists: false, confirmationRequired: true });
+  render(<LocalResourcesDialog controller={makeController({ status: { ...setupStatus, configured: true,
+    rootState: "ready", resourceRoot: "W:/old" }, chooseMoveLocation, moveLocation })} firstRun={false}
+    pendingAction={null} previewMode={false} onClose={vi.fn()} onDismissFirstRun={vi.fn()} onNotice={vi.fn()} />);
+  fireEvent.click(screen.getByText("高级维护：存储位置、迁移、修复和清理"));
+  fireEvent.click(screen.getByRole("button", { name: "移动保存位置" }));
+  fireEvent.click(await screen.findByRole("button", { name: "确认复制并切换" }));
+  expect(await screen.findByText("copy interrupted")).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "确认复制并切换" })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "移动保存位置" }));
+  expect(await screen.findByRole("button", { name: "确认复制并切换" })).toBeEnabled();
+  expect(chooseMoveLocation).toHaveBeenCalledTimes(2); expect(moveLocation).toHaveBeenCalledOnce();
+});
+
+it("offers a read retry even when previous resource status remains available", async () => {
+  const refresh = vi.fn().mockResolvedValue(setupStatus);
+  render(<LocalResourcesDialog controller={makeController({ error: "移动已完成，资源状态刷新失败", canRetryRead: true, refresh })}
+    firstRun={false} pendingAction={null} previewMode={false} onClose={vi.fn()} onDismissFirstRun={vi.fn()} onNotice={vi.fn()} />);
+  fireEvent.click(screen.getByRole("button", { name: "重新读取资源状态" }));
+  await waitFor(() => expect(refresh).toHaveBeenCalledOnce());
+});

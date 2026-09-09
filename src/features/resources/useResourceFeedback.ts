@@ -3,7 +3,7 @@ import { commandError } from "../../lib/desktop";
 
 // Read completions own only their channel; explicit actions invalidate older reads.
 export function useResourceFeedback() {
-  const [error, updateError] = useState<string | null>(null);
+  const [feedback, updateFeedback] = useState<{ error: string | null; canRetryRead: boolean }>({ error: null, canRetryRead: false });
   const state = useRef({ alive: true, epoch: 0, sequence: 0, operation: null as string | null,
     channels: new Map<string, { sequence: number; error: string | null }>() });
   useEffect(() => {
@@ -14,7 +14,7 @@ export function useResourceFeedback() {
   const setError = useCallback((message: string | null) => {
     const current = state.current;
     current.epoch++; current.operation = message; current.channels.clear();
-    if (current.alive) updateError(message);
+    if (current.alive) updateFeedback({ error: message, canRetryRead: false });
   }, []);
   const captureError = useCallback((cause: unknown) => {
     const message = commandError(cause).message; setError(message); return message;
@@ -27,8 +27,9 @@ export function useResourceFeedback() {
       if (!current.alive || epoch !== current.epoch || current.channels.get(channel)?.sequence !== sequence) return;
       current.channels.set(channel, { sequence, error: cause === undefined ? null : commandError(cause).message });
       const reads = [...current.channels.values()].sort((a, b) => b.sequence - a.sequence);
-      updateError(current.operation ?? reads.find(read => read.error !== null)?.error ?? null);
+      const error = current.operation ?? reads.find(read => read.error !== null)?.error ?? null;
+      updateFeedback({ error, canRetryRead: error !== null && current.operation === null });
     };
   }, []);
-  return { error, setError, captureError, beginRead };
+  return { ...feedback, setError, captureError, beginRead };
 }
