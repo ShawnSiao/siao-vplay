@@ -187,14 +187,28 @@ pub fn cleanup_unused_resources(
     }
     let plan = plan_unused_resource_cleanup()?;
     crate::cleanup_confirmation::verify(&input.plan_fingerprint, &plan.plan_fingerprint)?;
-    let mut removed = Vec::new();
+    let mut items = Vec::new();
     for resource_id in &plan.resource_ids {
-        if resource_download::remove_resource(resource_id, true)?.removed {
-            removed.push(resource_id.clone());
-        }
+        let receipt = local_resources::active_receipt(resource_id)?
+            .ok_or_else(|| LocalResourceError::ResourceNotReady(resource_id.clone()))?;
+        let bytes = receipt
+            .files
+            .iter()
+            .try_fold(0_u64, |sum, file| sum.checked_add(file.size))
+            .ok_or_else(|| LocalResourceError::InvalidReceipt("资源大小超出范围".into()))?;
+        items.push((resource_id.clone(), bytes));
     }
+    let outcome = crate::cleanup_batch::run(items, |id| {
+        let result =
+            resource_download::remove_resource(id, true).map_err(|error| error.to_string())?;
+        if !result.removed {
+            return Err("资源状态已变化，请重新检查清单".into());
+        }
+        Ok(())
+    })?;
     Ok(UnusedResourceCleanupResult {
-        removed_resource_ids: removed,
-        reclaimed_bytes: plan.reclaimable_bytes,
+        removed_resource_ids: outcome.completed_ids,
+        reclaimed_bytes: outcome.reclaimed_bytes,
+        interruption: outcome.interruption,
     })
 }

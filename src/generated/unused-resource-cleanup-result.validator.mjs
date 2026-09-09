@@ -2,7 +2,9 @@
 "use strict";
 export const validate = validate20;
 export default validate20;
-const schema31 = {"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"reclaimedBytes":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"removedResourceIds":{"items":{"type":"string"},"type":"array"}},"required":["removedResourceIds","reclaimedBytes"],"title":"UnusedResourceCleanupResult","type":"object"};
+const schema31 = {"$defs":{"CleanupInterruption":{"properties":{"itemId":{"minLength":1,"type":"string"},"message":{"minLength":1,"type":"string"},"remainingItemIds":{"items":{"type":"string"},"minItems":1,"type":"array"}},"required":["itemId","message","remainingItemIds"],"type":"object"}},"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"interruption":{"anyOf":[{"$ref":"#/$defs/CleanupInterruption"},{"type":"null"}]},"reclaimedBytes":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"removedResourceIds":{"items":{"type":"string"},"type":"array"}},"required":["removedResourceIds","reclaimedBytes","interruption"],"title":"UnusedResourceCleanupResult","type":"object"};
+const schema32 = {"properties":{"itemId":{"minLength":1,"type":"string"},"message":{"minLength":1,"type":"string"},"remainingItemIds":{"items":{"type":"string"},"minItems":1,"type":"array"}},"required":["itemId","message","remainingItemIds"],"type":"object"};
+const func1 = require("ajv/dist/runtime/ucs2length").default;
 
 function validate20(data, {instancePath="", parentData, parentDataProperty, rootData=data, dynamicAnchors={}}={}){
 let vErrors = null;
@@ -17,29 +19,207 @@ evaluated0.items = undefined;
 if(errors === 0){
 if(data && typeof data == "object" && !Array.isArray(data)){
 let missing0;
-if(((data.removedResourceIds === undefined) && (missing0 = "removedResourceIds")) || ((data.reclaimedBytes === undefined) && (missing0 = "reclaimedBytes"))){
+if((((data.removedResourceIds === undefined) && (missing0 = "removedResourceIds")) || ((data.reclaimedBytes === undefined) && (missing0 = "reclaimedBytes"))) || ((data.interruption === undefined) && (missing0 = "interruption"))){
 validate20.errors = [{instancePath,schemaPath:"#/required",keyword:"required",params:{missingProperty: missing0},message:"must have required property '"+missing0+"'"}];
 return false;
 }
 else {
-if(data.reclaimedBytes !== undefined){
-let data0 = data.reclaimedBytes;
+if(data.interruption !== undefined){
+let data0 = data.interruption;
 const _errs1 = errors;
-if(!(((typeof data0 == "number") && (!(data0 % 1) && !isNaN(data0))) && (isFinite(data0)))){
-validate20.errors = [{instancePath:instancePath+"/reclaimedBytes",schemaPath:"#/properties/reclaimedBytes/type",keyword:"type",params:{type: "integer"},message:"must be integer"}];
-return false;
+const _errs2 = errors;
+let valid1 = false;
+const _errs3 = errors;
+const _errs4 = errors;
+if(errors === _errs4){
+if(data0 && typeof data0 == "object" && !Array.isArray(data0)){
+let missing1;
+if((((data0.itemId === undefined) && (missing1 = "itemId")) || ((data0.message === undefined) && (missing1 = "message"))) || ((data0.remainingItemIds === undefined) && (missing1 = "remainingItemIds"))){
+const err0 = {instancePath:instancePath+"/interruption",schemaPath:"#/$defs/CleanupInterruption/required",keyword:"required",params:{missingProperty: missing1},message:"must have required property '"+missing1+"'"};
+if(vErrors === null){
+vErrors = [err0];
 }
-if(errors === _errs1){
-if((typeof data0 == "number") && (isFinite(data0))){
-if(data0 > 9007199254740991 || isNaN(data0)){
-validate20.errors = [{instancePath:instancePath+"/reclaimedBytes",schemaPath:"#/properties/reclaimedBytes/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"}];
+else {
+vErrors.push(err0);
+}
+errors++;
+}
+else {
+if(data0.itemId !== undefined){
+let data1 = data0.itemId;
+const _errs6 = errors;
+if(errors === _errs6){
+if(typeof data1 === "string"){
+if(func1(data1) < 1){
+const err1 = {instancePath:instancePath+"/interruption/itemId",schemaPath:"#/$defs/CleanupInterruption/properties/itemId/minLength",keyword:"minLength",params:{limit: 1},message:"must NOT have fewer than 1 characters"};
+if(vErrors === null){
+vErrors = [err1];
+}
+else {
+vErrors.push(err1);
+}
+errors++;
+}
+}
+else {
+const err2 = {instancePath:instancePath+"/interruption/itemId",schemaPath:"#/$defs/CleanupInterruption/properties/itemId/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(vErrors === null){
+vErrors = [err2];
+}
+else {
+vErrors.push(err2);
+}
+errors++;
+}
+}
+var valid3 = _errs6 === errors;
+}
+else {
+var valid3 = true;
+}
+if(valid3){
+if(data0.message !== undefined){
+let data2 = data0.message;
+const _errs8 = errors;
+if(errors === _errs8){
+if(typeof data2 === "string"){
+if(func1(data2) < 1){
+const err3 = {instancePath:instancePath+"/interruption/message",schemaPath:"#/$defs/CleanupInterruption/properties/message/minLength",keyword:"minLength",params:{limit: 1},message:"must NOT have fewer than 1 characters"};
+if(vErrors === null){
+vErrors = [err3];
+}
+else {
+vErrors.push(err3);
+}
+errors++;
+}
+}
+else {
+const err4 = {instancePath:instancePath+"/interruption/message",schemaPath:"#/$defs/CleanupInterruption/properties/message/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(vErrors === null){
+vErrors = [err4];
+}
+else {
+vErrors.push(err4);
+}
+errors++;
+}
+}
+var valid3 = _errs8 === errors;
+}
+else {
+var valid3 = true;
+}
+if(valid3){
+if(data0.remainingItemIds !== undefined){
+let data3 = data0.remainingItemIds;
+const _errs10 = errors;
+if(errors === _errs10){
+if(Array.isArray(data3)){
+if(data3.length < 1){
+const err5 = {instancePath:instancePath+"/interruption/remainingItemIds",schemaPath:"#/$defs/CleanupInterruption/properties/remainingItemIds/minItems",keyword:"minItems",params:{limit: 1},message:"must NOT have fewer than 1 items"};
+if(vErrors === null){
+vErrors = [err5];
+}
+else {
+vErrors.push(err5);
+}
+errors++;
+}
+else {
+var valid4 = true;
+const len0 = data3.length;
+for(let i0=0; i0<len0; i0++){
+const _errs12 = errors;
+if(typeof data3[i0] !== "string"){
+const err6 = {instancePath:instancePath+"/interruption/remainingItemIds/" + i0,schemaPath:"#/$defs/CleanupInterruption/properties/remainingItemIds/items/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(vErrors === null){
+vErrors = [err6];
+}
+else {
+vErrors.push(err6);
+}
+errors++;
+}
+var valid4 = _errs12 === errors;
+if(!valid4){
+break;
+}
+}
+}
+}
+else {
+const err7 = {instancePath:instancePath+"/interruption/remainingItemIds",schemaPath:"#/$defs/CleanupInterruption/properties/remainingItemIds/type",keyword:"type",params:{type: "array"},message:"must be array"};
+if(vErrors === null){
+vErrors = [err7];
+}
+else {
+vErrors.push(err7);
+}
+errors++;
+}
+}
+var valid3 = _errs10 === errors;
+}
+else {
+var valid3 = true;
+}
+}
+}
+}
+}
+else {
+const err8 = {instancePath:instancePath+"/interruption",schemaPath:"#/$defs/CleanupInterruption/type",keyword:"type",params:{type: "object"},message:"must be object"};
+if(vErrors === null){
+vErrors = [err8];
+}
+else {
+vErrors.push(err8);
+}
+errors++;
+}
+}
+var _valid0 = _errs3 === errors;
+valid1 = valid1 || _valid0;
+if(_valid0){
+var props0 = {};
+props0.itemId = true;
+props0.message = true;
+props0.remainingItemIds = true;
+}
+const _errs14 = errors;
+if(data0 !== null){
+const err9 = {instancePath:instancePath+"/interruption",schemaPath:"#/properties/interruption/anyOf/1/type",keyword:"type",params:{type: "null"},message:"must be null"};
+if(vErrors === null){
+vErrors = [err9];
+}
+else {
+vErrors.push(err9);
+}
+errors++;
+}
+var _valid0 = _errs14 === errors;
+valid1 = valid1 || _valid0;
+if(!valid1){
+const err10 = {instancePath:instancePath+"/interruption",schemaPath:"#/properties/interruption/anyOf",keyword:"anyOf",params:{},message:"must match a schema in anyOf"};
+if(vErrors === null){
+vErrors = [err10];
+}
+else {
+vErrors.push(err10);
+}
+errors++;
+validate20.errors = vErrors;
 return false;
 }
 else {
-if(data0 < 0 || isNaN(data0)){
-validate20.errors = [{instancePath:instancePath+"/reclaimedBytes",schemaPath:"#/properties/reclaimedBytes/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"}];
-return false;
+errors = _errs2;
+if(vErrors !== null){
+if(_errs2){
+vErrors.length = _errs2;
 }
+else {
+vErrors = null;
 }
 }
 }
@@ -49,21 +229,48 @@ else {
 var valid0 = true;
 }
 if(valid0){
-if(data.removedResourceIds !== undefined){
-let data1 = data.removedResourceIds;
-const _errs3 = errors;
-if(errors === _errs3){
-if(Array.isArray(data1)){
-var valid1 = true;
-const len0 = data1.length;
-for(let i0=0; i0<len0; i0++){
-const _errs5 = errors;
-if(typeof data1[i0] !== "string"){
-validate20.errors = [{instancePath:instancePath+"/removedResourceIds/" + i0,schemaPath:"#/properties/removedResourceIds/items/type",keyword:"type",params:{type: "string"},message:"must be string"}];
+if(data.reclaimedBytes !== undefined){
+let data5 = data.reclaimedBytes;
+const _errs16 = errors;
+if(!(((typeof data5 == "number") && (!(data5 % 1) && !isNaN(data5))) && (isFinite(data5)))){
+validate20.errors = [{instancePath:instancePath+"/reclaimedBytes",schemaPath:"#/properties/reclaimedBytes/type",keyword:"type",params:{type: "integer"},message:"must be integer"}];
 return false;
 }
-var valid1 = _errs5 === errors;
-if(!valid1){
+if(errors === _errs16){
+if((typeof data5 == "number") && (isFinite(data5))){
+if(data5 > 9007199254740991 || isNaN(data5)){
+validate20.errors = [{instancePath:instancePath+"/reclaimedBytes",schemaPath:"#/properties/reclaimedBytes/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"}];
+return false;
+}
+else {
+if(data5 < 0 || isNaN(data5)){
+validate20.errors = [{instancePath:instancePath+"/reclaimedBytes",schemaPath:"#/properties/reclaimedBytes/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"}];
+return false;
+}
+}
+}
+}
+var valid0 = _errs16 === errors;
+}
+else {
+var valid0 = true;
+}
+if(valid0){
+if(data.removedResourceIds !== undefined){
+let data6 = data.removedResourceIds;
+const _errs18 = errors;
+if(errors === _errs18){
+if(Array.isArray(data6)){
+var valid5 = true;
+const len1 = data6.length;
+for(let i1=0; i1<len1; i1++){
+const _errs20 = errors;
+if(typeof data6[i1] !== "string"){
+validate20.errors = [{instancePath:instancePath+"/removedResourceIds/" + i1,schemaPath:"#/properties/removedResourceIds/items/type",keyword:"type",params:{type: "string"},message:"must be string"}];
+return false;
+}
+var valid5 = _errs20 === errors;
+if(!valid5){
 break;
 }
 }
@@ -73,10 +280,11 @@ validate20.errors = [{instancePath:instancePath+"/removedResourceIds",schemaPath
 return false;
 }
 }
-var valid0 = _errs3 === errors;
+var valid0 = _errs18 === errors;
 }
 else {
 var valid0 = true;
+}
 }
 }
 }
@@ -89,4 +297,4 @@ return false;
 validate20.errors = vErrors;
 return errors === 0;
 }
-validate20.evaluated = {"props":{"reclaimedBytes":true,"removedResourceIds":true},"dynamicProps":false,"dynamicItems":false};
+validate20.evaluated = {"props":{"interruption":true,"reclaimedBytes":true,"removedResourceIds":true},"dynamicProps":false,"dynamicItems":false};

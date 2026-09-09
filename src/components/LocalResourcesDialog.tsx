@@ -1,3 +1,4 @@
+import { cleanupFeedback } from "../features/resources/cleanupFeedback";
 import { useMemo, useRef, useState } from "react";
 import { ResourcePreparationAction } from "../features/resources/ResourcePreparationAction";
 
@@ -297,11 +298,9 @@ export function LocalResourcesDialog({
       setOldVersionCleanupPlan(null);
       setDiagnostics(null);
       const result = await controller.cleanupUnused(plan.planFingerprint);
-      onNotice(
-        result.removedResourceIds.length > 0
-          ? `已清理 ${result.removedResourceIds.length} 项未使用资源。`
-          : "当前没有需要清理的资源。",
-      );
+      const feedback = cleanupFeedback(plan.resourceIds, result.removedResourceIds, result.interruption, "unused");
+      if (feedback.interrupted) setLocalError(feedback.message);
+      else onNotice(feedback.message);
     });
 
   const loadDiagnostics = () =>
@@ -384,11 +383,10 @@ export function LocalResourcesDialog({
       setCleanupPlan(null);
       setDiagnostics(null);
       const result = await controller.cleanupOldVersions(plan.planFingerprint);
-      onNotice(
-        result.removedVersions.length > 0
-          ? `已清理 ${result.removedVersions.length} 个旧资源版本。`
-          : "当前没有需要清理的旧版本。",
-      );
+      const ids = plan.candidates.map(item => `${item.resourceId}@${item.version}`);
+      const feedback = cleanupFeedback(ids, result.removedVersions, result.interruption, "old");
+      if (feedback.interrupted) setLocalError(feedback.message);
+      else onNotice(feedback.message);
     });
 
   const prepareSelection = async () => {

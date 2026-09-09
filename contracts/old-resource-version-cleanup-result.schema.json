@@ -1,6 +1,43 @@
 {
+  "$defs": {
+    "CleanupInterruption": {
+      "properties": {
+        "itemId": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "message": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "remainingItemIds": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array"
+        }
+      },
+      "required": [
+        "itemId",
+        "message",
+        "remainingItemIds"
+      ],
+      "type": "object"
+    }
+  },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "properties": {
+    "interruption": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/CleanupInterruption"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "reclaimedBytes": {
       "format": "uint64",
       "maximum": 9007199254740991,
@@ -16,7 +53,8 @@
   },
   "required": [
     "removedVersions",
-    "reclaimedBytes"
+    "reclaimedBytes",
+    "interruption"
   ],
   "title": "OldResourceVersionCleanupResult",
   "type": "object"

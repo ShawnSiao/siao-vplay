@@ -169,6 +169,7 @@ pub struct OldResourceVersionCleanupResult {
     pub removed_versions: Vec<String>,
     #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub reclaimed_bytes: u64,
+    pub interruption: Option<crate::cleanup_batch::CleanupInterruption>,
 }
 
 pub fn diagnostics() -> Result<LocalResourceDiagnostics, ResourceDiagnosticsError> {

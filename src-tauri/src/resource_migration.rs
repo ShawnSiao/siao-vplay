@@ -209,6 +209,7 @@ pub struct UnusedResourceCleanupResult {
     pub removed_resource_ids: Vec<String>,
     #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub reclaimed_bytes: u64,
+    pub interruption: Option<crate::cleanup_batch::CleanupInterruption>,
 }
 
 #[derive(Clone, Debug)]

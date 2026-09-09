@@ -145,7 +145,7 @@ export function makeController(
     }),
     cleanupUnused: vi.fn().mockResolvedValue({
       removedResourceIds: [],
-      reclaimedBytes: 0,
+      interruption: null, reclaimedBytes: 0,
     }),
     loadDiagnostics: vi.fn().mockResolvedValue({
       diagnostics: {
@@ -173,7 +173,7 @@ export function makeController(
     }),
     cleanupOldVersions: vi.fn().mockResolvedValue({
       removedVersions: [],
-      reclaimedBytes: 0,
+      interruption: null, reclaimedBytes: 0,
     }),
     selectProfile: vi.fn().mockResolvedValue(setupStatus),
     setProxy: vi.fn().mockResolvedValue({

@@ -1,3 +1,4 @@
+import { validCleanupOutcome } from "./cleanupOutcome";
 import { invoke } from "@tauri-apps/api/core";
 import validateRemoval from "../generated/resource-removal-result.validator.mjs";
 import validateRollback from "../generated/resource-rollback-result.validator.mjs";
@@ -15,7 +16,7 @@ export async function planUnusedResourceCleanup() {
 export async function cleanupUnusedResources(planFingerprint: string) {
   if (!/^[a-f0-9]{64}$/.test(planFingerprint)) invalid();
   const value = await invoke<unknown>("cleanup_unused_resources", { input: { confirmed: true, planFingerprint } });
-  if (!validateUnusedResult(value) || !ids(value.removedResourceIds)) invalid();
+  if (!validateUnusedResult(value) || !validCleanupOutcome(value.removedResourceIds, value.reclaimedBytes, value.interruption)) invalid();
   return value;
 }
 export async function removeLocalResource(resourceId: string, confirmed: boolean) {
@@ -43,6 +44,6 @@ export async function planOldResourceVersionCleanup() {
 export async function cleanupOldResourceVersions(planFingerprint: string) {
   if (!/^[a-f0-9]{64}$/.test(planFingerprint)) invalid();
   const value = await invoke<unknown>("cleanup_old_resource_versions", { input: { confirmed: true, planFingerprint } });
-  if (!validateOldResult(value) || !ids(value.removedVersions)) invalid();
+  if (!validateOldResult(value) || !validCleanupOutcome(value.removedVersions, value.reclaimedBytes, value.interruption)) invalid();
   return value;
 }

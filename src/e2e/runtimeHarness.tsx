@@ -256,7 +256,7 @@ export function RuntimeHarness() {
       }),
       cleanupUnused: async () => ({
         removedResourceIds: [],
-        reclaimedBytes: 0,
+        interruption: null, reclaimedBytes: 0,
       }),
       loadDiagnostics: async () => ({
         diagnostics: {
@@ -326,7 +326,7 @@ export function RuntimeHarness() {
       }),
       cleanupOldVersions: async () => ({
         removedVersions: [],
-        reclaimedBytes: 0,
+        interruption: null, reclaimedBytes: 0,
       }),
       selectProfile: async (profileId) => ({
         ...status,

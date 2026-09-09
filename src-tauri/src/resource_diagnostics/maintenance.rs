@@ -63,8 +63,7 @@ pub fn cleanup_old_versions(
         .ok_or(LocalResourceError::ConfirmationRequired)?;
     let plan = plan_old_version_cleanup()?;
     crate::cleanup_confirmation::verify(&input.plan_fingerprint, &plan.plan_fingerprint)?;
-    let mut removed_versions = Vec::new();
-    let mut reclaimed_bytes = 0_u64;
+    let mut items = Vec::new();
     for candidate in plan.candidates {
         if configuration
             .active_resources
@@ -76,17 +75,25 @@ pub fn cleanup_old_versions(
                 candidate.version,
             ));
         }
-        if !local_resources::remove_inactive_resource(&candidate.resource_id, &candidate.version)? {
-            return Err(ResourceDiagnosticsError::VersionNotFound(
-                candidate.resource_id,
-                candidate.version,
-            ));
-        }
-        reclaimed_bytes = reclaimed_bytes.saturating_add(candidate.reclaimable_bytes);
-        removed_versions.push(format!("{}@{}", candidate.resource_id, candidate.version));
+        items.push((
+            format!("{}@{}", candidate.resource_id, candidate.version),
+            candidate.reclaimable_bytes,
+        ));
     }
+    let outcome = crate::cleanup_batch::run(items, |id| {
+        let (resource, version) = id
+            .split_once('@')
+            .ok_or_else(|| "资源版本身份无效".to_owned())?;
+        if !local_resources::remove_inactive_resource(resource, version)
+            .map_err(|error| error.to_string())?
+        {
+            return Err("资源版本已变化，请重新检查清单".into());
+        }
+        Ok(())
+    })?;
     Ok(OldResourceVersionCleanupResult {
-        removed_versions,
-        reclaimed_bytes,
+        removed_versions: outcome.completed_ids,
+        reclaimed_bytes: outcome.reclaimed_bytes,
+        interruption: outcome.interruption,
     })
 }

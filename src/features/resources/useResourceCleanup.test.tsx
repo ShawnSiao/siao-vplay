@@ -14,7 +14,7 @@ vi.mock("../../lib/desktop", async importOriginal => ({
 beforeEach(() => { mocks.status.mockReset().mockResolvedValue(setupStatus); mocks.unused.mockReset(); mocks.old.mockReset(); });
 it.each(["unused", "old"] as const)("retains %s cleanup acknowledgement when status refresh fails", async kind => {
   const view = renderHook(() => useLocalResources()); await waitFor(() => expect(view.result.current.loading).toBe(false));
-  const acknowledgement = kind === "unused" ? { removedResourceIds: ["a"], reclaimedBytes: 10 } : { removedVersions: ["a@1"], reclaimedBytes: 10 };
+  const acknowledgement = kind === "unused" ? { removedResourceIds: ["a"], interruption: null, reclaimedBytes: 10 } : { removedVersions: ["a@1"], interruption: null, reclaimedBytes: 10 };
   mocks[kind].mockResolvedValue(acknowledgement); mocks.status.mockRejectedValueOnce(new Error("status unavailable"));
   let result: unknown;
   await act(async () => { result = await (kind === "unused" ? view.result.current.cleanupUnused("a".repeat(64)) : view.result.current.cleanupOldVersions("a".repeat(64))).catch(error => error); });
@@ -24,7 +24,7 @@ it.each(["unused", "old"] as const)("retains %s cleanup acknowledgement when sta
 
 it("clears the refresh warning after a successful explicit refresh", async () => {
   const view = renderHook(() => useLocalResources()); await waitFor(() => expect(view.result.current.loading).toBe(false));
-  mocks.unused.mockResolvedValue({ removedResourceIds: ["a"], reclaimedBytes: 10 }); mocks.status.mockRejectedValueOnce(new Error("status unavailable"));
+  mocks.unused.mockResolvedValue({ removedResourceIds: ["a"], interruption: null, reclaimedBytes: 10 }); mocks.status.mockRejectedValueOnce(new Error("status unavailable"));
   await act(async () => { await view.result.current.cleanupUnused("a".repeat(64)); });
   expect(view.result.current.error).toContain("清理结果已保留");
   await act(async () => { await view.result.current.refresh(); }); expect(view.result.current.error).toBeNull(); view.unmount();
@@ -37,7 +37,7 @@ it("keeps a command failure distinct from a refresh failure", async () => {
 });
 it("does not let an older cleanup refresh failure replace a newer successful refresh", async () => {
   const view = renderHook(() => useLocalResources()); await waitFor(() => expect(view.result.current.loading).toBe(false));
-  mocks.old.mockResolvedValue({ removedVersions: ["a@1"], reclaimedBytes: 10 });
+  mocks.old.mockResolvedValue({ removedVersions: ["a@1"], interruption: null, reclaimedBytes: 10 });
   let reject!: (cause: Error) => void; const held = new Promise<never>((_, fail) => { reject = fail; }); mocks.status.mockReturnValueOnce(held);
   let cleaning!: Promise<unknown>; await act(async () => { cleaning = view.result.current.cleanupOldVersions("a".repeat(64)); });
   await act(async () => { await view.result.current.refresh(); });
