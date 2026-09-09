@@ -1,6 +1,6 @@
 use std::{fs, path::Path, time::Duration};
 
-use rusqlite::{Connection, OpenFlags, backup::Backup, params};
+use rusqlite::{Connection, OpenFlags, backup::{Backup, StepResult}, params};
 
 use super::{StorageArea, StorageError};
 
@@ -21,17 +21,26 @@ const APP_PATH_COLUMNS: &[(&str, &str, bool)] = &[
     ("summary_chunks", "frame_manifest_json", true),
 ];
 
-pub(crate) fn backup_database(source: &Path, destination: &Path) -> Result<(), StorageError> {
+pub(crate) fn backup_database(source: &Path, destination: &Path, cancelled: impl Fn() -> bool) -> Result<(), StorageError> {
+    if cancelled() { return Err(StorageError::MigrationCancelled); }
     if let Some(parent) = destination.parent() {
         fs::create_dir_all(parent)?;
     }
     remove_database_files(destination)?;
     let source = Connection::open_with_flags(source, OpenFlags::SQLITE_OPEN_READ_ONLY)?;
     let mut destination_connection = Connection::open(destination)?;
+    // Surface contention as a step result so cancellation can be observed between retries.
+    source.busy_timeout(Duration::ZERO)?;
+    destination_connection.busy_timeout(Duration::ZERO)?;
     {
         let backup = Backup::new(&source, &mut destination_connection)?;
-        backup.run_to_completion(128, Duration::from_millis(10), None)?;
+        loop {
+            if cancelled() { return Err(StorageError::MigrationCancelled); }
+            if matches!(backup.step(128)?, StepResult::Done) { break; }
+            std::thread::sleep(Duration::from_millis(10));
+        }
     }
+    if cancelled() { return Err(StorageError::MigrationCancelled); }
     destination_connection
         .execute_batch("PRAGMA wal_checkpoint(TRUNCATE); PRAGMA journal_mode=DELETE;")?;
     drop(destination_connection);
@@ -277,3 +286,7 @@ mod tests {
         assert_eq!(locator, "W:\\media\\a.mp4");
     }
 }
+
+#[cfg(test)]
+#[path = "database_backup_tests.rs"]
+mod backup_tests;

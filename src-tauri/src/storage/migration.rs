@@ -209,7 +209,7 @@ impl StorageManager {
         match task.area {
             StorageArea::AppData => {
                 let destination_database = destination.join("projects").join("siaovplay.db");
-                database::backup_database(&source_database, &destination_database)?;
+                database::backup_database(&source_database, &destination_database, || cancelled.load(Ordering::Relaxed))?;
                 database::rewrite_managed_paths(
                     &destination_database,
                     StorageArea::AppData,
