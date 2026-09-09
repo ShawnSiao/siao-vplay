@@ -14,7 +14,7 @@ export { getDictionaryEntry, listDictionaryEntries } from "./dictionaryGateway";
 export { prepareTranslationTask, getTranslationTask, listTranslationTasks, readTranslationPrompt, importTranslationResult, startCodexTranslationTask, cancelTranslationTask, resumeCodexTranslationTask } from "./translationGateway";
 export { inspectSubtitleFile, importSubtitleFile, listSubtitleVersions, getSubtitleVersion, listSubtitleVersionMetadata, reviseSubtitleVersion, restoreSubtitleVersion, inspectEmbeddedSubtitle, importEmbeddedSubtitle } from "./subtitleGateway";
 export { inspectYouTubeUrl, importYouTubeUrl, cancelYouTubeImport, getPublicResolverDisclosure } from "./publicVideoGateway";
-export { getMediaPreparation, cancelMediaPreparation } from "./mediaPreparationGateway";
+export { getMediaPreparation, cancelMediaPreparation, prepareProjectMedia } from "./mediaPreparationGateway";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 
@@ -25,7 +25,6 @@ import type {
   ExternalAgentTaskKind,
   LearningCard,
   LearningCardsExport,
-  MediaPreparation,
   Project,
   RemoteMediaPreview,
   RuntimeCatalog,
@@ -200,17 +199,6 @@ export async function cancelRemoteMediaImport(
 
 export async function markProjectOpened(projectId: string): Promise<Project> {
   return invoke<Project>("mark_project_opened", { projectId });
-}
-
-export async function prepareProjectMedia(
-  projectId: string,
-  forceProxy: boolean,
-  requestId?: string,
-): Promise<MediaPreparation> {
-  return invoke<MediaPreparation>("prepare_project_media", {
-    input: { projectId, forceProxy },
-    requestId,
-  });
 }
 
 export async function ensureProjectPoster(projectId: string): Promise<Project> {

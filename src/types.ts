@@ -398,13 +398,7 @@ export type MediaInspection = {
   reusedProbe: boolean;
 };
 
-export type MediaPreparation = {
-  inspection: MediaInspection;
-  playbackSourceKind: "original" | "proxy";
-  playbackPath: string;
-  proxyArtifact: MediaArtifact | null;
-  reusedProxy: boolean;
-};
+export type { MediaPreparation } from "./generated/media-preparation-result";
 
 
 

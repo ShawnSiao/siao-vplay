@@ -50,6 +50,7 @@ pub enum MediaError {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub enum PlaybackDecision {
     Direct,
     RuntimeValidationRequired,
@@ -59,6 +60,7 @@ pub enum PlaybackDecision {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct PlaybackGate {
     pub decision: PlaybackDecision,
     pub reason_codes: Vec<String>,
@@ -67,30 +69,43 @@ pub struct PlaybackGate {
 
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct VideoStream {
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub index: i64,
     pub codec_name: String,
     pub profile: Option<String>,
     pub pixel_format: Option<String>,
+    #[cfg_attr(test, schemars(range(min = 0, max = 4294967295_u64)))]
     pub width: u32,
+    #[cfg_attr(test, schemars(range(min = 0, max = 4294967295_u64)))]
     pub height: u32,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991.0)))]
     pub frame_rate: Option<f64>,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub duration_ms: Option<i64>,
 }
 
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct AudioStream {
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub index: i64,
     pub codec_name: String,
+    #[cfg_attr(test, schemars(range(min = 0, max = 4294967295_u64)))]
     pub channels: Option<u32>,
+    #[cfg_attr(test, schemars(range(min = 0, max = 4294967295_u64)))]
     pub sample_rate_hz: Option<u32>,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub duration_ms: Option<i64>,
 }
 
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct SubtitleStream {
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub index: i64,
     pub codec_name: String,
     pub language: Option<String>,
@@ -100,6 +115,7 @@ pub struct SubtitleStream {
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub enum EmbeddedSubtitleKind {
     Text,
     Image,
@@ -109,10 +125,14 @@ pub enum EmbeddedSubtitleKind {
 
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct MediaProbe {
     pub container_formats: Vec<String>,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub duration_ms: Option<i64>,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub size_bytes: Option<u64>,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub bit_rate: Option<u64>,
     pub video_streams: Vec<VideoStream>,
     pub audio_streams: Vec<AudioStream>,
@@ -121,6 +141,7 @@ pub struct MediaProbe {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct MediaInspection {
     pub project_id: String,
     pub media_source_id: String,
@@ -133,6 +154,7 @@ pub struct MediaInspection {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub enum PlaybackSourceKind {
     Original,
     Proxy,
@@ -140,6 +162,7 @@ pub enum PlaybackSourceKind {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct MediaPreparation {
     pub inspection: MediaInspection,
     pub playback_source_kind: PlaybackSourceKind,

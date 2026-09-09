@@ -138,6 +138,7 @@ pub struct DeleteProjectResult {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub enum MediaArtifactStatus {
     Queued,
     Running,
@@ -171,6 +172,7 @@ impl MediaArtifactStatus {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct MediaArtifact {
     pub id: String,
     pub project_id: String,
@@ -181,7 +183,9 @@ pub struct MediaArtifact {
     pub profile: String,
     pub error_code: Option<String>,
     pub error_message: Option<String>,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub created_at_ms: i64,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub updated_at_ms: i64,
 }
 
