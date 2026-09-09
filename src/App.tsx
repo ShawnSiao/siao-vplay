@@ -1,4 +1,4 @@
-import { transcriptionCompletion, matchesTranscriptionOutput } from "./features/playback/transcriptionCompletion";
+import { useTrackedTranscription } from "./features/playback/useTrackedTranscription";
 import { posterCandidates } from "./features/library/posterCandidates";
 import { SubtitleHistoryLoader } from "./features/subtitle-revision/SubtitleHistoryLoader";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -647,9 +647,11 @@ export default function App() {
   });
 
   const handleSubtitleVersionCreated = useCallback(
-    async (version: SubtitleVersion, message: string) => {
+    async (version: SubtitleVersion, message: string, isActive: () => boolean = () => true) => {
+      if (!isActive()) return;
       mergeSubtitleVersion(version);
       const updatedProject = await getProject(version.projectId);
+      if (!isActive()) return;
       if (isCurrentSession(version.projectId)) setActiveProject(updatedProject);
       setToast(message);
       void refreshLibraryView();
@@ -657,74 +659,12 @@ export default function App() {
     [isCurrentSession, mergeSubtitleVersion, refreshLibraryView],
   );
 
-  useEffect(() => {
-    if (
-      !trackedTranscriptionJobId ||
-      subtitleDialogOpen ||
-      !activeProjectId
-    ) {
-      return undefined;
-    }
-
-    let active = true;
-    let timer: number | undefined;
-    const poll = async () => {
-      try {
-        const job = await getTranscriptionJob(trackedTranscriptionJobId);
-        if (!active) {
-          return;
-        }
-        const decision = transcriptionCompletion(job, trackedTranscriptionJobId, activeProjectId);
-        if (decision.kind === "waiting") {
-          timer = window.setTimeout(() => void poll(), 900);
-          return;
-        }
-
-        if (decision.kind === "stop") {
-          if (decision.notice) setToast(decision.notice);
-          setTrackedTranscriptionJobId(current => current === trackedTranscriptionJobId ? null : current);
-          return;
-        }
-        const version = await getSubtitleVersion(activeProjectId, decision.versionId);
-        if (!active) {
-          return;
-        }
-        if (!matchesTranscriptionOutput(version, decision.versionId, activeProjectId)) {
-          setToast("返回的字幕版本与任务不匹配，未采用结果。请重新打开字幕工具检查。");
-          setTrackedTranscriptionJobId(current => current === trackedTranscriptionJobId ? null : current);
-          return;
-        }
-        if (!subtitleVersions.some((item) => item.id === version.id)) {
-          await handleSubtitleVersionCreated(
-            version,
-            `已生成 ${version.segments.length} 条原文字幕草稿，可以开始抽查。`,
-          );
-        }
-        setTrackedTranscriptionJobId((current) =>
-          current === trackedTranscriptionJobId ? null : current,
-        );
-      } catch (error) {
-        if (active) {
-          setToast(userFacingCommandError(error, "subtitle"));
-          timer = window.setTimeout(() => void poll(), 1_500);
-        }
-      }
-    };
-
-    void poll();
-    return () => {
-      active = false;
-      if (timer !== undefined) {
-        window.clearTimeout(timer);
-      }
-    };
-  }, [
-    activeProjectId,
-    handleSubtitleVersionCreated,
-    subtitleDialogOpen,
-    subtitleVersions,
-    trackedTranscriptionJobId,
-  ]);
+  useTrackedTranscription({
+    jobId: trackedTranscriptionJobId, projectId: activeProjectId, sessionId,
+    paused: subtitleDialogOpen, versions: subtitleVersions, getTranscriptionJob, getSubtitleVersion,
+    onVersion: handleSubtitleVersionCreated, onNotice: setToast,
+    onFinished: (jobId) => setTrackedTranscriptionJobId(current => current === jobId ? null : current),
+  });
 
   const currentSubtitle =
     subtitleVersions.find(
