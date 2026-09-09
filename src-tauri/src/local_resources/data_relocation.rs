@@ -151,3 +151,7 @@ mod tests {
         assert_eq!(config.preferred_profile, "fast");
     }
 }
+
+#[cfg(test)]
+#[path = "data_relocation_recovery_tests.rs"]
+mod recovery_tests;
