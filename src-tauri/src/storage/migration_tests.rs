@@ -233,3 +233,6 @@ mod configuration_tests;
 
 #[path = "migration_material_tests.rs"]
 mod material_tests;
+
+#[path = "migration_language_material_tests.rs"]
+mod language_material_tests;
