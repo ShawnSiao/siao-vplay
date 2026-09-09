@@ -232,7 +232,7 @@ export function LibraryScreen(props: LibraryScreenProps) {
       ) : null}
 
       {revokeRootId ? (
-        <Dialog eyebrow="文件夹" title="撤销文件夹授权？" onClose={() => setRevokeRootId(null)} actions={<><button className="button quiet" type="button" onClick={() => setRevokeRootId(null)}>取消</button><button className="button danger" type="button" onClick={() => { props.onRevokeRoot(revokeRootId); setRevokeRootId(null); }}>撤销授权</button></>}>
+        <Dialog eyebrow="文件夹" title="撤销文件夹授权？" onClose={() => setRevokeRootId(null)} actions={<><button className="button quiet" type="button" onClick={() => setRevokeRootId(null)}>取消</button><button className="button danger" type="button" disabled={props.mutationPending} onClick={() => { props.onRevokeRoot(revokeRootId); setRevokeRootId(null); }}>撤销授权</button></>}>
           <p>只移除文件夹授权和扫描关系，不删除源视频、播放进度、字幕或学习资料。</p>
         </Dialog>
       ) : null}

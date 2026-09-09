@@ -203,6 +203,36 @@ describe("LibraryScreen library lifecycle", () => {
     expect(screen.getByText(/已保留 1 个视频项目/)).toHaveAttribute("role", "status");
   });
 
+  it("disables revoke confirmation while another mutation is pending", async () => {
+    const onRebuildRoot = vi.fn();
+    const onRevokeRoot = vi.fn();
+    renderScreen({
+      section: "folders",
+      mutationPending: true,
+      home: home({
+        folders: [{
+          id: "20000000-0000-4000-8000-000000000001",
+          path: "W:\\Rain",
+          displayName: "Rain",
+          availability: "available",
+          status: "orphaned",
+          lastScannedAtMs: 1,
+          itemCount: 1,
+        }],
+      }),
+      onRebuildRoot,
+      onRevokeRoot,
+    });
+
+    await screen.findByText("待重建");
+    fireEvent.click(screen.getByRole("button", { name: "Rain 的文件夹操作" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "撤销授权" }));
+    const confirm = screen.getByRole("button", { name: "撤销授权" });
+    expect(confirm).toBeDisabled();
+    fireEvent.click(confirm);
+    expect(onRevokeRoot).not.toHaveBeenCalled();
+  });
+
   it("shows orphaned folders with rebuild and revoke actions only", async () => {
     const onRebuildRoot = vi.fn();
     const onRevokeRoot = vi.fn();

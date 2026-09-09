@@ -1,3 +1,4 @@
+import { useLibraryMutation } from "./useLibraryMutation";
 import { useLibraryRecoveryApply } from "./useLibraryRecoveryApply";
 import { useLibraryRecoveryPreview } from "./useLibraryRecoveryPreview";
 import { useLibraryFolderImport } from "./useLibraryFolderImport";
@@ -732,22 +733,7 @@ export function useLibraryController() {
 
   const { loadCollection, collectionPagination } = useLibraryCollectionPaging(state, dispatch, collectionRequestSequence);
 
-  const runMutation = useCallback(
-    async <T,>(operation: () => Promise<T>, apply: (result: T) => void) => {
-      dispatch({ type: "mutation_started" });
-      try {
-        const result = await operation();
-        apply(result);
-        dispatch({ type: "mutation_finished" });
-        void refresh();
-        return result;
-      } catch (error) {
-        dispatch({ type: "failed", message: commandError(error).message });
-        return null;
-      }
-    },
-    [refresh],
-  );
+  const runMutation = useLibraryMutation(dispatch, refresh);
 
   const createManualCollection = useCallback(
     (title: string) =>
