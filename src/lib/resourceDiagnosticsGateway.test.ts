@@ -8,7 +8,7 @@ const version = { version: "1", active: true, installPath: "W:\\resources", file
 const resource = { id: "ffmpeg", catalogVersion: "1", activeVersion: "1", state: "ready", license: "LGPL",
   sourcePage: "https://example.test", artifactSha256: null, artifactUrl: null, healthCheck: "version", versions: [version] };
 const sample = { generatedAtMs: 1, catalogSource: "embedded", remoteCatalogEnabled: false,
-  remoteSignaturePolicy: "required", rootState: "ready", resourceRoot: "W:\\resources",
+  maintenance: { transactionState: "none", scanState: "complete", stagingReviewCount: 0, receiptRecoveryCopyCount: 0 }, remoteSignaturePolicy: "required", rootState: "ready", resourceRoot: "W:\\resources",
   preferredProfile: "standard", resources: [resource], tasks: [] };
 it.each([
   null,
@@ -35,4 +35,9 @@ it("accepts repair-required snapshots whose active receipt is unavailable", asyn
   const value = { ...sample, resources: [{ ...resource, state: "repair_required", versions: [] }] };
   mocks.invoke.mockResolvedValue(value);
   await expect(getLocalResourceDiagnostics()).resolves.toEqual(value);
+});
+it("rejects an unrecognized maintenance state instead of hiding it", async () => {
+  mocks.invoke.mockResolvedValue({ ...sample, maintenance: { transactionState: "unknown",
+    scanState: "complete", stagingReviewCount: 0, receiptRecoveryCopyCount: 0 } });
+  await expect(getLocalResourceDiagnostics()).rejects.toThrow();
 });

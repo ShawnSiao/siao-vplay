@@ -1,6 +1,8 @@
 #[cfg(test)]
 mod receipt_tests;
 mod receipts;
+mod maintenance_diagnostics;
+pub use maintenance_diagnostics::ResourceMaintenanceDiagnostics;
 mod activation;
 mod transaction_paths;
 mod removal;
@@ -425,6 +427,10 @@ pub(crate) fn development_path_override(name: &str) -> Option<PathBuf> {
 pub(crate) fn resource_change_pending() -> Result<bool, LocalResourceError> {
     if MANAGER.get().is_none() { return Ok(false); }
     with_manager_read(|manager| Ok(activation::pending(&manager.config_path)? || removal::pending(&manager.config_path)?))
+}
+
+pub(crate) fn maintenance_diagnostics() -> Result<ResourceMaintenanceDiagnostics, LocalResourceError> {
+    with_manager_read(maintenance_diagnostics::inspect)
 }
 
 pub(crate) fn recover_changes_for_use() -> Result<(), LocalResourceError> {

@@ -1,8 +1,12 @@
 /* Generated from Rust IPC schema. Run npm run contracts:generate. */
 
+export type ResourceMaintenanceScanState = "not_configured" | "complete" | "partial" | "root_unavailable";
+export type ResourceChangeState = "none" | "activation_pending" | "removal_pending" | "conflicting" | "unavailable";
+
 export interface LocalResourceDiagnostics {
   catalogSource: string;
   generatedAtMs: number;
+  maintenance: ResourceMaintenanceDiagnostics;
   preferredProfile: string;
   remoteCatalogEnabled: boolean;
   remoteSignaturePolicy: string;
@@ -10,6 +14,13 @@ export interface LocalResourceDiagnostics {
   resources: ResourceDiagnosticItem[];
   rootState: string;
   tasks: ResourceTaskDiagnostic[];
+  [k: string]: unknown;
+}
+export interface ResourceMaintenanceDiagnostics {
+  receiptRecoveryCopyCount: number;
+  scanState: ResourceMaintenanceScanState;
+  stagingReviewCount: number;
+  transactionState: ResourceChangeState;
   [k: string]: unknown;
 }
 export interface ResourceDiagnosticItem {

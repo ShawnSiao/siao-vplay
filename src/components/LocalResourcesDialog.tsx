@@ -1,4 +1,5 @@
 import { cleanupFeedback } from "../features/resources/cleanupFeedback";
+import { ResourceMaintenanceNotice } from "../features/resources/ResourceMaintenanceNotice";
 import { useMemo, useRef, useState } from "react";
 import { ResourcePreparationAction } from "../features/resources/ResourcePreparationAction";
 
@@ -1074,6 +1075,7 @@ export function LocalResourcesDialog({
               </div>
             )}
             <div className="local-resource-diagnostic-list">
+              {diagnostics ? <ResourceMaintenanceNotice diagnostic={diagnostics.maintenance} /> : null}
               {catalog.resources.map((resource) => {
                 const diagnostic = diagnostics?.resources.find(
                   (item) => item.id === resource.id,

@@ -1,5 +1,15 @@
 {
   "$defs": {
+    "ResourceChangeState": {
+      "enum": [
+        "none",
+        "activation_pending",
+        "removal_pending",
+        "conflicting",
+        "unavailable"
+      ],
+      "type": "string"
+    },
     "ResourceDiagnosticItem": {
       "properties": {
         "activeVersion": {
@@ -58,6 +68,44 @@
         "versions"
       ],
       "type": "object"
+    },
+    "ResourceMaintenanceDiagnostics": {
+      "properties": {
+        "receiptRecoveryCopyCount": {
+          "format": "uint",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "scanState": {
+          "$ref": "#/$defs/ResourceMaintenanceScanState"
+        },
+        "stagingReviewCount": {
+          "format": "uint",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "transactionState": {
+          "$ref": "#/$defs/ResourceChangeState"
+        }
+      },
+      "required": [
+        "transactionState",
+        "scanState",
+        "stagingReviewCount",
+        "receiptRecoveryCopyCount"
+      ],
+      "type": "object"
+    },
+    "ResourceMaintenanceScanState": {
+      "enum": [
+        "not_configured",
+        "complete",
+        "partial",
+        "root_unavailable"
+      ],
+      "type": "string"
     },
     "ResourceTaskDiagnostic": {
       "properties": {
@@ -177,6 +225,9 @@
       "minimum": 0,
       "type": "integer"
     },
+    "maintenance": {
+      "$ref": "#/$defs/ResourceMaintenanceDiagnostics"
+    },
     "preferredProfile": {
       "type": "string"
     },
@@ -209,6 +260,7 @@
     }
   },
   "required": [
+    "maintenance",
     "generatedAtMs",
     "catalogSource",
     "remoteCatalogEnabled",

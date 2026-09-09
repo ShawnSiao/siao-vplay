@@ -2,10 +2,11 @@
 "use strict";
 export const validate = validate20;
 export default validate20;
-const schema31 = {"$defs":{"ResourceDiagnosticItem":{"properties":{"activeVersion":{"type":["string","null"]},"artifactSha256":{"type":["string","null"]},"artifactUrl":{"type":["string","null"]},"catalogVersion":{"type":"string"},"healthCheck":{"type":"string"},"id":{"type":"string"},"license":{"type":"string"},"sourcePage":{"type":"string"},"state":{"type":"string"},"versions":{"items":{"$ref":"#/$defs/ResourceVersionDiagnostic"},"type":"array"}},"required":["id","catalogVersion","activeVersion","state","license","sourcePage","artifactSha256","artifactUrl","healthCheck","versions"],"type":"object"},"ResourceTaskDiagnostic":{"properties":{"downloadedBytes":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"errorCode":{"type":["string","null"]},"errorMessage":{"type":["string","null"]},"id":{"type":"string"},"resourceId":{"type":"string"},"state":{"type":"string"},"totalBytes":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"version":{"type":"string"}},"required":["id","resourceId","version","state","downloadedBytes","totalBytes","errorCode","errorMessage"],"type":"object"},"ResourceVersionDiagnostic":{"properties":{"activatedAtMs":{"maximum":9007199254740991,"minimum":0,"type":["integer","null"]},"active":{"type":"boolean"},"entrypointsAvailable":{"type":"boolean"},"fileCount":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"healthStatus":{"type":"string"},"installPath":{"type":"string"},"installedBytes":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"manifestSha256":{"type":"string"},"version":{"type":"string"}},"required":["version","active","installPath","fileCount","installedBytes","manifestSha256","healthStatus","activatedAtMs","entrypointsAvailable"],"type":"object"}},"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"catalogSource":{"type":"string"},"generatedAtMs":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"preferredProfile":{"type":"string"},"remoteCatalogEnabled":{"type":"boolean"},"remoteSignaturePolicy":{"type":"string"},"resourceRoot":{"type":["string","null"]},"resources":{"items":{"$ref":"#/$defs/ResourceDiagnosticItem"},"type":"array"},"rootState":{"type":"string"},"tasks":{"items":{"$ref":"#/$defs/ResourceTaskDiagnostic"},"type":"array"}},"required":["generatedAtMs","catalogSource","remoteCatalogEnabled","remoteSignaturePolicy","rootState","resourceRoot","preferredProfile","resources","tasks"],"title":"LocalResourceDiagnostics","type":"object"};
-const schema34 = {"properties":{"downloadedBytes":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"errorCode":{"type":["string","null"]},"errorMessage":{"type":["string","null"]},"id":{"type":"string"},"resourceId":{"type":"string"},"state":{"type":"string"},"totalBytes":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"version":{"type":"string"}},"required":["id","resourceId","version","state","downloadedBytes","totalBytes","errorCode","errorMessage"],"type":"object"};
-const schema32 = {"properties":{"activeVersion":{"type":["string","null"]},"artifactSha256":{"type":["string","null"]},"artifactUrl":{"type":["string","null"]},"catalogVersion":{"type":"string"},"healthCheck":{"type":"string"},"id":{"type":"string"},"license":{"type":"string"},"sourcePage":{"type":"string"},"state":{"type":"string"},"versions":{"items":{"$ref":"#/$defs/ResourceVersionDiagnostic"},"type":"array"}},"required":["id","catalogVersion","activeVersion","state","license","sourcePage","artifactSha256","artifactUrl","healthCheck","versions"],"type":"object"};
-const schema33 = {"properties":{"activatedAtMs":{"maximum":9007199254740991,"minimum":0,"type":["integer","null"]},"active":{"type":"boolean"},"entrypointsAvailable":{"type":"boolean"},"fileCount":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"healthStatus":{"type":"string"},"installPath":{"type":"string"},"installedBytes":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"manifestSha256":{"type":"string"},"version":{"type":"string"}},"required":["version","active","installPath","fileCount","installedBytes","manifestSha256","healthStatus","activatedAtMs","entrypointsAvailable"],"type":"object"};
+const schema31 = {"$defs":{"ResourceChangeState":{"enum":["none","activation_pending","removal_pending","conflicting","unavailable"],"type":"string"},"ResourceDiagnosticItem":{"properties":{"activeVersion":{"type":["string","null"]},"artifactSha256":{"type":["string","null"]},"artifactUrl":{"type":["string","null"]},"catalogVersion":{"type":"string"},"healthCheck":{"type":"string"},"id":{"type":"string"},"license":{"type":"string"},"sourcePage":{"type":"string"},"state":{"type":"string"},"versions":{"items":{"$ref":"#/$defs/ResourceVersionDiagnostic"},"type":"array"}},"required":["id","catalogVersion","activeVersion","state","license","sourcePage","artifactSha256","artifactUrl","healthCheck","versions"],"type":"object"},"ResourceMaintenanceDiagnostics":{"properties":{"receiptRecoveryCopyCount":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"scanState":{"$ref":"#/$defs/ResourceMaintenanceScanState"},"stagingReviewCount":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"transactionState":{"$ref":"#/$defs/ResourceChangeState"}},"required":["transactionState","scanState","stagingReviewCount","receiptRecoveryCopyCount"],"type":"object"},"ResourceMaintenanceScanState":{"enum":["not_configured","complete","partial","root_unavailable"],"type":"string"},"ResourceTaskDiagnostic":{"properties":{"downloadedBytes":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"errorCode":{"type":["string","null"]},"errorMessage":{"type":["string","null"]},"id":{"type":"string"},"resourceId":{"type":"string"},"state":{"type":"string"},"totalBytes":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"version":{"type":"string"}},"required":["id","resourceId","version","state","downloadedBytes","totalBytes","errorCode","errorMessage"],"type":"object"},"ResourceVersionDiagnostic":{"properties":{"activatedAtMs":{"maximum":9007199254740991,"minimum":0,"type":["integer","null"]},"active":{"type":"boolean"},"entrypointsAvailable":{"type":"boolean"},"fileCount":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"healthStatus":{"type":"string"},"installPath":{"type":"string"},"installedBytes":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"manifestSha256":{"type":"string"},"version":{"type":"string"}},"required":["version","active","installPath","fileCount","installedBytes","manifestSha256","healthStatus","activatedAtMs","entrypointsAvailable"],"type":"object"}},"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"catalogSource":{"type":"string"},"generatedAtMs":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"maintenance":{"$ref":"#/$defs/ResourceMaintenanceDiagnostics"},"preferredProfile":{"type":"string"},"remoteCatalogEnabled":{"type":"boolean"},"remoteSignaturePolicy":{"type":"string"},"resourceRoot":{"type":["string","null"]},"resources":{"items":{"$ref":"#/$defs/ResourceDiagnosticItem"},"type":"array"},"rootState":{"type":"string"},"tasks":{"items":{"$ref":"#/$defs/ResourceTaskDiagnostic"},"type":"array"}},"required":["maintenance","generatedAtMs","catalogSource","remoteCatalogEnabled","remoteSignaturePolicy","rootState","resourceRoot","preferredProfile","resources","tasks"],"title":"LocalResourceDiagnostics","type":"object"};
+const schema37 = {"properties":{"downloadedBytes":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"errorCode":{"type":["string","null"]},"errorMessage":{"type":["string","null"]},"id":{"type":"string"},"resourceId":{"type":"string"},"state":{"type":"string"},"totalBytes":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"version":{"type":"string"}},"required":["id","resourceId","version","state","downloadedBytes","totalBytes","errorCode","errorMessage"],"type":"object"};
+const schema32 = {"properties":{"receiptRecoveryCopyCount":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"scanState":{"$ref":"#/$defs/ResourceMaintenanceScanState"},"stagingReviewCount":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"transactionState":{"$ref":"#/$defs/ResourceChangeState"}},"required":["transactionState","scanState","stagingReviewCount","receiptRecoveryCopyCount"],"type":"object"};
+const schema33 = {"enum":["not_configured","complete","partial","root_unavailable"],"type":"string"};
+const schema34 = {"enum":["none","activation_pending","removal_pending","conflicting","unavailable"],"type":"string"};
 
 function validate21(data, {instancePath="", parentData, parentDataProperty, rootData=data, dynamicAnchors={}}={}){
 let vErrors = null;
@@ -20,8 +21,131 @@ evaluated0.items = undefined;
 if(errors === 0){
 if(data && typeof data == "object" && !Array.isArray(data)){
 let missing0;
-if(((((((((((data.id === undefined) && (missing0 = "id")) || ((data.catalogVersion === undefined) && (missing0 = "catalogVersion"))) || ((data.activeVersion === undefined) && (missing0 = "activeVersion"))) || ((data.state === undefined) && (missing0 = "state"))) || ((data.license === undefined) && (missing0 = "license"))) || ((data.sourcePage === undefined) && (missing0 = "sourcePage"))) || ((data.artifactSha256 === undefined) && (missing0 = "artifactSha256"))) || ((data.artifactUrl === undefined) && (missing0 = "artifactUrl"))) || ((data.healthCheck === undefined) && (missing0 = "healthCheck"))) || ((data.versions === undefined) && (missing0 = "versions"))){
+if(((((data.transactionState === undefined) && (missing0 = "transactionState")) || ((data.scanState === undefined) && (missing0 = "scanState"))) || ((data.stagingReviewCount === undefined) && (missing0 = "stagingReviewCount"))) || ((data.receiptRecoveryCopyCount === undefined) && (missing0 = "receiptRecoveryCopyCount"))){
 validate21.errors = [{instancePath,schemaPath:"#/required",keyword:"required",params:{missingProperty: missing0},message:"must have required property '"+missing0+"'"}];
+return false;
+}
+else {
+if(data.receiptRecoveryCopyCount !== undefined){
+let data0 = data.receiptRecoveryCopyCount;
+const _errs1 = errors;
+if(!(((typeof data0 == "number") && (!(data0 % 1) && !isNaN(data0))) && (isFinite(data0)))){
+validate21.errors = [{instancePath:instancePath+"/receiptRecoveryCopyCount",schemaPath:"#/properties/receiptRecoveryCopyCount/type",keyword:"type",params:{type: "integer"},message:"must be integer"}];
+return false;
+}
+if(errors === _errs1){
+if((typeof data0 == "number") && (isFinite(data0))){
+if(data0 > 9007199254740991 || isNaN(data0)){
+validate21.errors = [{instancePath:instancePath+"/receiptRecoveryCopyCount",schemaPath:"#/properties/receiptRecoveryCopyCount/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"}];
+return false;
+}
+else {
+if(data0 < 0 || isNaN(data0)){
+validate21.errors = [{instancePath:instancePath+"/receiptRecoveryCopyCount",schemaPath:"#/properties/receiptRecoveryCopyCount/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"}];
+return false;
+}
+}
+}
+}
+var valid0 = _errs1 === errors;
+}
+else {
+var valid0 = true;
+}
+if(valid0){
+if(data.scanState !== undefined){
+let data1 = data.scanState;
+const _errs3 = errors;
+if(typeof data1 !== "string"){
+validate21.errors = [{instancePath:instancePath+"/scanState",schemaPath:"#/$defs/ResourceMaintenanceScanState/type",keyword:"type",params:{type: "string"},message:"must be string"}];
+return false;
+}
+if(!((((data1 === "not_configured") || (data1 === "complete")) || (data1 === "partial")) || (data1 === "root_unavailable"))){
+validate21.errors = [{instancePath:instancePath+"/scanState",schemaPath:"#/$defs/ResourceMaintenanceScanState/enum",keyword:"enum",params:{allowedValues: schema33.enum},message:"must be equal to one of the allowed values"}];
+return false;
+}
+var valid0 = _errs3 === errors;
+}
+else {
+var valid0 = true;
+}
+if(valid0){
+if(data.stagingReviewCount !== undefined){
+let data2 = data.stagingReviewCount;
+const _errs6 = errors;
+if(!(((typeof data2 == "number") && (!(data2 % 1) && !isNaN(data2))) && (isFinite(data2)))){
+validate21.errors = [{instancePath:instancePath+"/stagingReviewCount",schemaPath:"#/properties/stagingReviewCount/type",keyword:"type",params:{type: "integer"},message:"must be integer"}];
+return false;
+}
+if(errors === _errs6){
+if((typeof data2 == "number") && (isFinite(data2))){
+if(data2 > 9007199254740991 || isNaN(data2)){
+validate21.errors = [{instancePath:instancePath+"/stagingReviewCount",schemaPath:"#/properties/stagingReviewCount/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"}];
+return false;
+}
+else {
+if(data2 < 0 || isNaN(data2)){
+validate21.errors = [{instancePath:instancePath+"/stagingReviewCount",schemaPath:"#/properties/stagingReviewCount/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"}];
+return false;
+}
+}
+}
+}
+var valid0 = _errs6 === errors;
+}
+else {
+var valid0 = true;
+}
+if(valid0){
+if(data.transactionState !== undefined){
+let data3 = data.transactionState;
+const _errs8 = errors;
+if(typeof data3 !== "string"){
+validate21.errors = [{instancePath:instancePath+"/transactionState",schemaPath:"#/$defs/ResourceChangeState/type",keyword:"type",params:{type: "string"},message:"must be string"}];
+return false;
+}
+if(!(((((data3 === "none") || (data3 === "activation_pending")) || (data3 === "removal_pending")) || (data3 === "conflicting")) || (data3 === "unavailable"))){
+validate21.errors = [{instancePath:instancePath+"/transactionState",schemaPath:"#/$defs/ResourceChangeState/enum",keyword:"enum",params:{allowedValues: schema34.enum},message:"must be equal to one of the allowed values"}];
+return false;
+}
+var valid0 = _errs8 === errors;
+}
+else {
+var valid0 = true;
+}
+}
+}
+}
+}
+}
+else {
+validate21.errors = [{instancePath,schemaPath:"#/type",keyword:"type",params:{type: "object"},message:"must be object"}];
+return false;
+}
+}
+validate21.errors = vErrors;
+return errors === 0;
+}
+validate21.evaluated = {"props":{"receiptRecoveryCopyCount":true,"scanState":true,"stagingReviewCount":true,"transactionState":true},"dynamicProps":false,"dynamicItems":false};
+
+const schema35 = {"properties":{"activeVersion":{"type":["string","null"]},"artifactSha256":{"type":["string","null"]},"artifactUrl":{"type":["string","null"]},"catalogVersion":{"type":"string"},"healthCheck":{"type":"string"},"id":{"type":"string"},"license":{"type":"string"},"sourcePage":{"type":"string"},"state":{"type":"string"},"versions":{"items":{"$ref":"#/$defs/ResourceVersionDiagnostic"},"type":"array"}},"required":["id","catalogVersion","activeVersion","state","license","sourcePage","artifactSha256","artifactUrl","healthCheck","versions"],"type":"object"};
+const schema36 = {"properties":{"activatedAtMs":{"maximum":9007199254740991,"minimum":0,"type":["integer","null"]},"active":{"type":"boolean"},"entrypointsAvailable":{"type":"boolean"},"fileCount":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"healthStatus":{"type":"string"},"installPath":{"type":"string"},"installedBytes":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"manifestSha256":{"type":"string"},"version":{"type":"string"}},"required":["version","active","installPath","fileCount","installedBytes","manifestSha256","healthStatus","activatedAtMs","entrypointsAvailable"],"type":"object"};
+
+function validate23(data, {instancePath="", parentData, parentDataProperty, rootData=data, dynamicAnchors={}}={}){
+let vErrors = null;
+let errors = 0;
+const evaluated0 = validate23.evaluated;
+if(evaluated0.dynamicProps){
+evaluated0.props = undefined;
+}
+if(evaluated0.dynamicItems){
+evaluated0.items = undefined;
+}
+if(errors === 0){
+if(data && typeof data == "object" && !Array.isArray(data)){
+let missing0;
+if(((((((((((data.id === undefined) && (missing0 = "id")) || ((data.catalogVersion === undefined) && (missing0 = "catalogVersion"))) || ((data.activeVersion === undefined) && (missing0 = "activeVersion"))) || ((data.state === undefined) && (missing0 = "state"))) || ((data.license === undefined) && (missing0 = "license"))) || ((data.sourcePage === undefined) && (missing0 = "sourcePage"))) || ((data.artifactSha256 === undefined) && (missing0 = "artifactSha256"))) || ((data.artifactUrl === undefined) && (missing0 = "artifactUrl"))) || ((data.healthCheck === undefined) && (missing0 = "healthCheck"))) || ((data.versions === undefined) && (missing0 = "versions"))){
+validate23.errors = [{instancePath,schemaPath:"#/required",keyword:"required",params:{missingProperty: missing0},message:"must have required property '"+missing0+"'"}];
 return false;
 }
 else {
@@ -29,7 +153,7 @@ if(data.activeVersion !== undefined){
 let data0 = data.activeVersion;
 const _errs1 = errors;
 if((typeof data0 !== "string") && (data0 !== null)){
-validate21.errors = [{instancePath:instancePath+"/activeVersion",schemaPath:"#/properties/activeVersion/type",keyword:"type",params:{type: schema32.properties.activeVersion.type},message:"must be string,null"}];
+validate23.errors = [{instancePath:instancePath+"/activeVersion",schemaPath:"#/properties/activeVersion/type",keyword:"type",params:{type: schema35.properties.activeVersion.type},message:"must be string,null"}];
 return false;
 }
 var valid0 = _errs1 === errors;
@@ -42,7 +166,7 @@ if(data.artifactSha256 !== undefined){
 let data1 = data.artifactSha256;
 const _errs3 = errors;
 if((typeof data1 !== "string") && (data1 !== null)){
-validate21.errors = [{instancePath:instancePath+"/artifactSha256",schemaPath:"#/properties/artifactSha256/type",keyword:"type",params:{type: schema32.properties.artifactSha256.type},message:"must be string,null"}];
+validate23.errors = [{instancePath:instancePath+"/artifactSha256",schemaPath:"#/properties/artifactSha256/type",keyword:"type",params:{type: schema35.properties.artifactSha256.type},message:"must be string,null"}];
 return false;
 }
 var valid0 = _errs3 === errors;
@@ -55,7 +179,7 @@ if(data.artifactUrl !== undefined){
 let data2 = data.artifactUrl;
 const _errs5 = errors;
 if((typeof data2 !== "string") && (data2 !== null)){
-validate21.errors = [{instancePath:instancePath+"/artifactUrl",schemaPath:"#/properties/artifactUrl/type",keyword:"type",params:{type: schema32.properties.artifactUrl.type},message:"must be string,null"}];
+validate23.errors = [{instancePath:instancePath+"/artifactUrl",schemaPath:"#/properties/artifactUrl/type",keyword:"type",params:{type: schema35.properties.artifactUrl.type},message:"must be string,null"}];
 return false;
 }
 var valid0 = _errs5 === errors;
@@ -67,7 +191,7 @@ if(valid0){
 if(data.catalogVersion !== undefined){
 const _errs7 = errors;
 if(typeof data.catalogVersion !== "string"){
-validate21.errors = [{instancePath:instancePath+"/catalogVersion",schemaPath:"#/properties/catalogVersion/type",keyword:"type",params:{type: "string"},message:"must be string"}];
+validate23.errors = [{instancePath:instancePath+"/catalogVersion",schemaPath:"#/properties/catalogVersion/type",keyword:"type",params:{type: "string"},message:"must be string"}];
 return false;
 }
 var valid0 = _errs7 === errors;
@@ -79,7 +203,7 @@ if(valid0){
 if(data.healthCheck !== undefined){
 const _errs9 = errors;
 if(typeof data.healthCheck !== "string"){
-validate21.errors = [{instancePath:instancePath+"/healthCheck",schemaPath:"#/properties/healthCheck/type",keyword:"type",params:{type: "string"},message:"must be string"}];
+validate23.errors = [{instancePath:instancePath+"/healthCheck",schemaPath:"#/properties/healthCheck/type",keyword:"type",params:{type: "string"},message:"must be string"}];
 return false;
 }
 var valid0 = _errs9 === errors;
@@ -91,7 +215,7 @@ if(valid0){
 if(data.id !== undefined){
 const _errs11 = errors;
 if(typeof data.id !== "string"){
-validate21.errors = [{instancePath:instancePath+"/id",schemaPath:"#/properties/id/type",keyword:"type",params:{type: "string"},message:"must be string"}];
+validate23.errors = [{instancePath:instancePath+"/id",schemaPath:"#/properties/id/type",keyword:"type",params:{type: "string"},message:"must be string"}];
 return false;
 }
 var valid0 = _errs11 === errors;
@@ -103,7 +227,7 @@ if(valid0){
 if(data.license !== undefined){
 const _errs13 = errors;
 if(typeof data.license !== "string"){
-validate21.errors = [{instancePath:instancePath+"/license",schemaPath:"#/properties/license/type",keyword:"type",params:{type: "string"},message:"must be string"}];
+validate23.errors = [{instancePath:instancePath+"/license",schemaPath:"#/properties/license/type",keyword:"type",params:{type: "string"},message:"must be string"}];
 return false;
 }
 var valid0 = _errs13 === errors;
@@ -115,7 +239,7 @@ if(valid0){
 if(data.sourcePage !== undefined){
 const _errs15 = errors;
 if(typeof data.sourcePage !== "string"){
-validate21.errors = [{instancePath:instancePath+"/sourcePage",schemaPath:"#/properties/sourcePage/type",keyword:"type",params:{type: "string"},message:"must be string"}];
+validate23.errors = [{instancePath:instancePath+"/sourcePage",schemaPath:"#/properties/sourcePage/type",keyword:"type",params:{type: "string"},message:"must be string"}];
 return false;
 }
 var valid0 = _errs15 === errors;
@@ -127,7 +251,7 @@ if(valid0){
 if(data.state !== undefined){
 const _errs17 = errors;
 if(typeof data.state !== "string"){
-validate21.errors = [{instancePath:instancePath+"/state",schemaPath:"#/properties/state/type",keyword:"type",params:{type: "string"},message:"must be string"}];
+validate23.errors = [{instancePath:instancePath+"/state",schemaPath:"#/properties/state/type",keyword:"type",params:{type: "string"},message:"must be string"}];
 return false;
 }
 var valid0 = _errs17 === errors;
@@ -151,7 +275,7 @@ if(errors === _errs22){
 if(data10 && typeof data10 == "object" && !Array.isArray(data10)){
 let missing1;
 if((((((((((data10.version === undefined) && (missing1 = "version")) || ((data10.active === undefined) && (missing1 = "active"))) || ((data10.installPath === undefined) && (missing1 = "installPath"))) || ((data10.fileCount === undefined) && (missing1 = "fileCount"))) || ((data10.installedBytes === undefined) && (missing1 = "installedBytes"))) || ((data10.manifestSha256 === undefined) && (missing1 = "manifestSha256"))) || ((data10.healthStatus === undefined) && (missing1 = "healthStatus"))) || ((data10.activatedAtMs === undefined) && (missing1 = "activatedAtMs"))) || ((data10.entrypointsAvailable === undefined) && (missing1 = "entrypointsAvailable"))){
-validate21.errors = [{instancePath:instancePath+"/versions/" + i0,schemaPath:"#/$defs/ResourceVersionDiagnostic/required",keyword:"required",params:{missingProperty: missing1},message:"must have required property '"+missing1+"'"}];
+validate23.errors = [{instancePath:instancePath+"/versions/" + i0,schemaPath:"#/$defs/ResourceVersionDiagnostic/required",keyword:"required",params:{missingProperty: missing1},message:"must have required property '"+missing1+"'"}];
 return false;
 }
 else {
@@ -159,18 +283,18 @@ if(data10.activatedAtMs !== undefined){
 let data11 = data10.activatedAtMs;
 const _errs24 = errors;
 if((!(((typeof data11 == "number") && (!(data11 % 1) && !isNaN(data11))) && (isFinite(data11)))) && (data11 !== null)){
-validate21.errors = [{instancePath:instancePath+"/versions/" + i0+"/activatedAtMs",schemaPath:"#/$defs/ResourceVersionDiagnostic/properties/activatedAtMs/type",keyword:"type",params:{type: schema33.properties.activatedAtMs.type},message:"must be integer,null"}];
+validate23.errors = [{instancePath:instancePath+"/versions/" + i0+"/activatedAtMs",schemaPath:"#/$defs/ResourceVersionDiagnostic/properties/activatedAtMs/type",keyword:"type",params:{type: schema36.properties.activatedAtMs.type},message:"must be integer,null"}];
 return false;
 }
 if(errors === _errs24){
 if((typeof data11 == "number") && (isFinite(data11))){
 if(data11 > 9007199254740991 || isNaN(data11)){
-validate21.errors = [{instancePath:instancePath+"/versions/" + i0+"/activatedAtMs",schemaPath:"#/$defs/ResourceVersionDiagnostic/properties/activatedAtMs/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"}];
+validate23.errors = [{instancePath:instancePath+"/versions/" + i0+"/activatedAtMs",schemaPath:"#/$defs/ResourceVersionDiagnostic/properties/activatedAtMs/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"}];
 return false;
 }
 else {
 if(data11 < 0 || isNaN(data11)){
-validate21.errors = [{instancePath:instancePath+"/versions/" + i0+"/activatedAtMs",schemaPath:"#/$defs/ResourceVersionDiagnostic/properties/activatedAtMs/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"}];
+validate23.errors = [{instancePath:instancePath+"/versions/" + i0+"/activatedAtMs",schemaPath:"#/$defs/ResourceVersionDiagnostic/properties/activatedAtMs/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"}];
 return false;
 }
 }
@@ -185,7 +309,7 @@ if(valid3){
 if(data10.active !== undefined){
 const _errs26 = errors;
 if(typeof data10.active !== "boolean"){
-validate21.errors = [{instancePath:instancePath+"/versions/" + i0+"/active",schemaPath:"#/$defs/ResourceVersionDiagnostic/properties/active/type",keyword:"type",params:{type: "boolean"},message:"must be boolean"}];
+validate23.errors = [{instancePath:instancePath+"/versions/" + i0+"/active",schemaPath:"#/$defs/ResourceVersionDiagnostic/properties/active/type",keyword:"type",params:{type: "boolean"},message:"must be boolean"}];
 return false;
 }
 var valid3 = _errs26 === errors;
@@ -197,7 +321,7 @@ if(valid3){
 if(data10.entrypointsAvailable !== undefined){
 const _errs28 = errors;
 if(typeof data10.entrypointsAvailable !== "boolean"){
-validate21.errors = [{instancePath:instancePath+"/versions/" + i0+"/entrypointsAvailable",schemaPath:"#/$defs/ResourceVersionDiagnostic/properties/entrypointsAvailable/type",keyword:"type",params:{type: "boolean"},message:"must be boolean"}];
+validate23.errors = [{instancePath:instancePath+"/versions/" + i0+"/entrypointsAvailable",schemaPath:"#/$defs/ResourceVersionDiagnostic/properties/entrypointsAvailable/type",keyword:"type",params:{type: "boolean"},message:"must be boolean"}];
 return false;
 }
 var valid3 = _errs28 === errors;
@@ -210,18 +334,18 @@ if(data10.fileCount !== undefined){
 let data14 = data10.fileCount;
 const _errs30 = errors;
 if(!(((typeof data14 == "number") && (!(data14 % 1) && !isNaN(data14))) && (isFinite(data14)))){
-validate21.errors = [{instancePath:instancePath+"/versions/" + i0+"/fileCount",schemaPath:"#/$defs/ResourceVersionDiagnostic/properties/fileCount/type",keyword:"type",params:{type: "integer"},message:"must be integer"}];
+validate23.errors = [{instancePath:instancePath+"/versions/" + i0+"/fileCount",schemaPath:"#/$defs/ResourceVersionDiagnostic/properties/fileCount/type",keyword:"type",params:{type: "integer"},message:"must be integer"}];
 return false;
 }
 if(errors === _errs30){
 if((typeof data14 == "number") && (isFinite(data14))){
 if(data14 > 9007199254740991 || isNaN(data14)){
-validate21.errors = [{instancePath:instancePath+"/versions/" + i0+"/fileCount",schemaPath:"#/$defs/ResourceVersionDiagnostic/properties/fileCount/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"}];
+validate23.errors = [{instancePath:instancePath+"/versions/" + i0+"/fileCount",schemaPath:"#/$defs/ResourceVersionDiagnostic/properties/fileCount/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"}];
 return false;
 }
 else {
 if(data14 < 0 || isNaN(data14)){
-validate21.errors = [{instancePath:instancePath+"/versions/" + i0+"/fileCount",schemaPath:"#/$defs/ResourceVersionDiagnostic/properties/fileCount/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"}];
+validate23.errors = [{instancePath:instancePath+"/versions/" + i0+"/fileCount",schemaPath:"#/$defs/ResourceVersionDiagnostic/properties/fileCount/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"}];
 return false;
 }
 }
@@ -236,7 +360,7 @@ if(valid3){
 if(data10.healthStatus !== undefined){
 const _errs32 = errors;
 if(typeof data10.healthStatus !== "string"){
-validate21.errors = [{instancePath:instancePath+"/versions/" + i0+"/healthStatus",schemaPath:"#/$defs/ResourceVersionDiagnostic/properties/healthStatus/type",keyword:"type",params:{type: "string"},message:"must be string"}];
+validate23.errors = [{instancePath:instancePath+"/versions/" + i0+"/healthStatus",schemaPath:"#/$defs/ResourceVersionDiagnostic/properties/healthStatus/type",keyword:"type",params:{type: "string"},message:"must be string"}];
 return false;
 }
 var valid3 = _errs32 === errors;
@@ -248,7 +372,7 @@ if(valid3){
 if(data10.installPath !== undefined){
 const _errs34 = errors;
 if(typeof data10.installPath !== "string"){
-validate21.errors = [{instancePath:instancePath+"/versions/" + i0+"/installPath",schemaPath:"#/$defs/ResourceVersionDiagnostic/properties/installPath/type",keyword:"type",params:{type: "string"},message:"must be string"}];
+validate23.errors = [{instancePath:instancePath+"/versions/" + i0+"/installPath",schemaPath:"#/$defs/ResourceVersionDiagnostic/properties/installPath/type",keyword:"type",params:{type: "string"},message:"must be string"}];
 return false;
 }
 var valid3 = _errs34 === errors;
@@ -261,18 +385,18 @@ if(data10.installedBytes !== undefined){
 let data17 = data10.installedBytes;
 const _errs36 = errors;
 if(!(((typeof data17 == "number") && (!(data17 % 1) && !isNaN(data17))) && (isFinite(data17)))){
-validate21.errors = [{instancePath:instancePath+"/versions/" + i0+"/installedBytes",schemaPath:"#/$defs/ResourceVersionDiagnostic/properties/installedBytes/type",keyword:"type",params:{type: "integer"},message:"must be integer"}];
+validate23.errors = [{instancePath:instancePath+"/versions/" + i0+"/installedBytes",schemaPath:"#/$defs/ResourceVersionDiagnostic/properties/installedBytes/type",keyword:"type",params:{type: "integer"},message:"must be integer"}];
 return false;
 }
 if(errors === _errs36){
 if((typeof data17 == "number") && (isFinite(data17))){
 if(data17 > 9007199254740991 || isNaN(data17)){
-validate21.errors = [{instancePath:instancePath+"/versions/" + i0+"/installedBytes",schemaPath:"#/$defs/ResourceVersionDiagnostic/properties/installedBytes/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"}];
+validate23.errors = [{instancePath:instancePath+"/versions/" + i0+"/installedBytes",schemaPath:"#/$defs/ResourceVersionDiagnostic/properties/installedBytes/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"}];
 return false;
 }
 else {
 if(data17 < 0 || isNaN(data17)){
-validate21.errors = [{instancePath:instancePath+"/versions/" + i0+"/installedBytes",schemaPath:"#/$defs/ResourceVersionDiagnostic/properties/installedBytes/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"}];
+validate23.errors = [{instancePath:instancePath+"/versions/" + i0+"/installedBytes",schemaPath:"#/$defs/ResourceVersionDiagnostic/properties/installedBytes/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"}];
 return false;
 }
 }
@@ -287,7 +411,7 @@ if(valid3){
 if(data10.manifestSha256 !== undefined){
 const _errs38 = errors;
 if(typeof data10.manifestSha256 !== "string"){
-validate21.errors = [{instancePath:instancePath+"/versions/" + i0+"/manifestSha256",schemaPath:"#/$defs/ResourceVersionDiagnostic/properties/manifestSha256/type",keyword:"type",params:{type: "string"},message:"must be string"}];
+validate23.errors = [{instancePath:instancePath+"/versions/" + i0+"/manifestSha256",schemaPath:"#/$defs/ResourceVersionDiagnostic/properties/manifestSha256/type",keyword:"type",params:{type: "string"},message:"must be string"}];
 return false;
 }
 var valid3 = _errs38 === errors;
@@ -299,7 +423,7 @@ if(valid3){
 if(data10.version !== undefined){
 const _errs40 = errors;
 if(typeof data10.version !== "string"){
-validate21.errors = [{instancePath:instancePath+"/versions/" + i0+"/version",schemaPath:"#/$defs/ResourceVersionDiagnostic/properties/version/type",keyword:"type",params:{type: "string"},message:"must be string"}];
+validate23.errors = [{instancePath:instancePath+"/versions/" + i0+"/version",schemaPath:"#/$defs/ResourceVersionDiagnostic/properties/version/type",keyword:"type",params:{type: "string"},message:"must be string"}];
 return false;
 }
 var valid3 = _errs40 === errors;
@@ -318,7 +442,7 @@ var valid3 = true;
 }
 }
 else {
-validate21.errors = [{instancePath:instancePath+"/versions/" + i0,schemaPath:"#/$defs/ResourceVersionDiagnostic/type",keyword:"type",params:{type: "object"},message:"must be object"}];
+validate23.errors = [{instancePath:instancePath+"/versions/" + i0,schemaPath:"#/$defs/ResourceVersionDiagnostic/type",keyword:"type",params:{type: "object"},message:"must be object"}];
 return false;
 }
 }
@@ -329,7 +453,7 @@ break;
 }
 }
 else {
-validate21.errors = [{instancePath:instancePath+"/versions",schemaPath:"#/properties/versions/type",keyword:"type",params:{type: "array"},message:"must be array"}];
+validate23.errors = [{instancePath:instancePath+"/versions",schemaPath:"#/properties/versions/type",keyword:"type",params:{type: "array"},message:"must be array"}];
 return false;
 }
 }
@@ -350,14 +474,14 @@ var valid0 = true;
 }
 }
 else {
-validate21.errors = [{instancePath,schemaPath:"#/type",keyword:"type",params:{type: "object"},message:"must be object"}];
+validate23.errors = [{instancePath,schemaPath:"#/type",keyword:"type",params:{type: "object"},message:"must be object"}];
 return false;
 }
 }
-validate21.errors = vErrors;
+validate23.errors = vErrors;
 return errors === 0;
 }
-validate21.evaluated = {"props":{"activeVersion":true,"artifactSha256":true,"artifactUrl":true,"catalogVersion":true,"healthCheck":true,"id":true,"license":true,"sourcePage":true,"state":true,"versions":true},"dynamicProps":false,"dynamicItems":false};
+validate23.evaluated = {"props":{"activeVersion":true,"artifactSha256":true,"artifactUrl":true,"catalogVersion":true,"healthCheck":true,"id":true,"license":true,"sourcePage":true,"state":true,"versions":true},"dynamicProps":false,"dynamicItems":false};
 
 
 function validate20(data, {instancePath="", parentData, parentDataProperty, rootData=data, dynamicAnchors={}}={}){
@@ -373,7 +497,7 @@ evaluated0.items = undefined;
 if(errors === 0){
 if(data && typeof data == "object" && !Array.isArray(data)){
 let missing0;
-if((((((((((data.generatedAtMs === undefined) && (missing0 = "generatedAtMs")) || ((data.catalogSource === undefined) && (missing0 = "catalogSource"))) || ((data.remoteCatalogEnabled === undefined) && (missing0 = "remoteCatalogEnabled"))) || ((data.remoteSignaturePolicy === undefined) && (missing0 = "remoteSignaturePolicy"))) || ((data.rootState === undefined) && (missing0 = "rootState"))) || ((data.resourceRoot === undefined) && (missing0 = "resourceRoot"))) || ((data.preferredProfile === undefined) && (missing0 = "preferredProfile"))) || ((data.resources === undefined) && (missing0 = "resources"))) || ((data.tasks === undefined) && (missing0 = "tasks"))){
+if(((((((((((data.maintenance === undefined) && (missing0 = "maintenance")) || ((data.generatedAtMs === undefined) && (missing0 = "generatedAtMs"))) || ((data.catalogSource === undefined) && (missing0 = "catalogSource"))) || ((data.remoteCatalogEnabled === undefined) && (missing0 = "remoteCatalogEnabled"))) || ((data.remoteSignaturePolicy === undefined) && (missing0 = "remoteSignaturePolicy"))) || ((data.rootState === undefined) && (missing0 = "rootState"))) || ((data.resourceRoot === undefined) && (missing0 = "resourceRoot"))) || ((data.preferredProfile === undefined) && (missing0 = "preferredProfile"))) || ((data.resources === undefined) && (missing0 = "resources"))) || ((data.tasks === undefined) && (missing0 = "tasks"))){
 validate20.errors = [{instancePath,schemaPath:"#/required",keyword:"required",params:{missingProperty: missing0},message:"must have required property '"+missing0+"'"}];
 return false;
 }
@@ -417,11 +541,11 @@ else {
 var valid0 = true;
 }
 if(valid0){
-if(data.preferredProfile !== undefined){
+if(data.maintenance !== undefined){
 const _errs5 = errors;
-if(typeof data.preferredProfile !== "string"){
-validate20.errors = [{instancePath:instancePath+"/preferredProfile",schemaPath:"#/properties/preferredProfile/type",keyword:"type",params:{type: "string"},message:"must be string"}];
-return false;
+if(!(validate21(data.maintenance, {instancePath:instancePath+"/maintenance",parentData:data,parentDataProperty:"maintenance",rootData,dynamicAnchors}))){
+vErrors = vErrors === null ? validate21.errors : vErrors.concat(validate21.errors);
+errors = vErrors.length;
 }
 var valid0 = _errs5 === errors;
 }
@@ -429,57 +553,69 @@ else {
 var valid0 = true;
 }
 if(valid0){
+if(data.preferredProfile !== undefined){
+const _errs6 = errors;
+if(typeof data.preferredProfile !== "string"){
+validate20.errors = [{instancePath:instancePath+"/preferredProfile",schemaPath:"#/properties/preferredProfile/type",keyword:"type",params:{type: "string"},message:"must be string"}];
+return false;
+}
+var valid0 = _errs6 === errors;
+}
+else {
+var valid0 = true;
+}
+if(valid0){
 if(data.remoteCatalogEnabled !== undefined){
-const _errs7 = errors;
+const _errs8 = errors;
 if(typeof data.remoteCatalogEnabled !== "boolean"){
 validate20.errors = [{instancePath:instancePath+"/remoteCatalogEnabled",schemaPath:"#/properties/remoteCatalogEnabled/type",keyword:"type",params:{type: "boolean"},message:"must be boolean"}];
 return false;
 }
-var valid0 = _errs7 === errors;
+var valid0 = _errs8 === errors;
 }
 else {
 var valid0 = true;
 }
 if(valid0){
 if(data.remoteSignaturePolicy !== undefined){
-const _errs9 = errors;
+const _errs10 = errors;
 if(typeof data.remoteSignaturePolicy !== "string"){
 validate20.errors = [{instancePath:instancePath+"/remoteSignaturePolicy",schemaPath:"#/properties/remoteSignaturePolicy/type",keyword:"type",params:{type: "string"},message:"must be string"}];
 return false;
 }
-var valid0 = _errs9 === errors;
+var valid0 = _errs10 === errors;
 }
 else {
 var valid0 = true;
 }
 if(valid0){
 if(data.resourceRoot !== undefined){
-let data5 = data.resourceRoot;
-const _errs11 = errors;
-if((typeof data5 !== "string") && (data5 !== null)){
+let data6 = data.resourceRoot;
+const _errs12 = errors;
+if((typeof data6 !== "string") && (data6 !== null)){
 validate20.errors = [{instancePath:instancePath+"/resourceRoot",schemaPath:"#/properties/resourceRoot/type",keyword:"type",params:{type: schema31.properties.resourceRoot.type},message:"must be string,null"}];
 return false;
 }
-var valid0 = _errs11 === errors;
+var valid0 = _errs12 === errors;
 }
 else {
 var valid0 = true;
 }
 if(valid0){
 if(data.resources !== undefined){
-let data6 = data.resources;
-const _errs13 = errors;
-if(errors === _errs13){
-if(Array.isArray(data6)){
+let data7 = data.resources;
+const _errs14 = errors;
+if(errors === _errs14){
+if(Array.isArray(data7)){
 var valid1 = true;
-const len0 = data6.length;
+const len0 = data7.length;
 for(let i0=0; i0<len0; i0++){
-const _errs15 = errors;
-if(!(validate21(data6[i0], {instancePath:instancePath+"/resources/" + i0,parentData:data6,parentDataProperty:i0,rootData,dynamicAnchors}))){
-vErrors = vErrors === null ? validate21.errors : vErrors.concat(validate21.errors);
+const _errs16 = errors;
+if(!(validate23(data7[i0], {instancePath:instancePath+"/resources/" + i0,parentData:data7,parentDataProperty:i0,rootData,dynamicAnchors}))){
+vErrors = vErrors === null ? validate23.errors : vErrors.concat(validate23.errors);
 errors = vErrors.length;
 }
-var valid1 = _errs15 === errors;
+var valid1 = _errs16 === errors;
 if(!valid1){
 break;
 }
@@ -490,166 +626,166 @@ validate20.errors = [{instancePath:instancePath+"/resources",schemaPath:"#/prope
 return false;
 }
 }
-var valid0 = _errs13 === errors;
+var valid0 = _errs14 === errors;
 }
 else {
 var valid0 = true;
 }
 if(valid0){
 if(data.rootState !== undefined){
-const _errs16 = errors;
+const _errs17 = errors;
 if(typeof data.rootState !== "string"){
 validate20.errors = [{instancePath:instancePath+"/rootState",schemaPath:"#/properties/rootState/type",keyword:"type",params:{type: "string"},message:"must be string"}];
 return false;
 }
-var valid0 = _errs16 === errors;
+var valid0 = _errs17 === errors;
 }
 else {
 var valid0 = true;
 }
 if(valid0){
 if(data.tasks !== undefined){
-let data9 = data.tasks;
-const _errs18 = errors;
-if(errors === _errs18){
-if(Array.isArray(data9)){
+let data10 = data.tasks;
+const _errs19 = errors;
+if(errors === _errs19){
+if(Array.isArray(data10)){
 var valid2 = true;
-const len1 = data9.length;
+const len1 = data10.length;
 for(let i1=0; i1<len1; i1++){
-let data10 = data9[i1];
-const _errs20 = errors;
+let data11 = data10[i1];
 const _errs21 = errors;
-if(errors === _errs21){
-if(data10 && typeof data10 == "object" && !Array.isArray(data10)){
+const _errs22 = errors;
+if(errors === _errs22){
+if(data11 && typeof data11 == "object" && !Array.isArray(data11)){
 let missing1;
-if(((((((((data10.id === undefined) && (missing1 = "id")) || ((data10.resourceId === undefined) && (missing1 = "resourceId"))) || ((data10.version === undefined) && (missing1 = "version"))) || ((data10.state === undefined) && (missing1 = "state"))) || ((data10.downloadedBytes === undefined) && (missing1 = "downloadedBytes"))) || ((data10.totalBytes === undefined) && (missing1 = "totalBytes"))) || ((data10.errorCode === undefined) && (missing1 = "errorCode"))) || ((data10.errorMessage === undefined) && (missing1 = "errorMessage"))){
+if(((((((((data11.id === undefined) && (missing1 = "id")) || ((data11.resourceId === undefined) && (missing1 = "resourceId"))) || ((data11.version === undefined) && (missing1 = "version"))) || ((data11.state === undefined) && (missing1 = "state"))) || ((data11.downloadedBytes === undefined) && (missing1 = "downloadedBytes"))) || ((data11.totalBytes === undefined) && (missing1 = "totalBytes"))) || ((data11.errorCode === undefined) && (missing1 = "errorCode"))) || ((data11.errorMessage === undefined) && (missing1 = "errorMessage"))){
 validate20.errors = [{instancePath:instancePath+"/tasks/" + i1,schemaPath:"#/$defs/ResourceTaskDiagnostic/required",keyword:"required",params:{missingProperty: missing1},message:"must have required property '"+missing1+"'"}];
 return false;
 }
 else {
-if(data10.downloadedBytes !== undefined){
-let data11 = data10.downloadedBytes;
-const _errs23 = errors;
-if(!(((typeof data11 == "number") && (!(data11 % 1) && !isNaN(data11))) && (isFinite(data11)))){
+if(data11.downloadedBytes !== undefined){
+let data12 = data11.downloadedBytes;
+const _errs24 = errors;
+if(!(((typeof data12 == "number") && (!(data12 % 1) && !isNaN(data12))) && (isFinite(data12)))){
 validate20.errors = [{instancePath:instancePath+"/tasks/" + i1+"/downloadedBytes",schemaPath:"#/$defs/ResourceTaskDiagnostic/properties/downloadedBytes/type",keyword:"type",params:{type: "integer"},message:"must be integer"}];
 return false;
 }
-if(errors === _errs23){
-if((typeof data11 == "number") && (isFinite(data11))){
-if(data11 > 9007199254740991 || isNaN(data11)){
+if(errors === _errs24){
+if((typeof data12 == "number") && (isFinite(data12))){
+if(data12 > 9007199254740991 || isNaN(data12)){
 validate20.errors = [{instancePath:instancePath+"/tasks/" + i1+"/downloadedBytes",schemaPath:"#/$defs/ResourceTaskDiagnostic/properties/downloadedBytes/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"}];
 return false;
 }
 else {
-if(data11 < 0 || isNaN(data11)){
+if(data12 < 0 || isNaN(data12)){
 validate20.errors = [{instancePath:instancePath+"/tasks/" + i1+"/downloadedBytes",schemaPath:"#/$defs/ResourceTaskDiagnostic/properties/downloadedBytes/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"}];
 return false;
 }
 }
 }
 }
-var valid4 = _errs23 === errors;
+var valid4 = _errs24 === errors;
 }
 else {
 var valid4 = true;
 }
 if(valid4){
-if(data10.errorCode !== undefined){
-let data12 = data10.errorCode;
-const _errs25 = errors;
-if((typeof data12 !== "string") && (data12 !== null)){
-validate20.errors = [{instancePath:instancePath+"/tasks/" + i1+"/errorCode",schemaPath:"#/$defs/ResourceTaskDiagnostic/properties/errorCode/type",keyword:"type",params:{type: schema34.properties.errorCode.type},message:"must be string,null"}];
-return false;
-}
-var valid4 = _errs25 === errors;
-}
-else {
-var valid4 = true;
-}
-if(valid4){
-if(data10.errorMessage !== undefined){
-let data13 = data10.errorMessage;
-const _errs27 = errors;
+if(data11.errorCode !== undefined){
+let data13 = data11.errorCode;
+const _errs26 = errors;
 if((typeof data13 !== "string") && (data13 !== null)){
-validate20.errors = [{instancePath:instancePath+"/tasks/" + i1+"/errorMessage",schemaPath:"#/$defs/ResourceTaskDiagnostic/properties/errorMessage/type",keyword:"type",params:{type: schema34.properties.errorMessage.type},message:"must be string,null"}];
+validate20.errors = [{instancePath:instancePath+"/tasks/" + i1+"/errorCode",schemaPath:"#/$defs/ResourceTaskDiagnostic/properties/errorCode/type",keyword:"type",params:{type: schema37.properties.errorCode.type},message:"must be string,null"}];
 return false;
 }
-var valid4 = _errs27 === errors;
+var valid4 = _errs26 === errors;
 }
 else {
 var valid4 = true;
 }
 if(valid4){
-if(data10.id !== undefined){
-const _errs29 = errors;
-if(typeof data10.id !== "string"){
+if(data11.errorMessage !== undefined){
+let data14 = data11.errorMessage;
+const _errs28 = errors;
+if((typeof data14 !== "string") && (data14 !== null)){
+validate20.errors = [{instancePath:instancePath+"/tasks/" + i1+"/errorMessage",schemaPath:"#/$defs/ResourceTaskDiagnostic/properties/errorMessage/type",keyword:"type",params:{type: schema37.properties.errorMessage.type},message:"must be string,null"}];
+return false;
+}
+var valid4 = _errs28 === errors;
+}
+else {
+var valid4 = true;
+}
+if(valid4){
+if(data11.id !== undefined){
+const _errs30 = errors;
+if(typeof data11.id !== "string"){
 validate20.errors = [{instancePath:instancePath+"/tasks/" + i1+"/id",schemaPath:"#/$defs/ResourceTaskDiagnostic/properties/id/type",keyword:"type",params:{type: "string"},message:"must be string"}];
 return false;
 }
-var valid4 = _errs29 === errors;
+var valid4 = _errs30 === errors;
 }
 else {
 var valid4 = true;
 }
 if(valid4){
-if(data10.resourceId !== undefined){
-const _errs31 = errors;
-if(typeof data10.resourceId !== "string"){
+if(data11.resourceId !== undefined){
+const _errs32 = errors;
+if(typeof data11.resourceId !== "string"){
 validate20.errors = [{instancePath:instancePath+"/tasks/" + i1+"/resourceId",schemaPath:"#/$defs/ResourceTaskDiagnostic/properties/resourceId/type",keyword:"type",params:{type: "string"},message:"must be string"}];
 return false;
 }
-var valid4 = _errs31 === errors;
+var valid4 = _errs32 === errors;
 }
 else {
 var valid4 = true;
 }
 if(valid4){
-if(data10.state !== undefined){
-const _errs33 = errors;
-if(typeof data10.state !== "string"){
+if(data11.state !== undefined){
+const _errs34 = errors;
+if(typeof data11.state !== "string"){
 validate20.errors = [{instancePath:instancePath+"/tasks/" + i1+"/state",schemaPath:"#/$defs/ResourceTaskDiagnostic/properties/state/type",keyword:"type",params:{type: "string"},message:"must be string"}];
 return false;
 }
-var valid4 = _errs33 === errors;
+var valid4 = _errs34 === errors;
 }
 else {
 var valid4 = true;
 }
 if(valid4){
-if(data10.totalBytes !== undefined){
-let data17 = data10.totalBytes;
-const _errs35 = errors;
-if(!(((typeof data17 == "number") && (!(data17 % 1) && !isNaN(data17))) && (isFinite(data17)))){
+if(data11.totalBytes !== undefined){
+let data18 = data11.totalBytes;
+const _errs36 = errors;
+if(!(((typeof data18 == "number") && (!(data18 % 1) && !isNaN(data18))) && (isFinite(data18)))){
 validate20.errors = [{instancePath:instancePath+"/tasks/" + i1+"/totalBytes",schemaPath:"#/$defs/ResourceTaskDiagnostic/properties/totalBytes/type",keyword:"type",params:{type: "integer"},message:"must be integer"}];
 return false;
 }
-if(errors === _errs35){
-if((typeof data17 == "number") && (isFinite(data17))){
-if(data17 > 9007199254740991 || isNaN(data17)){
+if(errors === _errs36){
+if((typeof data18 == "number") && (isFinite(data18))){
+if(data18 > 9007199254740991 || isNaN(data18)){
 validate20.errors = [{instancePath:instancePath+"/tasks/" + i1+"/totalBytes",schemaPath:"#/$defs/ResourceTaskDiagnostic/properties/totalBytes/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"}];
 return false;
 }
 else {
-if(data17 < 0 || isNaN(data17)){
+if(data18 < 0 || isNaN(data18)){
 validate20.errors = [{instancePath:instancePath+"/tasks/" + i1+"/totalBytes",schemaPath:"#/$defs/ResourceTaskDiagnostic/properties/totalBytes/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"}];
 return false;
 }
 }
 }
 }
-var valid4 = _errs35 === errors;
+var valid4 = _errs36 === errors;
 }
 else {
 var valid4 = true;
 }
 if(valid4){
-if(data10.version !== undefined){
-const _errs37 = errors;
-if(typeof data10.version !== "string"){
+if(data11.version !== undefined){
+const _errs38 = errors;
+if(typeof data11.version !== "string"){
 validate20.errors = [{instancePath:instancePath+"/tasks/" + i1+"/version",schemaPath:"#/$defs/ResourceTaskDiagnostic/properties/version/type",keyword:"type",params:{type: "string"},message:"must be string"}];
 return false;
 }
-var valid4 = _errs37 === errors;
+var valid4 = _errs38 === errors;
 }
 else {
 var valid4 = true;
@@ -668,7 +804,7 @@ validate20.errors = [{instancePath:instancePath+"/tasks/" + i1,schemaPath:"#/$de
 return false;
 }
 }
-var valid2 = _errs20 === errors;
+var valid2 = _errs21 === errors;
 if(!valid2){
 break;
 }
@@ -679,10 +815,11 @@ validate20.errors = [{instancePath:instancePath+"/tasks",schemaPath:"#/propertie
 return false;
 }
 }
-var valid0 = _errs18 === errors;
+var valid0 = _errs19 === errors;
 }
 else {
 var valid0 = true;
+}
 }
 }
 }
@@ -702,4 +839,4 @@ return false;
 validate20.errors = vErrors;
 return errors === 0;
 }
-validate20.evaluated = {"props":{"catalogSource":true,"generatedAtMs":true,"preferredProfile":true,"remoteCatalogEnabled":true,"remoteSignaturePolicy":true,"resourceRoot":true,"resources":true,"rootState":true,"tasks":true},"dynamicProps":false,"dynamicItems":false};
+validate20.evaluated = {"props":{"catalogSource":true,"generatedAtMs":true,"maintenance":true,"preferredProfile":true,"remoteCatalogEnabled":true,"remoteSignaturePolicy":true,"resourceRoot":true,"resources":true,"rootState":true,"tasks":true},"dynamicProps":false,"dynamicItems":false};

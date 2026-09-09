@@ -63,6 +63,7 @@ impl ResourceDiagnosticsError {
 #[serde(rename_all = "camelCase")]
 #[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct LocalResourceDiagnostics {
+    pub maintenance: local_resources::ResourceMaintenanceDiagnostics,
     #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub generated_at_ms: i64,
     pub catalog_source: String,
@@ -244,6 +245,7 @@ pub fn diagnostics() -> Result<LocalResourceDiagnostics, ResourceDiagnosticsErro
         })
         .collect();
     Ok(LocalResourceDiagnostics {
+        maintenance: local_resources::maintenance_diagnostics()?,
         generated_at_ms: now_ms(),
         catalog_source: CATALOG_SOURCE.to_owned(),
         remote_catalog_enabled: REMOTE_CATALOG_ENABLED,
@@ -279,6 +281,7 @@ pub fn diagnostic_summary() -> Result<String, ResourceDiagnosticsError> {
         ),
         format!("资源位置状态：{}", diagnostics.root_state),
         format!("字幕识别方式：{}", diagnostics.preferred_profile),
+        format!("资源变更与备份检查：{}", serde_json::to_string(&diagnostics.maintenance)?),
     ];
     for resource in diagnostics.resources {
         lines.push(format!(

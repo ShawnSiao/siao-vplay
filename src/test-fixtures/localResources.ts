@@ -152,7 +152,7 @@ export function makeController(
         generatedAtMs: 1,
         catalogSource: "embedded",
         remoteCatalogEnabled: false,
-        remoteSignaturePolicy: "ed25519-detached-v1-required-before-enable",
+        maintenance: { transactionState: "none", scanState: "complete", stagingReviewCount: 0, receiptRecoveryCopyCount: 0 }, remoteSignaturePolicy: "ed25519-detached-v1-required-before-enable",
         rootState: "ready",
         resourceRoot: "W:\\SiaoVPlay\\SiaoVPlay",
         preferredProfile: "standard",

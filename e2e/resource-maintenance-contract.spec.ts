@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-for (const mode of ["invalid", "stale", "refresh-failure", "partial", "partial-refresh", "unrelated-result"] as const) test(`cleanup confirmation and result feedback: ${mode}`, async ({ page }) => {
+for (const mode of ["invalid", "stale", "refresh-failure", "partial", "partial-refresh", "unrelated-result", "pending-diagnostic", "partial-diagnostic"] as const) test(`cleanup confirmation and result feedback: ${mode}`, async ({ page }) => {
   const errors: string[] = []; page.on("pageerror", error => errors.push(error.message));
   await page.addInitScript((mode) => {
     const state = window as unknown as { cleanupCalls: number; fingerprint?: string; __TAURI_INTERNALS__: unknown }; state.cleanupCalls = 0;
@@ -10,7 +10,7 @@ for (const mode of ["invalid", "stale", "refresh-failure", "partial", "partial-r
       if (command === "get_local_resource_status") return { snapshotRevision: 1, configured: true, selectedParent: "W:\\fixture", resourceRoot: "W:\\fixture\\resources", rootState: "ready", freeSpaceBytes: 1024, preferredProfile: "standard", capabilities: [] };
       if (command === "get_local_resource_network_status") return { snapshotRevision: 1, mode: "direct", proxySource: "direct", proxyAddress: null };
       if (command === "list_resource_download_tasks") return { generation: 1, tasks: [] };
-      if (command === "get_local_resource_diagnostics") return { generatedAtMs: 1, catalogSource: "embedded", remoteCatalogEnabled: false, remoteSignaturePolicy: "disabled", rootState: "ready", resourceRoot: "W:\\fixture\\resources", preferredProfile: "standard", resources: [], tasks: [] };
+      if (command === "get_local_resource_diagnostics") return { generatedAtMs: 1, catalogSource: "embedded", remoteCatalogEnabled: false, maintenance: { transactionState: mode === "pending-diagnostic" ? "activation_pending" : "none", scanState: mode === "partial-diagnostic" ? "partial" : "complete", stagingReviewCount: mode === "pending-diagnostic" ? 2 : 0, receiptRecoveryCopyCount: mode === "pending-diagnostic" ? 1 : 0 }, remoteSignaturePolicy: "disabled", rootState: "ready", resourceRoot: "W:\\fixture\\resources", preferredProfile: "standard", resources: [], tasks: [] };
       if (command === "get_local_resource_third_party_notices") return "fixture";
       if (command === "plan_old_resource_version_cleanup" && (mode === "partial" || mode === "partial-refresh")) return { planFingerprint: "a".repeat(64), candidates: ["0", "1", "2"].map(version => ({ resourceId: "ffmpeg", version, reclaimableBytes: 12 })), protectedVersions: ["ffmpeg@3"], reclaimableBytes: 36, confirmationRequired: true };
       if (command === "plan_old_resource_version_cleanup") return { planFingerprint: "a".repeat(64), candidates: [{ resourceId: "ffmpeg", version: "1", reclaimableBytes: 12 }], protectedVersions: mode !== "invalid" ? ["ffmpeg@2"] : ["ffmpeg@1"], reclaimableBytes: 12, confirmationRequired: true };
@@ -25,6 +25,21 @@ for (const mode of ["invalid", "stale", "refresh-failure", "partial", "partial-r
   const maintenance = page.locator("details.local-resources-maintenance");
   await expect(maintenance).toBeVisible();
   if (await maintenance.getAttribute("open") === null) await maintenance.locator("summary").click();
+  if (mode === "pending-diagnostic" || mode === "partial-diagnostic") {
+    const advanced = page.getByText("高级诊断与第三方许可", { exact: true });
+    if (await advanced.locator("..").getAttribute("open") === null) await advanced.click();
+    const notice = page.getByRole("region", { name: "资源变更与备份检查" });
+    await expect(notice).toBeVisible();
+    await expect(notice).toContainText(mode === "pending-diagnostic" ? "尚未确认归属" : "数量仅为已检查部分");
+    await expect(notice.getByRole("button")).toHaveCount(0);
+    expect(await page.evaluate(() => (window as unknown as { cleanupCalls: number }).cleanupCalls)).toBe(0);
+    if (mode === "pending-diagnostic") {
+      await notice.scrollIntoViewIfNeeded();
+      await page.screenshot({ path: "designs/open-source-readiness/resource-pending-diagnostics.png" });
+    }
+    expect(errors).toEqual([]);
+    return;
+  }
   await page.getByRole("button", { name: "清理旧版本", exact: true }).click();
   if (mode !== "invalid") {
     await page.getByRole("button", { name: /^清理旧版本 / }).click();

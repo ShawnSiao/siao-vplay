@@ -63,7 +63,7 @@ const diagnostics: LocalResourceDiagnostics = {
   generatedAtMs: 1,
   catalogSource: "embedded",
   remoteCatalogEnabled: false,
-  remoteSignaturePolicy: "required",
+  maintenance: { transactionState: "none", scanState: "complete", stagingReviewCount: 0, receiptRecoveryCopyCount: 0 }, remoteSignaturePolicy: "required",
   rootState: "ready",
   resourceRoot: status.resourceRoot,
   preferredProfile: "standard",
