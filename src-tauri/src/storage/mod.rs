@@ -107,3 +107,6 @@ mod migration_destination_tests;
 
 #[cfg(test)]
 mod migration_commit_tests;
+
+#[cfg(test)]
+mod app_data_recovery_tests;

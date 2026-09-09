@@ -92,7 +92,10 @@ impl StorageManager {
         } else {
             None
         };
-        let mut migration = load_migration_runtime(bootstrap_directory, &active_root)?;
+        let committed_app_root = if environment_app_data_root.is_none() {
+            settings.active_app_data_root.as_deref().map(Path::new)
+        } else { None };
+        let mut migration = load_migration_runtime(bootstrap_directory, committed_app_root)?;
         super::migration_commit::recover(&settings_path, &mut settings, &active_root, &mut migration)?;
         Ok((
             Self {

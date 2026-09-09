@@ -7,7 +7,7 @@ use std::{
 
 use uuid::Uuid;
 
-use super::{StorageError, StorageMigrationStatus, StorageMigrationTask};
+use super::{StorageArea, StorageError, StorageMigrationStatus, StorageMigrationTask};
 
 const MIGRATION_FILE_NAME: &str = "storage-migration.json";
 
@@ -20,19 +20,23 @@ pub(crate) struct MigrationRuntime {
 
 pub(crate) fn load_migration_runtime(
     bootstrap: &Path,
-    active_app_root: &Path,
+    committed_app_root: Option<&Path>,
 ) -> Result<MigrationRuntime, StorageError> {
     let path = bootstrap.join(MIGRATION_FILE_NAME);
     let mut task = load_task(&path)?;
     if let Some(task) = task.as_mut() {
-        if task.status == StorageMigrationStatus::Running {
-            task.status = StorageMigrationStatus::Interrupted;
-            task.updated_at_ms = now_ms()?;
-        } else if task.status == StorageMigrationStatus::RestartRequired
-            && Path::new(&task.destination_root) == active_app_root
-        {
+        let promoted = task.area == StorageArea::AppData
+            && committed_app_root == Some(Path::new(&task.destination_root))
+            && matches!(task.status, StorageMigrationStatus::Running | StorageMigrationStatus::Interrupted
+                | StorageMigrationStatus::Failed | StorageMigrationStatus::RestartRequired);
+        if promoted {
             task.status = StorageMigrationStatus::Completed;
             task.restart_required = false;
+            task.error_code = None;
+            task.error_message = None;
+            task.updated_at_ms = now_ms()?;
+        } else if task.status == StorageMigrationStatus::Running {
+            task.status = StorageMigrationStatus::Interrupted;
             task.updated_at_ms = now_ms()?;
         }
         persist_task(&path, task)?;

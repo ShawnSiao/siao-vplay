@@ -20,7 +20,7 @@ fn migration_record_directory_is_never_adopted_or_moved() {
     let path = bootstrap.join("storage-migration.json");
     fs::create_dir_all(&path).unwrap();
     fs::write(path.join("owned.txt"), b"keep").unwrap();
-    assert!(load_migration_runtime(&bootstrap, &bootstrap).is_err());
+    assert!(load_migration_runtime(&bootstrap, None).is_err());
     assert!(persist_task(&path, &task).is_err());
     assert_eq!(fs::read(path.join("owned.txt")).unwrap(), b"keep");
     assert_eq!(fs::read_dir(&bootstrap).unwrap().count(), 1);
@@ -37,7 +37,7 @@ fn interrupted_legacy_record_is_recovered_without_adopting_partial_candidate() {
     let bytes = serde_json::to_vec(&task).unwrap();
     fs::write(&backup, &bytes).unwrap();
     fs::write(bootstrap.join(".storage-migration.json.unfinished.part"), b"incomplete").unwrap();
-    let recovered = load_migration_runtime(&bootstrap, &bootstrap).unwrap().task.unwrap();
+    let recovered = load_migration_runtime(&bootstrap, None).unwrap().task.unwrap();
     assert_eq!(recovered.id, task.id);
     assert_eq!(recovered.status, StorageMigrationStatus::Interrupted);
     assert_eq!(fs::read(&backup).unwrap(), bytes);
@@ -53,10 +53,10 @@ fn ambiguous_or_corrupt_legacy_records_fail_closed() {
     fs::create_dir_all(&bootstrap).unwrap();
     let first = bootstrap.join(".storage-migration.json.0123456789abcdef0123456789abcdef.previous");
     fs::write(&first, b"corrupt").unwrap();
-    assert!(load_migration_runtime(&bootstrap, &bootstrap).is_err());
+    assert!(load_migration_runtime(&bootstrap, None).is_err());
     fs::write(&first, serde_json::to_vec(&task).unwrap()).unwrap();
     fs::write(bootstrap.join(".storage-migration.json.1123456789abcdef0123456789abcdef.previous"), serde_json::to_vec(&task).unwrap()).unwrap();
-    assert!(load_migration_runtime(&bootstrap, &bootstrap).is_err());
+    assert!(load_migration_runtime(&bootstrap, None).is_err());
     assert!(!bootstrap.join("storage-migration.json").exists());
 }
 
@@ -71,5 +71,5 @@ fn valid_main_record_wins_and_replacement_leaves_no_side_files() {
     persist_task(&path, &task).unwrap();
     assert_eq!(fs::read_dir(&bootstrap).unwrap().count(), 1);
     fs::write(bootstrap.join(".storage-migration.json.0123456789abcdef0123456789abcdef.previous"), b"corrupt").unwrap();
-    assert_eq!(load_migration_runtime(&bootstrap, &bootstrap).unwrap().task.unwrap().id, task.id);
+    assert_eq!(load_migration_runtime(&bootstrap, None).unwrap().task.unwrap().id, task.id);
 }
