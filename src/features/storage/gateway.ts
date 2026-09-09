@@ -14,38 +14,49 @@ export async function chooseStorageDirectory(title: string): Promise<string | nu
   return typeof selected === "string" ? selected : null;
 }
 
-export function prepareStorageMigration(
+export async function prepareStorageMigration(
   area: StorageArea,
   destinationDirectory: string,
   mode: StorageMigrationMode,
 ): Promise<StorageMigrationTask> {
-  return invoke("prepare_storage_migration", {
+  const task = await parseMigration(await invoke<unknown>("prepare_storage_migration", {
     input: { area, destinationDirectory, mode },
-  });
+  }), true);
+  if (task.area !== area || task.mode !== mode || task.status !== "prepared") throw migrationError(true);
+  return task;
 }
 
-export function startStorageMigration(
+export async function startStorageMigration(
   taskId: string,
 ): Promise<StorageMigrationTask> {
-  return invoke("start_storage_migration", { input: { taskId, confirmed: true } });
+  const task = await parseMigration(await invoke<unknown>("start_storage_migration", { input: { taskId, confirmed: true } }), true);
+  if (task.id !== taskId) throw migrationError(true);
+  return task;
 }
 
-export function resumeStorageMigration(
+export async function resumeStorageMigration(
   taskId: string,
 ): Promise<StorageMigrationTask> {
-  return invoke("resume_storage_migration", { input: { taskId, confirmed: true } });
+  const task = await parseMigration(await invoke<unknown>("resume_storage_migration", { input: { taskId, confirmed: true } }), true);
+  if (task.id !== taskId) throw migrationError(true);
+  return task;
 }
 
-export function getStorageMigration(taskId: string): Promise<StorageMigrationTask> {
-  return invoke("get_storage_migration", { input: { taskId } });
+export async function getStorageMigration(taskId: string): Promise<StorageMigrationTask> {
+  const task = await parseMigration(await invoke<unknown>("get_storage_migration", { input: { taskId } }), false);
+  if (task.id !== taskId) throw migrationError(false);
+  return task;
 }
 
-export function getCurrentStorageMigration(): Promise<StorageMigrationTask | null> {
-  return invoke("get_current_storage_migration");
+export async function getCurrentStorageMigration(): Promise<StorageMigrationTask | null> {
+  const value = await invoke<unknown>("get_current_storage_migration");
+  return value === null ? null : parseMigration(value, false);
 }
 
-export function cancelStorageMigration(taskId: string): Promise<StorageMigrationTask> {
-  return invoke("cancel_storage_migration", { input: { taskId } });
+export async function cancelStorageMigration(taskId: string): Promise<StorageMigrationTask> {
+  const task = await parseMigration(await invoke<unknown>("cancel_storage_migration", { input: { taskId } }), true);
+  if (task.id !== taskId) throw migrationError(true);
+  return task;
 }
 
 export function openStorageLocation(kind: StorageLocationKind): Promise<void> {
@@ -58,4 +69,13 @@ export function clearPlaybackCache(): Promise<{ reclaimedBytes: number }> {
 
 export function restartAfterStorageMigration(): Promise<never> {
   return invoke("restart_after_storage_migration");
+}
+
+function migrationError(mutating: boolean): Error {
+  return new Error(mutating ? "迁移操作结果尚未确认，请重新读取任务状态后再操作。" : "迁移任务格式或身份不匹配，未采用本次结果。");
+}
+async function parseMigration(value: unknown, mutating: boolean): Promise<StorageMigrationTask> {
+  const { default: validate } = await import("../../generated/storage-migration-task.validator.mjs");
+  if (!validate(value) || !value.id.trim() || !value.sourceRoot.trim() || !value.destinationRoot.trim()) throw migrationError(mutating);
+  return value;
 }

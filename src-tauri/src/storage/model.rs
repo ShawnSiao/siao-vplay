@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub enum StorageArea {
     AppData,
     RemoteMedia,
@@ -38,6 +39,7 @@ pub struct ClearPlaybackCacheResult {
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub enum StorageMigrationMode {
     Copy,
     Rebuild,
@@ -45,6 +47,7 @@ pub enum StorageMigrationMode {
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub enum StorageMigrationStatus {
     Prepared,
     Running,
@@ -79,6 +82,7 @@ pub struct StorageMigrationTaskInput {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct StorageMigrationTask {
     pub id: String,
     pub area: StorageArea,
@@ -86,16 +90,23 @@ pub struct StorageMigrationTask {
     pub status: StorageMigrationStatus,
     pub source_root: String,
     pub destination_root: String,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub bytes_to_copy: u64,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub copied_bytes: u64,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub file_count: usize,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub verified_file_count: usize,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub free_space_bytes: Option<u64>,
     pub previous_root_retained: bool,
     pub restart_required: bool,
     pub error_code: Option<String>,
     pub error_message: Option<String>,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub created_at_ms: i64,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub updated_at_ms: i64,
 }
 
