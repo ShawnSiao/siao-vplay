@@ -175,11 +175,11 @@ export function StoragePane({ controller }: StoragePaneProps) {
 
           <section className="storage-settings-section"><h3>默认导出位置</h3><div className="storage-settings-list">
             <StorageRow index={4} title="字幕" helper="SRT 或 WebVTT；导出时仍可临时改选" path={controller.subtitleDirectory ?? "每次询问"}>
-              {controller.subtitleDirectory ? <button className="button quiet" type="button" onClick={() => open("subtitle_export")}>打开位置</button> : null}
+              {controller.subtitleDirectory ? <button className="button quiet" type="button" disabled={controller.subtitleDirectory !== settings.defaultSubtitleExportDirectory} title={controller.subtitleDirectory !== settings.defaultSubtitleExportDirectory ? "应用设置后可打开新位置" : undefined} onClick={() => open("subtitle_export")}>打开位置</button> : null}
               <button className="button secondary" type="button" onClick={() => void controller.chooseDefault("subtitle")}>{controller.subtitleDirectory ? "更改" : "选择默认位置"}</button>
             </StorageRow>
             <StorageRow index={5} title="视频与分析报告" helper="烧录 MP4、Markdown 报告和报告素材" path={controller.reportDirectory ?? "每次询问"}>
-              {controller.reportDirectory ? <button className="button quiet" type="button" onClick={() => open("video_report_export")}>打开位置</button> : null}
+              {controller.reportDirectory ? <button className="button quiet" type="button" disabled={controller.reportDirectory !== settings.defaultVideoReportExportDirectory} title={controller.reportDirectory !== settings.defaultVideoReportExportDirectory ? "应用设置后可打开新位置" : undefined} onClick={() => open("video_report_export")}>打开位置</button> : null}
               <button className="button secondary" type="button" onClick={() => void controller.chooseDefault("report")}>{controller.reportDirectory ? "更改" : "选择默认位置"}</button>
             </StorageRow>
           </div></section>

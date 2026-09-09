@@ -49,13 +49,20 @@ export function EnvironmentSettingsDialog({
   const controller = useEnvironmentSettings(true, previewMode);
   const storage = useStorageSettings(tab === "storage", previewMode, onNotice);
 
+  const storageDirty = Boolean(storage.settings && (
+    storage.subtitleDirectory !== storage.settings.defaultSubtitleExportDirectory ||
+    storage.reportDirectory !== storage.settings.defaultVideoReportExportDirectory
+  ));
+
   const titleId = useId();
+  const allowClose = useCallback(() => {
+    if (controller.operation || storage.operation) return false;
+    const unsaved = [controller.dirtySelectionIds.length ? "AI 服务配置" : null, storageDirty ? "存储设置" : null].filter(Boolean);
+    return !unsaved.length || window.confirm(`还有未保存的 ${unsaved.join("和")}。确定放弃这些修改并关闭？选择取消可继续编辑和保存。`);
+  }, [controller.dirtySelectionIds, controller.operation, storage.operation, storageDirty]);
   const requestClose = useCallback(() => {
-    if (controller.operation || storage.operation) return;
-    if (controller.dirtySelectionIds.length &&
-        !window.confirm("还有未保存的 AI 服务配置。确定放弃这些修改并关闭？选择取消可继续编辑和保存。")) return;
-    onClose();
-  }, [controller.dirtySelectionIds, controller.operation, onClose, storage.operation]);
+    if (allowClose()) onClose();
+  }, [allowClose, onClose]);
   const dialogRef = useModalFocus(requestClose);
 
   useEffect(() => selectedTab === undefined ? listenEnvironmentSettings(setLocalTab) : undefined, [selectedTab]);
@@ -71,10 +78,7 @@ export function EnvironmentSettingsDialog({
     controller.draft && (configured || controller.draft.apiKey.trim()),
   );
   const aiBusy = controller.operation !== null;
-  const storageDirty = Boolean(storage.settings && (
-    storage.subtitleDirectory !== storage.settings.defaultSubtitleExportDirectory ||
-    storage.reportDirectory !== storage.settings.defaultVideoReportExportDirectory
-  ));
+
 
   return (
     <div className="environment-settings-scrim" role="presentation" onMouseDown={(event) => {
@@ -110,12 +114,12 @@ export function EnvironmentSettingsDialog({
           <span>{tab === "local" ? "下载位置与本地功能状态在这里统一管理。" : tab === "ai" ? "配置只保存在这台电脑，使用时会再次确认发送范围。" : "默认位置只影响下次选择，导出时仍可临时更改。"}</span>
           {tab === "local" ? (
             <>
-              {firstRun ? <button className="button text" type="button" onClick={onDismissFirstRun}>稍后配置</button> : null}
+              {firstRun ? <button className="button text" type="button" onClick={() => { if (allowClose()) onDismissFirstRun(); }}>稍后配置</button> : null}
               <button className="button quiet" type="button" onClick={requestClose}>关闭</button>
             </>
           ) : tab === "storage" ? (
             <>
-              <button className="button text" type="button" disabled={!storageDirty || storage.operation !== null} onClick={() => { storage.setSubtitleDirectory(null); storage.setReportDirectory(null); }}>恢复默认</button>
+              <button className="button text" type="button" disabled={(storage.subtitleDirectory === null && storage.reportDirectory === null) || storage.operation !== null} onClick={() => { storage.setSubtitleDirectory(null); storage.setReportDirectory(null); }}>恢复默认</button>
               <button className="button primary" type="button" disabled={!storageDirty || storage.operation !== null} onClick={() => void storage.saveDefaults()}>{storage.operation === "saving" ? "正在保存…" : "应用设置"}</button>
             </>
           ) : controller.selectionId === codexSelectionId ? (

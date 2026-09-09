@@ -116,3 +116,13 @@ describe("StoragePane", () => {
     expect(screen.getByRole("button", { name: "继续迁移" })).toBeVisible();
   });
 });
+
+
+it("does not open the saved location under a different draft directory", () => {
+  const value = controller({ reportDirectory: "W:/unsaved-report" });
+  render(<StoragePane controller={value} />);
+  const button = screen.getByTitle("应用设置后可打开新位置");
+  expect(button).toBeDisabled();
+  fireEvent.click(button);
+  expect(value.openLocation).not.toHaveBeenCalled();
+});
