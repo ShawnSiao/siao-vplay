@@ -2,10 +2,9 @@ import { invoke } from "@tauri-apps/api/core";
 import type { LibraryRootRebuildPreview } from "../generated/library-rebuild-preview";
 import type { LibraryRootRebuildResult } from "../generated/library-rebuild-result";
 import type { ApplyLibraryRootRebuildInput, InspectLibraryRootRebuildInput } from "../types";
-import validatePreview from "../generated/library-rebuild-preview.validator.mjs";
-import validateResult from "../generated/library-rebuild-result.validator.mjs";
 
 export async function inspectRebuild(input: InspectLibraryRootRebuildInput): Promise<LibraryRootRebuildPreview> {
+  const { default: validatePreview } = await import("../generated/library-rebuild-preview.validator.mjs");
   const value: unknown = await invoke("inspect_library_root_rebuild", { input });
   const invalid = () => new Error("目录重建预览无效，请重新检查目录");
   if (!validatePreview(value) || value.rootId !== input.rootId || !value.previewToken.trim()
@@ -25,6 +24,7 @@ export async function applyRebuild(input: ApplyLibraryRootRebuildInput, preview:
   const restoredCount = preview.matchedItems.length + preview.missingItems.length + preview.changedItems.length + preview.uncertainItems.length;
   const addedCount = input.newItems.length;
   if (input.previewToken !== preview.previewToken) throw new Error("重建确认与预览不一致，请重新检查目录");
+  const { default: validateResult } = await import("../generated/library-rebuild-result.validator.mjs");
   const value: unknown = await invoke("apply_library_root_rebuild", { input });
   if (!validateResult(value) || value.root.id !== rootId || value.root.path !== rootPath
     || value.collection.summary.rootId !== rootId || !value.collection.summary.id.trim()

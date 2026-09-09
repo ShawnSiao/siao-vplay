@@ -2,10 +2,9 @@ import { invoke } from "@tauri-apps/api/core";
 import type { LibraryRescanPreview } from "../generated/library-rescan-preview";
 import type { LibraryRescanResult } from "../generated/library-rescan-result";
 import type { ApplyLibraryRescanInput } from "../types";
-import validatePreview from "../generated/library-rescan-preview.validator.mjs";
-import validateResult from "../generated/library-rescan-result.validator.mjs";
 
 export async function inspectRescan(rootId: string): Promise<LibraryRescanPreview> {
+  const { default: validatePreview } = await import("../generated/library-rescan-preview.validator.mjs");
   const value: unknown = await invoke("inspect_library_rescan", { rootId });
   const invalid = () => new Error("目录重扫预览无效，请重新扫描");
   if (!validatePreview(value) || value.rootId !== rootId || !value.previewToken.trim()
@@ -23,6 +22,7 @@ export async function applyRescan(input: ApplyLibraryRescanInput, preview: Libra
   const { rootId, rootPath, collectionId, availableItemCount } = preview;
   const missingCount = preview.missingItems.length, changedCount = preview.changedItems.length, addedCount = input.newItems.length;
   if (input.previewToken !== preview.previewToken) throw new Error("重扫确认与预览不一致，请重新扫描");
+  const { default: validateResult } = await import("../generated/library-rescan-result.validator.mjs");
   const value: unknown = await invoke("apply_library_rescan", { input });
   if (!validateResult(value) || value.root.id !== rootId || value.root.path !== rootPath
     || value.collection.summary.id !== collectionId || value.collection.summary.rootId !== rootId

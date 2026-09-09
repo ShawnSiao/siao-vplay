@@ -27,7 +27,12 @@ export function checkDeferredBuild(manifest, entry, features) {
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   const directory = resolve("dist");
   const manifest = JSON.parse(await readFile(resolve(directory, ".vite/manifest.json"), "utf8"));
-  const files = checkDeferredBuild(manifest, "index.html", ["src/features/environment-settings/EnvironmentSettingsDialog.tsx"]);
+  const files = checkDeferredBuild(manifest, "index.html", [
+    "src/features/environment-settings/EnvironmentSettingsDialog.tsx",
+    "src/lib/subtitlePreviewContract.ts",
+    ...["library-rebuild-preview", "library-rebuild-result", "library-rescan-preview", "library-rescan-result"]
+      .map(name => `src/generated/${name}.validator.mjs`),
+  ]);
   const sizes = await Promise.all(files.filter(file => file.endsWith(".js")).map(async file => (await stat(resolve(directory, file))).size));
   console.log(`Deferred feature boundary passed; startup JavaScript: ${sizes.reduce((sum, size) => sum + size, 0)} bytes`);
 }
