@@ -1,4 +1,4 @@
-import { invokeProject } from "./projectGateway";
+import { invokeProject, readProjectList } from "./projectGateway";
 export { reconcileExternalAgentResults, acknowledgeExternalAgentResults } from "./externalResultGateway";
 export { retryLocalResourceBinding, inspectLocalResourceBinding } from "./resourceLocationGateway";
 export { planLocalResourceLocation, planLocalResourceMove, moveLocalResourceRoot, inspectLocalResourceMigration, adoptLocalResources } from "./resourceMigrationGateway";
@@ -102,7 +102,7 @@ export async function listProjects(): Promise<Project[]> {
   if (!isDesktopApp) {
     return [];
   }
-  return invoke<Project[]>("list_projects");
+  return readProjectList();
 }
 
 export async function getProject(projectId: string): Promise<Project> {
