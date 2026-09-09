@@ -12,7 +12,7 @@ fn receipt(version: &str, entry: &str) -> ResourceReceipt {
         activated_at_ms: Some(10),
     }
 }
-fn setup(version: &str) -> (TempDir, LocalResourceManager, Journal) {
+pub(super) fn setup(version: &str) -> (TempDir, LocalResourceManager, Journal) {
     let root = tempdir().unwrap();
     let mut manager = LocalResourceManager::load(root.path()).unwrap();
     manager

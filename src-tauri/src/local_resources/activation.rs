@@ -1,3 +1,4 @@
+mod prepare;
 use super::*;
 const JOURNAL: &str = "resource-activation.json";
 #[derive(Serialize, Deserialize)]
@@ -186,7 +187,7 @@ fn activate_inner(
     };
     validate(&journal)?;
     let path = journal_path(&manager.config_path)?;
-    persist_json(&path, &journal)?;
+    prepare::prepare(&path, &journal)?;
     let mut configuration_committed = false;
     let operation = (|| -> Result<(), LocalResourceError> {
         persist_json(&target, &journal.next_receipt)?;
