@@ -18,6 +18,7 @@ import {
   resumeSummaryTask,
   startSummaryTask,
 } from "./gateway";
+import { useSummaryPolling } from "./useSummaryPolling";
 import { useSummaryCompletion } from "./useSummaryCompletion";
 import { SummaryProgress } from "./SummaryProgress";
 import { SummaryResultView } from "./SummaryResultView";
@@ -42,7 +43,6 @@ type VideoSummaryPanelProps = {
   onPausePlayback?: () => void;
 };
 
-const pollingStatuses = new Set(["queued", "running", "validating"]);
 const restorableStatuses = new Set([
   "prepared",
   "awaiting_external_result",
@@ -110,21 +110,7 @@ export function VideoSummaryPanel({
     };
   }, [projectId, showError]);
 
-  useEffect(() => {
-    if (!task || !pollingStatuses.has(task.status)) return;
-    let active = true;
-    const timer = window.setInterval(() => {
-      void getSummaryTask(task.id).then((next) => {
-        if (active) setTask(next);
-      }).catch((cause) => {
-        if (active) showError(cause);
-      });
-    }, 900);
-    return () => {
-      active = false;
-      window.clearInterval(timer);
-    };
-  }, [showError, task]);
+  useSummaryPolling({ projectId, task, read: getSummaryTask, onTask: setTask, onError: showError });
 
   const completion = useSummaryCompletion({ projectId, task, read: getVideoSummary, onResult: (value) => {
     setSummary(value);
