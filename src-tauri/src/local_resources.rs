@@ -1,3 +1,5 @@
+#[cfg(test)]
+mod recovery_tests;
 mod persistence;
 use persistence::persist_json;
 #[cfg(test)]
@@ -429,14 +431,7 @@ fn with_manager_write<T>(
 impl LocalResourceManager {
     fn load(data_directory: &Path) -> Result<Self, LocalResourceError> {
         let config_path = data_directory.join(CONFIG_FILE_NAME);
-        let mut configuration = if config_path.is_file() {
-            let configuration =
-                serde_json::from_slice::<LocalResourceConfiguration>(&fs::read(&config_path)?)?;
-            validate_configuration(&configuration)?;
-            Some(configuration)
-        } else {
-            None
-        };
+        let mut configuration = persistence::load_configuration(&config_path)?;
         let legacy_settings = load_legacy_runtime_settings(data_directory);
         let mut changed = false;
         if let Some(legacy_root) = legacy_settings.storage_root {
