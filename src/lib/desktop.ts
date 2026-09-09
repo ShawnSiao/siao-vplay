@@ -1,3 +1,4 @@
+export { prepareTranslationTask, getTranslationTask, listTranslationTasks, readTranslationPrompt, importTranslationResult, startCodexTranslationTask, cancelTranslationTask, resumeCodexTranslationTask } from "./translationGateway";
 export { inspectSubtitleFile, importSubtitleFile, listSubtitleVersions, getSubtitleVersion, listSubtitleVersionMetadata, reviseSubtitleVersion, restoreSubtitleVersion, inspectEmbeddedSubtitle, importEmbeddedSubtitle } from "./subtitleGateway";
 export { inspectYouTubeUrl, importYouTubeUrl, cancelYouTubeImport, getPublicResolverDisclosure } from "./publicVideoGateway";
 export { getMediaPreparation, cancelMediaPreparation } from "./mediaPreparationGateway";
@@ -54,8 +55,6 @@ import type {
   SubtitleExportMode,
   TranscriptionRuntimeStatus,
   CodexRuntimeStatus,
-  TranslationApplication,
-  TranslationTask,
 } from "../types";
 
 export const isDesktopApp = "__TAURI_INTERNALS__" in window;
@@ -744,86 +743,17 @@ export async function chooseTranslationResultFile(): Promise<string | null> {
   return typeof selected === "string" ? selected : null;
 }
 
-export async function prepareTranslationTask(
-  projectId: string,
-  handoffKind: "manual" | "codex",
-  sourceLanguageCode: string,
-  targetLanguageCode: string,
-  segmentIds?: string[],
-): Promise<TranslationTask> {
-  return invoke<TranslationTask>("prepare_translation_task", {
-    input: {
-      projectId,
-      handoffKind,
-      sourceLanguageCode,
-      targetLanguageCode,
-      segmentIds,
-    },
-  });
-}
 
-export async function getTranslationTask(
-  taskId: string,
-): Promise<TranslationTask> {
-  return invoke<TranslationTask>("get_translation_task", {
-    input: { taskId },
-  });
-}
 
-export async function listTranslationTasks(
-  projectId: string,
-): Promise<TranslationTask[]> {
-  return invoke<TranslationTask[]>("list_translation_tasks", { projectId });
-}
 
-export async function readTranslationPrompt(taskId: string): Promise<string> {
-  return invoke<string>("read_translation_prompt", {
-    input: { taskId },
-  });
-}
 
-export async function importTranslationResult(
-  taskId: string,
-  resultPath: string,
-): Promise<TranslationApplication> {
-  return invoke<TranslationApplication>("import_translation_result", {
-    input: { taskId, resultPath },
-  });
-}
 
 export async function getCodexRuntimeStatus(): Promise<CodexRuntimeStatus> {
   return invoke<CodexRuntimeStatus>("get_codex_runtime_status");
 }
 
-export async function startCodexTranslationTask(
-  taskId: string,
-  timeoutSeconds: number | undefined,
-  confirmationSha256: string,
-): Promise<TranslationTask> {
-  return invoke<TranslationTask>("start_codex_translation_task", {
-    input: { taskId, timeoutSeconds },
-    confirmationSha256,
-  });
-}
 
-export async function cancelTranslationTask(
-  taskId: string,
-): Promise<TranslationTask> {
-  return invoke<TranslationTask>("cancel_translation_task", {
-    input: { taskId },
-  });
-}
 
-export async function resumeCodexTranslationTask(
-  taskId: string,
-  timeoutSeconds: number | undefined,
-  confirmationSha256: string,
-): Promise<TranslationTask> {
-  return invoke<TranslationTask>("resume_codex_translation_task", {
-    input: { taskId, timeoutSeconds },
-    confirmationSha256,
-  });
-}
 
 export async function chooseExplanationResultFile(): Promise<string | null> {
   if (!isDesktopApp) {

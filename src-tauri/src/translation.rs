@@ -1,3 +1,5 @@
+#[cfg(test)]
+mod wire_schema;
 use std::{
     collections::{BTreeMap, BTreeSet},
     fs,
@@ -121,14 +123,19 @@ pub struct ImportTranslationResultInput {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct TranslationTask {
     pub id: String,
     pub project_id: String,
+    #[cfg_attr(test, schemars(with = "wire_schema::TaskType"))]
     pub task_type: String,
+    #[cfg_attr(test, schemars(with = "wire_schema::Handoff"))]
     pub handoff_kind: String,
     pub protocol_version: String,
+    #[cfg_attr(test, schemars(with = "wire_schema::TaskStatus"))]
     pub status: String,
     pub stage: String,
+    #[cfg_attr(test, schemars(range(min = 0, max = 1)))]
     pub progress: f64,
     pub receiver_label: String,
     pub material_scope: Vec<String>,
@@ -136,30 +143,41 @@ pub struct TranslationTask {
     pub source_language_code: String,
     pub target_language_code: String,
     pub authorized_segment_ids: Vec<String>,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub segment_count: usize,
+    #[cfg_attr(test, schemars(range(min = -9007199254740991_i64, max = 9007199254740991_i64)))]
     pub expected_project_revision: i64,
     pub base_translation_version_id: Option<String>,
     pub output_version_id: Option<String>,
     pub validation: Option<TranslationValidation>,
     pub error_code: Option<String>,
     pub error_message: Option<String>,
+    #[cfg_attr(test, schemars(range(min = -9007199254740991_i64, max = 9007199254740991_i64)))]
     pub created_at_ms: i64,
+    #[cfg_attr(test, schemars(range(min = -9007199254740991_i64, max = 9007199254740991_i64)))]
     pub updated_at_ms: i64,
+    #[cfg_attr(test, schemars(range(min = -9007199254740991_i64, max = 9007199254740991_i64)))]
     pub started_at_ms: Option<i64>,
+    #[cfg_attr(test, schemars(range(min = -9007199254740991_i64, max = 9007199254740991_i64)))]
     pub completed_at_ms: Option<i64>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct TranslationValidation {
+    #[cfg_attr(test, schemars(with = "wire_schema::ValidationStatus"))]
     pub status: String,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub translation_count: usize,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub warning_count: usize,
     pub warnings: Vec<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct TranslationApplication {
     pub task: TranslationTask,
     pub subtitle_version: SubtitleVersion,

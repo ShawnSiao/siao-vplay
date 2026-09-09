@@ -1,4 +1,4 @@
-import type { SubtitlePreflightReport, SubtitleVersion } from "./generated/subtitle-version";
+import type { SubtitlePreflightReport } from "./generated/subtitle-version";
 export type { SubtitleIssueSeverity, SubtitleIssueCode, SubtitlePreflightIssue, SubtitlePreflightReport, SubtitleWord, SubtitleSegment, SubtitleVersion } from "./generated/subtitle-version";
 import type {
   CollectionDetail,
@@ -811,54 +811,8 @@ export type TranscriptionRuntimeStatus = {
 
 export type { TranscriptionJob } from "./generated/transcription-job";
 
-export type TranslationTask = {
-  id: string;
-  projectId: string;
-  taskType: "subtitle_translation";
-  handoffKind: "manual" | "codex" | "api";
-  protocolVersion: string;
-  status:
-    | "awaiting_external_result"
-    | "queued"
-    | "running"
-    | "validating"
-    | "completed"
-    | "failed"
-    | "cancelled"
-    | "interrupted";
-  stage: string;
-  progress: number;
-  receiverLabel: string;
-  materialScope: string[];
-  sourceVersionId: string;
-  sourceLanguageCode: string;
-  targetLanguageCode: string;
-  authorizedSegmentIds: string[];
-  segmentCount: number;
-  expectedProjectRevision: number;
-  baseTranslationVersionId: string | null;
-  outputVersionId: string | null;
-  validation: TranslationValidation | null;
-  errorCode: string | null;
-  errorMessage: string | null;
-  createdAtMs: number;
-  updatedAtMs: number;
-  startedAtMs: number | null;
-  completedAtMs: number | null;
-};
-
-export type TranslationValidation = {
-  status: "accepted" | "accepted_with_warnings";
-  translationCount: number;
-  warningCount: number;
-  warnings: string[];
-};
-
-export type TranslationApplication = {
-  task: TranslationTask;
-  subtitleVersion: SubtitleVersion;
-  validation: TranslationValidation;
-};
+export type { TranslationTask, TranslationValidation } from "./generated/translation-task";
+export type { TranslationApplication } from "./generated/translation-application";
 
 export type ExternalAgentTaskKind =
   | "translation"

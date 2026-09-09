@@ -49,6 +49,7 @@ fn committed_schemas_match_rust() {
     check_ai_service_schemas();
     check_transcription_schema();
     check_subtitle_body_schema();
+    check_translation_schemas();
     use crate::ai::types::{AiExecutionKind, AiExecutionPreview};
     let mut preview = serialized_schema::<AiExecutionPreview>();
     preview["examples"] = serde_json::json!([
@@ -158,17 +159,7 @@ fn check_transcription_schema() {
 fn check_subtitle_body_schema() {
     use crate::subtitles::*;
     let mut schema = serialized_schema::<SubtitleVersion>();
-    let example = SubtitleVersion {
-        id: "v".into(), track_id: "track".into(), project_id: "p".into(), role: "original".into(),
-        version_number: 1, status: "draft".into(), source_kind: "transcription".into(), source_label: "Test".into(),
-        source_sha256: "a".repeat(64), media_sha256: "b".repeat(64), language_code: "en".into(), project_revision: 2,
-        parent_version_id: None, source_task_id: Some("task".into()), created_at_ms: 1, is_current: true,
-        preflight: SubtitlePreflightReport { status: SubtitlePreflightStatus::Ready, segment_count: 1, error_count: 0, warning_count: 0,
-            first_start_ms: Some(0), last_end_ms: Some(1000), media_duration_ms: Some(2000), coverage_ratio: Some(0.5), issues: vec![] },
-        segments: vec![SubtitleSegment { id: "segment".into(), lineage_id: "lineage".into(), source_segment_id: None,
-            ordinal: 0, start_ms: 0, end_ms: 1000, text: "Hello".into(), confidence: None, issue_kind: None,
-            words: vec![SubtitleWord { ordinal: 0, start_ms: 0, end_ms: 500, text: "Hello".into(), confidence: Some(0.9) }] }],
-    };
+    let example = subtitle_body_example();
     let mut examples = Vec::new();
     for role in ["original", "translation"] {
         for status in ["draft", "ready", "rejected"] {
@@ -181,4 +172,49 @@ fn check_subtitle_body_schema() {
     }
     schema["examples"] = examples.into();
     check_schema("subtitle-version", &schema);
+}
+
+fn subtitle_body_example() -> crate::subtitles::SubtitleVersion {
+    use crate::subtitles::*;
+    crate::subtitles::SubtitleVersion {
+        id: "v".into(), track_id: "track".into(), project_id: "p".into(), role: "original".into(),
+        version_number: 1, status: "draft".into(), source_kind: "transcription".into(), source_label: "Test".into(),
+        source_sha256: "a".repeat(64), media_sha256: "b".repeat(64), language_code: "en".into(), project_revision: 2,
+        parent_version_id: None, source_task_id: Some("task".into()), created_at_ms: 1, is_current: true,
+        preflight: SubtitlePreflightReport { status: SubtitlePreflightStatus::Ready, segment_count: 1, error_count: 0, warning_count: 0,
+            first_start_ms: Some(0), last_end_ms: Some(1000), media_duration_ms: Some(2000), coverage_ratio: Some(0.5), issues: vec![] },
+        segments: vec![SubtitleSegment { id: "segment".into(), lineage_id: "lineage".into(), source_segment_id: None,
+            ordinal: 0, start_ms: 0, end_ms: 1000, text: "Hello".into(), confidence: None, issue_kind: None,
+            words: vec![SubtitleWord { ordinal: 0, start_ms: 0, end_ms: 500, text: "Hello".into(), confidence: Some(0.9) }] }],
+    }
+}
+
+fn check_translation_schemas() {
+    use crate::translation::{TranslationApplication, TranslationTask, TranslationValidation};
+    let validation = TranslationValidation { status: "accepted".into(), translation_count: 1, warning_count: 0, warnings: vec![] };
+    let mut task = TranslationTask {
+        id: "task".into(), project_id: "p".into(), task_type: "subtitle_translation".into(), handoff_kind: "manual".into(),
+        protocol_version: "siaovplay-agent-v1".into(), status: "completed".into(), stage: "completed".into(), progress: 1.0,
+        receiver_label: "Test".into(), material_scope: vec!["字幕".into()], source_version_id: "source".into(),
+        source_language_code: "en".into(), target_language_code: "zh-cn".into(), authorized_segment_ids: vec!["segment".into()],
+        segment_count: 1, expected_project_revision: 1, base_translation_version_id: None, output_version_id: Some("v".into()),
+        validation: Some(validation.clone()), error_code: None, error_message: None, created_at_ms: 1, updated_at_ms: 2,
+        started_at_ms: Some(1), completed_at_ms: Some(2),
+    };
+    let mut body = subtitle_body_example();
+    body.role = "translation".into(); body.source_kind = "agent_translation".into(); body.language_code = "zh-cn".into();
+    body.segments[0].source_segment_id = Some("segment".into());
+    let mut application = serialized_schema::<TranslationApplication>();
+    application["examples"] = serde_json::json!([TranslationApplication { task: task.clone(), subtitle_version: body, validation }]);
+    check_schema("translation-application", &application);
+    let mut schema = serialized_schema::<TranslationTask>();
+    let mut examples = Vec::new();
+    for status in ["awaiting_external_result", "queued", "running", "validating", "completed", "failed", "cancelled", "interrupted"] {
+        for handoff in ["manual", "codex", "api"] {
+            task.status = status.into(); task.handoff_kind = handoff.into();
+            examples.push(serde_json::to_value(&task).unwrap());
+        }
+    }
+    schema["examples"] = examples.into();
+    check_schema("translation-task", &schema);
 }

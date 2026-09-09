@@ -1,0 +1,1095 @@
+{
+  "$defs": {
+    "Handoff": {
+      "enum": [
+        "manual",
+        "codex",
+        "api"
+      ],
+      "type": "string"
+    },
+    "TaskStatus": {
+      "enum": [
+        "awaiting_external_result",
+        "queued",
+        "running",
+        "validating",
+        "completed",
+        "failed",
+        "cancelled",
+        "interrupted"
+      ],
+      "type": "string"
+    },
+    "TaskType": {
+      "enum": [
+        "subtitle_translation"
+      ],
+      "type": "string"
+    },
+    "TranslationValidation": {
+      "properties": {
+        "status": {
+          "$ref": "#/$defs/ValidationStatus"
+        },
+        "translationCount": {
+          "format": "uint",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "warningCount": {
+          "format": "uint",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "warnings": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "status",
+        "translationCount",
+        "warningCount",
+        "warnings"
+      ],
+      "type": "object"
+    },
+    "ValidationStatus": {
+      "enum": [
+        "accepted",
+        "accepted_with_warnings"
+      ],
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "examples": [
+    {
+      "authorizedSegmentIds": [
+        "segment"
+      ],
+      "baseTranslationVersionId": null,
+      "completedAtMs": 2,
+      "createdAtMs": 1,
+      "errorCode": null,
+      "errorMessage": null,
+      "expectedProjectRevision": 1,
+      "handoffKind": "manual",
+      "id": "task",
+      "materialScope": [
+        "字幕"
+      ],
+      "outputVersionId": "v",
+      "progress": 1.0,
+      "projectId": "p",
+      "protocolVersion": "siaovplay-agent-v1",
+      "receiverLabel": "Test",
+      "segmentCount": 1,
+      "sourceLanguageCode": "en",
+      "sourceVersionId": "source",
+      "stage": "completed",
+      "startedAtMs": 1,
+      "status": "awaiting_external_result",
+      "targetLanguageCode": "zh-cn",
+      "taskType": "subtitle_translation",
+      "updatedAtMs": 2,
+      "validation": {
+        "status": "accepted",
+        "translationCount": 1,
+        "warningCount": 0,
+        "warnings": []
+      }
+    },
+    {
+      "authorizedSegmentIds": [
+        "segment"
+      ],
+      "baseTranslationVersionId": null,
+      "completedAtMs": 2,
+      "createdAtMs": 1,
+      "errorCode": null,
+      "errorMessage": null,
+      "expectedProjectRevision": 1,
+      "handoffKind": "codex",
+      "id": "task",
+      "materialScope": [
+        "字幕"
+      ],
+      "outputVersionId": "v",
+      "progress": 1.0,
+      "projectId": "p",
+      "protocolVersion": "siaovplay-agent-v1",
+      "receiverLabel": "Test",
+      "segmentCount": 1,
+      "sourceLanguageCode": "en",
+      "sourceVersionId": "source",
+      "stage": "completed",
+      "startedAtMs": 1,
+      "status": "awaiting_external_result",
+      "targetLanguageCode": "zh-cn",
+      "taskType": "subtitle_translation",
+      "updatedAtMs": 2,
+      "validation": {
+        "status": "accepted",
+        "translationCount": 1,
+        "warningCount": 0,
+        "warnings": []
+      }
+    },
+    {
+      "authorizedSegmentIds": [
+        "segment"
+      ],
+      "baseTranslationVersionId": null,
+      "completedAtMs": 2,
+      "createdAtMs": 1,
+      "errorCode": null,
+      "errorMessage": null,
+      "expectedProjectRevision": 1,
+      "handoffKind": "api",
+      "id": "task",
+      "materialScope": [
+        "字幕"
+      ],
+      "outputVersionId": "v",
+      "progress": 1.0,
+      "projectId": "p",
+      "protocolVersion": "siaovplay-agent-v1",
+      "receiverLabel": "Test",
+      "segmentCount": 1,
+      "sourceLanguageCode": "en",
+      "sourceVersionId": "source",
+      "stage": "completed",
+      "startedAtMs": 1,
+      "status": "awaiting_external_result",
+      "targetLanguageCode": "zh-cn",
+      "taskType": "subtitle_translation",
+      "updatedAtMs": 2,
+      "validation": {
+        "status": "accepted",
+        "translationCount": 1,
+        "warningCount": 0,
+        "warnings": []
+      }
+    },
+    {
+      "authorizedSegmentIds": [
+        "segment"
+      ],
+      "baseTranslationVersionId": null,
+      "completedAtMs": 2,
+      "createdAtMs": 1,
+      "errorCode": null,
+      "errorMessage": null,
+      "expectedProjectRevision": 1,
+      "handoffKind": "manual",
+      "id": "task",
+      "materialScope": [
+        "字幕"
+      ],
+      "outputVersionId": "v",
+      "progress": 1.0,
+      "projectId": "p",
+      "protocolVersion": "siaovplay-agent-v1",
+      "receiverLabel": "Test",
+      "segmentCount": 1,
+      "sourceLanguageCode": "en",
+      "sourceVersionId": "source",
+      "stage": "completed",
+      "startedAtMs": 1,
+      "status": "queued",
+      "targetLanguageCode": "zh-cn",
+      "taskType": "subtitle_translation",
+      "updatedAtMs": 2,
+      "validation": {
+        "status": "accepted",
+        "translationCount": 1,
+        "warningCount": 0,
+        "warnings": []
+      }
+    },
+    {
+      "authorizedSegmentIds": [
+        "segment"
+      ],
+      "baseTranslationVersionId": null,
+      "completedAtMs": 2,
+      "createdAtMs": 1,
+      "errorCode": null,
+      "errorMessage": null,
+      "expectedProjectRevision": 1,
+      "handoffKind": "codex",
+      "id": "task",
+      "materialScope": [
+        "字幕"
+      ],
+      "outputVersionId": "v",
+      "progress": 1.0,
+      "projectId": "p",
+      "protocolVersion": "siaovplay-agent-v1",
+      "receiverLabel": "Test",
+      "segmentCount": 1,
+      "sourceLanguageCode": "en",
+      "sourceVersionId": "source",
+      "stage": "completed",
+      "startedAtMs": 1,
+      "status": "queued",
+      "targetLanguageCode": "zh-cn",
+      "taskType": "subtitle_translation",
+      "updatedAtMs": 2,
+      "validation": {
+        "status": "accepted",
+        "translationCount": 1,
+        "warningCount": 0,
+        "warnings": []
+      }
+    },
+    {
+      "authorizedSegmentIds": [
+        "segment"
+      ],
+      "baseTranslationVersionId": null,
+      "completedAtMs": 2,
+      "createdAtMs": 1,
+      "errorCode": null,
+      "errorMessage": null,
+      "expectedProjectRevision": 1,
+      "handoffKind": "api",
+      "id": "task",
+      "materialScope": [
+        "字幕"
+      ],
+      "outputVersionId": "v",
+      "progress": 1.0,
+      "projectId": "p",
+      "protocolVersion": "siaovplay-agent-v1",
+      "receiverLabel": "Test",
+      "segmentCount": 1,
+      "sourceLanguageCode": "en",
+      "sourceVersionId": "source",
+      "stage": "completed",
+      "startedAtMs": 1,
+      "status": "queued",
+      "targetLanguageCode": "zh-cn",
+      "taskType": "subtitle_translation",
+      "updatedAtMs": 2,
+      "validation": {
+        "status": "accepted",
+        "translationCount": 1,
+        "warningCount": 0,
+        "warnings": []
+      }
+    },
+    {
+      "authorizedSegmentIds": [
+        "segment"
+      ],
+      "baseTranslationVersionId": null,
+      "completedAtMs": 2,
+      "createdAtMs": 1,
+      "errorCode": null,
+      "errorMessage": null,
+      "expectedProjectRevision": 1,
+      "handoffKind": "manual",
+      "id": "task",
+      "materialScope": [
+        "字幕"
+      ],
+      "outputVersionId": "v",
+      "progress": 1.0,
+      "projectId": "p",
+      "protocolVersion": "siaovplay-agent-v1",
+      "receiverLabel": "Test",
+      "segmentCount": 1,
+      "sourceLanguageCode": "en",
+      "sourceVersionId": "source",
+      "stage": "completed",
+      "startedAtMs": 1,
+      "status": "running",
+      "targetLanguageCode": "zh-cn",
+      "taskType": "subtitle_translation",
+      "updatedAtMs": 2,
+      "validation": {
+        "status": "accepted",
+        "translationCount": 1,
+        "warningCount": 0,
+        "warnings": []
+      }
+    },
+    {
+      "authorizedSegmentIds": [
+        "segment"
+      ],
+      "baseTranslationVersionId": null,
+      "completedAtMs": 2,
+      "createdAtMs": 1,
+      "errorCode": null,
+      "errorMessage": null,
+      "expectedProjectRevision": 1,
+      "handoffKind": "codex",
+      "id": "task",
+      "materialScope": [
+        "字幕"
+      ],
+      "outputVersionId": "v",
+      "progress": 1.0,
+      "projectId": "p",
+      "protocolVersion": "siaovplay-agent-v1",
+      "receiverLabel": "Test",
+      "segmentCount": 1,
+      "sourceLanguageCode": "en",
+      "sourceVersionId": "source",
+      "stage": "completed",
+      "startedAtMs": 1,
+      "status": "running",
+      "targetLanguageCode": "zh-cn",
+      "taskType": "subtitle_translation",
+      "updatedAtMs": 2,
+      "validation": {
+        "status": "accepted",
+        "translationCount": 1,
+        "warningCount": 0,
+        "warnings": []
+      }
+    },
+    {
+      "authorizedSegmentIds": [
+        "segment"
+      ],
+      "baseTranslationVersionId": null,
+      "completedAtMs": 2,
+      "createdAtMs": 1,
+      "errorCode": null,
+      "errorMessage": null,
+      "expectedProjectRevision": 1,
+      "handoffKind": "api",
+      "id": "task",
+      "materialScope": [
+        "字幕"
+      ],
+      "outputVersionId": "v",
+      "progress": 1.0,
+      "projectId": "p",
+      "protocolVersion": "siaovplay-agent-v1",
+      "receiverLabel": "Test",
+      "segmentCount": 1,
+      "sourceLanguageCode": "en",
+      "sourceVersionId": "source",
+      "stage": "completed",
+      "startedAtMs": 1,
+      "status": "running",
+      "targetLanguageCode": "zh-cn",
+      "taskType": "subtitle_translation",
+      "updatedAtMs": 2,
+      "validation": {
+        "status": "accepted",
+        "translationCount": 1,
+        "warningCount": 0,
+        "warnings": []
+      }
+    },
+    {
+      "authorizedSegmentIds": [
+        "segment"
+      ],
+      "baseTranslationVersionId": null,
+      "completedAtMs": 2,
+      "createdAtMs": 1,
+      "errorCode": null,
+      "errorMessage": null,
+      "expectedProjectRevision": 1,
+      "handoffKind": "manual",
+      "id": "task",
+      "materialScope": [
+        "字幕"
+      ],
+      "outputVersionId": "v",
+      "progress": 1.0,
+      "projectId": "p",
+      "protocolVersion": "siaovplay-agent-v1",
+      "receiverLabel": "Test",
+      "segmentCount": 1,
+      "sourceLanguageCode": "en",
+      "sourceVersionId": "source",
+      "stage": "completed",
+      "startedAtMs": 1,
+      "status": "validating",
+      "targetLanguageCode": "zh-cn",
+      "taskType": "subtitle_translation",
+      "updatedAtMs": 2,
+      "validation": {
+        "status": "accepted",
+        "translationCount": 1,
+        "warningCount": 0,
+        "warnings": []
+      }
+    },
+    {
+      "authorizedSegmentIds": [
+        "segment"
+      ],
+      "baseTranslationVersionId": null,
+      "completedAtMs": 2,
+      "createdAtMs": 1,
+      "errorCode": null,
+      "errorMessage": null,
+      "expectedProjectRevision": 1,
+      "handoffKind": "codex",
+      "id": "task",
+      "materialScope": [
+        "字幕"
+      ],
+      "outputVersionId": "v",
+      "progress": 1.0,
+      "projectId": "p",
+      "protocolVersion": "siaovplay-agent-v1",
+      "receiverLabel": "Test",
+      "segmentCount": 1,
+      "sourceLanguageCode": "en",
+      "sourceVersionId": "source",
+      "stage": "completed",
+      "startedAtMs": 1,
+      "status": "validating",
+      "targetLanguageCode": "zh-cn",
+      "taskType": "subtitle_translation",
+      "updatedAtMs": 2,
+      "validation": {
+        "status": "accepted",
+        "translationCount": 1,
+        "warningCount": 0,
+        "warnings": []
+      }
+    },
+    {
+      "authorizedSegmentIds": [
+        "segment"
+      ],
+      "baseTranslationVersionId": null,
+      "completedAtMs": 2,
+      "createdAtMs": 1,
+      "errorCode": null,
+      "errorMessage": null,
+      "expectedProjectRevision": 1,
+      "handoffKind": "api",
+      "id": "task",
+      "materialScope": [
+        "字幕"
+      ],
+      "outputVersionId": "v",
+      "progress": 1.0,
+      "projectId": "p",
+      "protocolVersion": "siaovplay-agent-v1",
+      "receiverLabel": "Test",
+      "segmentCount": 1,
+      "sourceLanguageCode": "en",
+      "sourceVersionId": "source",
+      "stage": "completed",
+      "startedAtMs": 1,
+      "status": "validating",
+      "targetLanguageCode": "zh-cn",
+      "taskType": "subtitle_translation",
+      "updatedAtMs": 2,
+      "validation": {
+        "status": "accepted",
+        "translationCount": 1,
+        "warningCount": 0,
+        "warnings": []
+      }
+    },
+    {
+      "authorizedSegmentIds": [
+        "segment"
+      ],
+      "baseTranslationVersionId": null,
+      "completedAtMs": 2,
+      "createdAtMs": 1,
+      "errorCode": null,
+      "errorMessage": null,
+      "expectedProjectRevision": 1,
+      "handoffKind": "manual",
+      "id": "task",
+      "materialScope": [
+        "字幕"
+      ],
+      "outputVersionId": "v",
+      "progress": 1.0,
+      "projectId": "p",
+      "protocolVersion": "siaovplay-agent-v1",
+      "receiverLabel": "Test",
+      "segmentCount": 1,
+      "sourceLanguageCode": "en",
+      "sourceVersionId": "source",
+      "stage": "completed",
+      "startedAtMs": 1,
+      "status": "completed",
+      "targetLanguageCode": "zh-cn",
+      "taskType": "subtitle_translation",
+      "updatedAtMs": 2,
+      "validation": {
+        "status": "accepted",
+        "translationCount": 1,
+        "warningCount": 0,
+        "warnings": []
+      }
+    },
+    {
+      "authorizedSegmentIds": [
+        "segment"
+      ],
+      "baseTranslationVersionId": null,
+      "completedAtMs": 2,
+      "createdAtMs": 1,
+      "errorCode": null,
+      "errorMessage": null,
+      "expectedProjectRevision": 1,
+      "handoffKind": "codex",
+      "id": "task",
+      "materialScope": [
+        "字幕"
+      ],
+      "outputVersionId": "v",
+      "progress": 1.0,
+      "projectId": "p",
+      "protocolVersion": "siaovplay-agent-v1",
+      "receiverLabel": "Test",
+      "segmentCount": 1,
+      "sourceLanguageCode": "en",
+      "sourceVersionId": "source",
+      "stage": "completed",
+      "startedAtMs": 1,
+      "status": "completed",
+      "targetLanguageCode": "zh-cn",
+      "taskType": "subtitle_translation",
+      "updatedAtMs": 2,
+      "validation": {
+        "status": "accepted",
+        "translationCount": 1,
+        "warningCount": 0,
+        "warnings": []
+      }
+    },
+    {
+      "authorizedSegmentIds": [
+        "segment"
+      ],
+      "baseTranslationVersionId": null,
+      "completedAtMs": 2,
+      "createdAtMs": 1,
+      "errorCode": null,
+      "errorMessage": null,
+      "expectedProjectRevision": 1,
+      "handoffKind": "api",
+      "id": "task",
+      "materialScope": [
+        "字幕"
+      ],
+      "outputVersionId": "v",
+      "progress": 1.0,
+      "projectId": "p",
+      "protocolVersion": "siaovplay-agent-v1",
+      "receiverLabel": "Test",
+      "segmentCount": 1,
+      "sourceLanguageCode": "en",
+      "sourceVersionId": "source",
+      "stage": "completed",
+      "startedAtMs": 1,
+      "status": "completed",
+      "targetLanguageCode": "zh-cn",
+      "taskType": "subtitle_translation",
+      "updatedAtMs": 2,
+      "validation": {
+        "status": "accepted",
+        "translationCount": 1,
+        "warningCount": 0,
+        "warnings": []
+      }
+    },
+    {
+      "authorizedSegmentIds": [
+        "segment"
+      ],
+      "baseTranslationVersionId": null,
+      "completedAtMs": 2,
+      "createdAtMs": 1,
+      "errorCode": null,
+      "errorMessage": null,
+      "expectedProjectRevision": 1,
+      "handoffKind": "manual",
+      "id": "task",
+      "materialScope": [
+        "字幕"
+      ],
+      "outputVersionId": "v",
+      "progress": 1.0,
+      "projectId": "p",
+      "protocolVersion": "siaovplay-agent-v1",
+      "receiverLabel": "Test",
+      "segmentCount": 1,
+      "sourceLanguageCode": "en",
+      "sourceVersionId": "source",
+      "stage": "completed",
+      "startedAtMs": 1,
+      "status": "failed",
+      "targetLanguageCode": "zh-cn",
+      "taskType": "subtitle_translation",
+      "updatedAtMs": 2,
+      "validation": {
+        "status": "accepted",
+        "translationCount": 1,
+        "warningCount": 0,
+        "warnings": []
+      }
+    },
+    {
+      "authorizedSegmentIds": [
+        "segment"
+      ],
+      "baseTranslationVersionId": null,
+      "completedAtMs": 2,
+      "createdAtMs": 1,
+      "errorCode": null,
+      "errorMessage": null,
+      "expectedProjectRevision": 1,
+      "handoffKind": "codex",
+      "id": "task",
+      "materialScope": [
+        "字幕"
+      ],
+      "outputVersionId": "v",
+      "progress": 1.0,
+      "projectId": "p",
+      "protocolVersion": "siaovplay-agent-v1",
+      "receiverLabel": "Test",
+      "segmentCount": 1,
+      "sourceLanguageCode": "en",
+      "sourceVersionId": "source",
+      "stage": "completed",
+      "startedAtMs": 1,
+      "status": "failed",
+      "targetLanguageCode": "zh-cn",
+      "taskType": "subtitle_translation",
+      "updatedAtMs": 2,
+      "validation": {
+        "status": "accepted",
+        "translationCount": 1,
+        "warningCount": 0,
+        "warnings": []
+      }
+    },
+    {
+      "authorizedSegmentIds": [
+        "segment"
+      ],
+      "baseTranslationVersionId": null,
+      "completedAtMs": 2,
+      "createdAtMs": 1,
+      "errorCode": null,
+      "errorMessage": null,
+      "expectedProjectRevision": 1,
+      "handoffKind": "api",
+      "id": "task",
+      "materialScope": [
+        "字幕"
+      ],
+      "outputVersionId": "v",
+      "progress": 1.0,
+      "projectId": "p",
+      "protocolVersion": "siaovplay-agent-v1",
+      "receiverLabel": "Test",
+      "segmentCount": 1,
+      "sourceLanguageCode": "en",
+      "sourceVersionId": "source",
+      "stage": "completed",
+      "startedAtMs": 1,
+      "status": "failed",
+      "targetLanguageCode": "zh-cn",
+      "taskType": "subtitle_translation",
+      "updatedAtMs": 2,
+      "validation": {
+        "status": "accepted",
+        "translationCount": 1,
+        "warningCount": 0,
+        "warnings": []
+      }
+    },
+    {
+      "authorizedSegmentIds": [
+        "segment"
+      ],
+      "baseTranslationVersionId": null,
+      "completedAtMs": 2,
+      "createdAtMs": 1,
+      "errorCode": null,
+      "errorMessage": null,
+      "expectedProjectRevision": 1,
+      "handoffKind": "manual",
+      "id": "task",
+      "materialScope": [
+        "字幕"
+      ],
+      "outputVersionId": "v",
+      "progress": 1.0,
+      "projectId": "p",
+      "protocolVersion": "siaovplay-agent-v1",
+      "receiverLabel": "Test",
+      "segmentCount": 1,
+      "sourceLanguageCode": "en",
+      "sourceVersionId": "source",
+      "stage": "completed",
+      "startedAtMs": 1,
+      "status": "cancelled",
+      "targetLanguageCode": "zh-cn",
+      "taskType": "subtitle_translation",
+      "updatedAtMs": 2,
+      "validation": {
+        "status": "accepted",
+        "translationCount": 1,
+        "warningCount": 0,
+        "warnings": []
+      }
+    },
+    {
+      "authorizedSegmentIds": [
+        "segment"
+      ],
+      "baseTranslationVersionId": null,
+      "completedAtMs": 2,
+      "createdAtMs": 1,
+      "errorCode": null,
+      "errorMessage": null,
+      "expectedProjectRevision": 1,
+      "handoffKind": "codex",
+      "id": "task",
+      "materialScope": [
+        "字幕"
+      ],
+      "outputVersionId": "v",
+      "progress": 1.0,
+      "projectId": "p",
+      "protocolVersion": "siaovplay-agent-v1",
+      "receiverLabel": "Test",
+      "segmentCount": 1,
+      "sourceLanguageCode": "en",
+      "sourceVersionId": "source",
+      "stage": "completed",
+      "startedAtMs": 1,
+      "status": "cancelled",
+      "targetLanguageCode": "zh-cn",
+      "taskType": "subtitle_translation",
+      "updatedAtMs": 2,
+      "validation": {
+        "status": "accepted",
+        "translationCount": 1,
+        "warningCount": 0,
+        "warnings": []
+      }
+    },
+    {
+      "authorizedSegmentIds": [
+        "segment"
+      ],
+      "baseTranslationVersionId": null,
+      "completedAtMs": 2,
+      "createdAtMs": 1,
+      "errorCode": null,
+      "errorMessage": null,
+      "expectedProjectRevision": 1,
+      "handoffKind": "api",
+      "id": "task",
+      "materialScope": [
+        "字幕"
+      ],
+      "outputVersionId": "v",
+      "progress": 1.0,
+      "projectId": "p",
+      "protocolVersion": "siaovplay-agent-v1",
+      "receiverLabel": "Test",
+      "segmentCount": 1,
+      "sourceLanguageCode": "en",
+      "sourceVersionId": "source",
+      "stage": "completed",
+      "startedAtMs": 1,
+      "status": "cancelled",
+      "targetLanguageCode": "zh-cn",
+      "taskType": "subtitle_translation",
+      "updatedAtMs": 2,
+      "validation": {
+        "status": "accepted",
+        "translationCount": 1,
+        "warningCount": 0,
+        "warnings": []
+      }
+    },
+    {
+      "authorizedSegmentIds": [
+        "segment"
+      ],
+      "baseTranslationVersionId": null,
+      "completedAtMs": 2,
+      "createdAtMs": 1,
+      "errorCode": null,
+      "errorMessage": null,
+      "expectedProjectRevision": 1,
+      "handoffKind": "manual",
+      "id": "task",
+      "materialScope": [
+        "字幕"
+      ],
+      "outputVersionId": "v",
+      "progress": 1.0,
+      "projectId": "p",
+      "protocolVersion": "siaovplay-agent-v1",
+      "receiverLabel": "Test",
+      "segmentCount": 1,
+      "sourceLanguageCode": "en",
+      "sourceVersionId": "source",
+      "stage": "completed",
+      "startedAtMs": 1,
+      "status": "interrupted",
+      "targetLanguageCode": "zh-cn",
+      "taskType": "subtitle_translation",
+      "updatedAtMs": 2,
+      "validation": {
+        "status": "accepted",
+        "translationCount": 1,
+        "warningCount": 0,
+        "warnings": []
+      }
+    },
+    {
+      "authorizedSegmentIds": [
+        "segment"
+      ],
+      "baseTranslationVersionId": null,
+      "completedAtMs": 2,
+      "createdAtMs": 1,
+      "errorCode": null,
+      "errorMessage": null,
+      "expectedProjectRevision": 1,
+      "handoffKind": "codex",
+      "id": "task",
+      "materialScope": [
+        "字幕"
+      ],
+      "outputVersionId": "v",
+      "progress": 1.0,
+      "projectId": "p",
+      "protocolVersion": "siaovplay-agent-v1",
+      "receiverLabel": "Test",
+      "segmentCount": 1,
+      "sourceLanguageCode": "en",
+      "sourceVersionId": "source",
+      "stage": "completed",
+      "startedAtMs": 1,
+      "status": "interrupted",
+      "targetLanguageCode": "zh-cn",
+      "taskType": "subtitle_translation",
+      "updatedAtMs": 2,
+      "validation": {
+        "status": "accepted",
+        "translationCount": 1,
+        "warningCount": 0,
+        "warnings": []
+      }
+    },
+    {
+      "authorizedSegmentIds": [
+        "segment"
+      ],
+      "baseTranslationVersionId": null,
+      "completedAtMs": 2,
+      "createdAtMs": 1,
+      "errorCode": null,
+      "errorMessage": null,
+      "expectedProjectRevision": 1,
+      "handoffKind": "api",
+      "id": "task",
+      "materialScope": [
+        "字幕"
+      ],
+      "outputVersionId": "v",
+      "progress": 1.0,
+      "projectId": "p",
+      "protocolVersion": "siaovplay-agent-v1",
+      "receiverLabel": "Test",
+      "segmentCount": 1,
+      "sourceLanguageCode": "en",
+      "sourceVersionId": "source",
+      "stage": "completed",
+      "startedAtMs": 1,
+      "status": "interrupted",
+      "targetLanguageCode": "zh-cn",
+      "taskType": "subtitle_translation",
+      "updatedAtMs": 2,
+      "validation": {
+        "status": "accepted",
+        "translationCount": 1,
+        "warningCount": 0,
+        "warnings": []
+      }
+    }
+  ],
+  "properties": {
+    "authorizedSegmentIds": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "baseTranslationVersionId": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "completedAtMs": {
+      "format": "int64",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "createdAtMs": {
+      "format": "int64",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+    },
+    "errorCode": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "errorMessage": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "expectedProjectRevision": {
+      "format": "int64",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+    },
+    "handoffKind": {
+      "$ref": "#/$defs/Handoff"
+    },
+    "id": {
+      "type": "string"
+    },
+    "materialScope": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "outputVersionId": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "progress": {
+      "format": "double",
+      "maximum": 1,
+      "minimum": 0,
+      "type": "number"
+    },
+    "projectId": {
+      "type": "string"
+    },
+    "protocolVersion": {
+      "type": "string"
+    },
+    "receiverLabel": {
+      "type": "string"
+    },
+    "segmentCount": {
+      "format": "uint",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "sourceLanguageCode": {
+      "type": "string"
+    },
+    "sourceVersionId": {
+      "type": "string"
+    },
+    "stage": {
+      "type": "string"
+    },
+    "startedAtMs": {
+      "format": "int64",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "status": {
+      "$ref": "#/$defs/TaskStatus"
+    },
+    "targetLanguageCode": {
+      "type": "string"
+    },
+    "taskType": {
+      "$ref": "#/$defs/TaskType"
+    },
+    "updatedAtMs": {
+      "format": "int64",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+    },
+    "validation": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/TranslationValidation"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "required": [
+    "id",
+    "projectId",
+    "taskType",
+    "handoffKind",
+    "protocolVersion",
+    "status",
+    "stage",
+    "progress",
+    "receiverLabel",
+    "materialScope",
+    "sourceVersionId",
+    "sourceLanguageCode",
+    "targetLanguageCode",
+    "authorizedSegmentIds",
+    "segmentCount",
+    "expectedProjectRevision",
+    "baseTranslationVersionId",
+    "outputVersionId",
+    "validation",
+    "errorCode",
+    "errorMessage",
+    "createdAtMs",
+    "updatedAtMs",
+    "startedAtMs",
+    "completedAtMs"
+  ],
+  "title": "TranslationTask",
+  "type": "object"
+}
