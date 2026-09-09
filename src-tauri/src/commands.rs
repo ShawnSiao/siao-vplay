@@ -41,7 +41,6 @@ use crate::{
     resource_migration::{ConfirmLocalResourceOperationInput, ResourceMigrationError},
     runtime::{
         self, DownloadRuntimeComponentInput, RuntimeCatalog, RuntimeError, SetPreferredModelInput,
-        SetRuntimeStorageRootInput,
     },
     storage::{StorageError, StorageManager},
     store::{ProjectStore, StoreError},
@@ -762,13 +761,6 @@ pub fn cleanup_old_resource_versions(
 #[tauri::command]
 pub fn get_runtime_catalog() -> Result<RuntimeCatalog, CommandError> {
     runtime::catalog().map_err(Into::into)
-}
-
-#[tauri::command]
-pub fn set_runtime_storage_root(
-    input: SetRuntimeStorageRootInput,
-) -> Result<RuntimeCatalog, CommandError> {
-    runtime::set_storage_root(&input.path).map_err(Into::into)
 }
 
 #[tauri::command]

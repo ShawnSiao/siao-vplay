@@ -107,12 +107,6 @@ pub struct RuntimeCatalog {
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct SetRuntimeStorageRootInput {
-    pub path: String,
-}
-
-#[derive(Clone, Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct SetPreferredModelInput {
     pub model_kind: String,
 }
@@ -162,22 +156,6 @@ pub fn catalog() -> Result<RuntimeCatalog, RuntimeError> {
             downloadable_model_component("whisper-base", "Whisper Base", "base"),
         ],
     })
-}
-
-pub fn set_storage_root(path: &str) -> Result<RuntimeCatalog, RuntimeError> {
-    let path = path.trim();
-    if path.is_empty() {
-        return Err(RuntimeError::InvalidStorageRoot("目录不能为空".to_owned()));
-    }
-    let status = local_resources::configure_location(path, true)
-        .map_err(|error| RuntimeError::InvalidStorageRoot(error.to_string()))?;
-    crate::resource_download::bind_configured_root()
-        .map_err(|error| RuntimeError::InvalidStorageRoot(error.to_string()))?;
-    let resource_root = status.resource_root.ok_or_else(|| {
-        RuntimeError::InvalidStorageRoot("资源目录配置后未返回有效路径".to_owned())
-    })?;
-    update_settings(|settings| settings.storage_root = Some(resource_root))?;
-    catalog()
 }
 
 pub fn set_preferred_model(model_kind: &str) -> Result<RuntimeCatalog, RuntimeError> {

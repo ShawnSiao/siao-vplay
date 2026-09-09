@@ -47,3 +47,12 @@ test("inline and dynamic imports permit lower-layer literal dependencies", async
     assert.equal(result.errorCount, 0, statement);
   }
 });
+
+test("resource location changes cannot use the retired unconfirmed IPC command", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const source = await readFile(new URL("../src-tauri/src/lib.rs", import.meta.url), "utf8");
+  const registrations = [...source.matchAll(/tauri::generate_handler!\[([\s\S]*?)\]/g)].flatMap(match =>
+    [...match[1].matchAll(/commands::([a-z_]+)/g)].map(entry => entry[1]));
+  assert.ok(registrations.includes("configure_local_resource_root"), "confirmed location command must remain registered");
+  assert.ok(!registrations.includes("set_runtime_storage_root"), "legacy command bypasses reviewed location confirmation");
+});

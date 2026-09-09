@@ -207,6 +207,7 @@ pub fn plan_location(parent: &str) -> Result<LocalResourceLocationPlan, LocalRes
     with_manager_read(|manager| manager.plan_location(parent))
 }
 
+#[cfg(test)]
 pub fn configure_location(
     parent: &str,
     confirmed: bool,
@@ -428,6 +429,7 @@ impl LocalResourceManager {
         })
     }
 
+    #[cfg(test)]
     fn configure_location(
         &mut self,
         parent: &str,

@@ -119,12 +119,6 @@ export async function chooseRuntimeStorageRoot(): Promise<string | null> {
   return typeof selected === "string" ? selected : null;
 }
 
-export async function setRuntimeStorageRoot(path: string): Promise<RuntimeCatalog> {
-  return invoke<RuntimeCatalog>("set_runtime_storage_root", {
-    input: { path },
-  });
-}
-
 export async function setPreferredModel(
   modelKind: "small" | "base",
 ): Promise<RuntimeCatalog> {
