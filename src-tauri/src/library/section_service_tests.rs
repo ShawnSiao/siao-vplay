@@ -149,3 +149,33 @@ fn library_section_rejects_negative_offset() {
         .expect_err("negative offset should fail");
     assert!(matches!(error, LibraryError::Validation(_)));
 }
+
+#[test]
+fn home_media_windows_preserve_eligibility_order_and_one_membership() {
+    let fixture = Fixture::new();
+    let first = fixture.collection("First");
+    let second = fixture.collection("Second");
+    let chosen = if first.id < second.id { &first } else { &second };
+    let mut ids = Vec::new();
+    for index in 0..40_i64 {
+        let project = fixture.project(&format!("window-{index}.mp4"));
+        fixture.add(&first, &project, 1, index + 1, index);
+        fixture.add(&second, &project, 1, index + 1, index);
+        let connection = fixture.service.store.connect().unwrap();
+        connection.execute("UPDATE projects SET created_at_ms=?1, updated_at_ms=?1, last_opened_at_ms=?1 WHERE id=?2", params![index+100,project.id]).unwrap();
+        connection.execute("UPDATE playback_states SET position_ms=?1, completed_at_ms=?2 WHERE project_id=?3",
+            params![if index%7 == 0 {0} else {1000}, (index>=35).then_some(200), project.id]).unwrap();
+        ids.push(project.id);
+    }
+    let connection = fixture.service.store.connect().unwrap();
+    let repository = LibraryRepository::new(&connection);
+    let expected: Vec<_> = (0..40).rev().filter(|index| *index<35 && index%7!=0).skip(3).take(7).map(|index| ids[index].clone()).collect();
+    let page = repository.list_continue_watching_page(7,3).unwrap();
+    assert_eq!(page.iter().map(|item| item.project_id.clone()).collect::<Vec<_>>(),expected);
+    assert!(page.iter().all(|item| item.collection_id.as_deref()==Some(chosen.id.as_str()) && item.collection_title.as_deref()==Some(chosen.title.as_str())));
+    assert!(page.iter().all(|item| item.position_ms==1000 && item.completed_at_ms.is_none()));
+    let recent = repository.list_recently_added(5).unwrap();
+    assert_eq!(recent.iter().map(|item| item.project_id.clone()).collect::<Vec<_>>(),ids.iter().rev().take(5).cloned().collect::<Vec<_>>());
+    assert!(recent.iter().all(|item| item.collection_id.as_deref()==Some(chosen.id.as_str())));
+    assert!(repository.list_continue_watching_page(7,100).unwrap().is_empty());
+}

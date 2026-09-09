@@ -13,6 +13,8 @@ mod preview_store;
 mod recovery_service;
 mod recovery_store;
 mod repository;
+#[cfg(test)]
+pub(crate) use repository::LibraryRepository;
 mod episode_repository;
 mod episode_neighbor_repository;
 mod episode_page;
