@@ -6,6 +6,7 @@ import { invokeCollectionMutation, invokeCollectionDeletion } from "../../lib/co
 import { readCollectionEpisodes } from "../../lib/collectionEpisodesGateway";
 import { readEpisodeNeighbors } from "../../lib/episodeNeighborsGateway";
 import { subscribeLibraryScanProgress } from "../../lib/libraryScanProgressGateway";
+import { readLibraryScanPreview } from "../../lib/libraryScanPreviewGateway";
 import { invokeProject } from "../../lib/projectGateway";
 import { invoke } from "@tauri-apps/api/core";
 import type { UnlistenFn } from "@tauri-apps/api/event";
@@ -171,7 +172,7 @@ export async function setProjectWatched(projectId: string, watched: boolean): Pr
 export async function scanLibraryFolder(
   input: ScanLibraryFolderInput,
 ): Promise<LibraryScanPreview> {
-  return invoke<LibraryScanPreview>("scan_library_folder", { input });
+  return readLibraryScanPreview(input);
 }
 
 export async function cancelLibraryScan(scanId: string): Promise<void> {

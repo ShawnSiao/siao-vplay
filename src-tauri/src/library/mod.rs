@@ -1,3 +1,5 @@
+mod scan_model;
+pub(crate) use scan_model::*;
 mod episode_neighbors;
 pub(crate) use episode_neighbors::{EpisodeReference, EpisodeNeighbors, EpisodeNeighborsResult};
 pub(crate) mod commands;

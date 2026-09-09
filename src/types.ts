@@ -106,18 +106,7 @@ export type IgnoredLibraryEntry = {
 
 export type { LibraryScanPhase, LibraryScanProgress } from "./generated/library-scan-progress";
 
-export type LibraryScanPreview = {
-  scanId: string;
-  previewToken: string;
-  rootPath: string;
-  rootDisplayName: string;
-  suggestedCollectionTitle: string;
-  candidates: LibraryScanCandidate[];
-  ignoredEntries: IgnoredLibraryEntry[];
-  ignoredCount: number;
-  needsConfirmationCount: number;
-  expiresAtMs: number;
-};
+export type { LibraryScanPreview } from "./generated/library-scan-preview";
 
 export type ConfirmLibraryItemInput = {
   candidateId: string;
