@@ -4,7 +4,8 @@ use std::{
     sync::{Arc, Mutex, RwLock},
 };
 
-use uuid::Uuid;
+pub(crate) use super::settings_io::persist_settings;
+use super::settings_io::{load_settings, SETTINGS_FILE_NAME};
 
 use super::{
     StorageError,
@@ -13,7 +14,6 @@ use super::{
     paths::{canonical_existing_directory, configured_path, directory_available, directory_size},
 };
 
-const SETTINGS_FILE_NAME: &str = "storage-settings.json";
 
 #[derive(Clone, Debug)]
 pub struct StorageManager {
@@ -280,46 +280,6 @@ fn settings_view(state: &StorageState) -> Result<StorageSettingsView, StorageErr
         media_cache_available: directory_available(&media_cache_root),
         pending_app_data_root: state.settings.pending_app_data_root.clone(),
     })
-}
-
-fn load_settings(path: &Path) -> Result<StorageSettingsFile, StorageError> {
-    if !path.exists() {
-        return Ok(StorageSettingsFile::default());
-    }
-    Ok(serde_json::from_slice(&fs::read(path)?)?)
-}
-
-pub(crate) fn persist_settings(
-    path: &Path,
-    settings: &StorageSettingsFile,
-) -> Result<(), StorageError> {
-    match fs::symlink_metadata(path) {
-        Ok(metadata) if !metadata.file_type().is_file() => {
-            return Err(StorageError::InvalidPath("存储配置路径不是普通文件，未修改原有内容".to_owned()));
-        }
-        Ok(_) => {}
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-        Err(error) => return Err(error.into()),
-    }
-    let suffix = Uuid::new_v4().simple().to_string();
-    let temporary = path.with_file_name(format!(".{SETTINGS_FILE_NAME}.{suffix}.part"));
-    let previous = path.with_file_name(format!(".{SETTINGS_FILE_NAME}.{suffix}.previous"));
-    fs::write(&temporary, serde_json::to_vec_pretty(settings)?)?;
-    if path.exists() {
-        fs::rename(path, &previous)?;
-    }
-    if let Err(error) = fs::rename(&temporary, path) {
-        if previous.exists() {
-            let _ = fs::rename(&previous, path);
-        }
-        let _ = fs::remove_file(&temporary);
-        return Err(error.into());
-    }
-    if previous.exists() {
-        // The new settings are already committed. A retained backup must not report a failed save.
-        let _ = fs::remove_file(previous);
-    }
-    Ok(())
 }
 
 fn path_string(path: &Path) -> String {

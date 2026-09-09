@@ -7,6 +7,9 @@ mod migration_state;
 mod model;
 mod paths;
 mod settings;
+mod settings_io;
+#[cfg(test)]
+mod settings_recovery_tests;
 
 #[cfg(test)]
 #[path = "migration_tests.rs"]
