@@ -14,13 +14,7 @@ export type SummaryTaskStatus = SummaryTask["status"];
 
 export type { EvidenceKind, SummaryEvidence, SummaryCitation, SummarySection, SummaryResult, VideoSummary } from "../../generated/video-summary";
 
-export type SummaryExport = {
-  directory: string;
-  reportPath: string;
-  manifestPath: string;
-  assetCount: number;
-  reportSha256: string;
-};
+export type { SummaryExport } from "../../generated/summary-export";
 
 export type PrepareSummaryTaskInput = {
   projectId: string;

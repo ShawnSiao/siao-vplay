@@ -14,12 +14,12 @@ const gateway = vi.hoisted(() => ({
   resumeSummaryTask: vi.fn(),
   cancelSummaryTask: vi.fn(),
   previewSummaryDispatch: vi.fn(),
+  chooseSummaryExportDirectory: vi.fn(),
+  exportVideoSummary: vi.fn(),
 }));
 
 vi.mock("./gateway", () => ({
   ...gateway,
-  chooseSummaryExportDirectory: vi.fn(),
-  exportVideoSummary: vi.fn(),
   openSummaryMaterials: vi.fn(),
 }));
 vi.mock("../../lib/desktop", () => ({
@@ -167,4 +167,19 @@ it.each(["cancelled", "running"] as const)("preserves %s cancellation acknowledg
     expect(screen.getByText(/已取消/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "正在停止总结" })).not.toBeInTheDocument();
   }
+});
+
+
+it("shows uncertain export status without success or automatic repeat export", async () => {
+  const { task, summary } = createSummaryFixtures();
+  gateway.listSummaryTasks.mockResolvedValue([{ ...task, status: "completed", outputSummaryId: summary.id }]);
+  gateway.listVideoSummaries.mockResolvedValue([summary]);
+  gateway.chooseSummaryExportDirectory.mockResolvedValue("W:/reports");
+  gateway.exportVideoSummary.mockReset().mockRejectedValue(new Error("报告导出已返回，但保存结果尚未确认。请先检查所选目录，避免重复导出。"));
+  render(<VideoSummaryPanel projectId="project-1" playbackCutoffMs={1_000} durationMs={5_000}
+    sourceVersion={{ id: "subtitle-1" } as SubtitleVersion} translationVersion={null} onPrepareSubtitles={vi.fn()} />);
+  fireEvent.click(await screen.findByRole("button", { name: "保存 Markdown 报告" }));
+  expect(await screen.findByText(/保存结果尚未确认/)).toBeInTheDocument();
+  expect(screen.queryByText(/报告已保存/)).not.toBeInTheDocument();
+  expect(gateway.exportVideoSummary).toHaveBeenCalledTimes(1);
 });

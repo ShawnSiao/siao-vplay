@@ -37,3 +37,29 @@ test("completed summary read retries without dispatching again", async ({ page }
   expect(await page.evaluate(() => (window as unknown as { summarySends: unknown[] }).summarySends)).toHaveLength(1);
   expect(errors).toEqual([]);
 });
+
+
+test("invalid export receipt is disclosed without repeating export", async ({ page }) => {
+  const { summary } = createSummaryFixtures();
+  await page.addInitScript(({ summary }) => {
+    const state = window as unknown as { exports: number; __TAURI_INTERNALS__: unknown };
+    state.exports = 0;
+    state.__TAURI_INTERNALS__ = { invoke: async (command: string) => {
+      switch (command) {
+        case "get_codex_runtime_status": return { available: true, authenticated: true, supported: true, version: "codex-cli 0.100.0", minimumVersion: "0.100.0", authMode: "chatgpt", errorCode: null, errorMessage: null };
+        case "get_ai_service_settings": return { schemaVersion: 1, revision: 0, providerCatalog: { schemaVersion: 1, providers: [] }, services: [], defaultServiceId: null };
+        case "list_summary_tasks": case "list_analysis_prompt_templates": return [];
+        case "list_video_summaries": return [summary];
+        case "get_storage_settings": return { defaultVideoReportExportDirectory: "W:/reports" };
+        case "plugin:dialog|open": return "W:/reports";
+        case "export_video_summary": state.exports++; return { directory: "W:/other" };
+        default: throw new Error(`Unexpected fixture IPC: ${command}`);
+      }
+    } };
+  }, { summary });
+  await page.goto("/e2e/player.html?summary=confirm");
+  await page.getByRole("button", { name: "保存 Markdown 报告" }).click();
+  await expect(page.getByRole("alert")).toContainText("保存结果尚未确认");
+  await expect(page.getByText(/报告已保存/)).toHaveCount(0);
+  expect(await page.evaluate(() => (window as unknown as { exports: number }).exports)).toBe(1);
+});

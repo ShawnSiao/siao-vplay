@@ -1,3 +1,4 @@
+import { parseSummaryExport } from "./exportContract";
 import { parseVideoSummary, parseVideoSummaries } from "./resultContract";
 import { parseSummaryTask, parseSummaryTasks } from "./taskContract";
 import { invoke } from "@tauri-apps/api/core";
@@ -48,11 +49,12 @@ export async function chooseSummaryExportDirectory(): Promise<string | null> {
   return chooseConfiguredStorageDirectory("report", "选择视频分析报告保存位置");
 }
 
-export function exportVideoSummary(
+export async function exportVideoSummary(
   summaryId: string,
   directory: string,
 ): Promise<SummaryExport> {
-  return invoke("export_video_summary", { input: { summaryId, directory } });
+  const value = await invoke<unknown>("export_video_summary", { input: { summaryId, directory } });
+  return parseSummaryExport(value, summaryId, directory);
 }
 
 export function openSummaryMaterials(taskId: string): Promise<boolean> {

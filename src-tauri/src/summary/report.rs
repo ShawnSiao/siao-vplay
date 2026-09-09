@@ -78,6 +78,7 @@ pub(crate) fn export(
         verify_export(&temporary, &manifest)?;
         fs::rename(&temporary, &final_directory)?;
         Ok(SummaryExport {
+            summary_id: summary.id.clone(),
             directory: final_directory.to_string_lossy().into_owned(),
             report_path: final_directory
                 .join("report.md")

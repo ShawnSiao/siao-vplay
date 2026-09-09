@@ -330,11 +330,15 @@ pub struct VideoSummary {
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct SummaryExport {
+    pub summary_id: String,
     pub directory: String,
     pub report_path: String,
     pub manifest_path: String,
+    #[cfg_attr(test, schemars(range(min = 0, max = 12)))]
     pub asset_count: usize,
+    #[cfg_attr(test, schemars(regex(pattern = "^[a-f0-9]{64}$")))]
     pub report_sha256: String,
 }
 
