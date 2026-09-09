@@ -54,3 +54,6 @@ pub(crate) fn recover_summary_tasks(
 
 mod project_cancellation;
 pub(crate) use project_cancellation::cancel_project_tasks;
+
+#[cfg(test)]
+mod storage_relocation_tests;
