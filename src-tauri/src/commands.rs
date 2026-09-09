@@ -781,10 +781,12 @@ pub async fn ensure_project_poster(
     project_id: String,
 ) -> Result<Project, CommandError> {
     let store = store.inner().clone();
+    let project_operation = crate::project_operations::Operation::acquire(&store, &project_id)?;
     let usage = storage.acquire_usage()?;
     let media_cache_root = storage.media_cache_root_for_write()?;
     let project = tauri::async_runtime::spawn_blocking(move || {
         let _usage = usage;
+        let _project_operation = project_operation;
         media::ensure_project_poster(&store, &media_cache_root, &project_id)
             .map_err(CommandError::from)
     })

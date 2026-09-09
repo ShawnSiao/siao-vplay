@@ -38,6 +38,7 @@ pub(crate) fn prepare(
     input: PrepareSummaryTaskInput,
 ) -> Result<SummaryTask, StoreError> {
     let _data_access = crate::storage::database_access::shared(store.database_path())?;
+    let _project_operation = crate::project_operations::Operation::acquire(store, &input.project_id)?;
     validate_input(&input)?;
     let project = store.get_project(&input.project_id)?;
     let versions = list_current_subtitle_versions(store, &input.project_id)

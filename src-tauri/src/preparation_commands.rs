@@ -32,6 +32,7 @@ pub async fn prepare_project_media(
 ) -> Result<MediaPreparation, CommandError> {
     let usage = storage.acquire_usage()?;
     let store = store.inner().clone();
+    let project_operation = crate::project_operations::Operation::acquire(&store, &input.project_id)?;
     let media_cache_root = storage.media_cache_root_for_write()?;
     let request_id = request_id.unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
     let control =
@@ -46,6 +47,7 @@ pub async fn prepare_project_media(
     let worker_control = control.clone();
     let result = tauri::async_runtime::spawn_blocking(move || {
         let _usage = usage;
+        let _project_operation = project_operation;
         let _resources = resources;
         media::prepare_project_media_controlled(
             &store,

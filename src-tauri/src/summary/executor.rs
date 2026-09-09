@@ -52,6 +52,7 @@ pub(crate) fn start_or_resume(
 ) -> Result<SummaryTask, StoreError> {
     let repository = SummaryTaskRepository::new(store);
     let task = repository.get(task_id)?;
+    let project_operation = crate::project_operations::Operation::acquire(store, &task.project_id)?;
     verified_materials::load(store, &task)?;
     if repository.translation_is_active()? {
         return Err(StoreError::Validation(
@@ -78,6 +79,7 @@ pub(crate) fn start_or_resume(
     let worker_store = store.clone();
     let worker_task_id = task_id.to_owned();
     thread::spawn(move || {
+        let _project_operation = project_operation;
         if let Err(error) = execute(&worker_store, &worker_task_id) {
             let repository = SummaryTaskRepository::new(&worker_store);
             if repository
