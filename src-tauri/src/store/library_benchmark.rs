@@ -3,15 +3,27 @@ use crate::library::{LibraryMediaSection, LibraryService, ListLibrarySectionInpu
 use serde::Serialize;
 use std::time::Instant;
 
-fn measure<T: Serialize>(label: &str, read: impl FnOnce() -> T) -> T {
-    let start = Instant::now();
-    let value = read();
-    let bytes = serde_json::to_vec(&value).unwrap().len();
-    println!(
-        "{label}: bytes={bytes} elapsed_ms={:.3}",
-        start.elapsed().as_secs_f64() * 1000.0
-    );
-    value
+fn measure<T: Serialize>(label: &str, mut read: impl FnMut() -> T) -> T {
+    const SAMPLES: usize = 20;
+    let mut elapsed = Vec::with_capacity(SAMPLES);
+    let mut last = None;
+    let mut expected_bytes = None;
+    for _ in 0..SAMPLES {
+        let start = Instant::now();
+        let value = read();
+        let bytes = serde_json::to_vec(&value).unwrap().len();
+        elapsed.push(start.elapsed().as_secs_f64() * 1000.0);
+        assert_eq!(*expected_bytes.get_or_insert(bytes), bytes, "unstable fixture: {label}");
+        last = Some(value);
+    }
+    elapsed.sort_by(f64::total_cmp);
+    println!("{}", serde_json::json!({
+        "scenario": label, "samples": SAMPLES, "bytes": expected_bytes.unwrap(),
+        "readAndSerializeMs": { "min": elapsed[0],
+            "median": (elapsed[SAMPLES / 2 - 1] + elapsed[SAMPLES / 2]) / 2.0,
+            "p95": elapsed[(SAMPLES * 95).div_ceil(100) - 1], "max": elapsed[SAMPLES - 1] }
+    }));
+    last.unwrap()
 }
 
 #[test]

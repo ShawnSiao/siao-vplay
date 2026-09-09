@@ -55,7 +55,7 @@ cargo test --locked --release --lib --manifest-path src-tauri/Cargo.toml benchma
 cargo test --locked --release --lib --manifest-path src-tauri/Cargo.toml benchmark_library_summary_reads -- --ignored --nocapture
 ```
 
-临时数据库和文件随测试结束清理；耗时包含查询和 JSON 序列化，不包含数据创建。首页和搜索先预热，分页与全量读取共享此前已访问的数据库缓存。
+临时数据库和文件随测试结束清理；每个查询重复测量 20 次，输出 JSON 格式的字节数、最小值、中位数、P95（最近秩法）和最大值，并检查返回字节数稳定。耗时包含查询和 JSON 序列化，不包含数据创建。首页和搜索先预热，分页与全量读取共享此前已访问的数据库缓存。这是单机连续采样，不代表冷启动或跨设备延迟分布，也不设置依赖机器性能的通过阈值。
 
 ## 安装包
 
