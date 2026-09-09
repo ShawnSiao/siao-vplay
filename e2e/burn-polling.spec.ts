@@ -48,3 +48,26 @@ test("successful burn refresh does not hide a cancellation failure", async ({ pa
   await page.clock.runFor(2000);
   await expect(page.getByText("fixture cancellation failed", { exact: true })).toBeVisible();
 });
+
+test("cancelled burn remains cancelled in recent jobs after a late poll", async ({ page }) => {
+  const job = { ...createBurnJobFixture(), projectId: "e2e-project", translationVersionId: "burn-translation" };
+  await page.addInitScript(job => {
+    const state = window as unknown as { __TAURI_INTERNALS__: unknown; finish?: () => void };
+    state.__TAURI_INTERNALS__ = { invoke: async (command: string) => {
+      if (command === "list_subtitle_burn_jobs") return [job];
+      if (command === "get_subtitle_burn_job") return new Promise(resolve => { state.finish = () => resolve(job); });
+      if (command === "cancel_subtitle_burn_job") return { ...job, status: "cancelled", stage: "cancelled" };
+      throw new Error(`Unexpected fixture IPC: ${command}`);
+    } };
+  }, job);
+  await page.clock.install();
+  await page.goto("/e2e/player.html?burn");
+  await page.clock.runFor(500);
+  await expect.poll(() => page.evaluate(() => typeof (window as unknown as { finish?: unknown }).finish)).toBe("function");
+  await page.getByRole("button", { name: "取消烧录", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "任务已取消" })).toBeVisible();
+  await page.evaluate(() => (window as unknown as { finish: () => void }).finish());
+  await page.getByRole("button", { name: "继续导出" }).click();
+  await page.getByRole("button", { name: /最近一次烧录/ }).click();
+  await expect(page.getByRole("heading", { name: "任务已取消" })).toBeVisible();
+});

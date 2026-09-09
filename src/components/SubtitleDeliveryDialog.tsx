@@ -103,7 +103,14 @@ export function SubtitleDeliveryDialog({
   }, [project.id]);
 
   useBurnPolling({ projectId: project.id, task: job, read: getSubtitleBurnJob,
-    onTask: nextJob => { setJob(nextJob); setRecentJob(nextJob); setPollFailure(null); },
+    onTask: nextJob => {
+      const acceptPoll = (current: SubtitleBurnJob | null) => {
+        if (!current || current.id !== nextJob.id || current.projectId !== nextJob.projectId || !activeStatuses.has(current.status)) return current;
+        if (current.stage === "cancelling" && nextJob.stage !== "cancelling" && activeStatuses.has(nextJob.status)) return current;
+        return nextJob;
+      };
+      setJob(acceptPoll); setRecentJob(acceptPoll); setPollFailure(null);
+    },
     onError: caught => { if (job) setPollFailure({ jobId: job.id, projectId: project.id, message: commandError(caught).message }); } });
 
   const needsSource = mode === "original" || mode === "bilingual";
@@ -215,11 +222,11 @@ export function SubtitleDeliveryDialog({
             {active ? (
               <button
                 className="button danger"
-                disabled={operation !== null}
+                disabled={operation !== null || job.stage === "cancelling"}
                 type="button"
                 onClick={() => void cancelJob()}
               >
-                {operation === "cancelling" ? "正在取消…" : "取消烧录"}
+                {operation === "cancelling" || job.stage === "cancelling" ? "正在取消…" : "取消烧录"}
               </button>
             ) : null}
             {retryable ? (

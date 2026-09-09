@@ -13,6 +13,7 @@ export function versionLabel(version: SubtitleVersionMetadata) {
 }
 
 export function jobStatusLabel(job: SubtitleBurnJob) {
+  if (["queued", "running", "validating"].includes(job.status) && job.stage === "cancelling") return "正在取消烧录";
   if (job.status === "queued") return "等待开始";
   if (job.status === "running") return "正在烧录";
   if (job.status === "validating") return "正在检查视频";

@@ -3081,3 +3081,39 @@ it.each(["cancelled", "running"] as const)("retains explanation %s cancellation 
   });
   expect(screen.getByText(status === "cancelled" ? "本次理解已取消" : "正在取消请求…")).toBeInTheDocument();
 });
+
+it.each(["cancelled", "running"] as const)("preserves burn %s cancellation and recent-job history against a batched stale poll", async (status) => {
+  desktopMocks.listSubtitleVersions.mockResolvedValue([subtitleVersion, translatedVersion]);
+  desktopMocks.listSubtitleBurnJobs.mockResolvedValue([burnJob]);
+  let finishPoll!: (value: SubtitleBurnJob) => void;
+  let finishCancel!: (value: SubtitleBurnJob) => void;
+  desktopMocks.getSubtitleBurnJob.mockImplementation(() => new Promise(resolve => { finishPoll = resolve; }));
+  desktopMocks.cancelSubtitleBurnJob.mockImplementation(() => new Promise(resolve => { finishCancel = resolve; }));
+  render(<App />);
+  fireEvent.click(await screen.findByRole("button", { name: /继续播放/ }));
+  const exportButton = screen.queryByRole("button", { name: /导出字幕与视频/ });
+  if (exportButton) fireEvent.click(exportButton);
+  else {
+    fireEvent.click(await screen.findByRole("button", { name: /^更多$/ }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /导出字幕与视频/ }));
+  }
+  await waitFor(() => expect(finishPoll).toBeTypeOf("function"), { timeout: 2000 });
+  fireEvent.click(screen.getByRole("button", { name: "取消烧录" }));
+  await act(async () => {
+    finishCancel({ ...burnJob, status, stage: status === "cancelled" ? "cancelled" : "cancelling" });
+    await Promise.resolve();
+    finishPoll(burnJob);
+    await Promise.resolve();
+  });
+  if (status === "running") {
+    expect(screen.getByRole("heading", { name: "正在取消烧录" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "正在取消…" })).toBeDisabled();
+    const previous = finishPoll;
+    await waitFor(() => expect(finishPoll).not.toBe(previous), { timeout: 2000 });
+    await act(async () => finishPoll({ ...burnJob, status: "cancelled", stage: "cancelled" }));
+  }
+  expect(screen.getByRole("heading", { name: "任务已取消" })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "继续导出" }));
+  fireEvent.click(screen.getByRole("button", { name: /最近一次烧录/ }));
+  expect(screen.getByRole("heading", { name: "任务已取消" })).toBeInTheDocument();
+});
