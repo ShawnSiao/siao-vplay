@@ -36,7 +36,6 @@ import { createUnderstandingFixtures } from "./test-fixtures/understanding";
 const desktopMocks = vi.hoisted(() => ({
   getAppStatus: vi.fn(),
   getMediaRuntimeStatus: vi.fn(),
-  getRuntimeCatalog: vi.fn(),
   getLocalResourceCatalog: vi.fn(),
   getLocalResourceStatus: vi.fn(),
   getLocalResourceNetworkStatus: vi.fn(),
@@ -795,13 +794,6 @@ beforeEach(() => {
     ffprobePath: "W:\\SiaoVPlay\\runtimes\\ffmpeg\\bin\\ffprobe.exe",
     version: "ffmpeg 8.1.1",
     errorMessage: null,
-  });
-  desktopMocks.getRuntimeCatalog.mockResolvedValue({
-    settings: {
-      storageRoot: "W:\\SiaoVPlay\\runtime-data",
-      preferredModel: "small",
-    },
-    components: [],
   });
   desktopMocks.getLocalResourceCatalog.mockResolvedValue(localResourceCatalog);
   desktopMocks.getLocalResourceStatus.mockResolvedValue(readyLocalResourceStatus);

@@ -24,7 +24,6 @@ import { chooseConfiguredStorageDirectory } from "./storageDirectoryPicker";
 
 import type {
   Project,
-  RuntimeCatalog,
 } from "../types";
 
 export const isDesktopApp = "__TAURI_INTERNALS__" in window;
@@ -56,31 +55,6 @@ export async function chooseLocalResourceParent(): Promise<string | null> {
 }
 
 export { getLocalResourceDiagnosticSummary, getLocalResourceThirdPartyNotices } from "./resourceDiagnosticsGateway";
-
-export async function getRuntimeCatalog(): Promise<RuntimeCatalog> {
-  if (!isDesktopApp) {
-    return {
-      settings: {
-        storageRoot: null,
-        preferredModel: "small",
-      },
-      components: [],
-    };
-  }
-  return invoke<RuntimeCatalog>("get_runtime_catalog");
-}
-
-export async function chooseRuntimeStorageRoot(): Promise<string | null> {
-  if (!isDesktopApp) {
-    return null;
-  }
-  const selected = await open({
-    multiple: false,
-    directory: true,
-    title: "选择运行时与模型存储目录",
-  });
-  return typeof selected === "string" ? selected : null;
-}
 
 export async function listProjects(): Promise<Project[]> {
   if (!isDesktopApp) {

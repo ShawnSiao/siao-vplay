@@ -281,32 +281,6 @@ export type { MediaPreparation } from "./generated/media-preparation-result";
 
 
 
-export type RuntimeSettings = {
-  storageRoot: string | null;
-  preferredModel: "small" | "base";
-};
-
-export type RuntimeComponent = {
-  id: string;
-  title: string;
-  componentKind: "bundled" | "download";
-  version: string;
-  available: boolean;
-  installedPath: string | null;
-  expectedSizeBytes: number;
-  installedSizeBytes: number | null;
-  expectedSha256: string;
-  sourceUrl: string;
-  sourcePage: string;
-  license: string;
-  errorMessage: string | null;
-};
-
-export type RuntimeCatalog = {
-  settings: RuntimeSettings;
-  components: RuntimeComponent[];
-};
-
 export type { LocalResourceRootState, LocalResourceCapabilityState, LocalResourceCapabilityStatus, LocalResourceStatus } from "./generated/local-resource-status";
 
 export type { LocalResourceLocationPlan } from "./generated/local-resource-location-plan";
