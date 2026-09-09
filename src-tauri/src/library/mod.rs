@@ -3,6 +3,8 @@ mod error;
 mod import_service;
 pub(crate) mod migration;
 mod model;
+mod media_summary;
+pub(crate) use media_summary::MediaSummary;
 mod preview_store;
 mod recovery_service;
 mod recovery_store;

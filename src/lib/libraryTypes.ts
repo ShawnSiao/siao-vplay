@@ -1,3 +1,5 @@
+import type { MediaSummary as LibraryMediaSummary } from "../generated/library-section-page";
+export type { MediaSummary as LibraryMediaSummary } from "../generated/library-section-page";
 export type CollectionKind = "series" | "folder" | "manual";
 export type CollectionSortMode = "episode" | "natural" | "manual" | "added_at";
 export type LibraryItemAvailability =
@@ -39,28 +41,7 @@ export type LibraryRootSummary = {
   itemCount: number;
 };
 
-export type LibraryMediaSummary = {
-  projectId: string;
-  projectTitle: string;
-  displayName: string;
-  mediaLocator: string;
-  mediaAvailable: boolean;
-  posterPath: string | null;
-  positionMs: number;
-  durationMs: number | null;
-  completedAtMs: number | null;
-  lastOpenedAtMs: number;
-  createdAtMs: number;
-  originalSubtitleAvailable: boolean;
-  chineseTranslationAvailable: boolean;
-  collectionId: string | null;
-  collectionTitle: string | null;
-  seasonNumber: number | null;
-  episodeNumber: number | null;
-  absoluteOrder: number | null;
-  episodeTitle: string | null;
-  itemAvailability: LibraryItemAvailability | null;
-};
+
 
 export type LibraryHome = {
   continueWatching: LibraryMediaSummary[];
@@ -84,11 +65,7 @@ export type ListLibrarySectionInput = {
   offset: number;
 };
 
-export type LibrarySectionPage = {
-  items: LibraryMediaSummary[];
-  totalCount: number;
-  nextOffset: number | null;
-};
+export type { LibrarySectionPage } from "../generated/library-section-page";
 
 export type SeasonSummary = {
   seasonNumber: number | null;

@@ -19,8 +19,11 @@ pub(crate) struct ListLibrarySectionInput {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub(crate) struct LibrarySectionPage {
     pub items: Vec<MediaSummary>,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub total_count: i64,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub next_offset: Option<i64>,
 }

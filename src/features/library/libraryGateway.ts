@@ -1,3 +1,4 @@
+import { readLibrarySection } from "../../lib/libraryPageGateway";
 import { invokeProject } from "../../lib/projectGateway";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
@@ -85,7 +86,7 @@ export async function listLibrarySection(
     return { items: [], totalCount: 0, nextOffset: null };
   }
   const input: ListLibrarySectionInput = { section, offset };
-  return invoke<LibrarySectionPage>("list_library_section", { input });
+  return readLibrarySection(input);
 }
 
 export async function searchLibrary(query: string): Promise<LibrarySearchResult[]> {
