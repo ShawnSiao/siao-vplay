@@ -63,6 +63,7 @@ impl Deletion {
         if !self.is_idle()? { return Err(busy().into()); }
         Ok(())
     }
+    #[cfg(test)]
     pub(crate) fn acquire(store: &ProjectStore, project: &str) -> Result<Self, StoreError> {
         let deletion = Self::begin(store, project)?;
         deletion.ensure_ready(store, project)?;

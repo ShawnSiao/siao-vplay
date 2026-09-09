@@ -430,41 +430,6 @@ pub fn cancel_subtitle_burn_job(
     get_subtitle_burn_job(store, job_id)
 }
 
-pub fn cancel_project_subtitle_burn_jobs(
-    store: &ProjectStore,
-    project_id: &str,
-) -> Result<usize, SubtitleBurnError> {
-    let ids = {
-        let connection = store.connect()?;
-        let mut statement = connection.prepare(
-            "SELECT id FROM subtitle_burn_jobs
-             WHERE project_id = ?1
-               AND status IN ('queued', 'running', 'validating')",
-        )?;
-        statement
-            .query_map(params![project_id], |row| row.get::<_, String>(0))?
-            .collect::<Result<Vec<_>, _>>()?
-    };
-    for id in &ids {
-        let _ = cancel_subtitle_burn_job(store, id);
-    }
-    for _ in 0..100 {
-        let active = store.connect()?.query_row(
-            "SELECT COUNT(*) FROM subtitle_burn_jobs
-             WHERE project_id = ?1
-               AND status IN ('queued', 'running', 'validating')",
-            params![project_id],
-            |row| row.get::<_, i64>(0),
-        )?;
-        if active == 0 {
-            return Ok(ids.len());
-        }
-        thread::sleep(POLL_INTERVAL);
-    }
-    Err(SubtitleBurnError::InvalidJobState(
-        "取消字幕烧录任务超时，项目尚未删除".to_owned(),
-    ))
-}
 
 pub fn resume_subtitle_burn_job(
     store: &ProjectStore,

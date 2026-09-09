@@ -625,6 +625,7 @@ impl ProjectStore {
         )
     }
 
+    #[cfg(test)]
     pub fn delete_project_with_remote_media_root(
         &self,
         project_id: &str,

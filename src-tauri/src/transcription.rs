@@ -1210,41 +1210,6 @@ pub fn cancel_transcription_job(
     get_transcription_job(store, job_id)
 }
 
-pub fn cancel_project_transcriptions(
-    store: &ProjectStore,
-    project_id: &str,
-) -> Result<usize, TranscriptionError> {
-    let ids = {
-        let connection = store.connect()?;
-        let mut statement = connection.prepare(
-            "SELECT id FROM transcription_jobs
-             WHERE project_id = ?1
-               AND status IN ('queued', 'extracting', 'transcribing', 'validating')",
-        )?;
-        statement
-            .query_map(params![project_id], |row| row.get::<_, String>(0))?
-            .collect::<Result<Vec<_>, _>>()?
-    };
-    for id in &ids {
-        let _ = cancel_transcription_job(store, id);
-    }
-    for _ in 0..100 {
-        let active = store.connect()?.query_row(
-            "SELECT COUNT(*) FROM transcription_jobs
-             WHERE project_id = ?1
-               AND status IN ('queued', 'extracting', 'transcribing', 'validating')",
-            params![project_id],
-            |row| row.get::<_, i64>(0),
-        )?;
-        if active == 0 {
-            return Ok(ids.len());
-        }
-        thread::sleep(POLL_INTERVAL);
-    }
-    Err(TranscriptionError::InvalidJobState(
-        "取消转写任务超时，项目尚未删除".to_owned(),
-    ))
-}
 
 pub fn resume_transcription_job(
     store: &ProjectStore,

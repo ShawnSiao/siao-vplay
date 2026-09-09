@@ -1,3 +1,4 @@
+mod project_deletion;
 #[cfg(test)]
 mod resource_location_tests;
 use serde::Serialize;
@@ -579,25 +580,15 @@ pub fn relink_project_media(
 }
 
 #[tauri::command]
-pub fn delete_project(
+pub async fn delete_project(
     store: State<'_, ProjectStore>,
     storage: State<'_, StorageManager>,
     project_id: String,
 ) -> Result<DeleteProjectResult, CommandError> {
-    let _usage = storage.acquire_usage()?;
-    crate::summary::cancel_project_tasks(store.inner(), &project_id)?;
-    crate::preparation::cancel_project(&project_id).map_err(|error| CommandError {
-        code: "preparation_cancel_failed", message: error.to_string(),
-    })?;
-    transcription::cancel_project_transcriptions(store.inner(), &project_id)?;
-    codex_runner::cancel_project_translation_tasks(store.inner(), &project_id)?;
-    codex_runner::cancel_project_explanation_tasks(store.inner(), &project_id)?;
-    codex_runner::cancel_project_learning_tasks(store.inner(), &project_id)?;
-    burn::cancel_project_subtitle_burn_jobs(store.inner(), &project_id)?;
-    let remote_media_root = storage.remote_media_root()?;
-    store
-        .delete_project_with_remote_media_root(&project_id, &remote_media_root)
-        .map_err(Into::into)
+    let store = store.inner().clone();
+    let storage = storage.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || project_deletion::run(&store, &storage, &project_id))
+        .await.map_err(CommandError::background_task_failed)?
 }
 
 #[tauri::command]
