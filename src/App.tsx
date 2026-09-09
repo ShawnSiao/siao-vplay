@@ -24,6 +24,7 @@ import {
 import { PreparationScreen } from "./components/PreparationScreen";
 import { RemoteUrlDialog } from "./components/RemoteUrlDialog";
 import { createDeferredDialog } from "./components/createDeferredDialog";
+import { useExternalAgentResults } from "./features/ai-tasks/useExternalAgentResults";
 import { backgroundResultNotice } from "./features/ai-tasks/backgroundNotice";
 import { useCapabilityPreparation } from "./features/resources/useCapabilityPreparation";
 import { SubtitleImportDialog } from "./components/SubtitleImportDialog";
@@ -121,7 +122,6 @@ export default function App() {
   const openingIntent = useOpeningIntent();
   const [sessionId, setSessionId] = useState(0);
   const startupMediaHandledRef = useRef(false);
-  const externalResultScanRef = useRef(false);
   const [appStatus, setAppStatus] = useState<AppStatus | null>(null);
   const [libraryError, setLibraryError] = useState<string | null>(null);
   const [activeProject, setActiveProject] = useState<Project | null>(null);
@@ -628,62 +628,27 @@ export default function App() {
   );
   const activeProjectId = activeProject?.id;
 
-  useEffect(() => {
-    if (!isDesktopApp) {
-      return undefined;
-    }
-    let active = true;
-    const reconcile = async () => {
-      if (externalResultScanRef.current) {
-        return;
+  useExternalAgentResults({
+    enabled: isDesktopApp,
+    reconcile: reconcileExternalAgentResults,
+    onUpdates: async (updates, isActive) => {
+      const latest = updates.filter(update => update.status !== "validating").at(-1);
+      if (latest) {
+        const notice = backgroundResultNotice(latest, latest.projectId === activeProjectId);
+        if (notice) setToast(notice);
       }
-      externalResultScanRef.current = true;
-      try {
-        const updates = await reconcileExternalAgentResults();
-        if (!active || !updates.length) {
-          return;
+      if (activeProjectId && updates.some(update => update.status === "completed" &&
+        update.taskKind === "translation" && update.projectId === activeProjectId)) {
+        const [versions, updatedProject] = await Promise.all([
+          listSubtitleVersions(activeProjectId, false), getProject(activeProjectId),
+        ]);
+        if (isActive() && isCurrentSession(activeProjectId)) {
+          setSubtitleVersions(versions);
+          setActiveProject(updatedProject);
         }
-        const currentProjectUpdates = activeProjectId
-          ? updates.filter(
-              (update) =>
-                update.projectId === activeProjectId &&
-                update.status !== "validating",
-            )
-          : [];
-        const latest = currentProjectUpdates.at(-1);
-        const resultNotice = latest ? backgroundResultNotice(latest) : null;
-        if (resultNotice) setToast(resultNotice);
-        if (
-          updates.some(
-            (update) =>
-              update.status === "completed" &&
-              update.taskKind === "translation" &&
-              update.projectId === activeProjectId,
-          ) &&
-          activeProjectId
-        ) {
-          const [versions, updatedProject] = await Promise.all([
-            listSubtitleVersions(activeProjectId, false),
-            getProject(activeProjectId),
-          ]);
-          if (active && isCurrentSession(activeProjectId)) {
-            setSubtitleVersions(versions);
-            setActiveProject(updatedProject);
-          }
-        }
-      } catch {
-        // 自动检测是后台增强能力；显式导入入口仍可继续使用。
-      } finally {
-        externalResultScanRef.current = false;
       }
-    };
-    void reconcile();
-    const timer = window.setInterval(() => void reconcile(), 1_000);
-    return () => {
-      active = false;
-      window.clearInterval(timer);
-    };
-  }, [activeProjectId, isCurrentSession]);
+    },
+  });
 
   const handleSubtitleVersionCreated = useCallback(
     async (version: SubtitleVersion, message: string) => {
