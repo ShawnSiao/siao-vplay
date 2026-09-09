@@ -33,6 +33,11 @@ fn relocated(value: &str, source: &Path, destination: &Path) -> Option<PathBuf> 
     })
 }
 
+fn is_legacy_resource_root(path: &Path) -> bool {
+    path.file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| name.eq_ignore_ascii_case(RESOURCE_DIRECTORY_NAME))
+}
 // Transform only declared path properties; keep unknown properties and source bytes.
 pub(crate) fn relocate_data_config(
     name: &str,
@@ -79,9 +84,7 @@ pub(crate) fn relocate_data_config(
             let legacy: LegacyRuntimeSettingsFile = serde_json::from_value(value.clone())?;
             if let Some(old) = legacy.storage_root.as_deref().map(str::trim) {
                 if let Some(next) = relocated(old, source, destination) {
-                    if Path::new(old).ends_with(RESOURCE_DIRECTORY_NAME)
-                        && !next.ends_with(RESOURCE_DIRECTORY_NAME)
-                    {
+                    if is_legacy_resource_root(Path::new(old)) && !is_legacy_resource_root(&next) {
                         return Err(LocalResourceError::InvalidReceipt(
                             "迁移后资源目录名称不兼容，请先使用资源迁移功能调整位置".into(),
                         ));
@@ -101,5 +104,50 @@ pub(crate) fn relocate_data_config(
         Ok(Some(serde_json::to_vec(&value)?))
     } else {
         Ok(None)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn legacy_resource_root_cannot_change_interpretation_after_move() {
+        let temp = tempfile::tempdir().unwrap();
+        for name in ["SiaoVPlay", "siaovplay", "SIAOVPLAY"] {
+            let source = temp.path().join(name);
+            let destination = temp.path().join("renamed");
+            let bytes = serde_json::to_vec(&json!({"storageRoot":source})).unwrap();
+            assert!(
+                relocate_data_config("runtime-settings.json", &bytes, &source, &destination)
+                    .is_err(),
+                "{name}"
+            );
+        }
+    }
+
+    #[test]
+    fn legacy_only_configuration_loads_relocated_resource_root() {
+        let temp = tempfile::tempdir().unwrap();
+        let source = temp.path().join("old");
+        let destination = temp.path().join("new");
+        let expected = destination.join("components/SiaoVPlay");
+        fs::create_dir_all(&expected).unwrap();
+        let bytes = serde_json::to_vec(
+            &json!({"storageRoot":source.join("components/SiaoVPlay"),"preferredModel":"base"}),
+        )
+        .unwrap();
+        let updated = relocate_data_config("runtime-settings.json", &bytes, &source, &destination)
+            .unwrap()
+            .unwrap();
+        fs::write(destination.join("runtime-settings.json"), updated).unwrap();
+        let manager = LocalResourceManager::load(&destination).unwrap();
+        let config = manager.configuration.unwrap();
+        assert_eq!(
+            Path::new(&config.resource_root),
+            dunce::canonicalize(expected).unwrap()
+        );
+        assert_eq!(config.preferred_profile, "fast");
     }
 }
