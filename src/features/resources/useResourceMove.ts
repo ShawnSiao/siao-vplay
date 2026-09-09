@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { cancelLocalResourceMove } from "../../lib/resourceMigrationGateway";
 import type { LocalResourceMovePlan } from "../../types";
 import { useRef, useState } from "react";
 import { moveLocalResourceRoot } from "../../lib/desktop";
@@ -31,7 +31,7 @@ export function useResourceMove(onMoved: () => Promise<void>, onError: (error: u
   const cancel = async () => {
     const id = activeId.current;
     if (!id) return false;
-    const accepted = await invoke<boolean>("cancel_local_resource_move", { requestId: id });
+    const accepted = await cancelLocalResourceMove(id);
     if (activeId.current === id) setCancelling(accepted);
     return accepted;
   };

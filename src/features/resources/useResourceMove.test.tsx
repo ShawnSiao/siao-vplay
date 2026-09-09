@@ -42,3 +42,17 @@ it("keeps failure available for recovery and releases request ownership", async 
   expect(result.current.moving).toBe(false);
   expect(await result.current.cancel()).toBe(false);
 });
+
+it.each(["false", 1, null, {}, undefined])("rejects malformed cancellation acknowledgement %j", async (value) => {
+  let finish!: () => void;
+  mocks.move.mockReturnValue(new Promise<void>((resolve) => { finish = resolve; }));
+  mocks.invoke.mockResolvedValue(value);
+  const { result } = renderHook(() => useResourceMove(vi.fn().mockResolvedValue(undefined), vi.fn()));
+  let moving!: Promise<unknown>;
+  act(() => { moving = result.current.move(resourceMovePlan); });
+  try {
+    await act(async () => { await expect(result.current.cancel()).rejects.toThrow("资源迁移结果无效"); });
+    expect(result.current.cancelling).toBe(false);
+    expect(result.current.moving).toBe(true);
+  } finally { await act(async () => { finish(); await moving; }); }
+});

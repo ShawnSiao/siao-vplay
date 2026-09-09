@@ -73,3 +73,10 @@ export async function adoptLocalResources(confirmedPreview: ResourceMigrationPre
   if (!Number.isSafeInteger(bytes) || value.reusableBytes !== bytes) invalid();
   return value;
 }
+
+export async function cancelLocalResourceMove(requestId: string): Promise<boolean> {
+  if (!nonblank(requestId)) invalid();
+  const value = await invoke<unknown>("cancel_local_resource_move", { requestId });
+  if (typeof value !== "boolean") invalid();
+  return value;
+}
