@@ -26,7 +26,9 @@ export type EpisodeNavigationState = {
 };
 
 const emptyNeighbors: EpisodeNeighbors = { previous: null, next: null };
-const initialState: EpisodeNavigationState = {
+type OwnedState = EpisodeNavigationState & { scope: string | null };
+const initialState: OwnedState = {
+  scope: null,
   detail: null,
   episodes: [],
   neighbors: emptyNeighbors,
@@ -36,7 +38,7 @@ const initialState: EpisodeNavigationState = {
 
 type Action =
   | { type: "reset" }
-  | { type: "started" }
+  | { type: "started"; scope: string }
   | {
       type: "loaded";
       detail: CollectionDetail;
@@ -45,14 +47,15 @@ type Action =
     }
   | { type: "failed"; message: string };
 
-function reducer(state: EpisodeNavigationState, action: Action): EpisodeNavigationState {
+function reducer(state: OwnedState, action: Action): OwnedState {
   switch (action.type) {
     case "reset":
       return initialState;
     case "started":
-      return { ...state, loading: true, error: null };
+      return { ...initialState, scope: action.scope, loading: true };
     case "loaded":
       return {
+        scope: state.scope,
         detail: action.detail,
         episodes: action.episodes,
         neighbors: action.neighbors,
@@ -70,15 +73,16 @@ export function useEpisodeNavigation(
 ) {
   const [state, dispatch] = useReducer(reducer, initialState);
   const requestSequence = useRef(0);
+  const scope = context && projectId ? JSON.stringify([context.collectionId, context.seasonNumber, projectId]) : null;
 
   const refresh = useCallback(async () => {
     const sequence = requestSequence.current + 1;
     requestSequence.current = sequence;
-    if (!context || !projectId) {
+    if (!context || !projectId || !scope) {
       dispatch({ type: "reset" });
       return;
     }
-    dispatch({ type: "started" });
+    dispatch({ type: "started", scope });
     try {
       const [detail, episodes, neighbors] = await Promise.all([
         getCollectionDetail(context.collectionId),
@@ -93,7 +97,7 @@ export function useEpisodeNavigation(
         dispatch({ type: "failed", message: commandError(error).message });
       }
     }
-  }, [context, projectId]);
+  }, [context, projectId, scope]);
 
   useEffect(() => {
     void refresh();
@@ -102,5 +106,6 @@ export function useEpisodeNavigation(
     };
   }, [refresh]);
 
-  return { state, refresh };
+  const visibleState = state.scope === scope ? state : { ...initialState, loading: scope !== null };
+  return { state: visibleState, refresh };
 }

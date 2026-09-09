@@ -75,6 +75,33 @@ beforeEach(() => {
 });
 
 describe("useEpisodeNavigation", () => {
+  it("ignores a late result from a previous project", async () => {
+    const context = { collectionId: detail.summary.id, seasonNumber: 1 };
+    let resolve!: (value: EpisodeNeighbors) => void;
+    gatewayMocks.getEpisodeNeighbors.mockReturnValueOnce(new Promise(done => { resolve = done; }));
+    const { result, rerender } = renderHook(({ projectId }) => useEpisodeNavigation(context, projectId), {
+      initialProps: { projectId: "first" },
+    });
+    gatewayMocks.getEpisodeNeighbors.mockResolvedValueOnce({ previous: null, next: null });
+    rerender({ projectId: "second" });
+    await waitFor(() => expect(result.current.state.loading).toBe(false));
+    await act(async () => { resolve(neighbors); });
+    expect(result.current.state.neighbors).toEqual({ previous: null, next: null });
+  });
+  it("clears previous targets while loading another project and after failure", async () => {
+    const context = { collectionId: detail.summary.id, seasonNumber: 1 };
+    const { result, rerender } = renderHook(({ projectId }) => useEpisodeNavigation(context, projectId), {
+      initialProps: { projectId: "first" },
+    });
+    await waitFor(() => expect(result.current.state.neighbors.next).not.toBeNull());
+    let reject!: (error: Error) => void;
+    gatewayMocks.getEpisodeNeighbors.mockReturnValueOnce(new Promise((_, fail) => { reject = fail; }));
+    rerender({ projectId: "second" });
+    expect(result.current.state).toMatchObject({ loading: true, detail: null, episodes: [], neighbors: { previous: null, next: null } });
+    await act(async () => { reject(new Error("offline")); });
+    expect(result.current.state).toMatchObject({ loading: false, detail: null, neighbors: { previous: null, next: null } });
+    expect(result.current.state.error).toContain("offline");
+  });
   it("loads detail, current season, and stable neighbors together", async () => {
     const context: EpisodePlaybackContext = {
       collectionId: detail.summary.id,
