@@ -782,16 +782,18 @@ export function useLibraryController() {
   );
 
   const removeFromCollection = useCallback(
-    (collectionId: string, projectId: string) =>
-      runMutation(
+    (collectionId: string, projectId: string) => {
+      const viewSequence = collectionRequestSequence.current;
+      return runMutation(
         () => removeProjectFromCollection(collectionId, projectId),
         (detail) => {
           dispatch({ type: "upsert_detail", detail });
-          if (state.currentCollection?.summary.id === collectionId) {
+          if (collectionRequestSequence.current === viewSequence && state.currentCollection?.summary.id === collectionId) {
             void loadCollection(collectionId, state.selectedSeason);
           }
         },
-      ),
+      );
+    },
     [loadCollection, runMutation, state.currentCollection?.summary.id, state.selectedSeason],
   );
 
