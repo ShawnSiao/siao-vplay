@@ -1,4 +1,5 @@
 {
+  "schemaVersion": 1,
   "maxSegmentsPerBatch": 16,
   "maxSourceCharactersPerBatch": 12000,
   "maxOutputTokens": 12000,
