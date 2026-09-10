@@ -1,3 +1,11 @@
+.control-row {
+  display: grid;
+  align-items: center;
+  justify-content: space-between;
+  grid-template-columns: auto auto auto minmax(80px, 1fr) auto;
+  gap: 13px;
+}
+
 .seek-skip-control > span {
   display: inline-flex;
   align-items: center;
