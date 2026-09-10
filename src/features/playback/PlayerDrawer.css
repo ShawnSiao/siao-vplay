@@ -105,10 +105,17 @@
 
 @media (max-width: 1279px) {
   .player-workspace.with-drawer:has(.player-drawer) { grid-template-columns: minmax(0, 1fr); }
-  .player-workspace > .player-drawer { width: 320px; }
+  .player-workspace > .player-drawer {
+    position: absolute;
+    z-index: 7;
+    top: 0;
+    right: 0;
+    bottom: 64px;
+    width: 320px;
+  }
 }
 @media (max-width: 820px) {
-  .player-workspace > .player-drawer { width: 100%; }
+  .player-workspace > .player-drawer { left: 0; width: 100%; }
 }
 
 @media (max-height: 480px) {

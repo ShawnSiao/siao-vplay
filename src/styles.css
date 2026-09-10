@@ -5144,7 +5144,6 @@ h3 {
 }
 
 @media (max-width: 1279px) {
-  .player-workspace > .player-drawer,
   .player-workspace > .understanding-panel,
   .player-workspace > .learning-panel {
     position: absolute;
@@ -6412,10 +6411,6 @@ h3 {
     padding-left: 20px;
   }
 
-  .player-workspace > .player-drawer {
-    bottom: 70px;
-    width: min(360px, 100%);
-  }
 }
 
 @media (max-width: 1179px) {
@@ -6830,11 +6825,6 @@ h3 {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .player-workspace > .player-drawer {
-    right: 0;
-    bottom: 64px;
-    width: min(416px, calc(100% - 52px));
-  }
 }
 
 @media (max-width: 820px) {
@@ -6844,11 +6834,6 @@ h3 {
     min-width: 0;
   }
 
-  .player-workspace > .player-drawer {
-    right: 0;
-    left: 0;
-    width: 100%;
-  }
 
   .player-drawer-header strong {
     max-width: calc(100vw - 96px);
