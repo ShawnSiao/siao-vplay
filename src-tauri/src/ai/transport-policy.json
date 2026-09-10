@@ -1,4 +1,5 @@
 {
+  "schemaVersion": 1,
   "connectTimeoutSeconds": 30,
   "modelListTimeoutSeconds": 90,
   "probeTimeoutSeconds": 90,

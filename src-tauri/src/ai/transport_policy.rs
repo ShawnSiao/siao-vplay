@@ -5,6 +5,7 @@ use std::time::Duration;
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(super) struct Policy {
+    schema_version: u32,
     connect_timeout_seconds: u64,
     model_list_timeout_seconds: u64,
     probe_timeout_seconds: u64,
@@ -30,7 +31,7 @@ impl Policy {
 fn parse(source: &str) -> Result<Policy, AiError> {
     let invalid = || AiError::Validation("AI 请求连接配置无效".into());
     let policy: Policy = serde_json::from_str(source).map_err(|_| invalid())?;
-    if !(1..=120).contains(&policy.connect_timeout_seconds)
+    if policy.schema_version != 1 || !(1..=120).contains(&policy.connect_timeout_seconds)
         || ![policy.model_list_timeout_seconds, policy.probe_timeout_seconds, policy.summary_timeout_seconds]
             .iter().all(|value| (10..=600).contains(value))
         || !(64..=4096).contains(&policy.probe_max_output_tokens)
@@ -47,6 +48,19 @@ pub(super) fn load() -> Result<Policy, AiError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn policy_version_is_required_and_only_version_one_is_supported() {
+        let mut data: serde_json::Value = serde_json::from_str(include_str!("transport-policy.json")).unwrap();
+        data["schemaVersion"] = serde_json::json!(1);
+        assert!(parse(&data.to_string()).is_ok());
+        for version in [serde_json::json!(0), serde_json::json!(2), serde_json::json!("1"), serde_json::Value::Null] {
+            data["schemaVersion"] = version;
+            assert!(parse(&data.to_string()).is_err());
+        }
+        data.as_object_mut().unwrap().remove("schemaVersion");
+        assert!(parse(&data.to_string()).is_err());
+    }
+
     #[test]
     fn defaults_preserve_limits_and_connection_never_exceeds_request_deadline() {
         let policy = load().unwrap();

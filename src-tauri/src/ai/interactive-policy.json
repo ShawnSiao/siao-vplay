@@ -1,4 +1,5 @@
 {
+  "schemaVersion": 1,
   "explanation": { "maxOutputTokens": 2048, "timeoutSeconds": 90 },
   "learning": { "maxOutputTokens": 2048, "timeoutSeconds": 90 }
 }

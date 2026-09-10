@@ -21,8 +21,9 @@ impl RequestPolicy {
 }
 
 #[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(super) struct Policy {
+    schema_version: u32,
     pub explanation: RequestPolicy,
     pub learning: RequestPolicy,
 }
@@ -30,7 +31,7 @@ pub(super) struct Policy {
 fn parse(source: &str) -> Result<Policy, AiError> {
     let invalid = || AiError::Validation("解释与学习执行配置无效".into());
     let policy: Policy = serde_json::from_str(source).map_err(|_| invalid())?;
-    if !policy.explanation.valid() || !policy.learning.valid() {
+    if policy.schema_version != 1 || !policy.explanation.valid() || !policy.learning.valid() {
         return Err(invalid());
     }
     Ok(policy)
@@ -45,6 +46,19 @@ mod tests {
     use super::*;
 
     #[test]
+    fn policy_version_is_required_and_only_version_one_is_supported() {
+        let mut data: serde_json::Value = serde_json::from_str(include_str!("interactive-policy.json")).unwrap();
+        data["schemaVersion"] = serde_json::json!(1);
+        assert!(parse(&data.to_string()).is_ok());
+        for version in [serde_json::json!(0), serde_json::json!(2), serde_json::json!("1"), serde_json::Value::Null] {
+            data["schemaVersion"] = version;
+            assert!(parse(&data.to_string()).is_err());
+        }
+        data.as_object_mut().unwrap().remove("schemaVersion");
+        assert!(parse(&data.to_string()).is_err());
+    }
+
+    #[test]
     fn default_policy_preserves_existing_request_limits() {
         let policy = load().unwrap();
         for request in [policy.explanation, policy.learning] {
@@ -55,7 +69,7 @@ mod tests {
 
     #[test]
     fn domains_can_be_configured_independently() {
-        let policy = parse(r#"{"explanation":{"maxOutputTokens":4096,"timeoutSeconds":180},"learning":{"maxOutputTokens":1024,"timeoutSeconds":30}}"#).unwrap();
+        let policy = parse(r#"{"schemaVersion":1,"explanation":{"maxOutputTokens":4096,"timeoutSeconds":180},"learning":{"maxOutputTokens":1024,"timeoutSeconds":30}}"#).unwrap();
         assert_eq!(policy.explanation.max_output_tokens, 4096);
         assert_eq!(policy.explanation.timeout(), Duration::from_secs(180));
         assert_eq!(policy.learning.max_output_tokens, 1024);
