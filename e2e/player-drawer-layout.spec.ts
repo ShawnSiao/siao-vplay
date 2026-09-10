@@ -16,6 +16,13 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 1280, height: 720
       return { width: style.width, bottom: style.bottom, position: style.position, left: rect.left, right: rect.right, top: rect.top, height: rect.height };
     });
     console.info(JSON.stringify({ viewport, layout }));
+    const chrome = await drawer.locator(":scope > header, :scope > header *, .player-drawer-tabs, .player-drawer-tabs *, .player-drawer-content").evaluateAll(nodes => nodes.map(node => {
+      const style = getComputedStyle(node);
+      return { tag: node.tagName, classes: node.className, display: style.display, gap: style.gap,
+        font: style.fontSize, leading: style.lineHeight, color: style.color, background: style.background,
+        padding: style.padding, border: style.border, minHeight: style.minHeight, maxWidth: style.maxWidth };
+    }));
+    if (process.env.SIAOVPLAY_DESIGN_CAPTURE_DIR) console.info(JSON.stringify({ chromeLayout: true, viewport, chrome }));
     expect(layout.width).toBe(viewport.width >= 1280 ? "340px" : viewport.width <= 820 ? `${viewport.width}px` : "320px");
     expect(layout.bottom).toBe(viewport.height <= 480 ? "0px" : viewport.width >= 1280 ? "auto" : "64px");
     expect(layout.position).toBe(viewport.width >= 1280 ? "static" : "absolute");
