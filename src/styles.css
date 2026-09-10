@@ -5063,28 +5063,6 @@ h3 {
   background: var(--bg-control);
 }
 
-.player-drawer-empty {
-  display: grid;
-  min-height: 260px;
-  place-content: center;
-  gap: 6px;
-  padding: 24px;
-  color: var(--text-muted);
-  text-align: center;
-}
-
-.player-drawer-empty strong {
-  color: var(--text-primary);
-  font-size: 14px;
-}
-
-.player-drawer-empty p {
-  max-width: 260px;
-  margin: 0;
-  font-size: 12px;
-  line-height: 1.6;
-}
-
 .player-context-menu {
   position: fixed;
   z-index: 90;

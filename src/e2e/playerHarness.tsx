@@ -214,6 +214,7 @@ function UnderstandingResultPreview() {
 }
 
 export function PlayerHarness() {
+  const episodeState = new URLSearchParams(window.location.search).get("episodeState");
   const pagedEpisodes = new URLSearchParams(window.location.search).has("episodePages");
   const countParam = new URLSearchParams(window.location.search).get("episodeCount");
   const accumulatedCount = countParam === "1000" || countParam === "10000" ? Number(countParam) : 0;
@@ -315,12 +316,12 @@ export function PlayerHarness() {
         drawerTab={drawerTab}
         contextMenu={contextMenu}
         episodeNavigation={{
-          detail: accumulatedCount ? { ...collectionDetail, summary: { ...collectionDetail.summary, itemCount: accumulatedCount } } : collectionDetail,
+          detail: episodeState === "single" || episodeState === "loading" ? null : accumulatedCount ? { ...collectionDetail, summary: { ...collectionDetail.summary, itemCount: accumulatedCount } } : collectionDetail,
           episodes: episodeItems,
           currentEpisode: bounded ? episodeSummary(project.id, 1, "站台相遇") : undefined,
           neighbors: { previous: null, next: nextEpisode },
-          loading: false,
-          error: null,
+          loading: episodeState === "loading",
+          error: episodeState === "error" ? "Fixture episode read failed" : null,
         }}
         episodePagination={bounded ? {
           items: episodeItems, totalCount: accumulatedCount, offset: episodeOffset,
