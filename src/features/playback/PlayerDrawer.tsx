@@ -1,6 +1,7 @@
 import { readPreference, type PreferenceRecord } from "../../lib/preferenceRecord";
 import { savePreference } from "../../lib/preferenceNotice";
 import { useState, type ReactNode } from "react";
+import "./PlayerDrawerContent.css";
 import "./PlayerDrawer.css";
 
 import type { ShellDrawerTab } from "../shell/useShellController";
