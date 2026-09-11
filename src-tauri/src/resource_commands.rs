@@ -9,7 +9,7 @@ use crate::{
     },
 };
 
-async fn run<T: Send + 'static>(
+pub(crate) async fn run<T: Send + 'static>(
     operation: impl FnOnce() -> Result<T, CommandError> + Send + 'static,
 ) -> Result<T, CommandError> {
     tauri::async_runtime::spawn_blocking(operation)

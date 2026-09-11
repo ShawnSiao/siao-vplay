@@ -620,8 +620,8 @@ pub fn get_local_resource_catalog() -> Result<LocalResourceCatalog, CommandError
 }
 
 #[tauri::command]
-pub fn get_local_resource_status() -> Result<LocalResourceStatus, CommandError> {
-    local_resources::status().map_err(Into::into)
+pub async fn get_local_resource_status() -> Result<LocalResourceStatus, CommandError> {
+    crate::resource_commands::run(move || local_resources::status().map_err(Into::into)).await
 }
 
 #[tauri::command]
@@ -735,13 +735,13 @@ pub fn remove_local_resource(
 }
 
 #[tauri::command]
-pub fn get_local_resource_diagnostics() -> Result<LocalResourceDiagnostics, CommandError> {
-    resource_diagnostics::diagnostics().map_err(Into::into)
+pub async fn get_local_resource_diagnostics() -> Result<LocalResourceDiagnostics, CommandError> {
+    crate::resource_commands::run(move || resource_diagnostics::diagnostics().map_err(Into::into)).await
 }
 
 #[tauri::command]
-pub fn get_local_resource_diagnostic_summary() -> Result<String, CommandError> {
-    resource_diagnostics::diagnostic_summary().map_err(Into::into)
+pub async fn get_local_resource_diagnostic_summary() -> Result<String, CommandError> {
+    crate::resource_commands::run(move || resource_diagnostics::diagnostic_summary().map_err(Into::into)).await
 }
 
 #[tauri::command]
@@ -757,8 +757,8 @@ pub fn rollback_local_resource(
 }
 
 #[tauri::command]
-pub fn plan_old_resource_version_cleanup() -> Result<OldResourceVersionCleanupPlan, CommandError> {
-    resource_diagnostics::plan_old_version_cleanup().map_err(Into::into)
+pub async fn plan_old_resource_version_cleanup() -> Result<OldResourceVersionCleanupPlan, CommandError> {
+    crate::resource_commands::run(move || resource_diagnostics::plan_old_version_cleanup().map_err(Into::into)).await
 }
 
 #[tauri::command]

@@ -118,3 +118,11 @@ test("library database and filesystem commands dispatch through a worker", async
     }
   }
 });
+
+test("resource status and diagnostics reads offload receipt filesystem inspection", async () => {
+  const source = await readFile(new URL("../src-tauri/src/commands.rs", import.meta.url), "utf8");
+  for (const name of ["get_local_resource_status", "get_local_resource_diagnostics", "get_local_resource_diagnostic_summary", "plan_old_resource_version_cleanup"]) {
+    const body = source.match(new RegExp(`pub async fn ${name}\\([\\s\\S]*?\\n\\}`))?.[0];
+    assert.ok(body && /resource_commands::run\(move \|\|/.test(body), `${name} must inspect files on a worker`);
+  }
+});
