@@ -88,3 +88,14 @@ test("resource mutations only expose the managed task workflow", async () => {
   }
   assert.ok(registrations.includes("prepare_local_capability"));
 });
+
+test("storage operations leave the IPC thread before filesystem or lock work", async () => {
+  const source = await readFile(new URL("../src-tauri/src/storage/commands.rs", import.meta.url), "utf8");
+  const commands = [...source.matchAll(/#\[tauri::command\]\s+pub\s+(async\s+)?fn\s+(\w+)[\s\S]*?\n\}/g)];
+  assert.equal(commands.length, 11);
+  for (const [body, asynchronous, name] of commands) {
+    if (name === "restart_after_storage_migration") continue;
+    assert.ok(asynchronous, `${name} must yield the IPC thread`);
+    assert.match(body, /run\(move \|\|/, `${name} must delegate blocking work`);
+  }
+});
