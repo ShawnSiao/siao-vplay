@@ -45,3 +45,17 @@ it("refreshes the affected collection when the browsing context has not changed"
   expect(mocks.listCollectionEpisodePage).toHaveBeenLastCalledWith(importedDetail.summary.id, 2, 0);
   expect(hook.result.current.state.selectedSeason).toBe(2);
 });
+
+it("does not clear a pending mutation when an independent home refresh fails", async () => {
+  const pending = deferred<CollectionDetail>();
+  mocks.removeProjectFromCollection.mockReturnValue(pending.promise);
+  const hook = renderHook(() => useLibraryController());
+  await waitFor(() => expect(hook.result.current.state.loading).toBe(false));
+  let removal!: Promise<unknown>;
+  act(() => { removal = hook.result.current.removeFromCollection(importedDetail.summary.id, "project"); });
+  mocks.getLibraryHome.mockRejectedValueOnce(new Error("read failed"));
+  await act(async () => { await hook.result.current.refresh(); });
+  expect(hook.result.current.state.mutationPending).toBe(true);
+  await act(async () => { pending.resolve(importedDetail); await removal; });
+  expect(hook.result.current.state.mutationPending).toBe(false);
+});

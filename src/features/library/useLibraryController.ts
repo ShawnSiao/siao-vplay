@@ -1,3 +1,4 @@
+import { useLibraryHome } from "./useLibraryHome";
 import { useLibraryMutation } from "./useLibraryMutation";
 import { useLibraryRecoveryApply } from "./useLibraryRecoveryApply";
 import { useLibraryRecoveryPreview } from "./useLibraryRecoveryPreview";
@@ -7,9 +8,8 @@ import { useLibrarySearch, type LibrarySearchAction } from "./useLibrarySearch";
 import { useLibraryCollectionPaging, type CollectionReadAction } from "./useLibraryCollectionPaging";
 import { useLibraryWatchActions, type WatchAction } from "./useLibraryWatchActions";
 import { applyWatchedProject } from "./applyWatchedProject";
-import { useCallback, useEffect, useReducer, useRef } from "react";
+import { useCallback, useReducer, useRef } from "react";
 
-import { commandError } from "../../lib/desktop";
 import type {
   CollectionDetail,
   CollectionSortMode,
@@ -32,7 +32,6 @@ import {
   createCollection,
   deleteCollection,
   emptyLibraryHome,
-  getLibraryHome,
   removeProjectFromCollection,
   revokeLibraryRoot,
   toCollectionSummary,
@@ -146,6 +145,7 @@ type LibraryState = {
 
 type LibraryAction =
   | WatchAction
+  | { type: "home_failed"; message: string }
   | { type: "home_started" }
   | { type: "home_loaded"; home: LibraryHome; sequence: number }
   | { type: "failed"; message: string }
@@ -279,6 +279,8 @@ function libraryReducer(state: LibraryState, action: LibraryAction): LibraryStat
         refreshSequence: action.sequence,
       };
     }
+    case "home_failed":
+      return { ...state, loading: false, error: action.message };
     case "failed":
       return {
         ...state,
@@ -700,28 +702,9 @@ function libraryReducer(state: LibraryState, action: LibraryAction): LibraryStat
 
 export function useLibraryController() {
   const [state, dispatch] = useReducer(libraryReducer, initialState());
-  const homeRequestSequence = useRef(0);
   const collectionRequestSequence = useRef(0);
 
-  const refresh = useCallback(async () => {
-    const sequence = homeRequestSequence.current + 1;
-    homeRequestSequence.current = sequence;
-    dispatch({ type: "home_started" });
-    try {
-      const home = await getLibraryHome();
-      if (homeRequestSequence.current === sequence) {
-        dispatch({ type: "home_loaded", home, sequence });
-      }
-    } catch (error) {
-      if (homeRequestSequence.current === sequence) {
-        dispatch({ type: "failed", message: commandError(error).message });
-      }
-    }
-  }, []);
-
-  useEffect(() => {
-    void refresh();
-  }, [refresh]);
+  const refresh = useLibraryHome(dispatch);
 
   const { loadSectionPage, loadMoreSection, loadPreviousSection, retrySection } = useLibrarySectionPaging(
     state.section,
