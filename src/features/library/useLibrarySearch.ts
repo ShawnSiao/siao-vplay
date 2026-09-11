@@ -6,7 +6,7 @@ import { searchLibrary } from "./libraryGateway";
 export type LibrarySearchAction =
   | { type: "search_started" }
   | { type: "search_loaded"; results: LibrarySearchResult[] }
-  | { type: "failed"; message: string };
+  | { type: "search_failed"; message: string };
 
 export function useLibrarySearch(queryText: string, dispatch: (action: LibrarySearchAction) => void, delayMs = 180) {
   useEffect(() => {
@@ -18,7 +18,7 @@ export function useLibrarySearch(queryText: string, dispatch: (action: LibrarySe
       void searchLibrary(query).then(results => {
         if (active) dispatch({ type: "search_loaded", results });
       }).catch((error: unknown) => {
-        if (active) dispatch({ type: "failed", message: commandError(error).message });
+        if (active) dispatch({ type: "search_failed", message: commandError(error).message });
       });
     }, delayMs);
     return () => {

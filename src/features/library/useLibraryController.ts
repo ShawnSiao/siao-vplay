@@ -281,15 +281,12 @@ function libraryReducer(state: LibraryState, action: LibraryAction): LibraryStat
     }
     case "home_failed":
       return { ...state, loading: false, error: action.message };
+    case "collection_failed":
+      return { ...state, collectionLoading: false, error: action.message };
+    case "search_failed":
+      return { ...state, searchLoading: false, error: action.message };
     case "failed":
-      return {
-        ...state,
-        loading: false,
-        collectionLoading: false,
-        searchLoading: false,
-        mutationPending: false,
-        error: action.message,
-      };
+      return { ...state, error: action.message };
     case "set_section":
       return {
         ...state,

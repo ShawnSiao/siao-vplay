@@ -7,7 +7,7 @@ export type CollectionReadAction =
   | { type: "collection_started" }
   | { type: "collection_loaded"; detail: CollectionDetail; episodes: LibraryMediaSummary[]; season: number | null }
   | { type: "collection_window_loaded"; collectionId: string; season: number | null; episodes: LibraryMediaSummary[] }
-  | { type: "failed"; message: string };
+  | { type: "collection_failed"; message: string };
 type View = { currentCollection: CollectionDetail | null; selectedSeason: number | null; currentEpisodes: LibraryMediaSummary[]; collectionLoading: boolean };
 type PageState = { scope: string | null; offset: number; pageSize: number; totalCount: number; nextOffset: number | null; snapshotToken: string | undefined; loadingMore: boolean; error: string | null };
 const empty: PageState = { scope: null, offset: 0, pageSize: 0, totalCount: 0, nextOffset: null, snapshotToken: undefined, loadingMore: false, error: null };
@@ -33,7 +33,7 @@ export function useLibraryCollectionPaging(view: View, dispatch: Dispatch<Collec
       if (current !== sequence.current) return;
       const message = commandError(error).message;
       if (knownDetail) dispatch({ type: "collection_loaded", detail: knownDetail, episodes: [], season });
-      else dispatch({ type: "failed", message });
+      else dispatch({ type: "collection_failed", message });
       setPageState(previous => knownDetail
         ? { ...empty, scope: key(collectionId, season), error: message }
         : { ...previous, scope: previous.scope ?? key(collectionId, season), loadingMore: false, error: message });
