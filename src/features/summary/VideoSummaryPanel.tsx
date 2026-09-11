@@ -1,6 +1,7 @@
 import { useCodexDetection } from "../ai-tasks/useCodexDetection";
 import { CodexDetectionNotice } from "../ai-tasks/CodexDetectionNotice";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
+import { useSummaryHistory } from "./useSummaryHistory";
 
 import { commandError, getCodexRuntimeStatus } from "../../lib/desktop";
 import type { SubtitleVersion } from "../../types";
@@ -12,8 +13,6 @@ import {
   exportVideoSummary,
   getSummaryTask,
   getVideoSummary,
-  listSummaryTasks,
-  listVideoSummaries,
   openSummaryMaterials,
   prepareSummaryTask,
   previewSummaryDispatch,
@@ -79,7 +78,6 @@ export function VideoSummaryPanel({
   const [task, setTask] = useState<SummaryTask | null>(null);
   const [summary, setSummary] = useState<VideoSummary | null>(null);
   const [history, setHistory] = useState<VideoSummary[]>([]);
-  const [loading, setLoading] = useState(true);
   const [operation, setOperation] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [exportNotice, setExportNotice] = useState<string | null>(null);
@@ -89,27 +87,14 @@ export function VideoSummaryPanel({
     setError(commandError(cause).message);
   }, []);
 
-  useEffect(() => {
-    let active = true;
-    void Promise.all([
-      listSummaryTasks(projectId),
-      listVideoSummaries(projectId),
-    ])
-      .then(([tasks, summaries]) => {
-        if (!active) return;
-        setHistory(summaries);
-        const activeTask = tasks.find((item) => restorableStatuses.has(item.status)) ?? null;
-        setTask(activeTask);
-        if (!activeTask) setSummary(summaries[0] ?? null);
-      })
-      .catch(showError)
-      .finally(() => {
-        if (active) setLoading(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, [projectId, showError]);
+  const restoreHistory = useCallback((tasks: SummaryTask[], summaries: VideoSummary[]) => {
+    setHistory(summaries);
+    const activeTask = tasks.find((item) => restorableStatuses.has(item.status)) ?? null;
+    setTask(activeTask);
+    setSummary(activeTask ? null : summaries[0] ?? null);
+  }, []);
+  const historyRead = useSummaryHistory(projectId, restoreHistory);
+  const loading = historyRead.loading;
 
   useSummaryPolling({ projectId, task, read: getSummaryTask, onTask: (next) => setTask((current) => {
     if (!current || current.id !== next.id || current.projectId !== next.projectId ||
@@ -223,6 +208,10 @@ export function VideoSummaryPanel({
   };
 
   if (loading) return <div className="understanding-loading" role="status"><span className="spinner" />正在读取视频总结</div>;
+  if (historyRead.error) return <div className="understanding-error" role="alert">
+    <p>{historyRead.error}</p>
+    <button className="button quiet small" type="button" onClick={historyRead.retry}>重新读取总结记录</button>
+  </div>;
   if (!sourceVersion) return <div className="understanding-empty"><strong>需要先准备原文字幕</strong><p>视频总结只分析真实字幕和授权画面。</p><button className="button primary small" type="button" onClick={onPrepareSubtitles}>生成或导入原文字幕</button></div>;
 
   return (

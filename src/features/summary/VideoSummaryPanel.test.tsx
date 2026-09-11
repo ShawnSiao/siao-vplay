@@ -105,6 +105,47 @@ describe("VideoSummaryPanel", () => {
     await waitFor(() => expect(gateway.resumeSummaryTask).toHaveBeenCalledWith(task.id, "confirmed-hash"));
   });
 
+  it("retries failed history reading without preparing or starting a summary", async () => {
+    gateway.listSummaryTasks.mockRejectedValueOnce(new Error("history unavailable")).mockResolvedValue([]);
+    render(<VideoSummaryPanel projectId="project-1" playbackCutoffMs={1_000} durationMs={5_000}
+      sourceVersion={{ id: "subtitle-1" } as SubtitleVersion} translationVersion={null} onPrepareSubtitles={vi.fn()} />);
+    expect(await screen.findByText("history unavailable")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "准备并查看发送清单" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "重新读取总结记录" }));
+    expect(await screen.findByRole("button", { name: "准备并查看发送清单" })).toBeEnabled();
+    expect(gateway.listSummaryTasks).toHaveBeenCalledTimes(2);
+    expect(gateway.prepareSummaryTask).not.toHaveBeenCalled();
+    expect(gateway.startSummaryTask).not.toHaveBeenCalled();
+  });
+
+  it("ignores a previous video's delayed history failure", async () => {
+    let rejectOld!: (error: Error) => void;
+    gateway.listSummaryTasks.mockReturnValueOnce(new Promise((_, reject) => { rejectOld = reject; })).mockResolvedValue([]);
+    const props = { playbackCutoffMs: 1000, durationMs: 5000, sourceVersion: { id: "subtitle-1" } as SubtitleVersion,
+      translationVersion: null, onPrepareSubtitles: vi.fn() };
+    const { rerender } = render(<VideoSummaryPanel {...props} projectId="project-1" />);
+    rerender(<VideoSummaryPanel {...props} projectId="project-2" />);
+    await screen.findByRole("button", { name: "准备并查看发送清单" });
+    await act(async () => rejectOld(new Error("old history failure")));
+    expect(screen.queryByText("old history failure")).not.toBeInTheDocument();
+  });
+
+  it("hides previous history while the next video's records are still pending", async () => {
+    const { summary } = createSummaryFixtures();
+    gateway.listVideoSummaries.mockResolvedValueOnce([summary]).mockResolvedValue([]);
+    let finishNext!: (tasks: []) => void;
+    gateway.listSummaryTasks.mockResolvedValueOnce([]).mockReturnValueOnce(new Promise(resolve => { finishNext = resolve; }));
+    const props = { playbackCutoffMs: 1000, durationMs: 5000, sourceVersion: { id: "subtitle-1" } as SubtitleVersion,
+      translationVersion: null, onPrepareSubtitles: vi.fn() };
+    const { rerender } = render(<VideoSummaryPanel {...props} projectId="project-1" />);
+    await screen.findByLabelText("视频总结历史结果");
+    rerender(<VideoSummaryPanel {...props} projectId="project-2" />);
+    expect(screen.getByText("正在读取视频总结")).toBeInTheDocument();
+    expect(screen.queryByLabelText("视频总结历史结果")).not.toBeInTheDocument();
+    await act(async () => finishNext([]));
+    expect(await screen.findByRole("button", { name: "准备并查看发送清单" })).toBeEnabled();
+  });
+
   it("retains prepared materials when starting fails and can retry without preparing again", async () => {
     gateway.startSummaryTask.mockRejectedValueOnce(new Error("暂时不能启动"));
     const { task } = createSummaryFixtures();
