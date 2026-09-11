@@ -9,7 +9,7 @@ const media = { available: true, ffmpegPath: "W:/ffmpeg.exe", ffprobePath: "W:/f
 const runtime = { backend: "cpu", available: true, path: "W:/whisper", version: "1", errorMessage: null };
 const model = { modelKind: "small", available: true, path: "W:/small.bin", errorMessage: null };
 const transcription = { available: true, preferredBackend: "cpu", runtimes: [runtime], models: [model] };
-beforeEach(() => mocks.invoke.mockReset());
+beforeEach(() => { mocks.invoke.mockReset(); });
 afterAll(() => { Reflect.deleteProperty(window, "__TAURI_INTERNALS__"); });
 it.each([{ available: true }, { ...media, ffprobePath: null }, { ...media, errorMessage: "failed" }])("rejects invalid media readiness", async value => {
   mocks.invoke.mockResolvedValue(value); await expect(getMediaRuntimeStatus()).rejects.toThrow();
@@ -22,4 +22,12 @@ it("preserves valid ready and unavailable states", async () => {
   await expect(getMediaRuntimeStatus()).resolves.toEqual(media);
   await expect(getTranscriptionRuntimeStatus()).resolves.toEqual(transcription);
   await expect(getTranscriptionRuntimeStatus()).resolves.toMatchObject({ available: false });
+});
+
+it("keeps worker failure distinct from a valid unavailable runtime", async () => {
+  const failure = { code: "background_task_failed", message: "probe worker failed" };
+  const unavailable = { available: false, ffmpegPath: null, ffprobePath: null, version: null, errorMessage: "尚未安装媒体组件" };
+  mocks.invoke.mockRejectedValueOnce(failure).mockResolvedValueOnce(unavailable);
+  await expect(getMediaRuntimeStatus()).rejects.toBe(failure);
+  await expect(getMediaRuntimeStatus()).resolves.toEqual(unavailable);
 });

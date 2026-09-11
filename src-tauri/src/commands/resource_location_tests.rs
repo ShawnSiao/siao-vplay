@@ -56,7 +56,7 @@ fn isolated(name: &str, mode: &str) {
                 resource_download::initialize_for_startup().unwrap();
                 assert!(resource_download::list_tasks().is_err());
                 assert!(
-                    crate::resource_location::inspect()
+                    tauri::async_runtime::block_on(inspect_local_resource_binding())
                         .unwrap()
                         .binding_error
                         .is_some()
@@ -67,21 +67,21 @@ fn isolated(name: &str, mode: &str) {
                 };
                 let mut stale = input();
                 stale.configuration_fingerprint = "0".repeat(64);
-                assert!(crate::resource_location::retry(stale).is_err());
+                assert!(tauri::async_runtime::block_on(retry_local_resource_binding(stale)).is_err());
                 {
                     let _maintenance = crate::resource_leases::maintain_all().unwrap();
                     let input = input();
                     assert!(
-                        std::thread::spawn(move || crate::resource_location::retry(input).is_err())
+                        std::thread::spawn(move || tauri::async_runtime::block_on(retry_local_resource_binding(input)).is_err())
                             .join()
                             .unwrap()
                     );
                 }
                 assert_eq!(fs::read(&task_store).unwrap(), b"{broken");
-                let still_failed = crate::resource_location::retry(input()).unwrap();
+                let still_failed = tauri::async_runtime::block_on(retry_local_resource_binding(input())).unwrap();
                 assert!(still_failed.binding_error.is_some());
                 fs::write(&task_store, br#"{"schemaVersion":1,"tasks":[]}"#).unwrap();
-                let recovered = crate::resource_location::retry(input()).unwrap();
+                let recovered = tauri::async_runtime::block_on(retry_local_resource_binding(input())).unwrap();
                 assert!(recovered.binding_error.is_none());
                 assert!(recovered.task_snapshot.is_some());
                 assert_eq!(

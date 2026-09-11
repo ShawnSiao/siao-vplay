@@ -610,8 +610,8 @@ pub async fn get_pending_project_cleanup(store: State<'_, ProjectStore>) -> Resu
 }
 
 #[tauri::command]
-pub fn get_media_runtime_status() -> MediaRuntimeStatus {
-    media::media_runtime_status()
+pub async fn get_media_runtime_status() -> Result<MediaRuntimeStatus, CommandError> {
+    crate::resource_commands::run(move || Ok(media::media_runtime_status())).await
 }
 
 #[tauri::command]
@@ -775,8 +775,8 @@ pub async fn cleanup_old_resource_versions(
 }
 
 #[tauri::command]
-pub fn get_runtime_catalog() -> Result<RuntimeCatalog, CommandError> {
-    runtime::catalog().map_err(Into::into)
+pub async fn get_runtime_catalog() -> Result<RuntimeCatalog, CommandError> {
+    crate::resource_commands::run(move || runtime::catalog().map_err(Into::into)).await
 }
 
 #[tauri::command]
@@ -1500,10 +1500,10 @@ pub fn get_public_resolver_disclosure() -> Result<crate::x_resolver_policy::Reso
 }
 
 #[tauri::command]
-pub fn retry_local_resource_binding(input: crate::resource_location::RetryResourceBindingInput) -> Result<crate::resource_location::ResourceLocationResult, CommandError> {
-    crate::resource_location::retry(input).map_err(Into::into)
+pub async fn retry_local_resource_binding(input: crate::resource_location::RetryResourceBindingInput) -> Result<crate::resource_location::ResourceLocationResult, CommandError> {
+    crate::resource_commands::run(move || crate::resource_location::retry(input).map_err(Into::into)).await
 }
 #[tauri::command]
-pub fn inspect_local_resource_binding() -> Result<crate::resource_location::ResourceLocationResult, CommandError> {
-    crate::resource_location::inspect().map_err(Into::into)
+pub async fn inspect_local_resource_binding() -> Result<crate::resource_location::ResourceLocationResult, CommandError> {
+    crate::resource_commands::run(move || crate::resource_location::inspect().map_err(Into::into)).await
 }

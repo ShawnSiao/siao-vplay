@@ -134,3 +134,11 @@ test("resource maintenance commands offload IO while retaining domain admission"
     assert.ok(body && /resource_commands::run\(move \|\|/.test(body), `${name} must offload IO or contended locks`);
   }
 });
+
+test("runtime probes and resource binding work do not run synchronously in IPC", async () => {
+  const source = await readFile(new URL("../src-tauri/src/commands.rs", import.meta.url), "utf8");
+  for (const name of ["get_media_runtime_status", "get_runtime_catalog", "retry_local_resource_binding", "inspect_local_resource_binding"]) {
+    const body = source.match(new RegExp(`pub async fn ${name}\\([\\s\\S]*?\\n\\}`))?.[0];
+    assert.ok(body && /resource_commands::run\(move \|\|/.test(body), `${name} must offload process/filesystem work`);
+  }
+});
