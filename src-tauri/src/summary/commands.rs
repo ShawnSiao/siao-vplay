@@ -33,33 +33,30 @@ impl From<StoreError> for SummaryCommandError {
 }
 
 #[tauri::command]
-pub fn list_analysis_prompt_templates(
+pub async fn list_analysis_prompt_templates(
     store: State<'_, ProjectStore>,
     input: ListAnalysisPromptTemplatesInput,
 ) -> Result<Vec<AnalysisPromptTemplate>, SummaryCommandError> {
-    PromptTemplateRepository::new(store.inner())
-        .list(input.task_type)
-        .map_err(Into::into)
+    let store = store.inner().clone();
+    run_blocking(move || PromptTemplateRepository::new(&store).list(input.task_type)).await
 }
 
 #[tauri::command]
-pub fn save_analysis_prompt_templates(
+pub async fn save_analysis_prompt_templates(
     store: State<'_, ProjectStore>,
     input: SaveAnalysisPromptTemplateInput,
 ) -> Result<AnalysisPromptTemplate, SummaryCommandError> {
-    PromptTemplateRepository::new(store.inner())
-        .save(input)
-        .map_err(Into::into)
+    let store = store.inner().clone();
+    run_blocking(move || PromptTemplateRepository::new(&store).save(input)).await
 }
 
 #[tauri::command]
-pub fn delete_analysis_prompt_templates(
+pub async fn delete_analysis_prompt_templates(
     store: State<'_, ProjectStore>,
     input: DeleteAnalysisPromptTemplateInput,
 ) -> Result<(), SummaryCommandError> {
-    PromptTemplateRepository::new(store.inner())
-        .delete(&input.id)
-        .map_err(Into::into)
+    let store = store.inner().clone();
+    run_blocking(move || PromptTemplateRepository::new(&store).delete(&input.id)).await
 }
 
 #[tauri::command]
@@ -72,11 +69,12 @@ pub async fn prepare_summary_task(
 }
 
 #[tauri::command]
-pub fn open_summary_materials(
+pub async fn open_summary_materials(
     store: State<'_, ProjectStore>,
     input: SummaryTaskIdInput,
 ) -> Result<bool, SummaryCommandError> {
-    materials::open_materials(store.inner(), &input.task_id).map_err(Into::into)
+    let store = store.inner().clone();
+    run_blocking(move || materials::open_materials(&store, &input.task_id)).await
 }
 
 #[tauri::command]
@@ -106,61 +104,62 @@ pub async fn resume_summary_task(
 }
 
 #[tauri::command]
-pub fn cancel_summary_task(
+pub async fn cancel_summary_task(
     store: State<'_, ProjectStore>,
     input: SummaryTaskIdInput,
 ) -> Result<SummaryTask, SummaryCommandError> {
-    let repository = SummaryTaskRepository::new(store.inner());
-    let task = repository.get(&input.task_id)?;
-    if matches!(
-        task.status.as_str(),
-        "prepared" | "awaiting_external_result" | "paused" | "interrupted"
-    ) {
-        repository.finish_cancelled(&input.task_id)?;
-    } else {
-        repository.request_cancel(&input.task_id)?;
-    }
-    repository.get(&input.task_id).map_err(Into::into)
+    let store = store.inner().clone();
+    run_blocking(move || {
+        let repository = SummaryTaskRepository::new(&store);
+        let task = repository.get(&input.task_id)?;
+        if matches!(
+            task.status.as_str(),
+            "prepared" | "awaiting_external_result" | "paused" | "interrupted"
+        ) {
+            repository.finish_cancelled(&input.task_id)?;
+        } else {
+            repository.request_cancel(&input.task_id)?;
+        }
+        repository.get(&input.task_id)
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn get_summary_task(
+pub async fn get_summary_task(
     store: State<'_, ProjectStore>,
     input: SummaryTaskIdInput,
 ) -> Result<SummaryTask, SummaryCommandError> {
-    SummaryTaskRepository::new(store.inner())
-        .get(&input.task_id)
-        .map_err(Into::into)
+    let store = store.inner().clone();
+    run_blocking(move || SummaryTaskRepository::new(&store).get(&input.task_id)).await
 }
 
 #[tauri::command]
-pub fn list_summary_tasks(
+pub async fn list_summary_tasks(
     store: State<'_, ProjectStore>,
     input: ListSummaryTasksInput,
 ) -> Result<Vec<SummaryTask>, SummaryCommandError> {
-    SummaryTaskRepository::new(store.inner())
-        .list(&input.project_id)
-        .map_err(Into::into)
+    let store = store.inner().clone();
+    run_blocking(move || SummaryTaskRepository::new(&store).list(&input.project_id)).await
 }
 
 #[tauri::command]
-pub fn get_video_summary(
+pub async fn get_video_summary(
     store: State<'_, ProjectStore>,
     input: VideoSummaryIdInput,
 ) -> Result<VideoSummary, SummaryCommandError> {
-    SummaryResultRepository::new(store.inner())
-        .get_summary(&input.summary_id)
-        .map_err(Into::into)
+    let store = store.inner().clone();
+    run_blocking(move || SummaryResultRepository::new(&store).get_summary(&input.summary_id)).await
 }
 
 #[tauri::command]
-pub fn list_video_summaries(
+pub async fn list_video_summaries(
     store: State<'_, ProjectStore>,
     input: ListVideoSummariesInput,
 ) -> Result<Vec<VideoSummary>, SummaryCommandError> {
-    SummaryResultRepository::new(store.inner())
-        .list_summaries(&input.project_id)
-        .map_err(Into::into)
+    let store = store.inner().clone();
+    run_blocking(move || SummaryResultRepository::new(&store).list_summaries(&input.project_id))
+        .await
 }
 
 #[tauri::command]
@@ -169,13 +168,17 @@ pub async fn export_video_summary(
     input: ExportVideoSummaryInput,
 ) -> Result<SummaryExport, SummaryCommandError> {
     let store = store.inner().clone();
-    run_blocking(move || report::export(&store, input)).await.map_err(|mut error| {
-        if error.code == "summary_background_failed" {
-            error.code = "summary_export_unconfirmed";
-            error.message = "报告导出意外中断，保存结果尚未确认。请先检查所选目录，避免重复导出。".to_owned();
-        }
-        error
-    })
+    run_blocking(move || report::export(&store, input))
+        .await
+        .map_err(|mut error| {
+            if error.code == "summary_background_failed" {
+                error.code = "summary_export_unconfirmed";
+                error.message =
+                    "报告导出意外中断，保存结果尚未确认。请先检查所选目录，避免重复导出。"
+                        .to_owned();
+            }
+            error
+        })
 }
 
 #[tauri::command]
@@ -223,22 +226,28 @@ mod tests {
         where
             F: FnOnce(State<'static, ProjectStore>, ExportVideoSummaryInput) -> R,
             R: std::future::Future<Output = Result<SummaryExport, SummaryCommandError>>,
-        {}
+        {
+        }
         assert_async(export_video_summary);
     }
 
     #[test]
     fn blocking_work_runs_off_the_calling_thread() {
         let caller = std::thread::current().id();
-        let worker = tauri::async_runtime::block_on(run_blocking(|| Ok(std::thread::current().id()))).unwrap();
+        let worker =
+            tauri::async_runtime::block_on(run_blocking(|| Ok(std::thread::current().id())))
+                .unwrap();
         assert_ne!(caller, worker);
     }
 
     #[test]
     fn blocking_work_preserves_validation_errors() {
         let error = tauri::async_runtime::block_on(run_blocking::<()>(|| {
-            Err(StoreError::Validation("请选择已存在的报告保存目录".to_owned()))
-        })).unwrap_err();
+            Err(StoreError::Validation(
+                "请选择已存在的报告保存目录".to_owned(),
+            ))
+        }))
+        .unwrap_err();
         assert_eq!(error.code, "validation_failed");
         assert!(error.message.contains("请选择已存在的报告保存目录"));
     }

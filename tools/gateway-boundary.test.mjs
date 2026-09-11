@@ -142,3 +142,13 @@ test("runtime probes and resource binding work do not run synchronously in IPC",
     assert.ok(body && /resource_commands::run\(move \|\|/.test(body), `${name} must offload process/filesystem work`);
   }
 });
+
+test("summary command reads, templates and cancellation use the blocking worker", async () => {
+  const source = await readFile(new URL("../src-tauri/src/summary/commands.rs", import.meta.url), "utf8");
+  const commands = [...source.matchAll(/#\[tauri::command\]\s+pub\s+(async\s+)?fn\s+(\w+)[\s\S]*?\n\}/g)];
+  assert.equal(commands.length, 15);
+  for (const [body, asynchronous, name] of commands) {
+    assert.ok(asynchronous, `${name} must not run database or filesystem work synchronously`);
+    assert.ok(/run_blocking\(|spawn_blocking\(/.test(body), `${name} must offload work`);
+  }
+});
