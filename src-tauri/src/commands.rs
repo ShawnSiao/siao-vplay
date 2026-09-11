@@ -1,3 +1,4 @@
+mod project_io;
 mod project_deletion;
 #[cfg(test)]
 mod resource_location_tests;
@@ -454,11 +455,11 @@ impl CommandError {
 }
 
 #[tauri::command]
-pub fn create_local_project(
+pub async fn create_local_project(
     store: State<'_, ProjectStore>,
     input: CreateLocalProjectInput,
 ) -> Result<Project, CommandError> {
-    store.create_local_project(input).map_err(Into::into)
+    project_io::run(store.inner().clone(), move |store| store.create_local_project(input).map_err(Into::into)).await
 }
 
 #[tauri::command]
@@ -547,47 +548,49 @@ pub fn cancel_youtube_import(input: CancelYouTubeImportInput) -> Result<bool, Co
 }
 
 #[tauri::command]
-pub fn list_projects(
+pub async fn list_projects(
     app: AppHandle,
     store: State<'_, ProjectStore>,
 ) -> Result<Vec<Project>, CommandError> {
-    let projects = store.list_projects().map_err(CommandError::from)?;
-    for project in &projects {
-        allow_project_poster(&app, project)?;
-    }
-    Ok(projects)
+    project_io::run(store.inner().clone(), move |store| {
+        let projects = store.list_projects().map_err(CommandError::from)?;
+        for project in &projects {
+            allow_project_poster(&app, project)?;
+        }
+        Ok(projects)
+    }).await
 }
 
 #[tauri::command]
-pub fn get_project(
+pub async fn get_project(
     store: State<'_, ProjectStore>,
     project_id: String,
 ) -> Result<Project, CommandError> {
-    store.get_project(&project_id).map_err(Into::into)
+    project_io::run(store.inner().clone(), move |store| store.get_project(&project_id).map_err(Into::into)).await
 }
 
 #[tauri::command]
-pub fn mark_project_opened(
+pub async fn mark_project_opened(
     store: State<'_, ProjectStore>,
     project_id: String,
 ) -> Result<Project, CommandError> {
-    store.mark_project_opened(&project_id).map_err(Into::into)
+    project_io::run(store.inner().clone(), move |store| store.mark_project_opened(&project_id).map_err(Into::into)).await
 }
 
 #[tauri::command]
-pub fn update_playback_state(
+pub async fn update_playback_state(
     store: State<'_, ProjectStore>,
     input: UpdatePlaybackStateInput,
 ) -> Result<Project, CommandError> {
-    store.update_playback_state(input).map_err(Into::into)
+    project_io::run(store.inner().clone(), move |store| store.update_playback_state(input).map_err(Into::into)).await
 }
 
 #[tauri::command]
-pub fn relink_project_media(
+pub async fn relink_project_media(
     store: State<'_, ProjectStore>,
     input: RelinkProjectMediaInput,
 ) -> Result<Project, CommandError> {
-    store.relink_project_media(input).map_err(Into::into)
+    project_io::run(store.inner().clone(), move |store| store.relink_project_media(input).map_err(Into::into)).await
 }
 
 #[tauri::command]

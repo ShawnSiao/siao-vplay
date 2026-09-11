@@ -152,3 +152,11 @@ test("summary command reads, templates and cancellation use the blocking worker"
     assert.ok(/run_blocking\(|spawn_blocking\(/.test(body), `${name} must offload work`);
   }
 });
+
+test("project database commands offload their transaction work", async () => {
+  const source = await readFile(new URL("../src-tauri/src/commands.rs", import.meta.url), "utf8");
+  for (const name of ["create_local_project", "list_projects", "get_project", "mark_project_opened", "update_playback_state", "relink_project_media"]) {
+    const body = source.match(new RegExp(`pub async fn ${name}\\([\\s\\S]*?\\n\\}`))?.[0];
+    assert.ok(body && /project_io::run\(/.test(body), `${name} must offload DB/file work`);
+  }
+});
