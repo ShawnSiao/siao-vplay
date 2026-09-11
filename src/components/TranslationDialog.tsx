@@ -1,3 +1,5 @@
+import { useCodexDetection } from "../features/ai-tasks/useCodexDetection";
+import { CodexDetectionNotice } from "../features/ai-tasks/CodexDetectionNotice";
 import { previewTranslationDispatch, type TranslationDispatchPreview } from "../features/ai-tasks/translationDispatch";
 import { TranslationDispatchConfirm } from "../features/ai-tasks/TranslationDispatchConfirm";
 import { AiExecutionConfirm } from "../features/ai-tasks/AiExecutionConfirm";
@@ -21,7 +23,6 @@ import {
   startCodexTranslationTask,
 } from "../lib/desktop";
 import type {
-  CodexRuntimeStatus,
   SubtitleVersion,
   TranslationTask,
 } from "../types";
@@ -87,7 +88,8 @@ export function TranslationDialog({
   const [targetLanguageCode, setTargetLanguageCode] = useState(() =>
     defaultTargetLanguage(sourceVersion?.languageCode ?? "en"),
   );
-  const [runtime, setRuntime] = useState<CodexRuntimeStatus | null>(null);
+  const codexDetection = useCodexDetection(getCodexRuntimeStatus);
+  const { runtime } = codexDetection;
   const [dispatch, setDispatch] = useState<TranslationDispatchPreview | null>(null);
   const [task, setTask] = useState<TranslationTask | null>(null);
   const [loading, setLoading] = useState(true);
@@ -123,14 +125,12 @@ export function TranslationDialog({
   useEffect(() => {
     let active = true;
     void Promise.all([
-      getCodexRuntimeStatus(),
       listTranslationTasks(projectId),
     ])
-      .then(([nextRuntime, tasks]) => {
+      .then(([tasks]) => {
         if (!active) {
           return;
         }
-        setRuntime(nextRuntime);
         const activeTask = tasks.find((item) => activeStatuses.has(item.status));
         const taskMatchesSelection = (item: TranslationTask) => {
           const taskKey = [...item.authorizedSegmentIds].sort().join("|");
@@ -846,6 +846,7 @@ export function TranslationDialog({
       onClose={onClose}
       actions={dispatch ? null : actions}
     >
+      <CodexDetectionNotice {...codexDetection} />
       {dispatch ? <>
         <TranslationDispatchConfirm preview={dispatch} busy={busy} onConfirm={() => void confirmDispatch()} onBack={() => setDispatch(null)} />
         {error ? <div className="notice warning" role="alert">{error}</div> : null}

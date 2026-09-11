@@ -3,6 +3,7 @@ import { beforeEach, expect, it, vi } from "vitest";
 import type { SubtitleVersion } from "../types";
 import { createTranslationTask } from "../test-fixtures/translation";
 import { TranslationDialog } from "./TranslationDialog";
+import { getCodexRuntimeStatus } from "../lib/desktop";
 
 const mocks = vi.hoisted(() => ({ list: vi.fn(), setKind: vi.fn(), prepare: vi.fn(), start: vi.fn() }));
 vi.mock("../lib/desktop", async (original) => ({
@@ -13,7 +14,7 @@ vi.mock("../lib/desktop", async (original) => ({
   startCodexTranslationTask: mocks.start,
 }));
 vi.mock("../features/ai-tasks/useAiExecutionChoice", () => ({
-  useAiExecutionChoice: () => ({ kind: "codex", setKind: mocks.setKind }),
+  useAiExecutionChoice: () => ({ kind: "codex", setKind: mocks.setKind, services: [] }),
 }));
 
 const source = { id: "source-1", projectId: "project-1", languageCode: "ja", segments: [{ id: "line-1" }] } as SubtitleVersion;
@@ -30,4 +31,11 @@ it("retries reading completed subtitles without translating again", async () => 
   await waitFor(() => expect(screen.queryByText(/字幕暂时无法读取/)).not.toBeInTheDocument());
   expect(mocks.prepare).not.toHaveBeenCalled();
   expect(mocks.start).not.toHaveBeenCalled();
+});
+
+it("restores completed subtitles even when optional Codex detection fails", async () => {
+  vi.mocked(getCodexRuntimeStatus).mockRejectedValueOnce(new Error("detection unavailable"));
+  const read = vi.fn().mockResolvedValue(undefined);
+  render(<TranslationDialog projectId={source.projectId} sourceVersion={source} translationVersions={[]} onClose={vi.fn()} onPrepareOriginal={vi.fn()} onTaskCompleted={read} />);
+  await waitFor(() => expect(read).toHaveBeenCalledWith(completed));
 });

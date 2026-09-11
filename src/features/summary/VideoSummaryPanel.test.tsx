@@ -47,6 +47,7 @@ vi.mock("../analysis/gateway", () => ({
 }));
 
 import { VideoSummaryPanel } from "./VideoSummaryPanel";
+import { getCodexRuntimeStatus } from "../../lib/desktop";
 
 describe("VideoSummaryPanel", () => {
   beforeEach(() => {
@@ -93,6 +94,7 @@ describe("VideoSummaryPanel", () => {
   });
 
   it("restores a failed task with an explicit retry action", async () => {
+    vi.mocked(getCodexRuntimeStatus).mockRejectedValueOnce(new Error("detection unavailable"));
     const { task } = createSummaryFixtures();
     gateway.listSummaryTasks.mockResolvedValue([{ ...task, status: "failed", errorMessage: "连接中断" }]);
     gateway.resumeSummaryTask.mockResolvedValue(task);

@@ -1,3 +1,5 @@
+import { useCodexDetection } from "../features/ai-tasks/useCodexDetection";
+import { CodexDetectionNotice } from "../features/ai-tasks/CodexDetectionNotice";
 import { requireExplanationResult } from "../lib/explanationContract";
 import { useExplanationPolling } from "../features/analysis/useExplanationPolling";
 import { AiTaskDispatchConfirm } from "../features/ai-tasks/AiTaskDispatchConfirm";
@@ -23,7 +25,6 @@ import {
 } from "../lib/desktop";
 import { formatDuration } from "../lib/format";
 import type {
-  CodexRuntimeStatus,
   Explanation,
   ExplanationTask,
   SubtitleVersion,
@@ -96,7 +97,8 @@ export function CurrentScenePanel({
   const [resultReadAttempt, setResultReadAttempt] = useState(0);
   const initialCutoffRef = useRef(playbackCutoffMs);
   const executionChoice = useAiExecutionChoice(true);
-  const [runtime, setRuntime] = useState<CodexRuntimeStatus | null>(null);
+  const codexDetection = useCodexDetection(getCodexRuntimeStatus);
+  const { runtime } = codexDetection;
   const [task, setTask] = useState<ExplanationTask | null>(null);
   const [dispatch, setDispatch] = useState<TaskDispatchPreview | null>(null);
   const [explanation, setExplanation] = useState<Explanation | null>(null);
@@ -123,15 +125,13 @@ export function CurrentScenePanel({
   useEffect(() => {
     let active = true;
     void Promise.all([
-      getCodexRuntimeStatus(),
       listExplanationTasks(projectId),
       listExplanations(projectId),
     ])
-      .then(([nextRuntime, tasks, explanations]) => {
+      .then(([tasks, explanations]) => {
         if (!active) {
           return;
         }
-        setRuntime(nextRuntime);
         setHistory(explanations);
         const activeTask = tasks.find((item) => activeStatuses.has(item.status))
           ?? (tasks[0] && ["failed", "interrupted"].includes(tasks[0].status) ? tasks[0] : null);
@@ -438,6 +438,7 @@ export function CurrentScenePanel({
       </header> : null}
 
       <div className="understanding-scroll">
+        <CodexDetectionNotice {...codexDetection} />
         <div className="spoiler-boundary">
           <span>无剧透范围</span>
           <strong>仅使用 {formatDuration(playbackCutoffMs)} 之前</strong>

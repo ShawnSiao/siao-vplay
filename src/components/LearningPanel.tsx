@@ -1,3 +1,5 @@
+import { useCodexDetection } from "../features/ai-tasks/useCodexDetection";
+import { CodexDetectionNotice } from "../features/ai-tasks/CodexDetectionNotice";
 import { useLearningPolling } from "../features/learning/useLearningPolling";
 import { findLearningHistory } from "../features/learning/learningHistory";
 import { requireLearningResult } from "../lib/learningResult";
@@ -28,7 +30,6 @@ import {
   readLearningPrompt,
 } from "../lib/desktop";
 import type {
-  CodexRuntimeStatus,
   DictionaryEntry,
   LearningCard,
   LearningTask,
@@ -137,7 +138,8 @@ function LearningPanelSession({
   );
   const [selectedText, setSelectedText] = useState(savedDraft.draft?.selectedText ?? sourceSegment?.text ?? "");
   const executionChoice = useAiExecutionChoice(false, savedDraft.draft?.execution);
-  const [runtime, setRuntime] = useState<CodexRuntimeStatus | null>(null);
+  const codexDetection = useCodexDetection(getCodexRuntimeStatus);
+  const { runtime } = codexDetection;
   const [task, setTask] = useState<LearningTask | null>(null);
   const recovery = useLearningTaskContext(task, learningContext.context, (context, text) => {
     learningContext.restoreContext(context);
@@ -175,16 +177,14 @@ function LearningPanelSession({
   useEffect(() => {
     let active = true;
     void Promise.all([
-      getCodexRuntimeStatus(),
       listLearningTasks(projectId),
       listDictionaryEntries(projectId),
       listLearningCards(projectId),
     ])
-      .then(async ([nextRuntime, tasks, nextEntries, nextCards]) => {
+      .then(async ([tasks, nextEntries, nextCards]) => {
         if (!active) {
           return;
         }
-        setRuntime(nextRuntime);
         setEntries(nextEntries);
         setCards(nextCards);
         const activeTask = tasks.find((item) => activeStatuses.has(item.status))
@@ -559,6 +559,7 @@ function LearningPanelSession({
       </header> : null}
 
       <div className="learning-scroll">
+        <CodexDetectionNotice {...codexDetection} />
         {learningContext.changed && liveSourceVersion && liveSourceSegment ? (
           <div className="learning-context-notice">
             <span>{sourceSegment ? "已保留正在学习的台词。" : "当前已有可学习的台词。"}</span>

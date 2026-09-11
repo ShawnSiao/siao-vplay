@@ -1,7 +1,9 @@
+import { useCodexDetection } from "../ai-tasks/useCodexDetection";
+import { CodexDetectionNotice } from "../ai-tasks/CodexDetectionNotice";
 import { useCallback, useEffect, useState } from "react";
 
 import { commandError, getCodexRuntimeStatus } from "../../lib/desktop";
-import type { CodexRuntimeStatus, SubtitleVersion } from "../../types";
+import type { SubtitleVersion } from "../../types";
 import { useAiExecutionChoice } from "../ai-tasks/useAiExecutionChoice";
 import type { PromptSelection } from "../analysis/types";
 import {
@@ -65,7 +67,8 @@ export function VideoSummaryPanel({
   onPausePlayback,
 }: VideoSummaryPanelProps) {
   const execution = useAiExecutionChoice(true);
-  const [runtime, setRuntime] = useState<CodexRuntimeStatus | null>(null);
+  const codexDetection = useCodexDetection(getCodexRuntimeStatus);
+  const { runtime } = codexDetection;
   const [scope, setScope] = useState<SummaryScope>("current_progress");
   const [mode, setMode] = useState<SummaryAnalysisMode>("automatic");
   const [promptSelection, setPromptSelection] = useState<PromptSelection>({
@@ -89,13 +92,11 @@ export function VideoSummaryPanel({
   useEffect(() => {
     let active = true;
     void Promise.all([
-      getCodexRuntimeStatus(),
       listSummaryTasks(projectId),
       listVideoSummaries(projectId),
     ])
-      .then(([nextRuntime, tasks, summaries]) => {
+      .then(([tasks, summaries]) => {
         if (!active) return;
-        setRuntime(nextRuntime);
         setHistory(summaries);
         const activeTask = tasks.find((item) => restorableStatuses.has(item.status)) ?? null;
         setTask(activeTask);
@@ -226,6 +227,7 @@ export function VideoSummaryPanel({
 
   return (
     <div className="video-summary-panel">
+      <CodexDetectionNotice {...codexDetection} />
       {history.length > 0 ? (
         <label className="summary-history-select">
           <span>历史结果</span>
