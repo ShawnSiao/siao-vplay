@@ -148,8 +148,8 @@ export default function App() {
     translationSegmentIds, setTranslationSegmentIds, revisionDialogOpen, setRevisionDialogOpen,
     deliveryDialogOpen, setDeliveryDialogOpen,
   } = usePlaybackTools(sessionId);
-  const [trackedTranscriptionJobId, setTrackedTranscriptionJobId] = useState<
-    string | null
+  const [trackedTranscription, setTrackedTranscription] = useState<
+    { jobId: string; projectId: string } | null
   >(null);
   const [remoteUrlDialogOpen, setRemoteUrlDialogOpen] = useState(false);
   const [deleteCandidate, setDeleteCandidate] = useState<Project | null>(null);
@@ -624,6 +624,13 @@ export default function App() {
     [isCurrentSession, mergeSubtitleVersion, refreshLibraryView],
   );
   const activeProjectId = activeProject?.id;
+  const trackTranscription = useCallback((jobId: string) => {
+    if (!activeProjectId) return;
+    setTrackedTranscription(current =>
+      current?.jobId === jobId && current.projectId === activeProjectId
+        ? current : { jobId, projectId: activeProjectId },
+    );
+  }, [activeProjectId]);
 
   const externalResults = useExternalAgentResults({
     enabled: isDesktopApp,
@@ -662,10 +669,12 @@ export default function App() {
   );
 
   useTrackedTranscription({
-    jobId: trackedTranscriptionJobId, projectId: activeProjectId, sessionId,
-    paused: subtitleDialogOpen, versions: subtitleVersions, getTranscriptionJob, getSubtitleVersion,
+    jobId: trackedTranscription?.jobId ?? null, jobProjectId: trackedTranscription?.projectId,
+    projectId: screen === "player" ? activeProjectId : undefined, sessionId,
+    paused: subtitleDialogOpen && trackedTranscription?.projectId === activeProjectId,
+    versions: subtitleVersions, getTranscriptionJob, getSubtitleVersion,
     onVersion: handleSubtitleVersionCreated, onNotice: setToast,
-    onFinished: (jobId) => setTrackedTranscriptionJobId(current => current === jobId ? null : current),
+    onFinished: (jobId) => setTrackedTranscription(current => current?.jobId === jobId ? null : current),
   });
 
   const currentSubtitle =
@@ -894,7 +903,7 @@ export default function App() {
             (version) => version.role === "translation",
           )}
           onClose={() => setSubtitleDialogOpen(false)}
-          onTranscriptionTracked={setTrackedTranscriptionJobId}
+          onTranscriptionTracked={trackTranscription}
           onTranslationTaskCompleted={handleTranslationCompleted}
           localResourceCatalog={localResources.catalog}
           localResourceStatus={localResources.status}

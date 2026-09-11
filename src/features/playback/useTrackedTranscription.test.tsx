@@ -20,7 +20,7 @@ function deferred<T>() {
   const promise = new Promise<T>(finish => { resolve = finish; });
   return { resolve, promise };
 }
-const options = () => ({ jobId: "job", projectId: "project", sessionId: 1, paused: false, versions: [] as SubtitleVersion[],
+const options = () => ({ jobId: "job", jobProjectId: "project", projectId: "project" as string | undefined, sessionId: 1, paused: false, versions: [] as SubtitleVersion[],
   getTranscriptionJob: vi.fn(async () => job), getSubtitleVersion: vi.fn(async () => version),
   onVersion: vi.fn(async () => undefined), onFinished: vi.fn(), onNotice: vi.fn(),
 });
@@ -71,4 +71,23 @@ it("does not apply an already loaded version twice", async () => {
   renderHook(() => useTrackedTranscription(base));
   await waitFor(() => expect(base.onFinished).toHaveBeenCalledWith("job"));
   expect(base.onVersion).not.toHaveBeenCalled();
+});
+
+it.each(["another-project", undefined])("delivers completed background transcription while viewing %s", async projectId => {
+  const base = options();
+  renderHook(() => useTrackedTranscription({ ...base, projectId }));
+  await waitFor(() => expect(base.onFinished).toHaveBeenCalledWith("job"));
+  expect(base.getSubtitleVersion).toHaveBeenCalledWith("project", "version");
+  expect(base.onVersion).toHaveBeenCalledWith(version, expect.stringContaining("对应视频"), expect.any(Function));
+  expect(base.onNotice).not.toHaveBeenCalled();
+});
+
+it("keeps failure feedback associated with the background task's video", async () => {
+  const base = options();
+  base.getTranscriptionJob.mockResolvedValue({ ...job, status: "failed" });
+  renderHook(() => useTrackedTranscription({ ...base, projectId: "another-project" }));
+  await waitFor(() => expect(base.onFinished).toHaveBeenCalledWith("job"));
+  expect(base.onNotice).toHaveBeenCalledWith(expect.stringContaining("生成失败"));
+  expect(base.onNotice).toHaveBeenCalledWith(expect.stringContaining("对应视频"));
+  expect(base.getSubtitleVersion).not.toHaveBeenCalled();
 });

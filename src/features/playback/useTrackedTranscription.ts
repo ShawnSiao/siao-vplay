@@ -5,6 +5,7 @@ import { matchesTranscriptionOutput, transcriptionCompletion } from "./transcrip
 
 type Options = {
   jobId: string | null;
+  jobProjectId: string | undefined;
   projectId: string | undefined;
   sessionId: number;
   paused: boolean;
@@ -16,7 +17,7 @@ type Options = {
   onNotice: (message: string) => void;
 };
 
-export function useTrackedTranscription({ jobId, projectId, sessionId, paused, versions, getTranscriptionJob, getSubtitleVersion, onVersion, onFinished, onNotice }: Options) {
+export function useTrackedTranscription({ jobId, jobProjectId, projectId, sessionId, paused, versions, getTranscriptionJob, getSubtitleVersion, onVersion, onFinished, onNotice }: Options) {
   const latest = useRef({ versions, onVersion, onFinished, onNotice });
   useLayoutEffect(() => {
     latest.current = { versions, onVersion, onFinished, onNotice };
@@ -25,7 +26,7 @@ export function useTrackedTranscription({ jobId, projectId, sessionId, paused, v
     if (
       !jobId ||
       paused ||
-      !projectId
+      !jobProjectId
     ) {
       return undefined;
     }
@@ -38,22 +39,24 @@ export function useTrackedTranscription({ jobId, projectId, sessionId, paused, v
         if (!active) {
           return;
         }
-        const decision = transcriptionCompletion(job, jobId, projectId);
+        const decision = transcriptionCompletion(job, jobId, jobProjectId);
         if (decision.kind === "waiting") {
           timer = window.setTimeout(() => void poll(), 900);
           return;
         }
 
         if (decision.kind === "stop") {
-          if (decision.notice) latest.current.onNotice(decision.notice);
+          if (decision.notice) latest.current.onNotice(
+            projectId === jobProjectId ? decision.notice : `对应视频：${decision.notice}`,
+          );
           latest.current.onFinished(jobId);
           return;
         }
-        const version = await getSubtitleVersion(projectId, decision.versionId);
+        const version = await getSubtitleVersion(jobProjectId, decision.versionId);
         if (!active) {
           return;
         }
-        if (!matchesTranscriptionOutput(version, decision.versionId, projectId)) {
+        if (!matchesTranscriptionOutput(version, decision.versionId, jobProjectId)) {
           latest.current.onNotice("返回的字幕版本与任务不匹配，未采用结果。请重新打开字幕工具检查。");
           latest.current.onFinished(jobId);
           return;
@@ -61,7 +64,7 @@ export function useTrackedTranscription({ jobId, projectId, sessionId, paused, v
         if (!latest.current.versions.some((item) => item.id === version.id)) {
           await latest.current.onVersion(
             version,
-            `已生成 ${version.segments.length} 条原文字幕草稿，可以开始抽查。`,
+            `已生成 ${version.segments.length} 条原文字幕草稿，${projectId === jobProjectId ? "可以开始抽查。" : "可打开对应视频抽查。"}`,
             () => active,
           );
         }
@@ -83,6 +86,7 @@ export function useTrackedTranscription({ jobId, projectId, sessionId, paused, v
     };
   }, [
     projectId,
+    jobProjectId,
     sessionId,
     getTranscriptionJob,
     getSubtitleVersion,
