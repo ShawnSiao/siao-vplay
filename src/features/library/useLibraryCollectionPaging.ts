@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type Dispatch, type RefObject } from "react";
-import { commandError } from "../../lib/desktop";
+import { commandError } from "../../lib/commandError";
 import type { CollectionDetail, LibraryMediaSummary } from "../../types";
 import { getCollectionDetail, listCollectionEpisodePage } from "./libraryGateway";
 

@@ -7,12 +7,12 @@ import tseslint from "typescript-eslint";
 
 export default tseslint.config(
   {
-    files: ["src/features/library/useLibrarySearch.ts", "src/features/library/useLibraryFolderScan.ts", "src/features/library/useLibraryFolderImport.ts", "src/features/library/useLibraryRecoveryPreview.ts", "src/features/library/useLibraryRecoveryApply.ts", "src/features/library/useLibraryMutation.ts", "src/features/library/useLibraryHome.ts"],
+    files: ["src/features/library/useLibrarySearch.ts", "src/features/library/useLibraryFolderScan.ts", "src/features/library/useLibraryFolderImport.ts", "src/features/library/useLibraryRecoveryPreview.ts", "src/features/library/useLibraryRecoveryApply.ts", "src/features/library/useLibraryMutation.ts", "src/features/library/useLibraryHome.ts", "src/features/library/useLibraryCollectionPaging.ts", "src/features/library/useLibrarySectionPaging.ts", "src/features/library/useLibraryWatchActions.ts"],
     rules: {
       "no-restricted-imports": ["error", {
         patterns: [{
           group: ["**/useLibraryController", "**/useLibraryController.*", "**/components/**", "**/desktop", "**/desktop.*", "@tauri-apps/**"],
-          message: "Search lifecycle publishes narrow result actions; parent controller, UI and transport are outside its boundary."
+          message: "Library operation lifecycles publish narrow result actions; parent controller, UI and transport are outside its boundary."
         }]
       }]
     }

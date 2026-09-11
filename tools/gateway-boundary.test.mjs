@@ -2,8 +2,8 @@ import { ESLint } from "eslint";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 const eslint = new ESLint();
-test("library search lifecycle cannot import its parent controller, UI or transport", async () => {
-  for (const filePath of ["src/features/library/useLibrarySearch.ts", "src/features/library/useLibraryFolderScan.ts", "src/features/library/useLibraryFolderImport.ts", "src/features/library/useLibraryRecoveryPreview.ts", "src/features/library/useLibraryRecoveryApply.ts", "src/features/library/useLibraryMutation.ts", "src/features/library/useLibraryHome.ts"]) {
+test("library operation lifecycles cannot import its parent controller, UI or transport", async () => {
+  for (const filePath of ["src/features/library/useLibrarySearch.ts", "src/features/library/useLibraryFolderScan.ts", "src/features/library/useLibraryFolderImport.ts", "src/features/library/useLibraryRecoveryPreview.ts", "src/features/library/useLibraryRecoveryApply.ts", "src/features/library/useLibraryMutation.ts", "src/features/library/useLibraryHome.ts", "src/features/library/useLibraryCollectionPaging.ts", "src/features/library/useLibrarySectionPaging.ts", "src/features/library/useLibraryWatchActions.ts"]) {
   for (const source of ["./useLibraryController", "../../components/LibraryScreen", "../../lib/desktop", "@tauri-apps/api/core"]) {
     const [result] = await eslint.lintText(`import type { Value } from "${source}"; export type X = Value;`, { filePath });
     assert.ok(result.messages.some(message => message.ruleId === "no-restricted-imports"), source);

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef } from "react";
 
-import { commandError } from "../../lib/desktop";
+import { commandError } from "../../lib/commandError";
 import type { LibraryMediaSection } from "../../types";
 import { listLibrarySection } from "./libraryGateway";
 import type {
