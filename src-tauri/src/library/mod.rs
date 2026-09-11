@@ -3,6 +3,8 @@ pub(crate) use scan_model::*;
 mod episode_neighbors;
 pub(crate) use episode_neighbors::{EpisodeReference, EpisodeNeighbors, EpisodeNeighborsResult};
 pub(crate) mod commands;
+mod command_worker;
+mod command_assets;
 mod error;
 mod import_service;
 pub(crate) mod migration;

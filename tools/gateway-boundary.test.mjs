@@ -107,3 +107,14 @@ test("AI service and network settings commands offload blocking IO", async () =>
     assert.ok(body && /run\(move \|\|/.test(body), `${name} must offload network/filesystem work`);
   }
 });
+
+test("library database and filesystem commands dispatch through a worker", async () => {
+  for (const file of ["commands.rs", "episode_commands.rs"]) {
+    const source = await readFile(new URL(`../src-tauri/src/library/${file}`, import.meta.url), "utf8");
+    for (const match of source.matchAll(/#\[tauri::command\]\s+pub\(crate\)\s+(async\s+)?fn\s+(\w+)[\s\S]*?\n\}/g)) {
+      if (match[2] === "cancel_library_scan") continue;
+      assert.ok(match[1], `${match[2]} must not block IPC`);
+      assert.ok(/spawn_blocking|\brun\(/.test(match[0]), `${match[2]} must offload work`);
+    }
+  }
+});

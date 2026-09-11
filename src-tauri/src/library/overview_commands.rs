@@ -1,6 +1,6 @@
 use tauri::{AppHandle, State};
 use crate::{commands::CommandError, store::ProjectStore};
-use super::{LibraryService, commands::allow_poster,
+use super::{LibraryService, command_assets::allow_poster,
     overview_model::{CollectionOverviewInput, CollectionOverviewPage, OverviewPageInput, RootOverviewPage}};
 
 #[tauri::command]
