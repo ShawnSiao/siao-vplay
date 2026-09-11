@@ -126,3 +126,11 @@ test("resource status and diagnostics reads offload receipt filesystem inspectio
     assert.ok(body && /resource_commands::run\(move \|\|/.test(body), `${name} must inspect files on a worker`);
   }
 });
+
+test("resource maintenance commands offload IO while retaining domain admission", async () => {
+  const source = await readFile(new URL("../src-tauri/src/commands.rs", import.meta.url), "utf8");
+  for (const name of ["plan_local_resource_location", "configure_local_resource_root", "repair_local_resource_root", "set_local_resource_profile", "list_resource_download_tasks", "prepare_local_capability", "pause_resource_download", "resume_resource_download", "cancel_resource_download", "retry_resource_download", "repair_local_resource", "update_local_resource", "remove_local_resource", "rollback_local_resource", "cleanup_old_resource_versions"]) {
+    const body = source.match(new RegExp(`pub async fn ${name}\\([\\s\\S]*?\\n\\}`))?.[0];
+    assert.ok(body && /resource_commands::run\(move \|\|/.test(body), `${name} must offload IO or contended locks`);
+  }
+});

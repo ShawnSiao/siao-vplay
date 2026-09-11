@@ -625,28 +625,32 @@ pub async fn get_local_resource_status() -> Result<LocalResourceStatus, CommandE
 }
 
 #[tauri::command]
-pub fn plan_local_resource_location(
+pub async fn plan_local_resource_location(
     input: PlanLocalResourceLocationInput,
 ) -> Result<LocalResourceLocationPlan, CommandError> {
-    local_resources::plan_location(&input.parent_path).map_err(Into::into)
+    crate::resource_commands::run(move || local_resources::plan_location(&input.parent_path).map_err(Into::into)).await
 }
 
 #[tauri::command]
-pub fn configure_local_resource_root(
+pub async fn configure_local_resource_root(
     input: ConfigureLocalResourceRootInput,
 ) -> Result<crate::resource_location::ResourceLocationResult, CommandError> {
-    let _maintenance = crate::resource_leases::maintain_all().map_err(LocalResourceError::from)?;
-    let status = local_resources::configure_confirmed_location(&input)?;
-    crate::resource_location::finish(status).map_err(Into::into)
+    crate::resource_commands::run(move || {
+        let _maintenance = crate::resource_leases::maintain_all().map_err(LocalResourceError::from)?;
+        let status = local_resources::configure_confirmed_location(&input)?;
+        crate::resource_location::finish(status).map_err(Into::into)
+    }).await
 }
 
 #[tauri::command]
-pub fn repair_local_resource_root(
+pub async fn repair_local_resource_root(
     input: ConfirmLocalResourceOperationInput,
 ) -> Result<crate::resource_location::ResourceLocationResult, CommandError> {
-    let _maintenance = crate::resource_leases::maintain_all().map_err(LocalResourceError::from)?;
-    let status = local_resources::repair_configured_root(input.confirmed)?;
-    crate::resource_location::finish(status).map_err(Into::into)
+    crate::resource_commands::run(move || {
+        let _maintenance = crate::resource_leases::maintain_all().map_err(LocalResourceError::from)?;
+        let status = local_resources::repair_configured_root(input.confirmed)?;
+        crate::resource_location::finish(status).map_err(Into::into)
+    }).await
 }
 
 
@@ -657,81 +661,83 @@ pub fn repair_local_resource_root(
 
 
 #[tauri::command]
-pub fn set_local_resource_profile(
+pub async fn set_local_resource_profile(
     input: SetLocalResourceProfileInput,
 ) -> Result<LocalResourceStatus, CommandError> {
-    local_resources::set_preferred_profile(&input.profile_id).map_err(Into::into)
+    crate::resource_commands::run(move || local_resources::set_preferred_profile(&input.profile_id).map_err(Into::into)).await
 }
 
 #[tauri::command]
-pub fn list_resource_download_tasks() -> Result<ResourceDownloadSnapshot, CommandError> {
-    resource_download::task_snapshot_list().map_err(Into::into)
+pub async fn list_resource_download_tasks() -> Result<ResourceDownloadSnapshot, CommandError> {
+    crate::resource_commands::run(move || resource_download::task_snapshot_list().map_err(Into::into)).await
 }
 
 #[tauri::command]
-pub fn prepare_local_capability(
+pub async fn prepare_local_capability(
     app: AppHandle,
     input: PrepareLocalCapabilityInput,
 ) -> Result<CapabilityPreparation, CommandError> {
-    resource_download::prepare_capability(
-        &input.capability_id,
-        input.pending_action_id.as_deref(),
-        Some(app),
-    )
-    .map_err(Into::into)
+    crate::resource_commands::run(move || {
+        resource_download::prepare_capability(
+            &input.capability_id,
+            input.pending_action_id.as_deref(),
+            Some(app),
+        )
+        .map_err(Into::into)
+    }).await
 }
 
 #[tauri::command]
-pub fn pause_resource_download(
+pub async fn pause_resource_download(
     input: ResourceDownloadTaskInput,
 ) -> Result<ResourceDownloadTask, CommandError> {
-    resource_download::pause_task(&input.task_id).map_err(Into::into)
+    crate::resource_commands::run(move || resource_download::pause_task(&input.task_id).map_err(Into::into)).await
 }
 
 #[tauri::command]
-pub fn resume_resource_download(
+pub async fn resume_resource_download(
     app: AppHandle,
     input: ResourceDownloadTaskInput,
 ) -> Result<ResourceDownloadTask, CommandError> {
-    resource_download::resume_task(&input.task_id, Some(app)).map_err(Into::into)
+    crate::resource_commands::run(move || resource_download::resume_task(&input.task_id, Some(app)).map_err(Into::into)).await
 }
 
 #[tauri::command]
-pub fn cancel_resource_download(
+pub async fn cancel_resource_download(
     input: ResourceDownloadTaskInput,
 ) -> Result<ResourceDownloadTask, CommandError> {
-    resource_download::cancel_task(&input.task_id).map_err(Into::into)
+    crate::resource_commands::run(move || resource_download::cancel_task(&input.task_id).map_err(Into::into)).await
 }
 
 #[tauri::command]
-pub fn retry_resource_download(
+pub async fn retry_resource_download(
     app: AppHandle,
     input: ResourceDownloadTaskInput,
 ) -> Result<ResourceDownloadTask, CommandError> {
-    resource_download::retry_task(&input.task_id, Some(app)).map_err(Into::into)
+    crate::resource_commands::run(move || resource_download::retry_task(&input.task_id, Some(app)).map_err(Into::into)).await
 }
 
 #[tauri::command]
-pub fn repair_local_resource(
-    app: AppHandle,
-    input: RepairLocalResourceInput,
-) -> Result<ResourceDownloadTask, CommandError> {
-    resource_download::repair_resource(&input.resource_id, Some(app)).map_err(Into::into)
-}
-
-#[tauri::command]
-pub fn update_local_resource(
+pub async fn repair_local_resource(
     app: AppHandle,
     input: RepairLocalResourceInput,
 ) -> Result<ResourceDownloadTask, CommandError> {
-    resource_download::update_resource(&input.resource_id, Some(app)).map_err(Into::into)
+    crate::resource_commands::run(move || resource_download::repair_resource(&input.resource_id, Some(app)).map_err(Into::into)).await
 }
 
 #[tauri::command]
-pub fn remove_local_resource(
+pub async fn update_local_resource(
+    app: AppHandle,
+    input: RepairLocalResourceInput,
+) -> Result<ResourceDownloadTask, CommandError> {
+    crate::resource_commands::run(move || resource_download::update_resource(&input.resource_id, Some(app)).map_err(Into::into)).await
+}
+
+#[tauri::command]
+pub async fn remove_local_resource(
     input: RemoveLocalResourceInput,
 ) -> Result<ResourceRemovalResult, CommandError> {
-    resource_download::remove_resource(&input.resource_id, input.confirmed).map_err(Into::into)
+    crate::resource_commands::run(move || resource_download::remove_resource(&input.resource_id, input.confirmed).map_err(Into::into)).await
 }
 
 #[tauri::command]
@@ -750,10 +756,10 @@ pub fn get_local_resource_third_party_notices() -> String {
 }
 
 #[tauri::command]
-pub fn rollback_local_resource(
+pub async fn rollback_local_resource(
     input: RollbackLocalResourceInput,
 ) -> Result<ResourceRollbackResult, CommandError> {
-    resource_diagnostics::rollback_resource(input).map_err(Into::into)
+    crate::resource_commands::run(move || resource_diagnostics::rollback_resource(input).map_err(Into::into)).await
 }
 
 #[tauri::command]
@@ -762,10 +768,10 @@ pub async fn plan_old_resource_version_cleanup() -> Result<OldResourceVersionCle
 }
 
 #[tauri::command]
-pub fn cleanup_old_resource_versions(
+pub async fn cleanup_old_resource_versions(
     input: CleanupOldResourceVersionsInput,
 ) -> Result<OldResourceVersionCleanupResult, CommandError> {
-    resource_diagnostics::cleanup_old_versions(input).map_err(Into::into)
+    crate::resource_commands::run(move || resource_diagnostics::cleanup_old_versions(input).map_err(Into::into)).await
 }
 
 #[tauri::command]

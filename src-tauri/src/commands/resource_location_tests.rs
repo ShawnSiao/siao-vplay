@@ -40,12 +40,12 @@ fn isolated(name: &str, mode: &str) {
                 fs::write(state.join("download-tasks.json"), b"{broken").unwrap();
             }
             let plan = local_resources::plan_location(target.to_str().unwrap()).unwrap();
-            let result = configure_local_resource_root(ConfigureLocalResourceRootInput {
+            let result = tauri::async_runtime::block_on(configure_local_resource_root(ConfigureLocalResourceRootInput {
                 parent_path: plan.selected_parent,
                 resource_root: plan.resource_root,
                 plan_fingerprint: plan.plan_fingerprint,
                 confirmed: true,
-            })
+            }))
             .expect("saved location must not fail because legacy settings cannot be rewritten");
             if mode == "binding" {
                 assert!(result.binding_error.is_some());
@@ -91,7 +91,7 @@ fn isolated(name: &str, mode: &str) {
             }
         }
         "repair" => {
-            repair_local_resource_root(ConfirmLocalResourceOperationInput { confirmed: true })
+            tauri::async_runtime::block_on(repair_local_resource_root(ConfirmLocalResourceOperationInput { confirmed: true }))
                 .unwrap();
         }
         "reconnect" => {
