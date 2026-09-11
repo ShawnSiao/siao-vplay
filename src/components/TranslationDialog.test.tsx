@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
 import type { SubtitleVersion } from "../types";
 import { createTranslationTask } from "../test-fixtures/translation";
@@ -38,4 +38,26 @@ it("restores completed subtitles even when optional Codex detection fails", asyn
   const read = vi.fn().mockResolvedValue(undefined);
   render(<TranslationDialog projectId={source.projectId} sourceVersion={source} translationVersions={[]} onClose={vi.fn()} onPrepareOriginal={vi.fn()} onTaskCompleted={read} />);
   await waitFor(() => expect(read).toHaveBeenCalledWith(completed));
+});
+
+it("blocks preparation until task history is known", async () => {
+  let finish!: (tasks: typeof completed[]) => void;
+  mocks.list.mockReturnValueOnce(new Promise(resolve => { finish = resolve; }));
+  render(<TranslationDialog projectId={source.projectId} sourceVersion={source} translationVersions={[]} onClose={vi.fn()} onPrepareOriginal={vi.fn()} onTaskCompleted={vi.fn()} />);
+  await waitFor(() => expect(getCodexRuntimeStatus).toHaveBeenCalled());
+  expect(screen.queryByRole("button", { name: "准备翻译材料" })).not.toBeInTheDocument();
+  await act(async () => finish([completed]));
+});
+
+it("retries history failure and restores a completed task without retranslating", async () => {
+  mocks.list.mockRejectedValueOnce(new Error("history unavailable")).mockResolvedValue([completed]);
+  const read = vi.fn().mockResolvedValue(undefined);
+  render(<TranslationDialog projectId={source.projectId} sourceVersion={source} translationVersions={[]} onClose={vi.fn()} onPrepareOriginal={vi.fn()} onTaskCompleted={read} />);
+  expect(await screen.findByText("history unavailable")).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "准备翻译材料" })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "重新读取翻译记录" }));
+  await waitFor(() => expect(read).toHaveBeenCalledWith(completed));
+  expect(mocks.list).toHaveBeenCalledTimes(2);
+  expect(mocks.prepare).not.toHaveBeenCalled();
+  expect(mocks.start).not.toHaveBeenCalled();
 });

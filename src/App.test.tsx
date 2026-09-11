@@ -2570,7 +2570,7 @@ describe("App", () => {
       target: { value: "de" },
     });
     fireEvent.click(
-      screen.getByRole("button", { name: "准备翻译材料" }),
+      await screen.findByRole("button", { name: "准备翻译材料" }),
     );
 
     await waitFor(() =>

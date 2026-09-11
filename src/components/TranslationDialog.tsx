@@ -92,7 +92,8 @@ export function TranslationDialog({
   const { runtime } = codexDetection;
   const [dispatch, setDispatch] = useState<TranslationDispatchPreview | null>(null);
   const [task, setTask] = useState<TranslationTask | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [historyAttempt, setHistoryAttempt] = useState(0);
+  const [historyRead, setHistoryRead] = useState<{ key: string; projectId: string; error: string | null } | null>(null);
   const [operation, setOperation] = useState<string | null>(null);
   const [prompt, setPrompt] = useState<string | null>(null);
   const [promptExpanded, setPromptExpanded] = useState(false);
@@ -113,6 +114,10 @@ export function TranslationDialog({
   const taskVersion =
     translationVersions.find((version) => version.id === task?.outputVersionId) ??
     null;
+  const historyKey = JSON.stringify([projectId, requestedKey, sourceLanguageCode, targetLanguageCode,
+    sourceVersion?.id, sourceVersion?.segments.length, currentTranslation?.id, historyAttempt]);
+  const loading = historyRead?.key !== historyKey;
+  const historyError = loading ? null : historyRead?.error;
   const targetLanguageLabel = translationLanguageLabel(targetLanguageCode);
   const sourceById = useMemo(
     () =>
@@ -124,10 +129,8 @@ export function TranslationDialog({
 
   useEffect(() => {
     let active = true;
-    void Promise.all([
-      listTranslationTasks(projectId),
-    ])
-      .then(([tasks]) => {
+    void listTranslationTasks(projectId)
+      .then((tasks) => {
         if (!active) {
           return;
         }
@@ -163,21 +166,18 @@ export function TranslationDialog({
         if (currentTask) {
           setHandoff(currentTask.handoffKind);
         }
+        setHistoryRead({ key: historyKey, projectId, error: null });
       })
       .catch((cause: unknown) => {
         if (active) {
-          setError(commandError(cause).message);
-        }
-      })
-      .finally(() => {
-        if (active) {
-          setLoading(false);
+          setHistoryRead({ key: historyKey, projectId, error: commandError(cause).message });
         }
       });
     return () => {
       active = false;
     };
   }, [
+    historyKey,
     projectId,
     setHandoff,
     requestedKey,
@@ -244,7 +244,7 @@ export function TranslationDialog({
   }, [task]);
 
   const prepare = async () => {
-    if (!sourceVersion) {
+    if (!sourceVersion || loading || historyError) {
       return;
     }
     setOperation("prepare");
@@ -532,10 +532,15 @@ export function TranslationDialog({
 
   const content = (
     <>
-      {loading ? (
+      {loading && (historyRead?.projectId !== projectId || historyRead.error) ? (
         <div className="translation-loading" role="status">
           <span className="spinner"></span>
           <span>正在读取翻译状态</span>
+        </div>
+      ) : historyError ? (
+        <div className="notice warning" role="alert">
+          <p>{historyError}</p>
+          <button className="button quiet small" type="button" onClick={() => setHistoryAttempt(value => value + 1)}>重新读取翻译记录</button>
         </div>
       ) : !sourceVersion ? (
         <div className="translation-empty">
@@ -844,7 +849,7 @@ export function TranslationDialog({
       running={Boolean(running)}
       busy={busy}
       onClose={onClose}
-      actions={dispatch ? null : actions}
+      actions={loading || historyError ? <button className="button quiet" type="button" onClick={onClose}>关闭</button> : dispatch ? null : actions}
     >
       <CodexDetectionNotice {...codexDetection} />
       {dispatch ? <>
