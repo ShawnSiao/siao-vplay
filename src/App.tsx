@@ -1,4 +1,5 @@
 import { translationCompletionNotice } from "./features/ai-tasks/translationCompletionNotice";
+import { usePlaybackTools } from "./features/playback/usePlaybackTools";
 import { ProjectCleanupNotice } from "./components/ProjectCleanupNotice";
 import { ExternalResultNotice } from "./components/ExternalResultNotice";
 import { useSettingsNavigation } from "./features/environment-settings/useSettingsNavigation";
@@ -142,16 +143,14 @@ export default function App() {
   const [subtitleVersions, setSubtitleVersions] = useState<SubtitleVersion[]>(
     [],
   );
-  const [subtitleDialogOpen, setSubtitleDialogOpen] = useState(false);
+  const {
+    subtitleDialogOpen, setSubtitleDialogOpen, translationDialogOpen, setTranslationDialogOpen,
+    translationSegmentIds, setTranslationSegmentIds, revisionDialogOpen, setRevisionDialogOpen,
+    deliveryDialogOpen, setDeliveryDialogOpen,
+  } = usePlaybackTools(sessionId);
   const [trackedTranscriptionJobId, setTrackedTranscriptionJobId] = useState<
     string | null
   >(null);
-  const [translationDialogOpen, setTranslationDialogOpen] = useState(false);
-  const [translationSegmentIds, setTranslationSegmentIds] = useState<
-    string[] | undefined
-  >(undefined);
-  const [revisionDialogOpen, setRevisionDialogOpen] = useState(false);
-  const [deliveryDialogOpen, setDeliveryDialogOpen] = useState(false);
   const [remoteUrlDialogOpen, setRemoteUrlDialogOpen] = useState(false);
   const [deleteCandidate, setDeleteCandidate] = useState<Project | null>(null);
   const [busyMessage, setBusyMessage] = useState<string | null>(null);
@@ -312,10 +311,6 @@ export default function App() {
     setForceProxy(false);
     setSubtitleVersions([]);
     setEpisodeContext(null);
-    setSubtitleDialogOpen(false);
-    setTranslationDialogOpen(false);
-    setTranslationSegmentIds(undefined);
-    setRevisionDialogOpen(false);
     setRemoteUrlDialogOpen(false);
     void refreshLibraryView();
   }, [openingIntent, refreshLibraryView, setLibrarySection, setScreen]);
