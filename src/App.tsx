@@ -3,7 +3,8 @@ import { usePlaybackTools } from "./features/playback/usePlaybackTools";
 import { ProjectCleanupNotice } from "./components/ProjectCleanupNotice";
 import { ExternalResultNotice } from "./components/ExternalResultNotice";
 import { useSettingsNavigation } from "./features/environment-settings/useSettingsNavigation";
-import { useTrackedTranscription } from "./features/playback/useTrackedTranscription";
+import { TrackedTranscriptions } from "./features/playback/TrackedTranscriptions";
+import { useTranscriptionRegistry } from "./features/playback/useTranscriptionRegistry";
 import { posterCandidates } from "./features/library/posterCandidates";
 import { SubtitleHistoryLoader } from "./features/subtitle-revision/SubtitleHistoryLoader";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -148,9 +149,7 @@ export default function App() {
     translationSegmentIds, setTranslationSegmentIds, revisionDialogOpen, setRevisionDialogOpen,
     deliveryDialogOpen, setDeliveryDialogOpen,
   } = usePlaybackTools(sessionId);
-  const [trackedTranscription, setTrackedTranscription] = useState<
-    { jobId: string; projectId: string } | null
-  >(null);
+  const { jobs: trackedTranscriptions, register: registerTranscription, finish: finishTranscription } = useTranscriptionRegistry();
   const [remoteUrlDialogOpen, setRemoteUrlDialogOpen] = useState(false);
   const [deleteCandidate, setDeleteCandidate] = useState<Project | null>(null);
   const [busyMessage, setBusyMessage] = useState<string | null>(null);
@@ -626,11 +625,8 @@ export default function App() {
   const activeProjectId = activeProject?.id;
   const trackTranscription = useCallback((jobId: string) => {
     if (!activeProjectId) return;
-    setTrackedTranscription(current =>
-      current?.jobId === jobId && current.projectId === activeProjectId
-        ? current : { jobId, projectId: activeProjectId },
-    );
-  }, [activeProjectId]);
+    registerTranscription(jobId, activeProjectId);
+  }, [activeProjectId, registerTranscription]);
 
   const externalResults = useExternalAgentResults({
     enabled: isDesktopApp,
@@ -668,15 +664,6 @@ export default function App() {
     [isCurrentSession, mergeSubtitleVersion, refreshLibraryView],
   );
 
-  useTrackedTranscription({
-    jobId: trackedTranscription?.jobId ?? null, jobProjectId: trackedTranscription?.projectId,
-    projectId: screen === "player" ? activeProjectId : undefined, sessionId,
-    paused: subtitleDialogOpen && trackedTranscription?.projectId === activeProjectId,
-    versions: subtitleVersions, getTranscriptionJob, getSubtitleVersion,
-    onVersion: handleSubtitleVersionCreated, onNotice: setToast,
-    onFinished: (jobId) => setTrackedTranscription(current => current?.jobId === jobId ? null : current),
-  });
-
   const currentSubtitle =
     subtitleVersions.find(
       (version) => version.role === "original" && version.isCurrent,
@@ -693,6 +680,12 @@ export default function App() {
 
   return (
     <div className="app-root">
+      <TrackedTranscriptions
+        jobs={trackedTranscriptions} projectId={screen === "player" ? activeProjectId : undefined}
+        sessionId={sessionId} pausedProjectId={subtitleDialogOpen ? activeProjectId : undefined}
+        versions={subtitleVersions} getTranscriptionJob={getTranscriptionJob} getSubtitleVersion={getSubtitleVersion}
+        onVersion={handleSubtitleVersionCreated} onNotice={setToast} onFinished={finishTranscription}
+      />
       <DesktopShell
         activeView={screen}
         navigationCollapsed={shellController.state.navigationCollapsed}
