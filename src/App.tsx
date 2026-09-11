@@ -1,3 +1,4 @@
+import { translationCompletionNotice } from "./features/ai-tasks/translationCompletionNotice";
 import { ProjectCleanupNotice } from "./components/ProjectCleanupNotice";
 import { ExternalResultNotice } from "./components/ExternalResultNotice";
 import { useSettingsNavigation } from "./features/environment-settings/useSettingsNavigation";
@@ -619,19 +620,7 @@ export default function App() {
         const versions = await listSubtitleVersions(task.projectId, false);
         if (isCurrentSession(task.projectId)) setSubtitleVersions(versions);
       }
-      setToast(
-        task.validation?.warningCount
-          ? {
-              title: "中文字幕草稿已生成",
-              message: `另有 ${task.validation.warningCount} 项一致性提示，建议抽查后再使用。`,
-              tone: "warning",
-            }
-          : {
-              title: "中文字幕已准备好",
-              message: `已生成 ${task.segmentCount} 条草稿，当前视频可以切换为中文或双语字幕。`,
-              tone: "success",
-            },
-      );
+      setToast(translationCompletionNotice(task, isCurrentSession(task.projectId)));
       const updatedProject = await getProject(task.projectId);
       if (isCurrentSession(task.projectId)) setActiveProject(updatedProject);
       void refreshLibraryView();
