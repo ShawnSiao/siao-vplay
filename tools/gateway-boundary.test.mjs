@@ -99,3 +99,11 @@ test("storage operations leave the IPC thread before filesystem or lock work", a
     assert.match(body, /run\(move \|\|/, `${name} must delegate blocking work`);
   }
 });
+
+test("AI service and network settings commands offload blocking IO", async () => {
+  const source = await readFile(new URL("../src-tauri/src/ai/commands.rs", import.meta.url), "utf8");
+  for (const name of ["get_ai_service_settings", "save_ai_service", "delete_ai_service", "set_default_ai_service", "list_ai_service_models", "test_ai_service", "preview_ai_execution", "get_network_settings", "set_network_settings", "get_local_resource_network_status", "set_local_resource_proxy"]) {
+    const body = source.match(new RegExp(`pub async fn ${name}\\([\\s\\S]*?\\n\\}`))?.[0];
+    assert.ok(body && /run\(move \|\|/.test(body), `${name} must offload network/filesystem work`);
+  }
+});
