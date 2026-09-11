@@ -426,6 +426,17 @@ impl From<ExternalHandoffError> for CommandError {
     }
 }
 
+impl From<crate::ai::dispatch::CodexDispatchError> for CommandError {
+    fn from(error: crate::ai::dispatch::CodexDispatchError) -> Self {
+        use crate::ai::dispatch::CodexDispatchError;
+        let code = match &error {
+            CodexDispatchError::Confirmation(_) => "dispatch_confirmation_required",
+            CodexDispatchError::ReceiverChanged => "dispatch_receiver_changed",
+        };
+        Self { code, message: error.to_string() }
+    }
+}
+
 impl CommandError {
     pub(crate) fn asset_scope_failed(message: impl ToString) -> Self {
         Self {

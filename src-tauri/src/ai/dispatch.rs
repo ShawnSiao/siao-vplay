@@ -220,21 +220,23 @@ pub(crate) fn verify_choice(
     Ok(())
 }
 
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum CodexDispatchError {
+    #[error("{0}")]
+    Confirmation(AiTaskError),
+    #[error("任务接收方不是 Codex，请重新确认处理方式")]
+    ReceiverChanged,
+}
+
 pub(crate) fn verify_codex(
     store: &ProjectStore,
     kind: TaskDomain,
     id: &str,
     hash: &str,
-) -> Result<(), crate::commands::CommandError> {
-    let value = verify(store, kind, id, hash).map_err(|error| crate::commands::CommandError {
-        code: "dispatch_confirmation_required",
-        message: error.to_string(),
-    })?;
+) -> Result<(), CodexDispatchError> {
+    let value = verify(store, kind, id, hash).map_err(CodexDispatchError::Confirmation)?;
     if value.execution != AiExecutionTarget::Codex {
-        return Err(crate::commands::CommandError {
-            code: "dispatch_receiver_changed",
-            message: "任务接收方不是 Codex，请重新确认处理方式".to_owned(),
-        });
+        return Err(CodexDispatchError::ReceiverChanged);
     }
     Ok(())
 }

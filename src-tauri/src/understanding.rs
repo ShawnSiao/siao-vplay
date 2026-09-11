@@ -1593,12 +1593,16 @@ mod tests {
         assert_eq!(preview.frames.len(), task.frames.len());
         assert!(preview.frames.iter().all(|frame| frame.timestamp_ms <= 4_500));
         assert!(dispatch::verify(&fixture.store, TaskDomain::Explanation, &task.id, &preview.confirmation_sha256).is_ok());
+        let receiver_error = crate::commands::CommandError::from(dispatch::verify_codex(&fixture.store, TaskDomain::Explanation, &task.id, &preview.confirmation_sha256).unwrap_err());
+        assert_eq!(serde_json::to_value(receiver_error).unwrap(), serde_json::json!({"code":"dispatch_receiver_changed","message":"任务接收方不是 Codex，请重新确认处理方式"}));
         assert!(dispatch::verify(&fixture.store, TaskDomain::Explanation, &task.id, &"0".repeat(64)).is_err());
         fixture.store.connect().unwrap().execute(
             "UPDATE explanation_tasks SET execution_kind = 'codex' WHERE id = ?1", [&task.id],
         ).unwrap();
         assert!(dispatch::verify(&fixture.store, TaskDomain::Explanation, &task.id, &preview.confirmation_sha256).is_err());
-        assert!(dispatch::verify_codex(&fixture.store, TaskDomain::Explanation, &task.id, &preview.confirmation_sha256).is_err());
+        let confirmation_error = crate::commands::CommandError::from(dispatch::verify_codex(&fixture.store, TaskDomain::Explanation, &task.id, &preview.confirmation_sha256).unwrap_err());
+        assert_eq!(confirmation_error.code, "dispatch_confirmation_required");
+        assert!(!confirmation_error.message.is_empty());
     }
 
 
