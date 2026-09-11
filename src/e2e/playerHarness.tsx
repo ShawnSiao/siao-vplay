@@ -251,7 +251,7 @@ export function PlayerHarness() {
       drawerTab={drawerTab}
       dropFeedback={requestedDropFeedback()}
       appStatus={{
-        appName: "SiaoVPlay",
+        appName: "SiaoVPlay", interruptedTranscriptionCount: 0,
         version: "test",
         platform: "browser-test",
         dataDirectory: "",

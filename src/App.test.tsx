@@ -782,7 +782,7 @@ beforeEach(() => {
   window.sessionStorage.clear();
   setupLibraryQueryMocks(libraryGatewayMocks);
   desktopMocks.getAppStatus.mockResolvedValue({
-    appName: "SiaoVPlay",
+    appName: "SiaoVPlay", interruptedTranscriptionCount: 0,
     version: "0.3.0",
     platform: "windows-desktop",
     dataDirectory: "W:\\SiaoVPlay\\app-data",
@@ -2305,7 +2305,7 @@ describe("App", () => {
 
   it("opens a local video passed by the desktop process", async () => {
     desktopMocks.getAppStatus.mockResolvedValue({
-      appName: "SiaoVPlay",
+      appName: "SiaoVPlay", interruptedTranscriptionCount: 0,
       version: "0.3.0",
       platform: "windows-desktop",
       dataDirectory: "W:\\SiaoVPlay\\app-data",

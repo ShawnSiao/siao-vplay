@@ -6,7 +6,7 @@ test("App acknowledges an external completion only after delivery and retries a 
     state.acknowledgements = 0;
     state.delivered = false;
     state.__TAURI_INTERNALS__ = { invoke: async (command: string, args?: { updates?: unknown[] }) => {
-      if (command === "get_app_status") return { appName: "SiaoVPlay", version: "0.4.1", platform: "windows-desktop", dataDirectory: "W:/isolated", startupMediaPath: null };
+      if (command === "get_app_status") return { appName: "SiaoVPlay", interruptedTranscriptionCount: 0, version: "0.4.1", platform: "windows-desktop", dataDirectory: "W:/isolated", startupMediaPath: null };
       if (command === "reconcile_external_agent_results") return state.delivered ? [] : [{
         taskKind: "translation", taskId: "task", projectId: "other-project", status: "completed", outputId: "version", message: "已导入",
       }];

@@ -197,7 +197,7 @@ export function LibraryHarness() {
       drawerTab={null}
       dropFeedback={null}
       appStatus={{
-        appName: "SiaoVPlay",
+        appName: "SiaoVPlay", interruptedTranscriptionCount: 0,
         version: "test",
         platform: "browser-test",
         dataDirectory: "",

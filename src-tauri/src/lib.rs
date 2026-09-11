@@ -76,20 +76,24 @@ struct AppStatus {
     platform: &'static str,
     data_directory: String,
     startup_media_path: Option<String>,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_i64)))]
+    interrupted_transcription_count: usize,
 }
 
 #[tauri::command]
-fn app_status(data_directory: &Path, startup_media_path: Option<String>) -> AppStatus {
+fn app_status(data_directory: &Path, startup_media_path: Option<String>, interrupted_transcription_count: usize) -> AppStatus {
     AppStatus {
         app_name: "SiaoVPlay",
         version: env!("CARGO_PKG_VERSION"),
         platform: "windows-desktop",
         data_directory: data_directory.to_string_lossy().into_owned(),
         startup_media_path,
+        interrupted_transcription_count,
     }
 }
 
 struct StartupMediaPath(Option<String>);
+struct InterruptedTranscriptions(usize);
 struct AppInstanceLocks {
     _guards: Vec<instance_lock::InstanceLock>,
 }
@@ -98,13 +102,14 @@ struct AppInstanceLocks {
 fn get_app_status(
     store: State<'_, ProjectStore>,
     startup_media_path: State<'_, StartupMediaPath>,
+    interrupted_transcriptions: State<'_, InterruptedTranscriptions>,
 ) -> AppStatus {
     let data_directory = store
         .database_path()
         .parent()
         .and_then(Path::parent)
         .unwrap_or_else(|| Path::new("."));
-    app_status(data_directory, startup_media_path.0.clone())
+    app_status(data_directory, startup_media_path.0.clone(), interrupted_transcriptions.0)
 }
 
 #[tauri::command]
@@ -184,7 +189,8 @@ pub fn run() {
             let database_path = data_directory.join("projects").join("siaovplay.db");
             let store = ProjectStore::open(database_path)?;
             store.recover_running_media_artifacts()?;
-            transcription::recover_transcription_jobs(&store)?;
+            let interrupted_transcriptions = transcription::recover_transcription_jobs(&store)?;
+            app.manage(InterruptedTranscriptions(interrupted_transcriptions));
             codex_runner::recover_translation_tasks(&store)?;
             ai::translation_api::recover(&store)?;
             understanding::recover_explanation_tasks(&store)?;

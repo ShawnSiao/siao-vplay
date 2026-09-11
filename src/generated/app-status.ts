@@ -3,6 +3,7 @@
 export interface AppStatus {
   appName: string;
   dataDirectory: string;
+  interruptedTranscriptionCount: number;
   platform: string;
   startupMediaPath: string | null;
   version: string;

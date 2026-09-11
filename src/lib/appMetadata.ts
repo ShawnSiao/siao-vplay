@@ -5,7 +5,7 @@ import type { AppStatus } from "../types";
 export const appMetadata = metadata;
 
 export const browserStatus: AppStatus = {
-  appName: "SiaoVPlay",
+  appName: "SiaoVPlay", interruptedTranscriptionCount: 0,
   version: appMetadata.version,
   platform: "browser-preview",
   dataDirectory: "仅桌面应用可用",

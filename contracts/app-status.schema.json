@@ -7,6 +7,12 @@
     "dataDirectory": {
       "type": "string"
     },
+    "interruptedTranscriptionCount": {
+      "format": "uint",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    },
     "platform": {
       "type": "string"
     },
@@ -25,7 +31,8 @@
     "version",
     "platform",
     "dataDirectory",
-    "startupMediaPath"
+    "startupMediaPath",
+    "interruptedTranscriptionCount"
   ],
   "title": "AppStatus",
   "type": "object"

@@ -1,5 +1,6 @@
 import { translationCompletionNotice } from "./features/ai-tasks/translationCompletionNotice";
 import { usePlaybackTools } from "./features/playback/usePlaybackTools";
+import { startupRecoveryNotice } from "./features/playback/startupRecoveryNotice";
 import { ProjectCleanupNotice } from "./components/ProjectCleanupNotice";
 import { ExternalResultNotice } from "./components/ExternalResultNotice";
 import { useSettingsNavigation } from "./features/environment-settings/useSettingsNavigation";
@@ -188,6 +189,8 @@ export default function App() {
         if (active) {
           setAppStatus(status);
           setStartupError(null);
+          const notice = startupRecoveryNotice(status.interruptedTranscriptionCount);
+          if (notice) setToast(notice);
         }
       })
       .catch(() => {
