@@ -1369,7 +1369,7 @@ describe("App", () => {
     expect(desktopMocks.prepareProjectMedia).toHaveBeenCalledTimes(1);
   });
 
-  it("persists the current episode before preparing the next one", async () => {
+  it("persists the current episode and clears its subtitles before loading the next one", async () => {
     const collectionId = "60000000-0000-4000-8000-000000000001";
     const rootId = "60000000-0000-4000-8000-000000000002";
     const nextProject: Project = {
@@ -1457,6 +1457,11 @@ describe("App", () => {
     desktopMocks.getProject.mockImplementation(async (projectId: string) =>
       projectId === nextProject.id ? nextProject : project,
     );
+    let finishNextSubtitles!: (versions: SubtitleVersion[]) => void;
+    desktopMocks.listSubtitleVersions.mockImplementation((projectId: string) => projectId === nextProject.id
+        ? new Promise<SubtitleVersion[]>(resolve => { finishNextSubtitles = resolve; })
+        : Promise.resolve([subtitleVersion]),
+    );
     const order: string[] = [];
     desktopMocks.updatePlaybackState.mockImplementation(async (projectId: string) => {
       if (projectId === project.id) {
@@ -1491,14 +1496,17 @@ describe("App", () => {
     fireEvent.click(await screen.findByRole("button", { name: "继续" }));
     const nextButton = await screen.findByRole("button", { name: "下一集" });
     await waitFor(() => expect(nextButton).toBeEnabled());
+    expect(await screen.findByText("字幕已同步")).toBeInTheDocument();
     fireEvent.click(nextButton);
 
-    await waitFor(() => expect(order).toContain("prepare-next"));
+    await waitFor(() => expect(finishNextSubtitles).toBeDefined());
+    expect(screen.getByText("等待字幕")).toBeInTheDocument();
     expect(order).toEqual([
       "persist-current",
       "mark-next-opened",
       "prepare-next",
     ]);
+    await act(async () => finishNextSubtitles([]));
   });
 
   it("searches the real library gateway and opens a media result", async () => {

@@ -232,6 +232,7 @@ export default function App() {
       operationTokenRef.current = token;
       setSessionId(token);
       setActiveProject(project);
+      setSubtitleVersions([]);
       setPreparation(null);
       setPreparationError(null);
       setForceProxy(shouldForceProxy);
