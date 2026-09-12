@@ -1,3 +1,4 @@
+import type { TranscriptionPreparationChoice } from "../features/playback/usePlaybackTools";
 import { useMemo, useState } from "react";
 
 import {
@@ -51,8 +52,9 @@ type SubtitleImportDialogProps = {
   ) => Promise<void>;
   localResourceCatalog?: LocalResourceCatalog | null;
   localResourceStatus?: LocalResourceStatus | null;
+  initialPreparationChoice?: TranscriptionPreparationChoice | null;
   onPrepareTranscriptionResources?: (
-    profileId: "fast" | "standard",
+    profileId: "fast" | "standard", language: string,
   ) => Promise<void> | void;
 };
 
@@ -104,9 +106,9 @@ export function SubtitleImportDialog({
   onTranslationTaskCompleted,
   localResourceCatalog,
   localResourceStatus,
-  onPrepareTranscriptionResources,
+  onPrepareTranscriptionResources, initialPreparationChoice,
 }: SubtitleImportDialogProps) {
-  const [workflow, setWorkflow] = useState<SubtitleWorkflow>("import");
+  const [workflow, setWorkflow] = useState<SubtitleWorkflow>(initialPreparationChoice ? "transcribe" : "import");
   const [selection, setSelection] = useState<SubtitleSelection | null>(null);
   const [language, setLanguage] = useState("");
   const [otherLanguage, setOtherLanguage] = useState("");
@@ -455,6 +457,7 @@ export function SubtitleImportDialog({
           onVersionReady={onImported}
           localResourceCatalog={localResourceCatalog}
           localResourceStatus={localResourceStatus}
+          initialPreparationChoice={initialPreparationChoice}
           onPrepareResources={onPrepareTranscriptionResources}
         />
       ) : (

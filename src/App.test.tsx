@@ -6,7 +6,7 @@ import { locationResult } from "./test-fixtures/resourceLocation";
 import { createLearningTaskFixture } from "./test-fixtures/learning";
 import { verifyBackgroundTranscription } from "./appTranscriptionCompletionTest";
 import { verifyDismissedResourceAction, verifySelectedResourceResume } from "./appResourcePreparationTest";
-import { verifyStaleTranscriptionPreparation, verifyLocalImportShortcut } from "./appTranscriptionPreparationTest";
+import { verifyStaleTranscriptionPreparation, verifyLocalImportShortcut, verifyTranscriptionChoicesResume } from "./appTranscriptionPreparationTest";
 import { subtitleMetadata } from "./features/subtitle-revision/subtitleMetadata";
 import { createTranslationTask, translationDispatchFixture } from "./test-fixtures/translation";
 import { taskDispatchFixture } from "./test-fixtures/taskDispatch";
@@ -2281,6 +2281,7 @@ describe("App", () => {
 
   it("ignores successful transcription preparation from an abandoned session", () =>
     verifyStaleTranscriptionPreparation(desktopMocks, readyLocalResourceStatus));
+  it("retains transcription choices after resource preparation", () => verifyTranscriptionChoicesResume(desktopMocks, readyLocalResourceStatus));
 
   it("keeps Ctrl+O available in the player without bypassing a modal", async () => {
     render(<App />);

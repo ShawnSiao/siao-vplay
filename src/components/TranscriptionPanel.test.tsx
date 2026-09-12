@@ -170,7 +170,7 @@ describe("TranscriptionPanel", () => {
     fireEvent.click(
       screen.getByRole("button", { name: "准备本地字幕识别" }),
     );
-    await waitFor(() => expect(onPrepareResources).toHaveBeenCalledWith("fast"));
+    await waitFor(() => expect(onPrepareResources).toHaveBeenCalledWith("fast", "ja"));
     expect(desktopMocks.startTranscription).not.toHaveBeenCalled();
   });
 });

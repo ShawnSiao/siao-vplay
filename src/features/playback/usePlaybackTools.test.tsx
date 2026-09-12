@@ -6,12 +6,14 @@ it("clears all video tools and selected translation segments in a new playback s
   const { result, rerender } = renderHook(usePlaybackTools, { initialProps: 1 });
   act(() => {
     result.current.setSubtitleDialogOpen(true);
+    result.current.setTranscriptionPreparationChoice({ language: "ja", profileId: "standard" });
     result.current.setTranslationDialogOpen(true);
     result.current.setRevisionDialogOpen(true);
     result.current.setDeliveryDialogOpen(true);
     result.current.setTranslationSegmentIds(["old-video-segment"]);
   });
   rerender(2);
+  expect(result.current.transcriptionPreparationChoice).toBeNull();
   expect(result.current).toMatchObject({ subtitleDialogOpen: false, translationDialogOpen: false,
     revisionDialogOpen: false, deliveryDialogOpen: false, translationSegmentIds: undefined });
 });

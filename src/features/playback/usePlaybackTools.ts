@@ -1,6 +1,9 @@
 import { useMemo, useState } from "react";
 
+export type TranscriptionPreparationChoice = { language: string; profileId: "fast" | "standard" };
+
 type ToolState = {
+  transcriptionPreparationChoice: TranscriptionPreparationChoice | null;
   subtitleDialogOpen: boolean;
   translationDialogOpen: boolean;
   translationSegmentIds: string[] | undefined;
@@ -8,6 +11,7 @@ type ToolState = {
   deliveryDialogOpen: boolean;
 };
 const closed: ToolState = {
+  transcriptionPreparationChoice: null,
   subtitleDialogOpen: false, translationDialogOpen: false, translationSegmentIds: undefined,
   revisionDialogOpen: false, deliveryDialogOpen: false,
 };
@@ -23,6 +27,7 @@ export function usePlaybackTools(sessionId: number) {
       return { sessionId, tools: { ...tools, ...patch } };
     });
     return {
+      setTranscriptionPreparationChoice: (choice: TranscriptionPreparationChoice | null) => update({ transcriptionPreparationChoice: choice }),
       setSubtitleDialogOpen: (open: boolean) => update({ subtitleDialogOpen: open }),
       setTranslationDialogOpen: (open: boolean) => update({ translationDialogOpen: open }),
       setTranslationSegmentIds: (ids: string[] | undefined) => update({ translationSegmentIds: ids?.slice() }),

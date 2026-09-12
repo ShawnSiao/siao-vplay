@@ -1,3 +1,4 @@
+import type { TranscriptionPreparationChoice } from "../features/playback/usePlaybackTools";
 import { useTranscriptionResult } from "../features/transcription/useTranscriptionResult";
 import { useTaskPolling, taskPollingIntervals } from "../features/ai-tasks/useTaskPolling";
 import { useEffect, useState } from "react";
@@ -27,7 +28,8 @@ type TranscriptionPanelProps = {
   onVersionReady: (version: SubtitleVersion) => void;
   localResourceCatalog?: LocalResourceCatalog | null;
   localResourceStatus?: LocalResourceStatus | null;
-  onPrepareResources?: (profileId: "fast" | "standard") => Promise<void> | void;
+  initialPreparationChoice?: TranscriptionPreparationChoice | null;
+  onPrepareResources?: (profileId: "fast" | "standard", language: string) => Promise<void> | void;
 };
 
 const languageOptions = [
@@ -144,15 +146,15 @@ export function TranscriptionPanel({
   onVersionReady,
   localResourceCatalog,
   localResourceStatus,
-  onPrepareResources,
+  onPrepareResources, initialPreparationChoice,
 }: TranscriptionPanelProps) {
   const [runtimeStatus, setRuntimeStatus] =
     useState<TranscriptionRuntimeStatus | null>(null);
   const [runtimeCheckedKey, setRuntimeCheckedKey] = useState<string | null>(null);
   const [language, setLanguage] =
-    useState<(typeof languageOptions)[number][0] | "">("");
+    useState<(typeof languageOptions)[number][0] | "">(languageOptions.find(([value]) => value === initialPreparationChoice?.language)?.[0] ?? "");
   const [profileId, setProfileId] = useState<"fast" | "standard">(
-    localResourceStatus?.preferredProfile === "fast" ? "fast" : "standard",
+    initialPreparationChoice?.profileId ?? (localResourceStatus?.preferredProfile === "fast" ? "fast" : "standard"),
   );
   const [replaceConfirmed, setReplaceConfirmed] = useState(false);
   const [storedJob, setJob] = useState<TranscriptionJob | null>(null);
@@ -419,7 +421,7 @@ export function TranscriptionPanel({
               className="button"
               type="button"
               disabled={operation !== null}
-              onClick={() => void onPrepareResources(profileId)}
+              onClick={() => void onPrepareResources(profileId, language)}
             >
               准备本地字幕识别
             </button>
