@@ -1,4 +1,5 @@
 import { useSectionWindowPreview } from "./useSectionWindowPreview";
+import { homeCount, homeMatrixItems, homeMatrixSearch } from "./libraryHomeMatrix";
 import { collectionPickerFixture } from "./collectionPickerFixture";
 import { rootOverviewFixture } from "./rootOverviewFixture";
 import { useLibraryPagesPreview } from "./useLibraryPagesPreview";
@@ -19,7 +20,6 @@ import { DesktopShell } from "../features/shell/DesktopShell";
 import type { LibraryHome, LibraryMediaSummary, Project } from "../types";
 import { emptyLibraryHome, offlineRecovery } from "./libraryHarnessData";
 import "../styles.css";
-
 const project: Project = {
   id: "e2e-library-project",
   title: "雨站台",
@@ -77,7 +77,7 @@ const mediaSummary: LibraryMediaSummary = {
 const longListMode = new URLSearchParams(location.search).has("long-list");
 const listCountParam = new URLSearchParams(location.search).get("mediaCount");
 const loadedListCount = listCountParam === "1000" || listCountParam === "10000" ? Number(listCountParam) : 0;
-const unclassifiedItems = Array.from({ length: loadedListCount || (longListMode ? 20 : 12) }, (_, index) => ({
+const unclassifiedItems = Array.from({ length: homeCount ?? (loadedListCount || (longListMode ? 20 : 12)) }, (_, index) => ({
   ...mediaSummary,
   projectId: `e2e-library-project-${index + 1}`,
   projectTitle: longListMode ? `第 ${index + 1} 集 ${"很长的视频名称与跨语言学习内容".repeat(12)}` : `雨站台 ${index + 1}`,
@@ -182,13 +182,15 @@ const folderPreview: LibraryFolderImportState = {
 export function LibraryHarness() {
   const sectionWindow = useSectionWindowPreview(mediaSummary);
   const collectionPreview = useLibraryPagesPreview();
-  const emptyMode = new URLSearchParams(window.location.search).has("empty");
+  const [searchQuery, setSearchQuery] = useState("");
+  const emptyMode = homeCount === 0 || new URLSearchParams(window.location.search).has("empty");
   const [folderImport, setFolderImport] = useState<LibraryFolderImportState | null>(null); const [section, setSection] = useState<LibrarySection>(sectionWindow ? sectionWindow.initialSection : loadedListCount ? (new URLSearchParams(location.search).get("section") === "watch_later" ? "watch_later" : "unclassified") : longListMode ? "unclassified" : "home");
   const [recovery, setRecovery] = useState<LibraryRecoveryState | null>(null);
   const [watchLaterItems, setWatchLaterItems] = useState(loadedListCount ? unclassifiedItems : [mediaSummary]);
   const [uncategorizedItems, setUncategorizedItems] = useState(unclassifiedItems);
   const openFolderImport = () => setFolderImport(folderPreview);
-  const visibleHome: LibraryHome = emptyMode ? emptyLibraryHome : { ...libraryHome, unclassified: uncategorizedItems, unclassifiedCount: uncategorizedItems.length };
+  const visibleHome: LibraryHome = emptyMode ? emptyLibraryHome : { ...libraryHome, unclassified: uncategorizedItems, unclassifiedCount: uncategorizedItems.length,
+    ...homeMatrixItems(uncategorizedItems) };
   return (
     <>
       <DesktopShell
@@ -236,14 +238,14 @@ export function LibraryHarness() {
         unclassified: emptyMode ? 0 : uncategorizedItems.length,
       }}
       librarySection={section}
-      searchQuery=""
-      searchResults={[]}
+      searchQuery={searchQuery}
+      searchResults={homeMatrixSearch(uncategorizedItems, searchQuery)}
       searchLoading={false}
       onToggleNavigation={() => undefined}
       onToggleDrawer={() => undefined}
       onGoLibrary={() => undefined}
       onSelectLibrarySection={setSection}
-      onSearchQueryChange={() => undefined}
+      onSearchQueryChange={setSearchQuery}
       onOpenSearchResult={() => undefined}
       activityControl={new URLSearchParams(location.search).has("activity") ? <ActivityPreview /> : undefined}
       onOpenFile={() => undefined}
