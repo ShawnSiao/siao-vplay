@@ -2,7 +2,7 @@ use std::{
     collections::BTreeMap,
     fs,
     path::Path,
-    process::{Command, Stdio},
+    process::Command,
 };
 
 use serde::{Deserialize, Serialize};
@@ -56,6 +56,16 @@ pub(super) fn frame_resource_lease() -> std::io::Result<crate::resource_usage::R
     crate::resource_leases::configured(&["ffmpeg-cpu"])
 }
 
+fn check_cancellation(store: &ProjectStore, task_id: &str) -> std::io::Result<()> {
+    let task = super::task_repository::SummaryTaskRepository::new(store)
+        .get(task_id)
+        .map_err(|error| std::io::Error::other(error.to_string()))?;
+    if task.status == "cancelled" || task.cancel_requested {
+        return Err(std::io::Error::new(std::io::ErrorKind::Interrupted, "总结已取消"));
+    }
+    Ok(())
+}
+
 pub(crate) fn extract(
     store: &ProjectStore,
     task_id: &str,
@@ -66,6 +76,7 @@ pub(crate) fn extract(
     if timestamps.is_empty() {
         return Ok(Vec::new());
     }
+    check_cancellation(store, task_id)?;
     let _lease = frame_resource_lease()?;
     let ffmpeg = media::ffmpeg_path().map_err(|error| StoreError::Validation(error.to_string()))?;
     let frames_directory = task_directory.join("frames");
@@ -74,7 +85,8 @@ pub(crate) fn extract(
     for (index, (ordinal, timestamp)) in timestamps.iter().enumerate() {
         let name = format!("frame-{:03}.jpg", index + 1);
         let output = frames_directory.join(&name);
-        let status = hidden_command(&ffmpeg)
+        let mut command = hidden_command(&ffmpeg);
+        command
             .args([
                 "-hide_banner",
                 "-loglevel",
@@ -91,12 +103,12 @@ pub(crate) fn extract(
                 "3",
                 "-y",
             ])
-            .arg(&output)
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status()?;
-        if !status.success() || !output.is_file() {
+            .arg(&output);
+        let result = crate::cancellable_process::output_checked(&mut command, || {
+            check_cancellation(store, task_id)
+        })?;
+        check_cancellation(store, task_id)?;
+        if !result.status.success() || !output.is_file() {
             return Err(StoreError::Validation(format!(
                 "无法提取总结关键帧：{timestamp} ms"
             )));
@@ -109,6 +121,7 @@ pub(crate) fn extract(
             sha256: format!("{:x}", Sha256::digest(fs::read(&output)?)),
         });
     }
+    check_cancellation(store, task_id)?;
     fs::write(
         task_directory.join("frames.json"),
         serde_json::to_vec_pretty(&frames)
@@ -144,6 +157,46 @@ fn hidden_command(program: &Path) -> Command {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn cancelled_preparation_does_not_start_frame_extraction() {
+        let (directory, store, task) = super::super::test_support::prepared_summary();
+        let repository = super::super::task_repository::SummaryTaskRepository::new(&store);
+        repository.finish_cancelled(&task.id).unwrap();
+        let result = extract(&store, &task.id, "missing-media", directory.path(), &[(0, 100)]);
+        assert!(matches!(result, Err(StoreError::FileSystem(ref error))
+            if error.kind() == std::io::ErrorKind::Interrupted));
+        assert!(!directory.path().join("frames").exists());
+        assert!(repository.set_task_state(&task.id, "failed", "frame_extraction_failed", 0.0).is_err());
+        assert_eq!(repository.get(&task.id).unwrap().status, "cancelled");
+    }
+
+    #[test]
+    fn cancelling_prepared_task_stops_its_running_frame_process() {
+        use std::{thread, time::{Duration, Instant}};
+        let (directory, store, task) = super::super::test_support::prepared_summary();
+        let marker = directory.path().join("running-frame.txt");
+        thread::scope(|scope| {
+            let worker = scope.spawn(|| {
+                let mut command = Command::new(std::env::current_exe().unwrap());
+                command.args(["--exact", "cancellable_process::tests::slow_child", "--ignored"])
+                    .env("SIAOVPLAY_CANCEL_TEST_MARKER", &marker);
+                crate::cancellable_process::output_checked(&mut command, || check_cancellation(&store, &task.id))
+            });
+            let started = Instant::now();
+            while !marker.exists() && started.elapsed() < Duration::from_secs(5) {
+                thread::sleep(Duration::from_millis(10));
+            }
+            assert!(marker.exists(), "owned child must start before cancellation");
+            super::super::task_repository::SummaryTaskRepository::new(&store)
+                .finish_cancelled(&task.id).unwrap();
+            let cancelled_at = Instant::now();
+            assert_eq!(worker.join().unwrap().unwrap_err().kind(), std::io::ErrorKind::Interrupted);
+            assert!(cancelled_at.elapsed() < Duration::from_secs(2));
+        });
+        let stopped = fs::read(&marker).unwrap();
+        thread::sleep(Duration::from_millis(150));
+        assert_eq!(fs::read(&marker).unwrap(), stopped);
+    }
     #[test]
     fn frame_work_excludes_ffmpeg_component_maintenance_until_released() {
         const CHILD: &str = "SIAOVPLAY_FRAME_LEASE_TEST_CHILD";

@@ -23,7 +23,14 @@ impl Cancellation {
 }
 
 pub(crate) fn output(command: &mut Command, cancel: &Cancellation) -> io::Result<Output> {
-    cancel.check()?;
+    output_checked(command, || cancel.check())
+}
+
+pub(crate) fn output_checked(
+    command: &mut Command,
+    mut check: impl FnMut() -> io::Result<()>,
+) -> io::Result<Output> {
+    check()?;
     let mut child = command
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
@@ -44,7 +51,7 @@ pub(crate) fn output(command: &mut Command, cancel: &Cancellation) -> io::Result
         let out = scope.spawn(move || drain(stdout));
         let err = scope.spawn(move || drain(stderr));
         let status = loop {
-            if let Err(error) = cancel.check() {
+            if let Err(error) = check() {
                 process_group.terminate();
                 let _ = child.kill();
                 let _ = child.wait();
