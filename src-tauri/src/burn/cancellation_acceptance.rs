@@ -57,6 +57,8 @@ fn real_running_burn_cancels_and_resumes_without_partial_delivery() {
         assert!(Instant::now() < deadline, "encoder did not start output");
         thread::sleep(Duration::from_millis(20));
     }
+    assert!(crate::resource_leases::maintain_resource("ffmpeg-cpu").is_err());
+    assert!(crate::resource_leases::maintain_all().is_err());
     cancel_subtitle_burn_job(&store, &job.id).unwrap();
     let deadline = Instant::now() + Duration::from_secs(15);
     while get_subtitle_burn_job(&store, &job.id).unwrap().status != "cancelled" {
@@ -66,6 +68,11 @@ fn real_running_burn_cancels_and_resumes_without_partial_delivery() {
     assert!(!stored.temporary_output_path.exists());
     assert!(!stored.intended_output_path.exists());
     assert!(!stored.intended_manifest_path.exists());
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while crate::resource_leases::maintain_resource("ffmpeg-cpu").is_err() {
+        assert!(Instant::now() < deadline, "cancelled burn retained its resource lease");
+        thread::sleep(Duration::from_millis(20));
+    }
     let resumed = resume_subtitle_burn_job(&store, &job.id).unwrap();
     assert_eq!(resumed.id, job.id);
     spawn_subtitle_burn_job(store.clone(), job.id.clone()).unwrap();

@@ -42,6 +42,10 @@ fn real_transcription_cancel_and_resume_preserves_single_result() {
         assert!(Instant::now() < deadline, "transcription did not start");
         thread::sleep(Duration::from_millis(50));
     }
+    for id in ["ffmpeg-cpu", "whisper-cpu", "whisper-model-small"] {
+        assert!(crate::resource_leases::maintain_resource(id).is_err(), "running transcription left {id} unprotected");
+    }
+    assert!(crate::resource_leases::maintain_all().is_err());
     cancel_transcription_job(&store, &job.id).unwrap();
     let deadline = Instant::now() + Duration::from_secs(15);
     while get_transcription_job(&store, &job.id)
@@ -58,6 +62,11 @@ fn real_transcription_cancel_and_resume_preserves_single_result() {
             .unwrap()
             .is_empty()
     );
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while crate::resource_leases::maintain_all().is_err() {
+        assert!(Instant::now() < deadline, "cancelled transcription retained resource leases");
+        thread::sleep(Duration::from_millis(20));
+    }
     assert_eq!(
         resume_transcription_job(&store, &job.id).unwrap().id,
         job.id
