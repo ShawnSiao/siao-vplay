@@ -6,6 +6,7 @@ import { locationResult } from "./test-fixtures/resourceLocation";
 import { createLearningTaskFixture } from "./test-fixtures/learning";
 import { verifyBackgroundTranscription } from "./appTranscriptionCompletionTest";
 import { verifyDismissedResourceAction, verifySelectedResourceResume } from "./appResourcePreparationTest";
+import { verifyStaleTranscriptionPreparation, verifyLocalImportShortcut } from "./appTranscriptionPreparationTest";
 import { subtitleMetadata } from "./features/subtitle-revision/subtitleMetadata";
 import { createTranslationTask, translationDispatchFixture } from "./test-fixtures/translation";
 import { taskDispatchFixture } from "./test-fixtures/taskDispatch";
@@ -2273,16 +2274,13 @@ describe("App", () => {
     await waitFor(() => expect(screen.getByRole("textbox", { name: "要查询的原文" })).toHaveValue("未发送的修改"));
   });
 
-  it("opens the local import dialog with Ctrl+O", async () => {
-    render(<App />);
-    await screen.findAllByText("雨站台");
+  it("opens the local import dialog with Ctrl+O", () => verifyLocalImportShortcut(desktopMocks.chooseLocalVideo));
 
-    fireEvent.keyDown(window, { key: "o", ctrlKey: true });
+  it("does not reopen transcription preparation after leaving its playback session", () =>
+    verifyStaleTranscriptionPreparation(desktopMocks));
 
-    await waitFor(() =>
-      expect(desktopMocks.chooseLocalVideo).toHaveBeenCalled(),
-    );
-  });
+  it("ignores successful transcription preparation from an abandoned session", () =>
+    verifyStaleTranscriptionPreparation(desktopMocks, readyLocalResourceStatus));
 
   it("keeps Ctrl+O available in the player without bypassing a modal", async () => {
     render(<App />);

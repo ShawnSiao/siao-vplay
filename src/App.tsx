@@ -904,16 +904,25 @@ export default function App() {
           localResourceCatalog={localResources.catalog}
           localResourceStatus={localResources.status}
           onPrepareTranscriptionResources={async (profileId) => {
-            if (localResources.status?.configured) {
-              await localResources.selectProfile(profileId);
+            const projectId = activeProject.id;
+            const isCurrent = () => isCurrentSession(projectId);
+            try {
+              if (!isCurrent()) return;
+              if (localResources.status?.configured) {
+                await localResources.selectProfile(profileId);
+              }
+              if (!isCurrent()) return;
+              setSubtitleDialogOpen(false);
+              await requestCapability(
+                "local_transcription",
+                "继续生成原文字幕",
+                () => setSubtitleDialogOpen(true),
+                profileId,
+                isCurrent,
+              );
+            } catch (error) {
+              if (isCurrent()) setToast(userFacingCommandError(error, "settings"));
             }
-            setSubtitleDialogOpen(false);
-            await requestCapability(
-              "local_transcription",
-              "继续生成原文字幕",
-              () => setSubtitleDialogOpen(true),
-              profileId,
-            );
           }}
           onImported={(version) => {
             void handleSubtitleVersionCreated(
