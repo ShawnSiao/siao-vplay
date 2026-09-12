@@ -52,6 +52,10 @@ pub(crate) fn planned_timestamps(
         .collect()
 }
 
+pub(super) fn frame_resource_lease() -> std::io::Result<crate::resource_usage::ResourceLease> {
+    crate::resource_leases::configured(&["ffmpeg-cpu"])
+}
+
 pub(crate) fn extract(
     store: &ProjectStore,
     task_id: &str,
@@ -62,7 +66,7 @@ pub(crate) fn extract(
     if timestamps.is_empty() {
         return Ok(Vec::new());
     }
-    let _lease = crate::resource_leases::configured(&["ffmpeg"])?;
+    let _lease = frame_resource_lease()?;
     let ffmpeg = media::ffmpeg_path().map_err(|error| StoreError::Validation(error.to_string()))?;
     let frames_directory = task_directory.join("frames");
     fs::create_dir_all(&frames_directory)?;
@@ -140,6 +144,21 @@ fn hidden_command(program: &Path) -> Command {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn frame_work_excludes_ffmpeg_component_maintenance_until_released() {
+        const CHILD: &str = "SIAOVPLAY_FRAME_LEASE_TEST_CHILD";
+        if std::env::var_os(CHILD).is_none() {
+            let status = std::process::Command::new(std::env::current_exe().unwrap())
+                .args(["summary::keyframes::tests::frame_work_excludes_ffmpeg_component_maintenance_until_released", "--exact"])
+                .env(CHILD, "1").status().unwrap();
+            assert!(status.success());
+            return;
+        }
+        let lease = frame_resource_lease().unwrap();
+        assert!(crate::resource_leases::maintain_resource("ffmpeg-cpu").is_err());
+        drop(lease);
+        assert!(crate::resource_leases::maintain_resource("ffmpeg-cpu").is_ok());
+    }
 
     #[test]
     fn rejects_a_frame_manifest_that_points_outside_the_task_directory() {
