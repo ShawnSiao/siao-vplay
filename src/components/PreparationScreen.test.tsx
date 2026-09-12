@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { Project } from "../types";
+import type { MediaPreparationProgress } from "../lib/mediaPreparationGateway";
 import { PreparationScreen } from "./PreparationScreen";
 const settings = vi.hoisted(() => ({ openEnvironmentSettings: vi.fn() }));
 vi.mock("../features/environment-settings/events", () => settings);
@@ -12,6 +13,23 @@ const project = {
 } as Project;
 
 describe("PreparationScreen", () => {
+  it.each([false, true])("shows actual stages without invented percentages for forceProxy=%s", forceProxy => {
+    const stages: [MediaPreparationProgress["stage"], string][] = [
+      ["runtime", "检查播放组件"], ["fingerprint", "核对视频文件"],
+      ["inspect", "检查视频与音频"], ["transcode", "生成兼容播放版本"],
+      ["validate", "检查生成的播放版本"], ["finalize", "保存播放版本"],
+    ];
+    const props = { project, forceProxy, error: null, cancelling: false, canCancel: true,
+      onCancel: vi.fn(), onRetry: vi.fn(), onBack: vi.fn() };
+    const { rerender } = render(<PreparationScreen {...props} progress={null} />);
+    for (const [stage, label] of stages) {
+      rerender(<PreparationScreen {...props} progress={{ requestId: "request", projectId: project.id, stage, status: "running" }} />);
+      expect(screen.getByText(label)).toBeVisible();
+      expect(screen.queryByText(/\d+%/)).not.toBeInTheDocument();
+      expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
+    }
+  });
+
   it("opens storage settings from a failed preparation and retains retry", () => {
     const retry = vi.fn();
     render(<PreparationScreen project={project} forceProxy error="空间不足" progress={null} cancelling={false} canCancel={false} onCancel={vi.fn()} onRetry={retry} onBack={vi.fn()} />);

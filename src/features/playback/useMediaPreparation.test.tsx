@@ -18,6 +18,29 @@ describe("useMediaPreparation", () => {
     gateway.cancelMediaPreparation.mockResolvedValue(true);
   });
 
+  it.each([false, true])("polls actual worker stages for forceProxy=%s", async forceProxy => {
+    vi.useFakeTimers();
+    const worker = deferred();
+    gateway.prepareProjectMedia.mockReturnValue(worker.promise);
+    const { result, unmount } = renderHook(() => useMediaPreparation());
+    let run!: Promise<unknown>;
+    try {
+      act(() => { run = result.current.start("video-a", forceProxy).catch(error => error); });
+      const requestId = gateway.prepareProjectMedia.mock.calls[0][2];
+      expect(gateway.prepareProjectMedia).toHaveBeenCalledWith("video-a", forceProxy, requestId);
+      for (const stage of ["runtime", "fingerprint", "inspect", "transcode", "validate", "finalize"]) {
+        const snapshot = { requestId, projectId: "video-a", stage, status: "running" };
+        gateway.getMediaPreparation.mockResolvedValue(snapshot);
+        await act(async () => vi.advanceTimersByTimeAsync(500));
+        expect(result.current.progress).toEqual(snapshot);
+      }
+    } finally {
+      await act(async () => { worker.reject(new Error("test finished")); await run; });
+      unmount();
+      vi.useRealTimers();
+    }
+  });
+
   it("waits for the owned worker to finish after cancellation is accepted", async () => {
     const worker = deferred();
     gateway.prepareProjectMedia.mockReturnValue(worker.promise);
