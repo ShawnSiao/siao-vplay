@@ -7,6 +7,12 @@ import type { SubtitleVersion } from "../types";
 
 export function SummaryPreview({ state, sourceVersion, drawer = false }: { drawer?: boolean; state: "progress" | "result" | "confirm" | "empty"; sourceVersion: SubtitleVersion }) {
   const { task, summary } = createSummaryFixtures();
+  if (new URLSearchParams(location.search).has("long-summary")) {
+    summary.result.coreConcepts = Array.from({ length: 24 }, (_, index) => ({
+      ...summary.result.coreConcepts[0], title: `概念 ${index + 1}`,
+      body: "这是一段用于检查持续阅读、证据与操作可达性的长正文。".repeat(12),
+    }));
+  }
   const content = (
       <section className="understanding-shell embedded" aria-label="视频总结预览">
         <div className="understanding-inner-tabs" role="tablist" aria-label="理解类型">
@@ -30,8 +36,8 @@ export function SummaryPreview({ state, sourceVersion, drawer = false }: { drawe
                 summary={summary}
                 exporting={false}
                 exportNotice={null}
-                onExport={() => undefined}
-                onNewSummary={() => undefined}
+                onExport={() => { document.documentElement.dataset.summaryAction = "export"; }}
+                onNewSummary={() => { document.documentElement.dataset.summaryAction = "new"; }}
               />
             )}
           </div>
