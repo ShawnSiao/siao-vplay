@@ -26,6 +26,19 @@ fn isolated(name: &str, body: impl FnOnce()) {
 #[test]
 #[ignore = "writes and verifies a 1 GiB isolated resource tree; requires explicit W: TEMP"]
 fn gibibyte_move_preserves_hashes_and_reopens_selected_root() {
+    if let Ok(data) = std::env::var("SIAOVPLAY_KILLED_MOVE_DATA") {
+        let data = PathBuf::from(data);
+        assert!(data.starts_with(std::env::temp_dir()));
+        local_resources::initialize(&data).unwrap();
+        resource_download::initialize().unwrap();
+        crate::runtime::initialize(&data).unwrap();
+        let plan = plan_resource_root_move(data.join("destination").to_str().unwrap()).unwrap();
+        let id = Uuid::new_v4().to_string();
+        move_control::register(&id).unwrap().run(|| move_resource_root(
+            MoveLocalResourceRootInput { parent_path: plan.selected_parent,
+                plan_fingerprint: plan.plan_fingerprint, confirmed: true }, &id)).unwrap();
+        return;
+    }
     isolated("gibibyte_move_preserves_hashes_and_reopens_selected_root", || {
         use std::io::Write;
         assert!(std::env::temp_dir().to_string_lossy().to_ascii_lowercase().starts_with("w:"));
@@ -72,6 +85,32 @@ fn gibibyte_move_preserves_hashes_and_reopens_selected_root() {
         let cancelled = receive.recv_timeout(std::time::Duration::from_secs(5)).unwrap();
         worker.join().unwrap();
         assert!(matches!(cancelled, Err(ResourceMigrationError::Cancelled)));
+        assert_eq!(local_resources::configured_root().unwrap(), root);
+        assert!(!Path::new(&plan.resource_root).exists());
+        let partial_size = || fs::read_dir(&target).unwrap().filter_map(Result::ok)
+            .filter_map(|entry| fs::metadata(entry.path().join("large-fixture.bin")).ok())
+            .map(|metadata| metadata.len()).max().unwrap_or(0);
+        let previous_size = partial_size();
+        let mut child = Command::new(std::env::current_exe().unwrap())
+            .args(["--exact", "resource_migration::move_confirmation_tests::gibibyte_move_preserves_hashes_and_reopens_selected_root", "--ignored"])
+            .env("SIAOVPLAY_KILLED_MOVE_DATA", data.path())
+            .stdout(std::process::Stdio::null()).spawn().unwrap();
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
+        loop {
+            let size = partial_size();
+            if size > previous_size && size < 1024 * 1024 * 1024 { break; }
+            if child.try_wait().unwrap().is_some() || std::time::Instant::now() >= deadline {
+                let _ = child.kill();
+                let _ = child.wait();
+                panic!("child did not expose an actively growing partial copy");
+            }
+            std::thread::sleep(std::time::Duration::from_millis(2));
+        }
+        child.kill().unwrap();
+        assert!(!child.wait().unwrap().success());
+        local_resources::initialize(data.path()).unwrap();
+        resource_download::initialize().unwrap();
+        crate::runtime::initialize(data.path()).unwrap();
         assert_eq!(local_resources::configured_root().unwrap(), root);
         assert!(!Path::new(&plan.resource_root).exists());
         let id = Uuid::new_v4().to_string();
