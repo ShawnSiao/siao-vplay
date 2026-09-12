@@ -43,3 +43,23 @@ export async function verifySettingsEscapeLayers() {
     migrationRead.mockRestore();
   }
 }
+
+export async function verifyCodexRedetectClick(detect: Mock) {
+  detect.mockResolvedValue({ available: false, authenticated: false, supported: false,
+    version: null, minimumVersion: "0.100.0", authMode: null,
+    errorCode: "codex_runtime_unavailable", errorMessage: "测试：尚未安装" });
+  render(<App />);
+  fireEvent.click(await screen.findByRole("button", { name: "设置" }));
+  fireEvent.click(await screen.findByRole("tab", { name: "AI 服务" }));
+  const settings = screen.getByRole("dialog", { name: "设置" });
+  expect(await within(settings).findByText("测试：尚未安装")).toBeInTheDocument();
+  const detail = within(settings).getByRole("region", { name: "本机 Codex 状态" });
+  const calls = detect.mock.calls.length;
+  detect.mockResolvedValue({ available: true, authenticated: true, supported: true,
+    version: "0.100.0", minimumVersion: "0.100.0", authMode: "chatgpt",
+    errorCode: null, errorMessage: null });
+  fireEvent.click(within(settings).getByRole("button", { name: "重新检测" }));
+  expect(await within(settings).findByText("可以使用")).toBeInTheDocument();
+  expect(detect).toHaveBeenCalledTimes(calls + 1);
+  expect(within(settings).getByRole("region", { name: "本机 Codex 状态" })).toBe(detail);
+}
