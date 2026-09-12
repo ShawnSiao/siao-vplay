@@ -125,6 +125,10 @@ pub(crate) fn backup_before_upgrade(
 }
 
 #[cfg(test)]
+#[path = "database_upgrade_acceptance.rs"]
+mod acceptance;
+
+#[cfg(test)]
 mod tests {
     use crate::store::{ProjectStore, StoreError};
     use rusqlite::Connection;
