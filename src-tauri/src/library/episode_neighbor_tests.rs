@@ -1,4 +1,23 @@
 #[test]
+fn neighbor_lookup_does_not_decode_unrelated_earlier_rows() {
+    let fixture = Fixture::new();
+    let collection = fixture.collection("bounded earlier neighbors");
+    let mut projects = Vec::new();
+    for index in 0..4 {
+        let project = fixture.project(&format!("earlier-{index}.mp4"));
+        fixture.add(&collection, &project, 1, index + 1, index);
+        projects.push(project);
+    }
+    fixture.service.store.connect().unwrap().execute(
+        "UPDATE collection_items SET display_title = X'80' WHERE collection_id = ?1 AND project_id = ?2",
+        rusqlite::params![collection.id, projects[0].id],
+    ).unwrap();
+    let neighbors = fixture.service.get_episode_neighbors(&collection.id, &projects[3].id).unwrap();
+    assert_eq!(neighbors.previous.unwrap().project_id, projects[2].id);
+    assert!(neighbors.next.is_none());
+}
+
+#[test]
 fn neighbor_lookup_does_not_decode_unrelated_later_rows() {
     let fixture = Fixture::new();
     let collection = fixture.collection("bounded neighbors");

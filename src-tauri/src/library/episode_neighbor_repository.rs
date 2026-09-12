@@ -24,14 +24,21 @@ impl LibraryRepository<'_> {
                 ci.project_id",
         )?;
         let mut rows = statement.query(params![collection_id])?;
-        let mut previous = None;
+        let mut previous_id: Option<String> = None;
         while let Some(row) = rows.next()? {
-            let episode = reference(row)?;
-            if episode.project_id == project_id {
+            let candidate_id: String = row.get(0)?;
+            if candidate_id == project_id {
+                // Ordering still belongs to SQLite. Decode only the actual neighbors,
+                // not the titles and metadata of every preceding episode.
+                let previous = previous_id.map(|id| self.connection.query_row(
+                    "SELECT project_id, display_title, season_number, episode_number, absolute_order
+                     FROM collection_items WHERE collection_id = ?1 AND project_id = ?2",
+                    params![collection_id, id], reference,
+                )).transpose()?;
                 let next = rows.next()?.map(reference).transpose()?;
                 return Ok(EpisodeNeighbors { previous, next });
             }
-            previous = Some(episode);
+            previous_id = Some(candidate_id);
         }
         Err(LibraryError::MembershipNotFound { collection_id: collection_id.to_owned(), project_id: project_id.to_owned() })
     }
