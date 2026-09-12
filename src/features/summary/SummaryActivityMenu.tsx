@@ -13,7 +13,7 @@ const statusLabels: Record<SummaryActivity["status"], string> = {
 type Props = { onNotice: (notice: ToastNotice) => void; onOpen: (result: LibrarySearchResult) => void };
 export function SummaryActivityMenu({ onNotice, onOpen }: Props) {
   const { activities, error, incomplete } = useSummaryCompletionNotice(onNotice);
-  return <MenuPopover label="处理动态" className="summary-activity" triggerClassName="shell-command" panelClassName="summary-activity-menu"
+  return <MenuPopover constrainToViewport label="处理动态" className="summary-activity" triggerClassName="shell-command" panelClassName="summary-activity-menu"
     trigger={<><span aria-hidden="true">◷</span><span>动态</span></>}>
     <p>最近 100 项视频总结</p>
     {error ? <p role="status">暂时无法刷新；保留上次记录，稍后自动重试。</p> : incomplete ? <p role="status">有动态未通过检查；仅显示已验证的记录，稍后自动重试。</p> : null}

@@ -1,6 +1,30 @@
 import { join } from "node:path";
 import { expect, test } from "@playwright/test";
 
+for (const width of [960, 1440]) {
+  test(`activity panel stays inside the right window edge at ${width}`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 640 });
+    await page.addInitScript(() => {
+      (window as unknown as { __TAURI_INTERNALS__: unknown }).__TAURI_INTERNALS__ = { invoke: async () =>
+        Array.from({ length: 30 }, (_, index) => ({ id: `task-${index}`, projectId: `project-${index}`,
+          projectTitle: `LongVideoTitle${"WithoutSpaces".repeat(12)}-${index}`, status: "completed", hasResult: true, updatedAtMs: index })) };
+    });
+    await page.goto("/e2e/library.html?activity=1&activityRightEdge=1");
+    await page.getByRole("button", { name: "处理动态", exact: true }).click();
+    const panel = page.getByRole("menu");
+    await expect(panel.getByRole("menuitem")).toHaveCount(30);
+    const bounds = await panel.boundingBox();
+    expect(bounds!.x).toBeGreaterThanOrEqual(0);
+    expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(width);
+    expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(640);
+    expect(await panel.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+    if (process.env.SIAOVPLAY_DESIGN_CAPTURE_DIR) await page.screenshot({ path: join(process.env.SIAOVPLAY_DESIGN_CAPTURE_DIR, `activity-player-${width}.png`) });
+    await panel.getByRole("menuitem").last().scrollIntoViewIfNeeded();
+    await panel.getByRole("menuitem").last().click();
+    await expect(page.getByTestId("activity-selected-project")).toHaveText("project-29");
+  });
+}
+
 test("global activity retains another video's failed summary and opens its project", async ({ page }) => {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));

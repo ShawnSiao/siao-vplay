@@ -194,7 +194,7 @@ export function LibraryHarness() {
   return (
     <>
       <DesktopShell
-      activeView="library"
+      activeView={new URLSearchParams(location.search).has("activityRightEdge") ? "player" : "library"}
       navigationCollapsed={false}
       drawerTab={null}
       dropFeedback={null}
