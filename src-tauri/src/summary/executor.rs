@@ -76,9 +76,21 @@ pub(crate) fn start_or_resume(
             let _ = repository.fail(task_id, "summary_result_invalid", &error.to_string());
         });
     }
+    launch_worker(store, task_id, project_operation, |worker| {
+        thread::Builder::new().spawn(worker).map(|_| ())
+    })?;
+    repository.get(task_id)
+}
+
+fn launch_worker(
+    store: &ProjectStore,
+    task_id: &str,
+    project_operation: crate::project_operations::Operation,
+    spawn: impl FnOnce(Box<dyn FnOnce() + Send>) -> std::io::Result<()>,
+) -> Result<(), StoreError> {
     let worker_store = store.clone();
     let worker_task_id = task_id.to_owned();
-    thread::spawn(move || {
+    let launched = spawn(Box::new(move || {
         let _project_operation = project_operation;
         if let Err(error) = execute(&worker_store, &worker_task_id) {
             let repository = SummaryTaskRepository::new(&worker_store);
@@ -91,8 +103,13 @@ pub(crate) fn start_or_resume(
                 let _ = repository.fail(&worker_task_id, error.code(), &error.to_string());
             }
         }
-    });
-    repository.get(task_id)
+    }));
+    if let Err(error) = launched {
+        let message = format!("无法启动总结任务，请稍后重试：{error}");
+        SummaryTaskRepository::new(store).fail(task_id, "summary_worker_start_failed", &message)?;
+        return Err(std::io::Error::new(error.kind(), message).into());
+    }
+    Ok(())
 }
 
 fn execute(store: &ProjectStore, task_id: &str) -> Result<(), SummaryExecutionError> {

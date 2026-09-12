@@ -1,6 +1,32 @@
 use super::*;
 
 #[test]
+fn worker_launch_failure_releases_project_and_leaves_task_retryable() {
+    let (_directory, store, task) = super::super::test_support::prepared_summary();
+    let repository = SummaryTaskRepository::new(&store);
+    let result: SummaryResult = serde_json::from_value(
+        serde_json::json!({"title":"saved", "overview":"completed chunk"}),
+    ).unwrap();
+    SummaryResultRepository::new(&store).save_chunk(&task.chunks[0].id, &result).unwrap();
+    repository.claim_for_execution(&task.id).unwrap();
+    let operation = crate::project_operations::Operation::acquire(&store, &task.project_id).unwrap();
+    let error = launch_worker(&store, &task.id, operation, |_worker| {
+        Err(std::io::Error::other("test: worker unavailable"))
+    }).unwrap_err();
+    assert!(error.to_string().contains("worker unavailable"));
+    let failed = repository.get(&task.id).unwrap();
+    assert_eq!(failed.status, "failed");
+    assert_eq!(failed.error_code.as_deref(), Some("summary_worker_start_failed"));
+    assert_eq!(failed.chunks[0].status, "completed");
+    assert_eq!(SummaryResultRepository::new(&store).completed_chunk_results(&task.id)
+        .unwrap()[0].overview, "completed chunk");
+    let deleting = crate::project_operations::Deletion::acquire(&store, &task.project_id).unwrap();
+    drop(deleting);
+    repository.claim_for_execution(&task.id).unwrap();
+    assert_eq!(repository.get(&task.id).unwrap().status, "queued");
+}
+
+#[test]
 fn cancelled_summary_never_attempts_to_resolve_or_send_to_a_provider() {
     let (_directory, store, mut task) = super::super::test_support::prepared_summary();
     task.execution_kind = SummaryExecutionKind::Api;
