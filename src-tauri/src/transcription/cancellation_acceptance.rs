@@ -5,6 +5,10 @@ use std::time::{Duration, Instant};
 #[test]
 #[ignore = "requires authorized regression media and pinned local transcription assets"]
 fn real_transcription_cancel_and_resume_preserves_single_result() {
+    let completion_timeout = env::var("SIAOVPLAY_TRANSCRIPTION_ACCEPTANCE_TIMEOUT_SECONDS")
+        .map(|value| value.parse::<u64>().expect("acceptance timeout must be seconds"))
+        .unwrap_or(180);
+    assert!((180..=3600).contains(&completion_timeout));
     let source = PathBuf::from(env::var_os("SIAOVPLAY_TRANSCRIPTION_REGRESSION_MEDIA").unwrap());
     let before = hash_file(&source).unwrap();
     let directory = tempfile::tempdir().unwrap();
@@ -38,7 +42,7 @@ fn real_transcription_cancel_and_resume_preserves_single_result() {
         assert!(!matches!(
             state.status.as_str(),
             "failed" | "completed" | "cancelled"
-        ));
+        ), "transcription stopped before cancellation: {state:?}");
         assert!(Instant::now() < deadline, "transcription did not start");
         thread::sleep(Duration::from_millis(50));
     }
@@ -72,7 +76,7 @@ fn real_transcription_cancel_and_resume_preserves_single_result() {
         job.id
     );
     spawn_transcription_job(store.clone(), job.id.clone()).unwrap();
-    let deadline = Instant::now() + Duration::from_secs(180);
+    let deadline = Instant::now() + Duration::from_secs(completion_timeout);
     loop {
         let state = get_transcription_job(&store, &job.id).unwrap();
         if state.status.as_str() == "completed" {
@@ -81,7 +85,7 @@ fn real_transcription_cancel_and_resume_preserves_single_result() {
         assert!(!matches!(
             state.status.as_str(),
             "failed" | "cancelled" | "interrupted"
-        ));
+        ), "resumed transcription stopped: {state:?}");
         assert!(
             Instant::now() < deadline,
             "resumed transcription did not finish"
