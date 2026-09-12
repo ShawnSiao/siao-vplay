@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Project } from "../../types";
 import { usePlaybackPersistence } from "./usePlaybackPersistence";
 const update = vi.hoisted(() => vi.fn());
-vi.mock("../../lib/desktop", () => ({ updatePlaybackState: update }));
+vi.mock("../../lib/desktop", () => ({ updatePlaybackState: update, beginPlaybackSession: async () => "00000000-0000-4000-8000-000000000001" }));
 const values = { positionMs: 100, durationMs: 1_000, volume: 1, playbackRate: 1, subtitleMode: "bilingual" as const };
 const project = (id: string, positionMs = 0): Project => ({
   id, title: id, revision: 1, status: "ready", createdAtMs: 0, updatedAtMs: 0, lastOpenedAtMs: 0,

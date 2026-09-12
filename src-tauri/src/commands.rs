@@ -1,3 +1,4 @@
+pub(crate) mod playback;
 mod project_io;
 mod project_deletion;
 #[cfg(test)]
@@ -13,7 +14,7 @@ use crate::{
     delivery::{self, DeliveryError, ExportSubtitlesInput, SubtitleExport},
     domain::{
         CreateLocalProjectInput, DeleteProjectResult, Project,
-        RelinkProjectMediaInput, UpdatePlaybackStateInput,
+        RelinkProjectMediaInput,
     },
     external_handoff::{self, ExternalAgentResultUpdate, ExternalHandoffError},
     learning::{
@@ -580,9 +581,9 @@ pub async fn mark_project_opened(
 #[tauri::command]
 pub async fn update_playback_state(
     store: State<'_, ProjectStore>,
-    input: UpdatePlaybackStateInput,
+    input: crate::store::playback_sessions::SaveInput,
 ) -> Result<Project, CommandError> {
-    project_io::run(store.inner().clone(), move |store| store.update_playback_state(input).map_err(Into::into)).await
+    project_io::run(store.inner().clone(), move |store| store.save_playback_session(input).map_err(Into::into)).await
 }
 
 #[tauri::command]

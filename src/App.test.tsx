@@ -69,7 +69,7 @@ const desktopMocks = vi.hoisted(() => ({
   ensureProjectPoster: vi.fn(),
   markProjectOpened: vi.fn(),
   prepareProjectMedia: vi.fn(),
-  updatePlaybackState: vi.fn(),
+  updatePlaybackState: vi.fn(), beginPlaybackSession: vi.fn(),
   relinkProjectMedia: vi.fn(),
   deleteProject: vi.fn(),
   inspectSubtitleFile: vi.fn(),
@@ -891,7 +891,7 @@ beforeEach(() => {
         ? remoteProject.mediaSource.locator
         : preparation.playbackPath,
   }));
-  desktopMocks.updatePlaybackState.mockResolvedValue(project);
+  desktopMocks.updatePlaybackState.mockResolvedValue(project); desktopMocks.beginPlaybackSession.mockResolvedValue("00000000-0000-4000-8000-000000000001");
   desktopMocks.deleteProject.mockResolvedValue({
     projectId: project.id,
     deleted: true,

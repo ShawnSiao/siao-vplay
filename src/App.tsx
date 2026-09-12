@@ -598,7 +598,7 @@ export default function App() {
   };
 
   const persistPlayback = usePlaybackPersistence({
-    project: activeProject, sessionId, currentSession: operationTokenRef,
+    project: screen === "player" ? activeProject : null, sessionId, currentSession: operationTokenRef,
     setProject: setActiveProject, onFailure: setToast,
   });
   const isCurrentSession = useCallback((projectId: string) =>

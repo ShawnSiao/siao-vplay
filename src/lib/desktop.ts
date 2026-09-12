@@ -1,3 +1,4 @@
+export { beginPlaybackSession } from "./playbackSessionGateway";
 import { invokeProject, readProjectList } from "./projectGateway";
 export { reconcileExternalAgentResults, acknowledgeExternalAgentResults } from "./externalResultGateway";
 export { retryLocalResourceBinding, inspectLocalResourceBinding } from "./resourceLocationGateway";
@@ -153,6 +154,8 @@ export async function ensureProjectPoster(projectId: string): Promise<Project> {
 export async function updatePlaybackState(
   projectId: string,
   values: {
+    sessionId: string;
+    saveSequence: number;
     completed?: boolean;
     positionMs: number;
     durationMs: number | null;

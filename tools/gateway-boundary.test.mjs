@@ -160,3 +160,13 @@ test("project database commands offload their transaction work", async () => {
     assert.ok(body && /project_io::run\(/.test(body), `${name} must offload DB/file work`);
   }
 });
+
+test("registered playback writes require session identity and use the guarded store path", async () => {
+  const source = await readFile(new URL("../src-tauri/src/commands.rs", import.meta.url), "utf8");
+  const body = source.match(/pub async fn update_playback_state\([\s\S]*?\n\}/)?.[0];
+  assert.match(body, /input: crate::store::playback_sessions::SaveInput/);
+  assert.match(body, /store\.save_playback_session\(input\)/);
+  assert.doesNotMatch(body, /store\.update_playback_state/);
+  const handlers = await readFile(new URL("../src-tauri/src/ipc_handler.rs", import.meta.url), "utf8");
+  assert.match(handlers, /commands::playback::begin_playback_session/);
+});

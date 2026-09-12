@@ -1,3 +1,4 @@
+pub(crate) mod playback_sessions;
 mod local_projects;
 mod project_cleanup;
 pub use project_cleanup::PendingProjectCleanup;
@@ -63,6 +64,7 @@ pub enum StoreError {
 #[derive(Clone, Debug)]
 pub struct ProjectStore {
     database_path: PathBuf,
+    playback_sessions: std::sync::Arc<playback_sessions::Registry>,
 }
 
 impl ProjectStore {
@@ -72,7 +74,7 @@ impl ProjectStore {
             fs::create_dir_all(parent)?;
         }
 
-        let store = Self { database_path };
+        let store = Self { database_path, playback_sessions: Default::default() };
         let mut connection = store.connect()?;
         Self::migrate(&mut connection, &store.database_path)?;
         Ok(store)
@@ -296,9 +298,9 @@ impl ProjectStore {
              WHERE id = ?1",
             params![input.project_id, timestamp],
         )?;
+        let project = Self::load_project(&transaction, &input.project_id)?;
         transaction.commit()?;
-
-        self.get_project(&input.project_id)
+        Ok(project)
     }
 
     pub fn relink_project_media(
@@ -667,6 +669,7 @@ impl ProjectStore {
         }
         let changed = transaction.execute("DELETE FROM projects WHERE id = ?1", params![project_id])?;
         transaction.commit()?;
+        self.playback_sessions.retire(project_id);
         let (cleanup_pending, cached_media_deleted) = project_cleanup::retry_remote(&connection, self.data_directory(), remote_media_root, project_id)?;
         Ok(DeleteProjectResult {
             project_id: project_id.to_owned(),

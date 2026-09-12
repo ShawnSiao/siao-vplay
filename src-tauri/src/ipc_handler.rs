@@ -42,6 +42,7 @@ pub(crate) fn handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Sen
         crate::library::commands::open_project_media_location,
         crate::commands::get_project,
         crate::commands::mark_project_opened,
+        crate::commands::playback::begin_playback_session,
         crate::commands::update_playback_state,
         crate::watch_state::set_project_watched,
         crate::commands::relink_project_media,

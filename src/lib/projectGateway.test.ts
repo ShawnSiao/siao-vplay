@@ -14,7 +14,7 @@ const reads = [
   () => setProjectWatched("project", true),
   () => getProject("project"), () => markProjectOpened("project"), () => ensureProjectPoster("project"),
   () => relinkProjectMedia("project", "W:/video.mp4"),
-  () => updatePlaybackState("project", { positionMs: 0, durationMs: null, volume: 1, playbackRate: 1, subtitleMode: "bilingual" }),
+  () => updatePlaybackState("project", { sessionId: "00000000-0000-4000-8000-000000000001", saveSequence: 1, positionMs: 0, durationMs: null, volume: 1, playbackRate: 1, subtitleMode: "bilingual" }),
 ];
 it.each(reads)("rejects another project's response", async read => {
   mocks.invoke.mockResolvedValue({ ...project, id: "other" });
