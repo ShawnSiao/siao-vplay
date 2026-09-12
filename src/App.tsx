@@ -147,6 +147,7 @@ export default function App() {
   );
   const {
     transcriptionPreparationChoice, setTranscriptionPreparationChoice,
+    beginSubtitlePreparation, dismissSubtitleDialog,
     subtitleDialogOpen, setSubtitleDialogOpen, translationDialogOpen, setTranslationDialogOpen,
     translationSegmentIds, setTranslationSegmentIds, revisionDialogOpen, setRevisionDialogOpen,
     deliveryDialogOpen, setDeliveryDialogOpen,
@@ -900,14 +901,15 @@ export default function App() {
             (version) => version.role === "translation",
           )}
           initialPreparationChoice={transcriptionPreparationChoice}
-          onClose={() => { setSubtitleDialogOpen(false); setTranscriptionPreparationChoice(null); }}
+          onClose={dismissSubtitleDialog}
           onTranscriptionTracked={trackTranscription}
           onTranslationTaskCompleted={handleTranslationCompleted}
           localResourceCatalog={localResources.catalog}
           localResourceStatus={localResources.status}
           onPrepareTranscriptionResources={async (profileId, language) => {
             const projectId = activeProject.id;
-            const isCurrent = () => isCurrentSession(projectId);
+            const isPending = beginSubtitlePreparation();
+            const isCurrent = () => isPending() && isCurrentSession(projectId);
             try {
               if (!isCurrent()) return;
               if (localResources.status?.configured) {

@@ -25,7 +25,7 @@ export async function verifyTranscriptionChoicesResume(mocks: Record<"getTranscr
   expect(screen.getAllByRole("radio").find(input => (input as HTMLInputElement).value === "standard")!).toBeChecked();
 }
 
-export async function verifyStaleTranscriptionPreparation(mocks: Record<"getTranscriptionRuntimeStatus" | "setLocalResourceProfile", Mock>, ready?: LocalResourceStatus) {
+export async function verifyStaleTranscriptionPreparation(mocks: Record<"getTranscriptionRuntimeStatus" | "setLocalResourceProfile", Mock>, ready?: LocalResourceStatus, leavePlayer = true) {
   mocks.getTranscriptionRuntimeStatus.mockResolvedValue({ available: false, preferredBackend: "cpu", runtimes: [], models: [] });
   let finish!: () => void;
   const pending = new Promise<void>(resolve => { finish = resolve; });
@@ -41,7 +41,7 @@ export async function verifyStaleTranscriptionPreparation(mocks: Record<"getTran
   fireEvent.click(await screen.findByRole("button", { name: "准备本地字幕识别" }));
   await waitFor(() => expect(mocks.setLocalResourceProfile).toHaveBeenCalled());
   fireEvent.click(screen.getByRole("button", { name: "关闭" }));
-  fireEvent.click((await screen.findAllByRole("button", { name: "返回媒体库" }))[0]);
+  if (leavePlayer) fireEvent.click((await screen.findAllByRole("button", { name: "返回媒体库" }))[0]);
   await act(async () => { finish(); await pending; });
   expect(screen.queryByRole("heading", { name: "准备原文字幕" })).toBeNull();
   expect(screen.queryByRole("dialog", { name: "设置" })).toBeNull();

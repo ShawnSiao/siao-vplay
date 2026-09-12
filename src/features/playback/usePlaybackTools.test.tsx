@@ -2,6 +2,18 @@ import { act, renderHook } from "@testing-library/react";
 import { expect, it } from "vitest";
 import { usePlaybackTools } from "./usePlaybackTools";
 
+it("invalidates dismissed or superseded preparation without cancelling an internal hide", () => {
+  const { result } = renderHook(usePlaybackTools, { initialProps: 1 });
+  const first = result.current.beginSubtitlePreparation();
+  act(() => result.current.setSubtitleDialogOpen(false));
+  expect(first()).toBe(true);
+  const second = result.current.beginSubtitlePreparation();
+  expect(first()).toBe(false);
+  expect(second()).toBe(true);
+  act(() => result.current.dismissSubtitleDialog());
+  expect(second()).toBe(false);
+});
+
 it("clears all video tools and selected translation segments in a new playback session", () => {
   const { result, rerender } = renderHook(usePlaybackTools, { initialProps: 1 });
   act(() => {

@@ -2281,6 +2281,7 @@ describe("App", () => {
 
   it("ignores successful transcription preparation from an abandoned session", () =>
     verifyStaleTranscriptionPreparation(desktopMocks, readyLocalResourceStatus));
+  it("keeps dismissed transcription preparation closed in the same video", () => verifyStaleTranscriptionPreparation(desktopMocks, readyLocalResourceStatus, false));
   it("retains transcription choices after resource preparation", () => verifyTranscriptionChoicesResume(desktopMocks, readyLocalResourceStatus));
 
   it("keeps Ctrl+O available in the player without bypassing a modal", async () => {
