@@ -5,6 +5,7 @@ import validateServiceTest from "../../generated/ai-service-test-result.validato
 import validateNetworkSettings from "../../generated/network-settings.validator.mjs";
 import validateModelList from "../../generated/ai-model-list.validator.mjs";
 import { invoke } from "@tauri-apps/api/core";
+import { publishAiServiceSettings } from "./events";
 
 import type {
   AiExecutionPreview,
@@ -23,6 +24,12 @@ function parseServiceSettings(value: unknown): AiServiceSettings {
   return value;
 }
 
+function changedServiceSettings(value: unknown): AiServiceSettings {
+  const settings = parseServiceSettings(value);
+  publishAiServiceSettings(settings);
+  return settings;
+}
+
 export async function getAiServiceSettings(): Promise<AiServiceSettings> {
   return parseServiceSettings(await invoke<unknown>("get_ai_service_settings"));
 }
@@ -31,7 +38,7 @@ export async function saveAiService(
   expectedRevision: number,
   draft: AiServiceDraft,
 ): Promise<AiServiceSettings> {
-  return parseServiceSettings(await invoke<unknown>("save_ai_service", {
+  return changedServiceSettings(await invoke<unknown>("save_ai_service", {
     input: {
       expectedRevision,
       id: draft.id,
@@ -49,14 +56,14 @@ export async function deleteAiService(
   expectedRevision: number,
   id: string,
 ): Promise<AiServiceSettings> {
-  return parseServiceSettings(await invoke<unknown>("delete_ai_service", { input: { expectedRevision, id } }));
+  return changedServiceSettings(await invoke<unknown>("delete_ai_service", { input: { expectedRevision, id } }));
 }
 
 export async function setDefaultAiService(
   expectedRevision: number,
   id: string | null,
 ): Promise<AiServiceSettings> {
-  return parseServiceSettings(await invoke<unknown>("set_default_ai_service", {
+  return changedServiceSettings(await invoke<unknown>("set_default_ai_service", {
     input: { expectedRevision, id },
   }));
 }

@@ -5,12 +5,26 @@ import settingsSchema from "../../../contracts/ai-service-settings.schema.json";
 import resultSchema from "../../../contracts/ai-service-test-result.schema.json";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { useEnvironmentSettings } from "./useEnvironmentSettings";
+import { useAiExecutionChoice } from "../ai-tasks/useAiExecutionChoice";
 import { previewNetworkSettings } from "./previewData";
 const mocks = vi.hoisted(() => ({ invoke: vi.fn() }));
 vi.mock("@tauri-apps/api/core", () => mocks);
 beforeEach(() => { mocks.invoke.mockReset(); });
 const draft = { id: null, providerId: "openai" as const, displayName: "Test", protocol: "openai_responses" as const, baseUrl: "", modelId: "model", apiKey: "", makeDefault: false };
 const input = { serviceConfigId: "service", providerId: draft.providerId, protocol: draft.protocol, baseUrl: null, modelId: "model", apiKey: null };
+
+it("updates an open task through the validated save gateway", async () => {
+  const saved = settingsSchema.examples.find(value => value.services.length > 0)!;
+  mocks.invoke.mockResolvedValue({ ...saved, services: [], defaultServiceId: null });
+  const { result } = renderHook(() => useAiExecutionChoice(false));
+  await waitFor(() => expect(result.current.loading).toBe(false));
+  mocks.invoke.mockResolvedValue(saved);
+  await act(async () => { await saveAiService(0, draft); });
+  expect(result.current.settings).toEqual(saved);
+  mocks.invoke.mockResolvedValue({ services: [] });
+  await act(async () => { await expect(saveAiService(saved.revision, draft)).rejects.toThrow(); });
+  expect(result.current.settings).toEqual(saved);
+});
 
 it.each(settingsSchema.examples)("accepts actual Rust service settings %j", async (payload) => {
   mocks.invoke.mockResolvedValue(payload);

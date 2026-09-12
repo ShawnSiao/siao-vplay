@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import type { AiTaskExecutionInfo } from "../../types";
+import { listenAiServiceSettings } from "../environment-settings/events";
 import {
   commandMessage,
   getAiServiceSettings,
@@ -62,9 +63,17 @@ export function useAiExecutionChoice(allowFrames: boolean, initialChoice?: AiExe
 
   useEffect(() => {
     let active = true;
+    let updated = false;
+    const unsubscribe = listenAiServiceSettings((next) => {
+      updated = true;
+      setSettings(next);
+      setFrames(false);
+      setError(null);
+      setLoading(false);
+    });
     void getAiServiceSettings()
       .then((next) => {
-        if (!active) return;
+        if (!active || updated) return;
         setSettings(next);
         const preferred = next.services.find((service) => service.id === next.defaultServiceId);
         if (!restoredChoice && preferred?.credentialState === "stored" && preferred.modelId) {
@@ -75,19 +84,26 @@ export function useAiExecutionChoice(allowFrames: boolean, initialChoice?: AiExe
         }
       })
       .catch((cause) => {
-        if (active) setError(commandMessage(cause));
+        if (active && !updated) setError(commandMessage(cause));
       })
       .finally(() => {
         if (active) setLoading(false);
       });
-    return () => { active = false; };
+    return () => { active = false; unsubscribe(); };
   }, [restoredChoice]);
 
   const services = useMemo(() => usableServices(settings), [settings]);
   const service = services.find((item) => item.id === serviceId) ?? (serviceId === null ? services[0] ?? null : null);
+  const currentChoice = useRef({ modelId, service });
+  useLayoutEffect(() => { currentChoice.current = { modelId, service }; }, [modelId, service]);
 
   const setKind = useCallback((nextKind: AiExecutionChoiceKind) => {
     setKindState(nextKind);
+    const { modelId, service } = currentChoice.current;
+    if (nextKind === "api" && !modelId && service) {
+      setServiceId(service.id);
+      setModelId(service.modelId ?? "");
+    }
     setFrames(false);
     setError(null);
   }, []);
