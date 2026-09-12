@@ -161,3 +161,38 @@ fn modified_source_material_is_rejected_before_any_request() {
     });
     assert!(result.is_err());
 }
+
+#[test]
+fn project_revision_changed_during_api_request_rejects_final_application() {
+    let (fixture, task) = prepared();
+    let mut changed = false;
+    let result = execution::run_with(&fixture.store, &task.id, |prompt, _| {
+        if !changed {
+            fixture
+                .store
+                .connect()
+                .unwrap()
+                .execute(
+                    "UPDATE projects SET revision = revision + 1 WHERE id = ?1",
+                    [&fixture.project_id],
+                )
+                .unwrap();
+            changed = true;
+        }
+        Ok(translated(prompt).to_string())
+    });
+    assert!(result.is_err());
+    let reopened = crate::store::ProjectStore::open(fixture.store.database_path()).unwrap();
+    assert!(
+        translation::get_translation_task(&reopened, &task.id)
+            .unwrap()
+            .output_version_id
+            .is_none()
+    );
+    let versions =
+        crate::subtitles::list_subtitle_versions(&reopened, &fixture.project_id).unwrap();
+    assert_eq!(versions.len(), 1);
+    assert_eq!(versions[0].id, fixture.source_version_id);
+    assert_eq!(versions[0].role, "original");
+    assert!(versions[0].is_current);
+}
