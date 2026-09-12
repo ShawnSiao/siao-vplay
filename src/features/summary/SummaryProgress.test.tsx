@@ -31,6 +31,15 @@ it("covers all persisted states and uses a readable fallback for new states", ()
   expect(summaryChunkLabel("unknown_state")).toBe("状态待更新");
 });
 
+it.each([
+  ["synthesizing_summary", "正在整理总结"],
+  ["merging", "正在整合结果"],
+  ["cancelling", "正在停止总结"],
+  ["awaiting_confirmation", "等待确认发送清单"],
+])("translates the %s execution stage", (stage, label) => {
+  expect(summaryStageLabel(stage)).toBe(label);
+});
+
 it("shows actual cancellation progress without promising another full request", () => {
   const { task } = createSummaryFixtures();
   render(<SummaryProgress task={{ ...task, cancelRequested: true }} busy={false} onCancel={vi.fn()} onResume={vi.fn()} onOpenMaterials={vi.fn()} />);

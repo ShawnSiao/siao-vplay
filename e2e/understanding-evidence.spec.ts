@@ -32,6 +32,8 @@ test("understanding loads original evidence, retries reads and pauses before see
   await page.setViewportSize({ width: 960, height: 640 });
   await page.goto("/e2e/player.html?ai-confirm=explanation");
   await expect(page.getByText(explanation.confirmedFacts[0].text, { exact: true })).toBeVisible();
+  await expect(page.getByRole("alert")).toContainText("原任务证据暂时无法读取，分析正文仍保留");
+  await expect(page.getByRole("button", { name: /^定位(原文|画面)/ })).toHaveCount(0);
   await page.getByRole("button", { name: "重新读取证据" }).click();
   await expect(page.getByText("駅の前で会おう。").first()).toBeVisible();
   await expect(page.getByText(/Unexpected fixture IPC/)).toHaveCount(0);
@@ -40,6 +42,9 @@ test("understanding loads original evidence, retries reads and pauses before see
   await page.getByRole("button", { name: "定位原文 00:02" }).first().focus();
   await page.keyboard.press("Enter");
   await expect(page.getByLabel("定位结果")).toHaveText("已暂停 · 2000 毫秒");
+  await page.getByRole("button", { name: "定位画面 00:14" }).first().focus();
+  await page.keyboard.press("Enter");
+  await expect(page.getByLabel("定位结果")).toHaveText("已暂停 · 14000 毫秒");
   expect(await page.evaluate(() => (window as unknown as { evidenceReads: number }).evidenceReads)).toBe(2);
   expect(errors).toEqual([]);
 });
