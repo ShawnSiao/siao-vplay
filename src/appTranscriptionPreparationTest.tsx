@@ -10,7 +10,7 @@ export async function verifyLocalImportShortcut(chooseLocalVideo: Mock) {
   await waitFor(() => expect(chooseLocalVideo).toHaveBeenCalled());
 }
 
-export async function verifyTranscriptionChoicesResume(mocks: Record<"getTranscriptionRuntimeStatus" | "setLocalResourceProfile", Mock>, ready: LocalResourceStatus) {
+export async function verifyTranscriptionChoicesResume(mocks: Record<"getTranscriptionRuntimeStatus" | "setLocalResourceProfile", Mock>, ready: LocalResourceStatus, failFirst = false) {
   mocks.getTranscriptionRuntimeStatus.mockResolvedValue({ available: false, preferredBackend: "cpu", runtimes: [], models: [] });
   render(<App />);
   fireEvent.click(await screen.findByRole("button", { name: /继续播放/ }));
@@ -18,11 +18,20 @@ export async function verifyTranscriptionChoicesResume(mocks: Record<"getTranscr
   fireEvent.click(await screen.findByRole("tab", { name: "从视频生成" }));
   fireEvent.change(await screen.findByRole("combobox", { name: /视频原声语言/ }), { target: { value: "ja" } });
   fireEvent.click(screen.getAllByRole("radio").find(input => (input as HTMLInputElement).value === "standard")!);
+  if (failFirst) {
+    mocks.setLocalResourceProfile.mockRejectedValueOnce(new Error("configuration unavailable"));
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "准备本地字幕识别" })); });
+    expect(screen.getByRole("combobox", { name: /视频原声语言/ })).toHaveValue("ja");
+    expect(screen.getAllByRole("radio").find(input => (input as HTMLInputElement).value === "standard")!).toBeChecked();
+    expect(screen.getByRole("button", { name: "准备本地字幕识别" })).toBeEnabled();
+    expect(mocks.setLocalResourceProfile).toHaveBeenCalledTimes(1);
+  }
   mocks.setLocalResourceProfile.mockResolvedValue(ready);
   await act(async () => { fireEvent.click(screen.getByRole("button", { name: "准备本地字幕识别" })); });
   await waitFor(() => expect(screen.getByRole("tab", { name: "从视频生成" })).toHaveAttribute("aria-selected", "true"));
   await waitFor(() => expect(screen.getByRole("combobox", { name: /视频原声语言/ })).toHaveValue("ja"));
   expect(screen.getAllByRole("radio").find(input => (input as HTMLInputElement).value === "standard")!).toBeChecked();
+  expect(mocks.setLocalResourceProfile).toHaveBeenCalledTimes(failFirst ? 2 : 1);
 }
 
 export async function verifyStaleTranscriptionPreparation(mocks: Record<"getTranscriptionRuntimeStatus" | "setLocalResourceProfile", Mock>, ready?: LocalResourceStatus, leavePlayer = true) {
