@@ -75,6 +75,35 @@ fn real_old_database_snapshot_preserves_assets_and_backup() {
         before == assets(&backup),
         "backup assets differ from pre-upgrade snapshot"
     );
+    // Exercise recovery from the retained backup, not from the upgraded database.
+    let recovery_directory = directory.path().join("recovered");
+    std::fs::create_dir(&recovery_directory).unwrap();
+    let recovered_path = recovery_directory.join("projects.db");
+    let mut recovered = Connection::open(&recovered_path).unwrap();
+    Backup::new(&backup, &mut recovered)
+        .unwrap()
+        .run_to_completion(128, std::time::Duration::from_millis(10), None)
+        .unwrap();
+    drop(recovered);
+    let recovered_store = ProjectStore::open(&recovered_path).unwrap();
+    let recovered = Connection::open(&recovered_path).unwrap();
+    assert_eq!(super::check_version(&recovered, 21).unwrap(), 21);
+    assert!(before == assets(&recovered), "restored assets differ");
+    let project_ids: Vec<String> = recovered
+        .prepare("SELECT id FROM projects")
+        .unwrap()
+        .query_map([], |row| row.get(0))
+        .unwrap()
+        .collect::<Result<_, _>>()
+        .unwrap();
+    for project_id in project_ids {
+        assert!(
+            recovered_store.get_project(&project_id).is_ok(),
+            "restored project cannot load"
+        );
+    }
+    drop(recovered);
+    drop(recovered_store);
     drop(backup);
     drop(migrated);
     drop(store);
@@ -83,5 +112,7 @@ fn real_old_database_snapshot_preserves_assets_and_backup() {
         before == assets(&Connection::open(&path).unwrap()),
         "assets changed on reopen"
     );
-    println!("schema {version} -> 21: assets, backup, integrity and reopen verified");
+    println!(
+        "schema {version} -> 21: assets, backup recovery, project loading, integrity and reopen verified"
+    );
 }
