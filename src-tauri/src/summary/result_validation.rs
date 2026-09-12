@@ -6,10 +6,11 @@ use crate::store::StoreError;
 pub(crate) fn validate_chunk_result(
     result: &SummaryResult,
     allowed_subtitle_ids: &HashSet<String>,
+    allowed_frame_timestamps: &HashSet<i64>,
     cutoff_ms: Option<i64>,
     chunk_ordinal: usize,
 ) -> Result<(), StoreError> {
-    validate_common(result, allowed_subtitle_ids, cutoff_ms)?;
+    validate_common(result, allowed_subtitle_ids, allowed_frame_timestamps, cutoff_ms)?;
     if result.format_version != 2 || result.covered_chunk_ordinals != vec![chunk_ordinal + 1] {
         return Err(StoreError::Validation(
             "分块总结必须声明当前分块覆盖标记".to_owned(),
@@ -36,12 +37,13 @@ pub(crate) fn validate_chunk_result(
 pub(crate) fn validate_final_result(
     result: &SummaryResult,
     allowed_subtitle_ids: &HashSet<String>,
+    allowed_frame_timestamps: &HashSet<i64>,
     cutoff_ms: Option<i64>,
     required_chunk_ids: &[HashSet<String>],
     require_examples: bool,
     analysis_mode: AnalysisMode,
 ) -> Result<(), StoreError> {
-    validate_common(result, allowed_subtitle_ids, cutoff_ms)?;
+    validate_common(result, allowed_subtitle_ids, allowed_frame_timestamps, cutoff_ms)?;
     if result.format_version != 2 {
         return Err(StoreError::Validation("最终总结格式版本无效".to_owned()));
     }
@@ -116,6 +118,7 @@ fn validate_chunk_evidence_coverage(
 fn validate_common(
     result: &SummaryResult,
     allowed_subtitle_ids: &HashSet<String>,
+    allowed_frame_timestamps: &HashSet<i64>,
     cutoff_ms: Option<i64>,
 ) -> Result<(), StoreError> {
     if result.title.trim().is_empty() || result.overview.trim().is_empty() {
@@ -149,6 +152,11 @@ fn validate_common(
                 return Err(StoreError::Validation(
                     "总结引用了任务范围外的字幕".to_owned(),
                 ));
+            }
+            if evidence.frame_timestamps_ms.iter().any(|timestamp| {
+                *timestamp < 0 || !allowed_frame_timestamps.contains(timestamp)
+            }) {
+                return Err(StoreError::Validation("总结引用了未提供的画面".to_owned()));
             }
             if cutoff_ms.is_some_and(|cutoff| {
                 evidence
@@ -261,11 +269,29 @@ mod tests {
     }
 
     #[test]
+    fn rejects_unprovided_frames_even_when_before_the_playback_cutoff() {
+        let ids = HashSet::from(["past".into()]);
+        let allowed = HashSet::from([500]);
+        for timestamp in [-1, 400, 600] {
+            let mut result = detailed_result("past");
+            result.speaker_narrative[0].evidence[0].frame_timestamps_ms = vec![timestamp];
+            assert!(validate_chunk_result(&result, &ids, &allowed, Some(1000), 0).is_err(), "accepted unprovided frame {timestamp}");
+            assert!(validate_final_result(&result, &ids, &allowed, Some(1000), &[ids.clone()], true, AnalysisMode::ScienceTechnology).is_err());
+        }
+        let mut result = detailed_result("past");
+        result.speaker_narrative[0].evidence[0].frame_timestamps_ms = vec![500];
+        assert!(validate_chunk_result(&result, &ids, &allowed, Some(1000), 0).is_ok());
+        assert!(validate_final_result(&result, &ids, &allowed, Some(1000), &[ids.clone()], true, AnalysisMode::ScienceTechnology).is_ok());
+        assert!(validate_chunk_result(&result, &ids, &HashSet::new(), Some(1000), 0).is_err());
+    }
+
+    #[test]
     fn rejects_out_of_scope_evidence() {
         assert!(
             validate_final_result(
                 &detailed_result("future"),
                 &HashSet::from(["past".into()]),
+                &HashSet::new(),
                 Some(1_000),
                 &[HashSet::from(["past".into()])],
                 true,
@@ -283,6 +309,7 @@ mod tests {
             validate_final_result(
                 &result,
                 &HashSet::from(["past".into()]),
+                &HashSet::new(),
                 None,
                 &[HashSet::from(["past".into()])],
                 true,
@@ -300,6 +327,7 @@ mod tests {
             validate_final_result(
                 &result,
                 &HashSet::from(["first".into(), "second".into()]),
+                &HashSet::new(),
                 None,
                 &[
                     HashSet::from(["first".into()]),

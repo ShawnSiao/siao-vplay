@@ -53,7 +53,7 @@ pub(crate) fn start_or_resume(
     let repository = SummaryTaskRepository::new(store);
     let task = repository.get(task_id)?;
     let project_operation = crate::project_operations::Operation::acquire(store, &task.project_id)?;
-    verified_materials::load(store, &task)?;
+    let materials = verified_materials::load(store, &task)?;
     if repository.translation_is_active()? {
         return Err(StoreError::Validation(
             "存在活动翻译任务，完成或取消翻译后才能启动视频总结".to_owned(),
@@ -72,7 +72,7 @@ pub(crate) fn start_or_resume(
     }
     repository.claim_for_execution(task_id)?;
     if task.execution_kind == SummaryExecutionKind::Manual {
-        return resume_manual(store, &task).inspect_err(|error| {
+        return resume_manual(store, &task, &materials).inspect_err(|error| {
             let _ = repository.fail(task_id, "summary_result_invalid", &error.to_string());
         });
     }
@@ -163,7 +163,7 @@ fn execute(store: &ProjectStore, task_id: &str) -> Result<(), SummaryExecutionEr
         }
         let result: SummaryResult = serde_json::from_str(raw.trim_start_matches('\u{feff}'))
             .map_err(|error| StoreError::Validation(format!("分块结果 JSON 无效：{error}")))?;
-        validate_chunk_result(&result, &allowed, task.playback_cutoff_ms, chunk.ordinal)?;
+        validate_chunk_result(&result, &allowed, &materials.frames.iter().filter(|frame| frame.metadata.ordinal == chunk.ordinal).map(|frame| frame.metadata.timestamp_ms).collect(), task.playback_cutoff_ms, chunk.ordinal)?;
         SummaryResultRepository::new(store).save_chunk(&chunk.id, &result)?;
         let progress = (chunk.ordinal + 1) as f64 / (total + 1) as f64;
         tasks.set_task_state(task_id, "running", "analyzing_chunks", progress)?;
@@ -211,6 +211,7 @@ fn execute(store: &ProjectStore, task_id: &str) -> Result<(), SummaryExecutionEr
     validate_final_result(
         &result,
         &allowed,
+        &materials.frames.iter().map(|frame| frame.metadata.timestamp_ms).collect(),
         task.playback_cutoff_ms,
         &required_chunk_ids,
         require_examples,
@@ -345,7 +346,7 @@ fn provider_error(failure: ProviderFailure) -> SummaryExecutionError {
     }
 }
 
-fn resume_manual(store: &ProjectStore, task: &SummaryTask) -> Result<SummaryTask, StoreError> {
+fn resume_manual(store: &ProjectStore, task: &SummaryTask, materials: &verified_materials::VerifiedMaterials) -> Result<SummaryTask, StoreError> {
     let repository = SummaryTaskRepository::new(store);
     let result_path = repository.materials_directory(&task.id).join("result.json");
     if !result_path.is_file() {
@@ -373,6 +374,7 @@ fn resume_manual(store: &ProjectStore, task: &SummaryTask) -> Result<SummaryTask
     validate_final_result(
         &result,
         &allowed,
+        &materials.frames.iter().map(|frame| frame.metadata.timestamp_ms).collect(),
         task.playback_cutoff_ms,
         &required_chunk_ids,
         false,

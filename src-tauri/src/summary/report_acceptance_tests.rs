@@ -197,6 +197,16 @@ fn manual_handoff(cancel_before_import: bool) {
         assert!(SummaryResultRepository::new(&store).list_summaries(&task.project_id).unwrap().is_empty());
         return;
     }
+    let error = executor::start_or_resume(&store, &task.id).unwrap_err();
+    assert!(error.to_string().contains("未提供的画面"));
+    assert!(SummaryResultRepository::new(&store).list_summaries(&task.project_id).unwrap().is_empty());
+    let mut corrected = summary_result();
+    for sections in [&mut corrected.speaker_narrative, &mut corrected.timeline,
+        &mut corrected.core_concepts, &mut corrected.principles_or_architecture,
+        &mut corrected.examples_and_scenarios, &mut corrected.design_tradeoffs, &mut corrected.conclusions] {
+        for section in sections { for evidence in &mut section.evidence { evidence.frame_timestamps_ms.clear(); } }
+    }
+    fs::write(Path::new(&task.materials_directory).join("result.json"), serde_json::to_vec(&corrected).unwrap()).unwrap();
     let completed = executor::start_or_resume(&store, &task.id).unwrap();
     assert_eq!(completed.status, "completed");
     assert!(completed.output_summary_id.is_some());
