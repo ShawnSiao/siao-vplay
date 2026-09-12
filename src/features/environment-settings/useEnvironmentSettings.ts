@@ -166,6 +166,17 @@ export function useEnvironmentSettings(open: boolean, previewMode: boolean) {
       if (previewMode) return;
       let next = await saveAiService(settings.revision, draft);
       const saved = findSavedService(draft, next);
+      // The service write has committed even if the subsequent default update fails.
+      setSettings(next);
+      if (saved) {
+        const remainingDraft = { ...draft, id: saved.id, apiKey: "" };
+        draftsRef.current.delete(selectionRef.current);
+        draftsRef.current.set(saved.id, remainingDraft);
+        selectionRef.current = saved.id;
+        setSelectionId(saved.id);
+        setDraft(remainingDraft);
+        setDirtySelectionIds([...draftsRef.current.keys()]);
+      }
       if (saved && draft.makeDefault && !saved.isDefault) {
         next = await setDefaultAiService(next.revision, saved.id);
       } else if (saved?.isDefault && !draft.makeDefault) {
