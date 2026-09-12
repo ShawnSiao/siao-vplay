@@ -79,6 +79,8 @@ export function SubtitleDeliveryDialog({
   const [confirmed, setConfirmed] = useState(false);
   const [operation, setOperation] = useState<DeliveryOperation>("loading");
   const [error, setError] = useState<string | null>(null);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  const [historyAttempt, setHistoryAttempt] = useState(0);
   const [exported, setExported] = useState<SubtitleExport | null>(null);
   const [job, setJob] = useState<SubtitleBurnJob | null>(null);
   const [recentJob, setRecentJob] = useState<SubtitleBurnJob | null>(null);
@@ -96,11 +98,11 @@ export function SubtitleDeliveryDialog({
         if (latest && activeStatuses.has(latest.status)) {
           setJob(latest);
         }
-        setError(null);
+        setHistoryError(null);
       })
       .catch((caught: unknown) => {
         if (active) {
-          setError(commandError(caught).message);
+          setHistoryError(commandError(caught).message);
         }
       })
       .finally(() => {
@@ -111,7 +113,7 @@ export function SubtitleDeliveryDialog({
     return () => {
       active = false;
     };
-  }, [project.id]);
+  }, [project.id, historyAttempt]);
 
   useBurnPolling({ projectId: project.id, task: job, read: getSubtitleBurnJob,
     onTask: nextJob => {
@@ -130,6 +132,7 @@ export function SubtitleDeliveryDialog({
     confirmed &&
     (!needsSource || Boolean(sourceVersionId)) &&
     (!needsTranslation || Boolean(translationVersionId)) &&
+    (outputKind === "subtitle" || historyError === null) &&
     operation === null;
 
   const submission = useDeliverySubmission({ projectId: project.id, outputKind, mode, format,
@@ -491,6 +494,17 @@ export function SubtitleDeliveryDialog({
 
         {operation === "loading" ? (
           <p className="delivery-loading">正在读取本地任务…</p>
+        ) : null}
+        {historyError ? (
+          <div className="notice danger delivery-error">
+            <strong>无法读取烧录记录</strong>
+            <p>{historyError}</p>
+            <p>仍可导出字幕文件。重新读取后可查看和恢复已有烧录。</p>
+            <button className="button quiet" type="button" disabled={operation !== null}
+              onClick={() => { setOperation("loading"); setHistoryAttempt(value => value + 1); }}>
+              重新读取烧录记录
+            </button>
+          </div>
         ) : null}
         {error ? (
           <div className="notice danger delivery-error">

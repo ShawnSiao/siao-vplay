@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, expect, it, vi } from "vitest";
 import { SubtitleDeliveryDialog } from "../../components/SubtitleDeliveryDialog";
 import type { Project, SubtitleVersion } from "../../types";
+import { createBurnJobFixture } from "../../test-fixtures/burn";
 const mocks = vi.hoisted(() => ({ jobs: vi.fn(), choose: vi.fn(), export: vi.fn() }));
 vi.mock("../../lib/desktop", () => ({ listSubtitleBurnJobs: mocks.jobs, getSubtitleBurnJob: vi.fn(),
   chooseSubtitleDeliveryDirectory: mocks.choose, exportSubtitles: mocks.export,
@@ -55,4 +56,33 @@ it("releases admission after picker failure so the confirmed selection can be re
   expect(screen.getByRole("checkbox")).toBeChecked();
   fireEvent.click(screen.getByRole("button", { name: "选择位置并导出" }));
   await waitFor(() => expect(mocks.export).toHaveBeenCalledWith("p", "original", "srt", "source", null, "destination"));
+});
+
+it("retries failed burn history without losing export choices or hiding export errors", async () => {
+  mocks.jobs.mockRejectedValueOnce(new Error("历史暂不可用")).mockResolvedValueOnce([]);
+  mocks.choose.mockResolvedValue("destination");
+  await setup();
+  fireEvent.change(screen.getByRole("combobox", { name: "字幕文件格式" }), { target: { value: "vtt" } });
+  fireEvent.click(screen.getByRole("checkbox"));
+  fireEvent.click(screen.getByRole("button", { name: "选择位置并导出" }));
+  await screen.findByText("fixture export failure");
+  expect(screen.getByText("历史暂不可用")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "重新读取烧录记录" }));
+  await waitFor(() => expect(mocks.jobs).toHaveBeenCalledTimes(2));
+  expect(screen.getByRole("combobox", { name: "字幕文件格式" })).toHaveValue("vtt");
+  expect(screen.getByRole("checkbox")).toBeChecked();
+  expect(screen.getByText("fixture export failure")).toBeInTheDocument();
+  expect(mocks.export).toHaveBeenCalledTimes(1);
+});
+
+it("recovers an interrupted burn after retry without silently starting another job", async () => {
+  mocks.jobs.mockRejectedValueOnce(new Error("历史暂不可用"))
+    .mockResolvedValueOnce([{ ...createBurnJobFixture(), projectId: "p", status: "interrupted", stage: "interrupted" }]);
+  await setup();
+  fireEvent.click(screen.getByRole("button", { name: "重新读取烧录记录" }));
+  const recent = await screen.findByRole("button", { name: /最近一次烧录/ });
+  fireEvent.click(recent);
+  expect(screen.getByRole("button", { name: "重新开始" })).toBeEnabled();
+  expect(mocks.choose).not.toHaveBeenCalled();
+  expect(mocks.export).not.toHaveBeenCalled();
 });
