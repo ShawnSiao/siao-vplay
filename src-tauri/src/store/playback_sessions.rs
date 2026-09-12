@@ -192,6 +192,21 @@ mod tests {
         );
     }
     #[test]
+    fn database_busy_preserves_position_and_allows_same_sequence_retry() {
+        let (_temp, store, id) = fixture();
+        let token = store.begin_playback_session(&id).unwrap();
+        store.save_playback_session(input(&id, &token, 1, 100)).unwrap();
+        let connection = store.connect().unwrap();
+        connection.execute_batch("BEGIN IMMEDIATE;").unwrap();
+        let error = store.save_playback_session(input(&id, &token, 2, 200)).unwrap_err();
+        assert!(matches!(error, SaveError::Store(StoreError::Database(rusqlite::Error::SqliteFailure(error, _)))
+            if error.code == rusqlite::ErrorCode::DatabaseBusy));
+        connection.execute_batch("ROLLBACK;").unwrap();
+        assert_eq!(store.get_project(&id).unwrap().playback_state.position_ms, 100);
+        store.save_playback_session(input(&id, &token, 2, 200)).unwrap();
+        assert_eq!(store.get_project(&id).unwrap().playback_state.position_ms, 200);
+    }
+    #[test]
     fn failed_write_can_retry_same_sequence() {
         let (_temp, store, id) = fixture();
         let token = store.begin_playback_session(&id).unwrap();
