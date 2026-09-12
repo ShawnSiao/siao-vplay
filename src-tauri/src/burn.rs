@@ -1215,6 +1215,10 @@ impl ProcessGroup {
 }
 
 #[cfg(test)]
+#[path = "burn/cancellation_acceptance.rs"]
+mod cancellation_acceptance;
+
+#[cfg(test)]
 mod tests {
     use rusqlite::params;
 
@@ -1642,7 +1646,7 @@ mod tests {
         }
     }
 
-    fn insert_subtitle_fixture(
+    pub(super) fn insert_subtitle_fixture(
         store: &ProjectStore,
         project_id: &str,
         media_sha256: &str,
