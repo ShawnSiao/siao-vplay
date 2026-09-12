@@ -2,6 +2,7 @@ import { setupLibraryQueryMocks, createMockOverviewReaders } from "./test/librar
 import { readMockSubtitlePage } from "./test/subtitleHistoryPageMock";
 import { confirmProjectDeletion } from "./test/confirmProjectDeletion";
 import { verifyRejectedStartupStatus } from "./appStartupStatusTest";
+import { verifyPreparationStorageSettings, verifySettingsEscapeLayers } from "./appSettingsEscapeTest";
 import { locationResult } from "./test-fixtures/resourceLocation";
 import { createLearningTaskFixture } from "./test-fixtures/learning";
 import { verifyBackgroundTranscription } from "./appTranscriptionCompletionTest";
@@ -1361,14 +1362,8 @@ describe("App", () => {
     );
   });
 
-  it("opens storage settings from preparation failure without losing the selected project", async () => {
-    desktopMocks.prepareProjectMedia.mockRejectedValueOnce(new Error("disk full"));
-    render(<App />);
-    fireEvent.click(await screen.findByRole("button", { name: "打开最近观看的 雨站台" }));
-    fireEvent.click(await screen.findByRole("button", { name: "存储设置" }));
-    await waitFor(() => expect(screen.getByRole("tab", { name: "存储" })).toHaveClass("active"));
-    expect(desktopMocks.prepareProjectMedia).toHaveBeenCalledTimes(1);
-  });
+  it("opens storage settings from preparation failure without losing the selected project", () => verifyPreparationStorageSettings(desktopMocks.prepareProjectMedia));
+  it("isolates Escape between storage migration, settings and the current player", verifySettingsEscapeLayers);
 
   it("persists the current episode and clears its subtitles before loading the next one", async () => {
     const collectionId = "60000000-0000-4000-8000-000000000001";
