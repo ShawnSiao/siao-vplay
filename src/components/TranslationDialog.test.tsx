@@ -5,7 +5,7 @@ import { createTranslationTask } from "../test-fixtures/translation";
 import { TranslationDialog } from "./TranslationDialog";
 import { getCodexRuntimeStatus } from "../lib/desktop";
 
-const mocks = vi.hoisted(() => ({ list: vi.fn(), setKind: vi.fn(), prepare: vi.fn(), start: vi.fn() }));
+const mocks = vi.hoisted(() => ({ list: vi.fn(), setKind: vi.fn(), prepare: vi.fn(), start: vi.fn(), choose: vi.fn(), importResult: vi.fn() }));
 vi.mock("../lib/desktop", async (original) => ({
   ...await original<typeof import("../lib/desktop")>(),
   getCodexRuntimeStatus: vi.fn().mockResolvedValue({ available: true }),
@@ -13,6 +13,8 @@ vi.mock("../lib/desktop", async (original) => ({
   prepareTranslationTask: mocks.prepare,
   startCodexTranslationTask: mocks.start,
   readTranslationPrompt: vi.fn().mockResolvedValue("controlled prompt"),
+  chooseTranslationResultFile: mocks.choose,
+  importTranslationResult: mocks.importResult,
 }));
 vi.mock("../features/ai-tasks/useAiExecutionChoice", () => ({
   useAiExecutionChoice: () => ({ kind: "codex", setKind: mocks.setKind, services: [] }),
@@ -38,6 +40,21 @@ it("lets an invalidated manual handoff return to preparation", async () => {
   fireEvent.click(await screen.findByRole("button", { name: "重新准备翻译" }));
   expect(await screen.findByRole("button", { name: "准备翻译材料" })).toBeInTheDocument();
   expect(mocks.prepare).not.toHaveBeenCalled();
+});
+
+it("recovers an immediate stale manual import without reopening or sending", async () => {
+  const task = { ...completed, status: "awaiting_external_result", handoffKind: "manual", outputVersionId: null, errorCode: null, errorMessage: null };
+  mocks.list.mockResolvedValue([task]);
+  mocks.choose.mockResolvedValue("W:\\validation\\result.json");
+  mocks.importResult.mockRejectedValue({ code: "project_changed", message: "项目已变化" });
+  render(<TranslationDialog projectId={source.projectId} sourceVersion={source} translationVersions={[]} onClose={vi.fn()} onPrepareOriginal={vi.fn()} onTaskCompleted={vi.fn()} />);
+  fireEvent.click(await screen.findByRole("button", { name: /选择.*JSON/ }));
+  fireEvent.click(await screen.findByRole("button", { name: /检查并生成.*字幕/ }));
+  fireEvent.click(await screen.findByRole("button", { name: "重新准备翻译" }));
+  expect(await screen.findByRole("button", { name: "准备翻译材料" })).toBeInTheDocument();
+  expect(mocks.importResult).toHaveBeenCalledWith(task.id, "W:\\validation\\result.json");
+  expect(mocks.prepare).not.toHaveBeenCalled();
+  expect(mocks.start).not.toHaveBeenCalled();
 });
 
 it("retries reading completed subtitles without translating again", async () => {
