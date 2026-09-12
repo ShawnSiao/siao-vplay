@@ -78,6 +78,43 @@ mod tests {
     }
 
     #[test]
+    fn killed_owner_releases_lock_without_touching_existing_data() {
+        let directory = Fixture::new();
+        let sentinel = directory.0.join("user-data");
+        fs::write(&sentinel, b"preserve user data").unwrap();
+        let ready = directory.0.join("owner-ready");
+        let mut child = std::process::Command::new(std::env::current_exe().unwrap())
+            .args(["instance_lock::tests::child_owner", "--exact", "--ignored", "--nocapture"])
+            .env("SIAOVPLAY_LOCK_TEST_DIRECTORY", &directory.0)
+            .spawn().unwrap();
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        while !ready.exists() && std::time::Instant::now() < deadline {
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        let started = ready.exists();
+        let excluded = started && InstanceLock::acquire(&directory.0).is_err();
+        // Kill only the child created above, even if startup verification failed.
+        let killed = child.kill();
+        let waited = child.wait();
+        assert!(started && excluded);
+        killed.unwrap();
+        waited.unwrap();
+        let _replacement = InstanceLock::acquire(&directory.0).unwrap();
+        assert_eq!(fs::read(&sentinel).unwrap(), b"preserve user data");
+        assert!(InstanceLock::acquire(&directory.0).is_err());
+    }
+
+    #[test]
+    #[ignore = "isolated child killed by killed_owner_releases_lock_without_touching_existing_data"]
+    fn child_owner() {
+        let directory = std::env::var_os("SIAOVPLAY_LOCK_TEST_DIRECTORY").expect("isolated fixture path");
+        let directory = Path::new(&directory);
+        let _owner = InstanceLock::acquire(directory).unwrap();
+        fs::write(directory.join("owner-ready"), b"ready").unwrap();
+        std::thread::sleep(std::time::Duration::from_secs(30));
+    }
+
+    #[test]
     #[ignore = "subprocess probe, invoked by excludes_another_process"]
     fn child_probe() {
         let directory =
