@@ -5,7 +5,7 @@ for (const width of [1440, 960]) {
   test(`drawer content remains readable at ${width}px`, async ({ page }) => {
     const errors: string[] = [];
     page.on("pageerror", error => errors.push(error.message));
-    await page.setViewportSize({ width, height: 900 });
+    await page.setViewportSize({ width, height: width === 960 ? 640 : 900 });
     await page.goto("/e2e/player.html");
     await page.evaluate(() => {
       (window as unknown as { __TAURI_INTERNALS__: unknown }).__TAURI_INTERNALS__ = { invoke: async (command: string) => {

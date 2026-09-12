@@ -4,12 +4,13 @@ import { join } from "node:path";
 for (const width of [1440, 960]) {
   for (const state of ["single", "loading", "error"]) {
     test(`drawer ${state} layout at ${width}px`, async ({ page }) => {
-      await page.setViewportSize({ width, height: 720 });
+      await page.setViewportSize({ width, height: width === 960 ? 640 : 900 });
       await page.goto(`/e2e/player.html?episodeState=${state}`);
       await page.getByRole("button", { name: "更多", exact: true }).click();
       await page.getByRole("menuitem", { name: /^剧集/ }).click();
       const content = page.locator(".player-drawer-empty");
       await expect(content).toBeVisible();
+      await expect(content.locator("strong")).toBeInViewport();
       await expect(content).toHaveCSS("display", "grid");
       await expect(content).toHaveCSS("min-height", "280px");
       await expect(content).toHaveCSS("padding", "32px 24px");
