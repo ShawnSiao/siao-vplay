@@ -7,6 +7,7 @@ import { verifyPreparationStorageSettings, verifySettingsEscapeLayers, verifyCod
 import { locationResult } from "./test-fixtures/resourceLocation";
 import { createLearningTaskFixture } from "./test-fixtures/learning";
 import { verifyBackgroundTranscription } from "./appTranscriptionCompletionTest";
+import { verifyNewTranslationWhileWatching } from "./appTranslationWatchingTest";
 import { verifyDismissedResourceAction, verifySelectedResourceResume } from "./appResourcePreparationTest";
 import { verifyStaleTranscriptionPreparation, verifyLocalImportShortcut, verifyTranscriptionChoicesResume } from "./appTranscriptionPreparationTest";
 import { subtitleMetadata } from "./features/subtitle-revision/subtitleMetadata";
@@ -2797,10 +2798,10 @@ describe("App", () => {
       screen.getByRole("button", { name: /手动选择 JSON/ }),
     );
     expect(await screen.findByText("result.json")).toBeInTheDocument();
+    desktopMocks.listSubtitleVersions.mockResolvedValue([subtitleVersion, translatedVersion]);
     fireEvent.click(
       screen.getByRole("button", { name: "检查并生成简体中文字幕" }),
     );
-
     await waitFor(() =>
       expect(desktopMocks.importTranslationResult).toHaveBeenCalledWith(
         translationTask.id,
@@ -2811,6 +2812,7 @@ describe("App", () => {
     expect(
       screen.getByText("已生成 1 条草稿，当前视频可以切换为中文或双语字幕。"),
     ).toBeInTheDocument();
+    await verifyNewTranslationWhileWatching(subtitleVersion.segments[0].text, translatedVersion.segments[0].text);
   });
 
   it("shows a completed Chinese draft with source and translated samples", async () => {
