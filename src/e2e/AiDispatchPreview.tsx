@@ -15,8 +15,8 @@ export function AiDispatchPreview({ kind, sourceVersion }: { kind: string; sourc
     onPrepareSubtitles: () => undefined, onClose: () => undefined, embedded: true };
   const content = <section className="understanding-shell embedded">
     {contextFixture ? <button type="button" onClick={() => setLater(true)}>测试：播放下一句</button> : null}
-    {kind === "learning" ? <LearningPanel {...common} playbackPositionMs={later ? 25_000 : 15_000} onJump={() => undefined}
-      sourceSegment={noSource ? null : selectedSegment} translationSegment={null} onPausePlayback={() => undefined} />
+    {kind === "learning" ? <LearningPanel {...common} playbackPositionMs={later ? 25_000 : 15_000} onJump={setSeek}
+      sourceSegment={noSource ? null : selectedSegment} translationSegment={null} onPausePlayback={() => setPaused(true)} />
       : <CurrentScenePanel {...common} playbackCutoffMs={15_000} onJump={setSeek} onPausePlayback={() => setPaused(true)} />}
     {seek !== null ? <output aria-label="定位结果">{paused ? "已暂停" : "播放中"} · {seek} 毫秒</output> : null}
   </section>;
