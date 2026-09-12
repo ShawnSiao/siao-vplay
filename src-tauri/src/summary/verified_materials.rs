@@ -39,10 +39,10 @@ pub(crate) struct VerifiedMaterials {
     pub frames: Vec<VerifiedFrame>,
 }
 
-pub(crate) fn load(
+fn load_manifest(
     store: &ProjectStore,
     task: &SummaryTask,
-) -> Result<VerifiedMaterials, StoreError> {
+) -> Result<Manifest, StoreError> {
     let directory = SummaryTaskRepository::new(store).materials_directory(&task.id);
     let bytes = read_bounded(&directory.join("manifest.json"), MAX_MANIFEST_BYTES)?;
     if digest(&bytes) != task.material_manifest_sha256 {
@@ -85,6 +85,16 @@ pub(crate) fn load(
     {
         return Err(invalid("总结字幕超出已确认范围或缺失"));
     }
+    Ok(manifest)
+}
+
+pub(crate) fn load_subtitle_evidence(store: &ProjectStore, task: &SummaryTask) -> Result<Vec<SubtitleSegment>, StoreError> {
+    Ok(load_manifest(store, task)?.segments)
+}
+
+pub(crate) fn load(store: &ProjectStore, task: &SummaryTask) -> Result<VerifiedMaterials, StoreError> {
+    let directory = SummaryTaskRepository::new(store).materials_directory(&task.id);
+    let manifest = load_manifest(store, task)?;
     let connection = store.connect()?;
     let mut query = connection.prepare("SELECT ordinal, frame_manifest_json, material_sha256 FROM summary_chunks WHERE task_id = ?1 ORDER BY ordinal")?;
     let rows = query.query_map([&task.id], |row| {

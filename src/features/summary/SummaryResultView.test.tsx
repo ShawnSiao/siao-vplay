@@ -69,7 +69,7 @@ describe("SummaryResultView", () => {
     legacy.result.formatVersion = 1;
     delete legacy.result.principlesOrArchitecture[0].evidence[0].citations;
     render(<SummaryResultView summary={legacy} exporting={false} exportNotice={null} onExport={vi.fn()} onNewSummary={vi.fn()} />);
-    expect(screen.getByText("1 条字幕证据")).toBeInTheDocument();
+    expect(screen.getByText("1 条字幕引用不可用")).toBeInTheDocument();
     expect(screen.queryByText(/private-uuid/)).not.toBeInTheDocument();
   });
 });

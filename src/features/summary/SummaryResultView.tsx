@@ -77,7 +77,7 @@ function Evidence({
           />
         ))}
         {citations.length === 0 && evidence.subtitleIds.length > 0 ? (
-          <span className="summary-citation">{evidence.subtitleIds.length} 条字幕证据</span>
+          <span className="summary-citation">{evidence.subtitleIds.length} 条字幕引用不可用</span>
         ) : null}
         {evidence.frameTimestampsMs.map((timestamp) => (
           <button

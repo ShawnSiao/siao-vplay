@@ -1,5 +1,3 @@
-use std::fs;
-
 use rusqlite::{OptionalExtension, params};
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
@@ -9,6 +7,9 @@ use super::{
     model::{AnalysisMode, AnalysisScope, SummaryResult, VideoSummary},
     task_repository::now_ms,
 };
+#[cfg(test)]
+#[path = "citation_integrity_tests.rs"]
+mod citation_integrity_tests;
 use crate::store::{ProjectStore, StoreError};
 
 pub(crate) struct SummaryResultRepository<'a> {
@@ -165,14 +166,14 @@ impl<'a> SummaryResultRepository<'a> {
             .ok_or_else(|| StoreError::Validation("视频总结不存在".to_owned()))?;
         let mut result: SummaryResult = serde_json::from_str(&row.9)
             .map_err(|error| StoreError::Validation(error.to_string()))?;
-        let materials = super::task_repository::SummaryTaskRepository::new(self.store)
-            .materials_directory(&row.1)
-            .join("subtitles.json");
-        if let Ok(bytes) = fs::read(materials) {
-            if let Ok(segments) =
-                serde_json::from_slice::<Vec<crate::subtitles::SubtitleSegment>>(&bytes)
+        citations::hydrate_result(&mut result, &[]);
+        if let Ok(task) = super::task_repository::SummaryTaskRepository::new(self.store).get(&row.1) {
+            if task.project_id == row.2 && task.subtitle_version_id == row.7
+                && task.material_manifest_sha256 == row.8
             {
-                citations::hydrate_result(&mut result, &segments);
+                if let Ok(segments) = super::verified_materials::load_subtitle_evidence(self.store, &task) {
+                    citations::hydrate_result(&mut result, &segments);
+                }
             }
         }
         Ok(VideoSummary {
