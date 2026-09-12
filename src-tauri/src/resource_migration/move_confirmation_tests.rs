@@ -10,6 +10,7 @@ fn isolated(name: &str, body: impl FnOnce()) {
             "--exact",
             &format!("resource_migration::move_confirmation_tests::{name}"),
             "--nocapture",
+            "--include-ignored",
         ])
         .env("SIAOVPLAY_MOVE_CONFIRM_TEST", name)
         .output()
@@ -20,6 +21,50 @@ fn isolated(name: &str, body: impl FnOnce()) {
         String::from_utf8_lossy(&result.stdout),
         String::from_utf8_lossy(&result.stderr)
     );
+}
+
+#[test]
+#[ignore = "writes and verifies a 1 GiB isolated resource tree; requires explicit W: TEMP"]
+fn gibibyte_move_preserves_hashes_and_reopens_selected_root() {
+    isolated("gibibyte_move_preserves_hashes_and_reopens_selected_root", || {
+        use std::io::Write;
+        assert!(std::env::temp_dir().to_string_lossy().to_ascii_lowercase().starts_with("w:"));
+        let data = tempfile::tempdir().unwrap();
+        local_resources::initialize(data.path()).unwrap();
+        local_resources::configure_location(data.path().to_str().unwrap(), true).unwrap();
+        resource_download::initialize().unwrap();
+        crate::runtime::initialize(data.path()).unwrap();
+        let root = local_resources::configured_root().unwrap();
+        let payload = root.join("large-fixture.bin");
+        let mut file = fs::File::create(&payload).unwrap();
+        let block: Vec<u8> = (0..1024 * 1024).map(|index| (index % 251) as u8).collect();
+        for _ in 0..1024 { file.write_all(&block).unwrap(); }
+        file.sync_all().unwrap();
+        drop(file);
+        let before = move_io::manifest(&root).unwrap();
+        let target = data.path().join("destination");
+        fs::create_dir(&target).unwrap();
+        let plan = plan_resource_root_move(target.to_str().unwrap()).unwrap();
+        assert!(plan.bytes_to_copy >= 1024 * 1024 * 1024);
+        let id = Uuid::new_v4().to_string();
+        let result = move_control::register(&id).unwrap().run(|| move_resource_root(
+            MoveLocalResourceRootInput { parent_path: plan.selected_parent,
+                plan_fingerprint: plan.plan_fingerprint, confirmed: true }, &id)).unwrap();
+        let moved = PathBuf::from(&result.current_root);
+        let after = move_io::manifest(&moved).unwrap();
+        for entry in &before {
+            let copied = after.iter().find(|value| value.relative_path == entry.relative_path).unwrap();
+            assert_eq!(copied.size, entry.size);
+            assert_eq!(copied.sha256, entry.sha256);
+        }
+        let retained = move_io::manifest(&root).unwrap();
+        assert_eq!(serde_json::to_value(&retained).unwrap(), serde_json::to_value(&before).unwrap());
+        local_resources::initialize(data.path()).unwrap();
+        crate::runtime::initialize(data.path()).unwrap();
+        assert_eq!(local_resources::configured_root().unwrap(), moved);
+        assert_eq!(crate::runtime::configured_runtime_root().unwrap(), moved);
+        println!("verified_bytes={} verified_files={}", result.copied_bytes, result.verified_file_count);
+    });
 }
 fn stale_case(change: &str) {
     let data = tempfile::tempdir().unwrap();
