@@ -8,6 +8,27 @@ const MAX_CITATIONS_PER_ITEM: usize = 3;
 const MAX_EXCERPT_CHARACTERS: usize = 180;
 const MAX_GROUP_GAP_MS: i64 = 5_000;
 
+pub(crate) fn has_frame_references(result: &mut SummaryResult) -> bool {
+    all_sections_mut(result).iter().any(|section| section.evidence.iter()
+        .any(|evidence| !evidence.frame_timestamps_ms.is_empty()))
+}
+
+pub(crate) fn retain_verified_frames(result: &mut SummaryResult, timestamps: &[i64]) {
+    let mut unavailable = false;
+    for section in all_sections_mut(result) {
+        for evidence in &mut section.evidence {
+            evidence.frame_timestamps_ms.retain(|timestamp| {
+                let valid = *timestamp >= 0 && timestamps.contains(timestamp);
+                unavailable |= !valid;
+                valid
+            });
+        }
+    }
+    if unavailable {
+        result.limitations.push("部分画面引用不可用：原始材料缺失或无法验证，相关定位入口已隐藏。".into());
+    }
+}
+
 pub(crate) fn hydrate_result(result: &mut SummaryResult, segments: &[SubtitleSegment]) {
     let by_id = segments
         .iter()

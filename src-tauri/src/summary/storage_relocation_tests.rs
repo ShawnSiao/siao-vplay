@@ -121,7 +121,7 @@ fn verify_relocation(visual: bool) {
     );
 }
 
-fn seed_visual_material(store: &ProjectStore, task: &super::model::SummaryTask) {
+pub(super) fn seed_visual_material(store: &ProjectStore, task: &super::model::SummaryTask) {
     use sha2::{Digest, Sha256};
     let directory = Path::new(&task.materials_directory);
     fs::create_dir_all(directory.join("frames")).unwrap();

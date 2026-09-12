@@ -167,6 +167,7 @@ impl<'a> SummaryResultRepository<'a> {
         let mut result: SummaryResult = serde_json::from_str(&row.9)
             .map_err(|error| StoreError::Validation(error.to_string()))?;
         citations::hydrate_result(&mut result, &[]);
+        let mut verified_frames = Vec::new();
         if let Ok(task) = super::task_repository::SummaryTaskRepository::new(self.store).get(&row.1) {
             if task.project_id == row.2 && task.subtitle_version_id == row.7
                 && task.material_manifest_sha256 == row.8
@@ -174,8 +175,14 @@ impl<'a> SummaryResultRepository<'a> {
                 if let Ok(segments) = super::verified_materials::load_subtitle_evidence(self.store, &task) {
                     citations::hydrate_result(&mut result, &segments);
                 }
+                if citations::has_frame_references(&mut result) {
+                    if let Ok(materials) = super::verified_materials::load(self.store, &task) {
+                        verified_frames = materials.frames.iter().map(|frame| frame.metadata.timestamp_ms).collect();
+                    }
+                }
             }
         }
+        citations::retain_verified_frames(&mut result, &verified_frames);
         Ok(VideoSummary {
             id: row.0,
             task_id: row.1,
