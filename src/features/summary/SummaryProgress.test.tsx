@@ -1,8 +1,19 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
 import { createSummaryFixtures } from "../../test-fixtures/summary";
 import { SummaryProgress } from "./SummaryProgress";
 import { summaryChunkLabel, summaryStageLabel } from "./summaryStatus";
+
+it("lets the user cancel a failed summary without resuming it", () => {
+  const { task } = createSummaryFixtures();
+  const onCancel = vi.fn();
+  const onResume = vi.fn();
+  render(<SummaryProgress task={{ ...task, status: "failed" }} busy={false}
+    onCancel={onCancel} onResume={onResume} onOpenMaterials={vi.fn()} />);
+  fireEvent.click(screen.getByRole("button", { name: "取消总结" }));
+  expect(onCancel).toHaveBeenCalledTimes(1);
+  expect(onResume).not.toHaveBeenCalled();
+});
 
 it("shows Chinese task and chunk states instead of internal enums", () => {
   const { task } = createSummaryFixtures();

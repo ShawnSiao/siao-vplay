@@ -109,20 +109,21 @@ pub async fn cancel_summary_task(
     input: SummaryTaskIdInput,
 ) -> Result<SummaryTask, SummaryCommandError> {
     let store = store.inner().clone();
-    run_blocking(move || {
-        let repository = SummaryTaskRepository::new(&store);
-        let task = repository.get(&input.task_id)?;
-        if matches!(
-            task.status.as_str(),
-            "prepared" | "awaiting_external_result" | "paused" | "interrupted"
-        ) {
-            repository.finish_cancelled(&input.task_id)?;
-        } else {
-            repository.request_cancel(&input.task_id)?;
-        }
-        repository.get(&input.task_id)
-    })
-    .await
+    run_blocking(move || cancel_task(&store, &input.task_id)).await
+}
+
+fn cancel_task(store: &ProjectStore, task_id: &str) -> Result<SummaryTask, StoreError> {
+    let repository = SummaryTaskRepository::new(store);
+    let task = repository.get(task_id)?;
+    if matches!(
+        task.status.as_str(),
+        "prepared" | "awaiting_external_result" | "paused" | "interrupted" | "failed"
+    ) {
+        repository.finish_cancelled(task_id)?;
+    } else {
+        repository.request_cancel(task_id)?;
+    }
+    repository.get(task_id)
 }
 
 #[tauri::command]
@@ -219,6 +220,24 @@ pub async fn preview_summary_dispatch(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn failed_summary_can_be_cancelled_without_discarding_completed_chunks() {
+        let (_directory, store, task) = super::super::test_support::prepared_summary();
+        let repository = SummaryTaskRepository::new(&store);
+        let results = SummaryResultRepository::new(&store);
+        let result = serde_json::from_value(serde_json::json!({
+            "title": "saved", "overview": "completed chunk"
+        })).unwrap();
+        results.save_chunk(&task.chunks[0].id, &result).unwrap();
+        repository.fail(&task.id, "provider_failed", "连接失败").unwrap();
+        let cancelled = cancel_task(&store, &task.id).unwrap();
+        assert_eq!(cancelled.status, "cancelled");
+        assert_eq!(cancelled.chunks[0].status, "completed");
+        assert_eq!(results.completed_chunk_results(&task.id).unwrap()[0].overview, "completed chunk");
+        assert!(repository.claim_for_execution(&task.id).is_err());
+        assert_eq!(cancel_task(&store, &task.id).unwrap().status, "cancelled");
+    }
 
     #[test]
     fn export_command_returns_a_future_instead_of_blocking_the_dispatcher() {

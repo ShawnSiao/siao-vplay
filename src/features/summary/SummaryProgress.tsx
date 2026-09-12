@@ -57,7 +57,7 @@ export function SummaryProgress({
       ) : null}
       <div className="summary-task-actions">
         {resumable ? <button className="button primary" type="button" disabled={busy} onClick={onResume}>{task.status === "prepared" ? "开始总结" : "继续总结"}</button> : null}
-        {running || ["prepared", "paused", "interrupted", "awaiting_external_result"].includes(task.status) ? (
+        {running || ["prepared", "failed", "paused", "interrupted", "awaiting_external_result"].includes(task.status) ? (
           <button className="button quiet" type="button" disabled={busy || task.cancelRequested} onClick={onCancel}>
             {task.cancelRequested ? "正在停止总结" : "取消总结"}
           </button>
