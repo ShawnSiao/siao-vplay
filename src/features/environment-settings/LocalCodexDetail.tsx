@@ -34,7 +34,7 @@ export function LocalCodexDetail({ previewMode, refreshKey = 0 }: { previewMode:
         <div className="environment-detail-heading">
           <div>
             <h2>本机 Codex</h2>
-            <p>检测这台电脑上的 Codex 客户端，用于调用其配置的模型服务。</p>
+            <p>检测这台电脑上的 Codex 客户端，用于通过 OpenAI 服务处理任务。</p>
           </div>
           <span className={`environment-status-chip ${ready ? "" : "unavailable"}`}>
             {ready ? "可以使用" : "未检测到"}
@@ -42,9 +42,9 @@ export function LocalCodexDetail({ previewMode, refreshKey = 0 }: { previewMode:
         </div>
         <div className="environment-codex-status">
           <strong>{ready ? `Codex ${runtime?.version ?? ""} 已准备` : "当前没有检测到可用的本机 Codex"}</strong>
-          <p>{ready ? "经授权的任务材料会交给 Codex，并可能发送至其配置的模型服务。" : error ?? runtime?.errorMessage ?? "可以继续使用已配置的 API 服务。"}</p>
+          <p>{ready ? "经授权的任务材料会通过 Codex 发送至 OpenAI。" : error ?? runtime?.errorMessage ?? "可以继续使用已配置的 API 服务。"}</p>
         </div>
-        <div className="environment-privacy-note">本机安装不代表离线推理。实际接收服务取决于 Codex 配置；执行前请核对服务与发送范围。</div>
+        <div className="environment-privacy-note">本机安装不代表离线推理。任务使用 OpenAI 服务，不读取用户的模型服务配置；执行前请核对发送范围。</div>
       </div>
     </section>
   );

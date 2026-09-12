@@ -13,6 +13,8 @@ describe("Codex detection", () => {
     await waitFor(() => expect(detect).toHaveBeenCalledTimes(2));
     expect(await screen.findByText("可以使用")).toBeInTheDocument();
     expect(screen.getByText(/不代表离线推理/)).toBeInTheDocument();
+    expect(screen.getByText(/经授权的任务材料会通过 Codex 发送至 OpenAI/)).toBeInTheDocument();
+    expect(screen.queryByText(/实际接收服务取决于 Codex 配置/)).not.toBeInTheDocument();
     expect(screen.queryByText(/不会把字幕或画面发送给外部/)).not.toBeInTheDocument();
   });
 });
