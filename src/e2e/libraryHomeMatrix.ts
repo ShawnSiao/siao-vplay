@@ -3,6 +3,10 @@ import type { LibraryHome, LibraryMediaSummary, LibrarySearchResult } from "../t
 const countText = new URLSearchParams(location.search).get("homeCount");
 export const homeCount = countText !== null && ["0", "1", "20", "1000"].includes(countText) ? Number(countText) : null;
 
+export function recordHomeSelection(result: LibrarySearchResult) {
+  document.documentElement.dataset.selectedProject = result.projectId ?? "";
+}
+
 export function homeMatrixItems(items: LibraryMediaSummary[]): Partial<LibraryHome> {
   return homeCount === null ? {} : { continueWatching: items.slice(0, 4), continueWatchingCount: homeCount,
     recentlyAdded: items.slice(0, 8), totalProjectCount: homeCount };

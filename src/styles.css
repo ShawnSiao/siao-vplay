@@ -202,6 +202,7 @@ h3 {
 
 .shell-search-results button {
   display: grid;
+  min-width: 0;
   gap: 2px;
   padding: 8px 10px;
   border: 0;
@@ -209,6 +210,20 @@ h3 {
   color: var(--text-primary);
   background: transparent;
   text-align: left;
+}
+
+.shell-search-results button strong {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+
+.shell-search-results button small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .shell-search-results button:hover,

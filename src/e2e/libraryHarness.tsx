@@ -1,5 +1,5 @@
 import { useSectionWindowPreview } from "./useSectionWindowPreview";
-import { homeCount, homeMatrixItems, homeMatrixSearch } from "./libraryHomeMatrix";
+import { homeCount, homeMatrixItems, homeMatrixSearch, recordHomeSelection } from "./libraryHomeMatrix";
 import { collectionPickerFixture } from "./collectionPickerFixture";
 import { rootOverviewFixture } from "./rootOverviewFixture";
 import { useLibraryPagesPreview } from "./useLibraryPagesPreview";
@@ -184,7 +184,7 @@ export function LibraryHarness() {
   const collectionPreview = useLibraryPagesPreview();
   const [searchQuery, setSearchQuery] = useState("");
   const emptyMode = homeCount === 0 || new URLSearchParams(window.location.search).has("empty");
-  const [folderImport, setFolderImport] = useState<LibraryFolderImportState | null>(null); const [section, setSection] = useState<LibrarySection>(sectionWindow ? sectionWindow.initialSection : loadedListCount ? (new URLSearchParams(location.search).get("section") === "watch_later" ? "watch_later" : "unclassified") : longListMode ? "unclassified" : "home");
+  const [folderImport, setFolderImport] = useState<LibraryFolderImportState | null>(null); const [section, setSection] = useState<LibrarySection>(homeCount !== null ? "home" : sectionWindow ? sectionWindow.initialSection : loadedListCount ? (new URLSearchParams(location.search).get("section") === "watch_later" ? "watch_later" : "unclassified") : longListMode ? "unclassified" : "home");
   const [recovery, setRecovery] = useState<LibraryRecoveryState | null>(null);
   const [watchLaterItems, setWatchLaterItems] = useState(loadedListCount ? unclassifiedItems : [mediaSummary]);
   const [uncategorizedItems, setUncategorizedItems] = useState(unclassifiedItems);
@@ -246,7 +246,7 @@ export function LibraryHarness() {
       onGoLibrary={() => undefined}
       onSelectLibrarySection={setSection}
       onSearchQueryChange={setSearchQuery}
-      onOpenSearchResult={() => undefined}
+      onOpenSearchResult={recordHomeSelection}
       activityControl={new URLSearchParams(location.search).has("activity") ? <ActivityPreview /> : undefined}
       onOpenFile={() => undefined}
       onOpenFolder={openFolderImport}
