@@ -2,6 +2,7 @@ import { setupLibraryQueryMocks, createMockOverviewReaders } from "./test/librar
 import { readMockSubtitlePage } from "./test/subtitleHistoryPageMock";
 import { confirmProjectDeletion } from "./test/confirmProjectDeletion";
 import { verifyRejectedStartupStatus } from "./appStartupStatusTest";
+import { verifySummaryWhileWatchingOtherVideo } from "./appSummaryActivityTest";
 import { verifyPreparationStorageSettings, verifySettingsEscapeLayers, verifyCodexRedetectClick } from "./appSettingsEscapeTest";
 import { locationResult } from "./test-fixtures/resourceLocation";
 import { createLearningTaskFixture } from "./test-fixtures/learning";
@@ -1365,6 +1366,7 @@ describe("App", () => {
   it("opens storage settings from preparation failure without losing the selected project", () => verifyPreparationStorageSettings(desktopMocks.prepareProjectMedia));
   it("isolates Escape between storage migration, settings and the current player", verifySettingsEscapeLayers);
   it("redetects Codex from the settings button without remounting its detail", () => verifyCodexRedetectClick(desktopMocks.getCodexRuntimeStatus));
+  it.each(["completed", "failed"] as const)("keeps B watching while A summary becomes %s", outcome => verifySummaryWhileWatchingOtherVideo(outcome, project, preparation, desktopMocks, subtitleVersion));
 
   it("persists the current episode and clears its subtitles before loading the next one", async () => {
     const collectionId = "60000000-0000-4000-8000-000000000001";
