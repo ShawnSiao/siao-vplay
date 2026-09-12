@@ -41,6 +41,19 @@ function controller(): EnvironmentSettingsController {
 }
 
 describe("environment settings components", () => {
+  it("requires explicit confirmation before deleting a service and its saved key", () => {
+    const confirm = vi.spyOn(window, "confirm").mockReturnValueOnce(false).mockReturnValueOnce(true);
+    const state = controller();
+    try {
+      render(<AiServiceEditor controller={state} />);
+      fireEvent.click(screen.getByRole("button", { name: "删除此服务" }));
+      expect(confirm).toHaveBeenCalledWith(expect.stringContaining("API Key 也会同时删除"));
+      expect(state.remove).not.toHaveBeenCalled();
+      fireEvent.click(screen.getByRole("button", { name: "删除此服务" }));
+      expect(state.remove).toHaveBeenCalledTimes(1);
+    } finally { confirm.mockRestore(); }
+  });
+
   it("replaces a saved API key inline without exposing the old secret", () => {
     render(<AiServiceEditor controller={controller()} />);
     expect(screen.getByLabelText("API Key 已安全保存")).toHaveValue("••••••••••••••••••••••••");
