@@ -33,4 +33,3 @@ export function readableRelationships(source: string): Relationship[] | null {
   }
   return relations.length ? relations.map((item) => ({ ...item, from: names.get(item.from) ?? item.from, to: names.get(item.to) ?? item.to })) : null;
 }
-
