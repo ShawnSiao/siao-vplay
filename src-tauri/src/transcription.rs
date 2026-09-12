@@ -1921,6 +1921,10 @@ fn is_non_speech_caption(value: &str) -> bool {
 }
 
 #[cfg(test)]
+#[path = "transcription/cancellation_acceptance.rs"]
+mod cancellation_acceptance;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::domain::CreateLocalProjectInput;
