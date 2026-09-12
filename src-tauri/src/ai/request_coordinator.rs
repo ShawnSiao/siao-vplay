@@ -13,6 +13,8 @@ enum RequestClass {
 struct LaneState {
     active: bool,
     waiting_interactive: usize,
+    waiting_summary: usize,
+    interactive_burst: usize,
 }
 
 #[derive(Default)]
@@ -20,10 +22,33 @@ struct CoordinatorState {
     lanes: HashMap<String, LaneState>,
 }
 
-#[derive(Default)]
 struct CoordinatorInner {
     state: Mutex<CoordinatorState>,
     changed: Condvar,
+    policy: SchedulingPolicy,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct SchedulingPolicy {
+    schema_version: u32,
+    max_interactive_burst: usize,
+}
+impl SchedulingPolicy {
+    fn parse(source: &str) -> Result<Self, String> {
+        let policy: Self = serde_json::from_str(source).map_err(|error| error.to_string())?;
+        if policy.schema_version != 1 || !(1..=16).contains(&policy.max_interactive_burst) {
+            return Err("unsupported AI scheduling policy".into());
+        }
+        Ok(policy)
+    }
+}
+impl Default for CoordinatorInner {
+    fn default() -> Self {
+        Self { state: Mutex::default(), changed: Condvar::new(),
+            policy: SchedulingPolicy::parse(include_str!("scheduling-policy.json"))
+                .expect("bundled AI scheduling policy must be valid") }
+    }
 }
 
 #[derive(Clone, Default)]
@@ -78,6 +103,8 @@ impl RequestCoordinator {
                 .entry(lane.clone())
                 .or_default()
                 .waiting_interactive += 1;
+        } else {
+            state.lanes.entry(lane.clone()).or_default().waiting_summary += 1;
         }
         loop {
             match cancelled() {
@@ -86,8 +113,11 @@ impl RequestCoordinator {
                     if let Some(waiting) = state.lanes.get_mut(&lane) {
                         if class == RequestClass::Interactive {
                             waiting.waiting_interactive -= 1;
+                        } else {
+                            waiting.waiting_summary -= 1;
+                            if waiting.waiting_summary == 0 { waiting.interactive_burst = 0; }
                         }
-                        if !waiting.active && waiting.waiting_interactive == 0 {
+                        if !waiting.active && waiting.waiting_interactive == 0 && waiting.waiting_summary == 0 {
                             state.lanes.remove(&lane);
                         }
                     }
@@ -96,12 +126,22 @@ impl RequestCoordinator {
                 }
             }
             let lane_state = state.lanes.entry(lane.clone()).or_default();
-            let can_start = !lane_state.active
-                && (class == RequestClass::Interactive || lane_state.waiting_interactive == 0);
+            let summary_turn = lane_state.waiting_summary > 0 &&
+                lane_state.interactive_burst >= self.inner.policy.max_interactive_burst;
+            let can_start = !lane_state.active && match class {
+                RequestClass::Interactive => !summary_turn,
+                RequestClass::Summary => lane_state.waiting_interactive == 0 || summary_turn,
+            };
             if can_start {
                 lane_state.active = true;
                 if class == RequestClass::Interactive {
                     lane_state.waiting_interactive -= 1;
+                    lane_state.interactive_burst = if lane_state.waiting_summary > 0 {
+                        lane_state.interactive_burst.saturating_add(1)
+                    } else { 0 };
+                } else {
+                    lane_state.waiting_summary -= 1;
+                    lane_state.interactive_burst = 0;
                 }
                 return Ok(Some(RequestPermit {
                     inner: self.inner.clone(),
@@ -137,7 +177,7 @@ impl Drop for RequestPermit {
         let mut state = lock_state(&self.inner);
         if let Some(lane_state) = state.lanes.get_mut(&self.lane) {
             lane_state.active = false;
-            if lane_state.waiting_interactive == 0 {
+            if lane_state.waiting_interactive == 0 && lane_state.waiting_summary == 0 {
                 state.lanes.remove(&self.lane);
             }
         }
@@ -175,6 +215,39 @@ mod tests {
     };
 
     use super::*;
+
+    #[test]
+    fn scheduling_policy_is_versioned_and_bounded() {
+        assert_eq!(SchedulingPolicy::parse(include_str!("scheduling-policy.json")).unwrap().max_interactive_burst, 4);
+        for source in [r#"{"schemaVersion":2,"maxInteractiveBurst":4}"#,
+            r#"{"schemaVersion":1,"maxInteractiveBurst":0}"#,
+            r#"{"schemaVersion":1,"maxInteractiveBurst":17}"#,
+            r#"{"maxInteractiveBurst":4}"#,
+            r#"{"schemaVersion":1,"maxInteractiveBurst":4,"unused":true}"#] {
+            assert!(SchedulingPolicy::parse(source).is_err());
+        }
+    }
+
+    #[test]
+    fn cancelled_summary_releases_its_waiting_turn() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        let coordinator = RequestCoordinator::default();
+        let active = coordinator.acquire_interactive("service");
+        let cancelled = Arc::new(AtomicBool::new(false));
+        let flag = cancelled.clone();
+        let next = coordinator.clone();
+        let worker = thread::spawn(move || next.acquire_summary_cancellable("service", ||
+            Ok::<_, ()>(flag.load(Ordering::Acquire))).unwrap().is_none());
+        loop {
+            if lock_state(&coordinator.inner).lanes["service"].waiting_summary == 1 { break; }
+            thread::yield_now();
+        }
+        cancelled.store(true, Ordering::Release);
+        assert!(worker.join().unwrap());
+        assert_eq!(lock_state(&coordinator.inner).lanes["service"].waiting_summary, 0);
+        drop(active);
+        let _next = coordinator.acquire_interactive("service");
+    }
 
     #[test]
     fn cancellation_releases_a_waiting_request_before_the_active_request_finishes() {
@@ -245,5 +318,39 @@ mod tests {
         let coordinator = RequestCoordinator::default();
         let _first = coordinator.acquire_summary("service-a");
         let _second = coordinator.acquire_summary("service-b");
+    }
+
+    #[test]
+    fn queued_summary_gets_a_turn_during_an_interactive_burst() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        let coordinator = RequestCoordinator::default();
+        let active = coordinator.acquire_summary("service");
+        let (send, receive) = mpsc::channel();
+        let mut workers = Vec::new();
+        for _ in 0..8 {
+            let coordinator = coordinator.clone();
+            let send = send.clone();
+            workers.push(thread::spawn(move || {
+                let _permit = coordinator.acquire_interactive("service");
+                send.send("interactive").unwrap();
+            }));
+        }
+        while coordinator.waiting_interactive("service") != 8 { thread::yield_now(); }
+        let entered = Arc::new(AtomicBool::new(false));
+        let waiting = entered.clone();
+        let next = coordinator.clone();
+        workers.push(thread::spawn(move || {
+            let _permit = next.acquire_summary_cancellable("service", || {
+                waiting.store(true, Ordering::Release);
+                Ok::<_, ()>(false)
+            }).unwrap().unwrap();
+            send.send("summary").unwrap();
+        }));
+        while !entered.load(Ordering::Acquire) { thread::yield_now(); }
+        drop(active);
+        let events: Vec<_> = (0..9).map(|_| receive.recv_timeout(Duration::from_secs(2)).unwrap()).collect();
+        for worker in workers { worker.join().unwrap(); }
+        assert!(events.iter().position(|event| *event == "summary").unwrap() <= 4,
+            "a waiting summary must run within a bounded interactive burst: {events:?}");
     }
 }
