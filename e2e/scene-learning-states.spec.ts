@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { verifyKeyboardReachability } from "./keyboardReachability";
 import { join } from "node:path";
 import { createUnderstandingFixtures } from "../src/test-fixtures/understanding";
 import type { DictionaryEntry } from "../src/types";
@@ -45,6 +46,7 @@ for (const kind of ["learning", "explanation"]) {
           await expect(drawer.getByRole("status").filter({ hasText: "正在读取" })).toBeVisible();
         } else if (state === "long") {
           await expect(drawer.getByText(longText, { exact: true })).toHaveCount(1);
+          await verifyKeyboardReachability(page, drawer);
           const scroll = drawer.locator(kind === "learning" ? ".learning-scroll" : ".understanding-scroll");
           await scroll.evaluate(node => { node.scrollTop = 0; });
           await scroll.hover();
