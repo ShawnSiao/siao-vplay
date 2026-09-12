@@ -1,6 +1,46 @@
 use super::*;
 
 #[test]
+fn reopening_after_chunk_failure_only_requests_unfinished_chunks() {
+    let (_directory, store, task) = super::super::test_support::prepared_summary();
+    // Isolated two-chunk fixture using the same authorized sentence in both chunks.
+    store.connect().unwrap().execute(
+        "INSERT INTO summary_chunks(id,task_id,ordinal,start_ms,end_ms,segment_ids_json,context_segment_ids_json,frame_manifest_json,material_sha256,status,created_at_ms,updated_at_ms)
+         SELECT 'second-chunk',task_id,1,start_ms,end_ms,segment_ids_json,context_segment_ids_json,frame_manifest_json,material_sha256,'prepared',created_at_ms,updated_at_ms FROM summary_chunks WHERE id=?1",
+        [&task.chunks[0].id],
+    ).unwrap();
+    let section = serde_json::json!({"title":"mechanism", "body":"Verified explanation of the original source and its limitations. ".repeat(20),
+        "evidence":[{"kind":"video_statement","claim":"source evidence","subtitleIds":["past"]}]});
+    let result = |coverage: Vec<usize>| serde_json::json!({
+        "formatVersion":2,"title":"report","overview":"Detailed source overview. ".repeat(30),
+        "coveredChunkOrdinals":coverage,"speakerNarrative":[section.clone()],"coreConcepts":[section.clone()],
+        "principlesOrArchitecture":[section.clone()],"examplesAndScenarios":[section.clone()],"designTradeoffs":[section.clone()]
+    }).to_string();
+    let mut calls = Vec::new();
+    let first = execute_with_request(&store, &task.id, |_, _, name, _, _, _, _| {
+        calls.push(name.to_owned());
+        if name == "chunk-1" { return Err(StoreError::Validation("isolated provider failure".into()).into()); }
+        Ok(result(vec![1]))
+    });
+    assert!(first.is_err());
+    assert_eq!(calls, ["chunk-0", "chunk-1"]);
+    SummaryTaskRepository::new(&store).fail(&task.id, "provider_failed", "isolated failure").unwrap();
+    let reopened = ProjectStore::open(store.database_path()).unwrap();
+    let tasks = SummaryTaskRepository::new(&reopened);
+    assert_eq!(tasks.get(&task.id).unwrap().chunks[0].status, "completed");
+    tasks.claim_for_execution(&task.id).unwrap();
+    calls.clear();
+    execute_with_request(&reopened, &task.id, |_, _, name, _, _, prompt, _| {
+        calls.push(name.to_owned());
+        assert!(!prompt.is_empty());
+        Ok(result(if name == "final" { vec![1, 2] } else { vec![2] }))
+    }).unwrap();
+    assert_eq!(calls, ["chunk-1", "final"]);
+    assert_eq!(tasks.get(&task.id).unwrap().status, "completed");
+    assert_eq!(SummaryResultRepository::new(&reopened).list_summaries(&task.project_id).unwrap().len(), 1);
+}
+
+#[test]
 fn worker_launch_failure_releases_project_and_leaves_task_retryable() {
     let (_directory, store, task) = super::super::test_support::prepared_summary();
     let repository = SummaryTaskRepository::new(&store);

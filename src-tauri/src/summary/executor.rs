@@ -113,6 +113,12 @@ fn launch_worker(
 }
 
 fn execute(store: &ProjectStore, task_id: &str) -> Result<(), SummaryExecutionError> {
+    execute_with_request(store, task_id, run_request)
+}
+
+fn execute_with_request(store: &ProjectStore, task_id: &str, mut request: impl FnMut(
+    &ProjectStore, &SummaryTask, &str, Option<&str>, Vec<VerifiedFrame>, String, u32,
+) -> Result<String, SummaryExecutionError>) -> Result<(), SummaryExecutionError> {
     let tasks = SummaryTaskRepository::new(store);
     tasks.set_task_state(task_id, "running", "analyzing_chunks", 0.0)?;
     let mut task = tasks.get(task_id)?;
@@ -148,7 +154,7 @@ fn execute(store: &ProjectStore, task_id: &str) -> Result<(), SummaryExecutionEr
             .filter(|frame| frame.metadata.ordinal == chunk.ordinal)
             .cloned()
             .collect();
-        let raw = run_request(
+        let raw = request(
             store,
             &task,
             &format!("chunk-{}", chunk.ordinal),
@@ -180,7 +186,7 @@ fn execute(store: &ProjectStore, task_id: &str) -> Result<(), SummaryExecutionEr
         return Err(StoreError::Validation("并非所有总结分块均已通过校验".to_owned()).into());
     }
     let final_prompt = execution_prompts::final_synthesis(&task, &chunk_results)?;
-    let raw = run_request(
+    let raw = request(
         store,
         &task,
         "final",
