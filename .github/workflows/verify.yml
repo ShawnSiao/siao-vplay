@@ -15,8 +15,15 @@ jobs:
     timeout-minutes: 60
     env:
       CARGO_TARGET_DIR: ${{ github.workspace }}/.tmp/cargo-target
+      # Avoid the runner account's 8.3 TEMP alias: fixtures compare their paths
+      # with canonical paths returned by storage/resource operations.
+      TEMP: ${{ runner.temp }}/siaovplay-tests
+      TMP: ${{ runner.temp }}/siaovplay-tests
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Prepare isolated test temporary directory
+        shell: pwsh
+        run: New-Item -ItemType Directory -Force -Path $env:TEMP | Out-Null
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version-file: .node-version
