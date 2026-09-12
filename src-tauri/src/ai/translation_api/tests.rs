@@ -78,8 +78,9 @@ fn interrupted_retry_only_sends_unfinished_batches_and_preserves_original_versio
             [&task.id],
         )
         .unwrap();
+    let reopened = crate::store::ProjectStore::open(fixture.store.database_path()).unwrap();
     let mut retried = 0;
-    execution::run_with(&fixture.store, &task.id, |prompt, _| {
+    execution::run_with(&reopened, &task.id, |prompt, _| {
         retried += 1;
         Ok(translated(prompt).to_string())
     })
@@ -93,11 +94,20 @@ fn interrupted_retry_only_sends_unfinished_batches_and_preserves_original_versio
     );
     let original: String = fixture.store.connect().unwrap().query_row("SELECT current_version_id FROM subtitle_tracks WHERE project_id = ?1 AND role = 'original'", [&fixture.project_id], |row| row.get(0)).unwrap();
     assert_eq!(original, fixture.source_version_id);
+    let reopened = crate::store::ProjectStore::open(fixture.store.database_path()).unwrap();
+    let restored = translation::get_translation_task(&reopened, &task.id).unwrap();
+    assert_eq!(restored.status, "completed");
+    assert_eq!(restored.output_version_id, completed.output_version_id);
+    let translated: String = reopened.connect().unwrap().query_row(
+        "SELECT current_version_id FROM subtitle_tracks WHERE project_id = ?1 AND role = 'translation'",
+        [&fixture.project_id], |row| row.get(0),
+    ).unwrap();
+    assert_eq!(Some(translated), completed.output_version_id);
 }
 
 #[test]
 fn invalid_batch_output_never_creates_a_subtitle_version() {
-    for fault in ["missing", "duplicate", "language", "foreign", "empty"] {
+    for fault in ["missing", "duplicate", "language", "foreign", "empty", "oversized"] {
         let (fixture, task) = prepared();
         let result = execution::run_with(&fixture.store, &task.id, |prompt, _| {
             let mut output = translated(prompt);
@@ -109,6 +119,7 @@ fn invalid_batch_output_never_creates_a_subtitle_version() {
                 }
                 "language" => output["targetLanguageCode"] = json!("en"),
                 "foreign" => output["translations"][0]["segmentId"] = json!("unrelated"),
+                "oversized" => output["translations"][0]["translatedText"] = json!("字".repeat(4001)),
                 _ => output["translations"][0]["translatedText"] = json!(""),
             }
             Ok(output.to_string())
