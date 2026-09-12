@@ -198,7 +198,8 @@ test("direct media lists remove successful classification changes", async ({ pag
   await expect(page.getByRole("heading", { name: "未分类" })).toBeVisible();
   await expect(page.getByText("共 12 个视频，已加载 12 个。")).toBeVisible();
   await page.getByLabel("雨站台 1 的更多操作").click();
-  await page.getByRole("menuitem", { name: "加入「周末电影」" }).click();
+  await page.getByRole("menuitem", { name: "加入合集…" }).click();
+  await page.getByRole("button", { name: "加入「周末电影」" }).click();
   await expect(page.getByText("共 11 个视频，已加载 11 个。")).toBeVisible();
   await expect(page.getByText("雨站台 1", { exact: true })).toHaveCount(0);
 });
@@ -287,19 +288,16 @@ test("reading-first drawer exposes readable hierarchy and density controls", asy
   await page.getByRole("button", { name: "更多", exact: true }).click();
   await page.getByRole("menuitem", { name: /^剧集/ }).click();
 
-  await expect(drawer).toHaveCSS("width", "416px");
-  await expect(drawer.locator(".player-drawer-meta")).toContainText("正在观看");
-  await expect(drawer.locator(".player-drawer-toolbar")).toBeVisible();
-  await expect(drawer.locator(".player-drawer-toolbar")).toHaveCSS(
-    "height",
-    "54px",
-  );
+  await expect(drawer).toHaveCSS("width", "340px");
+  await expect(drawer.getByLabel("当前观看上下文")).toBeVisible();
+  await expect(drawer.getByRole("button", { name: "舒适", exact: true })).toBeHidden();
+  await drawer.getByText("阅读设置", { exact: true }).click();
   await expect(
     drawer.getByRole("button", { name: "舒适", exact: true }),
   ).toHaveAttribute("aria-pressed", "true");
   await expect(drawer.locator(".player-drawer-content")).toHaveCSS(
     "font-size",
-    "15px",
+    "14px",
   );
 
   await drawer.getByRole("button", { name: "紧凑", exact: true }).click();
@@ -412,10 +410,10 @@ test("seek buttons, keyboard shortcuts, and the saved interval stay in sync", as
   await expect
     .poll(() =>
       page.evaluate(() =>
-        window.localStorage.getItem("siaovplay-playback-seek-step-seconds"),
+        JSON.parse(window.localStorage.getItem("siaovplay-preferences.seek-step") ?? "{}").value,
       ),
     )
-    .toBe("30");
+    .toBe(30);
   await page.getByRole("button", { name: "快退 30 秒" }).click();
   await expect(page.locator(".player-time")).toContainText("00:00 / 02:00");
 
@@ -506,8 +504,8 @@ test("subtitle following, appearance, dragging, resizing, and controls remain co
   expect(settingsBox!.x + settingsBox!.width).toBeLessThanOrEqual(960);
   expect(settingsBox!.y).toBeGreaterThanOrEqual(0);
   expect(settingsBox!.y + settingsBox!.height).toBeLessThanOrEqual(640);
-  await expect.poll(() => page.evaluate(() => JSON.parse(window.localStorage.getItem("siaovplay-subtitle-display-preferences-v3") ?? "{}").baseTextColor)).toBe("#fef3c7");
-  await expect.poll(() => page.evaluate(() => JSON.parse(window.localStorage.getItem("siaovplay-subtitle-display-preferences-v3") ?? "{}").highlightColor)).toBe("#fb923c");
+  await expect.poll(() => page.evaluate(() => JSON.parse(window.localStorage.getItem("siaovplay-preferences.subtitle-display") ?? "{}").value.baseTextColor)).toBe("#fef3c7");
+  await expect.poll(() => page.evaluate(() => JSON.parse(window.localStorage.getItem("siaovplay-preferences.subtitle-display") ?? "{}").value.highlightColor)).toBe("#fb923c");
   await settings.getByRole("checkbox", { name: "原文逐词跟随" }).uncheck();
   await expect(page.locator(".caption-word")).toHaveCount(0);
   await settings.getByRole("checkbox", { name: "原文逐词跟随" }).check();
@@ -525,7 +523,7 @@ test("subtitle following, appearance, dragging, resizing, and controls remain co
   await page.mouse.up();
   const moved = await caption.boundingBox();
   expect(moved?.x).toBeLessThan(before.x - 40);
-  const storedPosition = await page.evaluate(() => JSON.parse(window.localStorage.getItem("siaovplay-subtitle-display-preferences-v3") ?? "{}").position);
+  const storedPosition = await page.evaluate(() => JSON.parse(window.localStorage.getItem("siaovplay-preferences.subtitle-display") ?? "{}").value.position);
   expect(storedPosition.x).toBeLessThan(0.5);
   await page.reload();
   const restored = await caption.boundingBox();
@@ -558,7 +556,7 @@ test("subtitle following, appearance, dragging, resizing, and controls remain co
   const resized = await caption.boundingBox();
   expect(resized?.width).toBeGreaterThan(beforeResize.width + 60);
   expect(Math.abs((resized?.x ?? 0) - beforeResize.x)).toBeLessThanOrEqual(2);
-  await expect.poll(() => page.evaluate(() => JSON.parse(window.localStorage.getItem("siaovplay-subtitle-display-preferences-v3") ?? "{}").frameSize.widthRatio)).toBeGreaterThan(0.3);
+  await expect.poll(() => page.evaluate(() => JSON.parse(window.localStorage.getItem("siaovplay-preferences.subtitle-display") ?? "{}").value.frameSize.widthRatio)).toBeGreaterThan(0.3);
   await page.reload();
   const restoredSize = await caption.boundingBox();
   expect(restoredSize?.width).toBeGreaterThan(beforeResize.width + 60);
@@ -575,7 +573,7 @@ test("subtitle following, appearance, dragging, resizing, and controls remain co
   await page.keyboard.press("ArrowDown");
   const heightResized = await caption.boundingBox();
   expect(heightResized?.height).toBeGreaterThan(beforeHeightResize.height + 10);
-  await expect.poll(() => page.evaluate(() => JSON.parse(window.localStorage.getItem("siaovplay-subtitle-display-preferences-v3") ?? "{}").frameSize.minHeightRatio)).toBeGreaterThan(0.1);
+  await expect.poll(() => page.evaluate(() => JSON.parse(window.localStorage.getItem("siaovplay-preferences.subtitle-display") ?? "{}").value.frameSize.minHeightRatio)).toBeGreaterThan(0.1);
   await page.getByRole("button", { name: "字幕设置" }).click();
   const resetSizeSettings = page.getByRole("dialog", { name: "字幕设置" });
   await resetSizeSettings.getByRole("button", { name: "恢复默认尺寸" }).click();

@@ -1,3 +1,5 @@
+import { readPreference, type PreferenceRecord } from "../../lib/preferenceRecord";
+import { savePreference } from "../../lib/preferenceNotice";
 import { useCallback, useState } from "react";
 
 export const seekStepOptions = [5, 10, 15, 30] as const;
@@ -70,22 +72,15 @@ function validSeekStep(value: number): value is SeekStepSeconds {
   return seekStepOptions.some((option) => option === value);
 }
 
-export function readSeekStepSeconds(): SeekStepSeconds {
-  try {
-    const value = Number(window.localStorage.getItem(seekStepStorageKey));
-    return validSeekStep(value) ? value : defaultSeekStepSeconds;
-  } catch {
-    return defaultSeekStepSeconds;
-  }
-}
+const seekPreference: PreferenceRecord<SeekStepSeconds> = {
+  key: "siaovplay-preferences.seek-step",
+  fallback: defaultSeekStepSeconds,
+  decode: (value) => typeof value === "number" && validSeekStep(value) ? value : undefined,
+  legacy: (storage) => Number(storage.getItem(seekStepStorageKey)),
+};
 
-export function saveSeekStepSeconds(value: SeekStepSeconds) {
-  try {
-    window.localStorage.setItem(seekStepStorageKey, String(value));
-  } catch {
-    // Playback remains usable when local preferences cannot be written.
-  }
-}
+export function readSeekStepSeconds(): SeekStepSeconds { return readPreference(seekPreference); }
+export function saveSeekStepSeconds(value: SeekStepSeconds) { return savePreference(seekPreference, value); }
 
 export function useSeekStepPreference() {
   const [seekStepSeconds, setSeekStepSeconds] = useState(readSeekStepSeconds);
@@ -191,15 +186,15 @@ function parseSubtitleDisplayPreferences(
   };
 }
 
-export function readSubtitleDisplayPreferences(): SubtitleDisplayPreferences {
+function readLegacySubtitleDisplayPreferences(storage: Storage): SubtitleDisplayPreferences {
   try {
-    const currentRaw = window.localStorage.getItem(subtitleDisplayStorageKey);
+    const currentRaw = storage.getItem(subtitleDisplayStorageKey);
     if (currentRaw) {
       const current = parseSubtitleDisplayPreferences(JSON.parse(currentRaw));
       if (current) return current;
     }
 
-    const previousDisplayRaw = window.localStorage.getItem(
+    const previousDisplayRaw = storage.getItem(
       legacySubtitleDisplayStorageKey,
     );
     if (previousDisplayRaw) {
@@ -208,12 +203,11 @@ export function readSubtitleDisplayPreferences(): SubtitleDisplayPreferences {
         true,
       );
       if (previousDisplay) {
-        saveSubtitleDisplayPreferences(previousDisplay);
         return previousDisplay;
       }
     }
 
-    const legacyRaw = window.localStorage.getItem(subtitleFollowStorageKey);
+    const legacyRaw = storage.getItem(subtitleFollowStorageKey);
     if (!legacyRaw) return defaultSubtitleDisplayPreferences;
     const legacy = parseSubtitleFollowPreferences(JSON.parse(legacyRaw));
     if (!legacy) return defaultSubtitleDisplayPreferences;
@@ -223,21 +217,25 @@ export function readSubtitleDisplayPreferences(): SubtitleDisplayPreferences {
       quickToolbar: "auto",
       frameSize: { ...defaultSubtitleFrameSize },
     } as const;
-    saveSubtitleDisplayPreferences(migrated);
     return migrated;
   } catch {
     return defaultSubtitleDisplayPreferences;
   }
 }
 
-export function saveSubtitleDisplayPreferences(
-  value: SubtitleDisplayPreferences,
-) {
-  try {
-    window.localStorage.setItem(subtitleDisplayStorageKey, JSON.stringify(value));
-  } catch {
-    // Playback remains usable when local preferences cannot be written.
-  }
+const displayPreference: PreferenceRecord<SubtitleDisplayPreferences> = {
+  key: "siaovplay-preferences.subtitle-display",
+  fallback: defaultSubtitleDisplayPreferences,
+  decode: (value) => parseSubtitleDisplayPreferences(value) ?? undefined,
+  legacy: readLegacySubtitleDisplayPreferences,
+};
+
+export function readSubtitleDisplayPreferences(): SubtitleDisplayPreferences {
+  return readPreference(displayPreference);
+}
+
+export function saveSubtitleDisplayPreferences(value: SubtitleDisplayPreferences) {
+  return savePreference(displayPreference, value);
 }
 
 export function useSubtitleDisplayPreferences() {

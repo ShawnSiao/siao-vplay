@@ -4,7 +4,7 @@ param(
     [string]$InstallerPath,
 
     [Parameter()]
-    [string]$ValidationRoot = 'W:\SiaoVPlay\validation\phase-1-app-only\installed',
+    [string]$ValidationRoot,
 
     [Parameter()]
     [switch]$UseExistingInstall,
@@ -37,10 +37,10 @@ function Get-Sha256([string]$Path) {
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $installer = (Resolve-Path -LiteralPath $InstallerPath).Path
-$validationRootPath = [System.IO.Path]::GetFullPath($ValidationRoot)
-if ($validationRootPath -match '^(?i)C:\\') {
-    throw "Validation install directory cannot be on the C drive: $validationRootPath"
+if ([string]::IsNullOrWhiteSpace($ValidationRoot)) {
+    $ValidationRoot = Join-Path (Split-Path -Parent $installer) ('validation-' + [Guid]::NewGuid().ToString('N') + '\installed')
 }
+$validationRootPath = [System.IO.Path]::GetFullPath($ValidationRoot)
 if (Test-Path -LiteralPath $validationRootPath) {
     $existing = @(Get-ChildItem -LiteralPath $validationRootPath -Force -ErrorAction SilentlyContinue)
     if ($existing.Count -gt 0 -and -not $UseExistingInstall) {
@@ -65,8 +65,20 @@ $protectedSnapshots = @($ProtectedFile | ForEach-Object {
 })
 
 if (-not $UseExistingInstall) {
+    $uninstallRoots = @(
+        'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall',
+        'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall',
+        'HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall'
+    )
+    $registeredProduct = @($uninstallRoots | Where-Object { Test-Path -LiteralPath $_ } |
+        ForEach-Object { Get-ChildItem -LiteralPath $_ -ErrorAction SilentlyContinue } |
+        Get-ItemProperty -ErrorAction SilentlyContinue |
+        Where-Object { $_.DisplayName -like 'SiaoVPlay*' })
+    if ($registeredProduct.Count -gt 0) {
+        throw 'An existing SiaoVPlay installation is registered. Use a disposable Windows environment for lifecycle validation.'
+    }
     New-Item -ItemType Directory -Force -Path $validationRootPath | Out-Null
-    $process = Start-Process -FilePath $installer -ArgumentList @('/S', "/D=$validationRootPath") -Wait -PassThru
+    $process = Start-Process -FilePath $installer -ArgumentList @('/S', "/D=$validationRootPath") -WindowStyle Hidden -Wait -PassThru
     if ($process.ExitCode -ne 0) {
         throw "Silent NSIS installation failed with exit code $($process.ExitCode)"
     }
@@ -103,7 +115,7 @@ if ($Cleanup) {
     if ($null -eq $uninstaller) {
         throw "Cleanup was requested but no uninstaller was found in $validationRootPath"
     }
-    $uninstallProcess = Start-Process -FilePath $uninstaller.FullName -ArgumentList '/S' -Wait -PassThru
+    $uninstallProcess = Start-Process -FilePath $uninstaller.FullName -ArgumentList '/S' -WindowStyle Hidden -Wait -PassThru
     if ($uninstallProcess.ExitCode -ne 0) {
         throw "Silent uninstall failed with exit code $($uninstallProcess.ExitCode)"
     }

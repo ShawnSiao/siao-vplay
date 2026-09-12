@@ -1,8 +1,9 @@
-use super::LibraryError;
+use super::{LibraryError, LibraryScanCandidate};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub(crate) enum CollectionKind {
     Series,
     Folder,
@@ -30,6 +31,7 @@ impl CollectionKind {
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub(crate) enum CollectionSortMode {
     Episode,
     Natural,
@@ -62,6 +64,7 @@ impl CollectionSortMode {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub(crate) enum ItemAvailability {
     Available,
     Missing,
@@ -94,45 +97,60 @@ impl ItemAvailability {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub(crate) struct Collection {
     pub id: String,
     pub kind: CollectionKind,
     pub title: String,
     pub root_id: Option<String>,
+    #[cfg_attr(test, schemars(with = "Option<super::home_model::CollectionSystemKey>"))]
     pub system_key: Option<String>,
     pub poster_path: Option<String>,
     pub sort_mode: CollectionSortMode,
     pub auto_play_next: bool,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub last_opened_at_ms: Option<i64>,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub created_at_ms: i64,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub updated_at_ms: i64,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub(crate) struct CollectionSummary {
     #[serde(flatten)]
     pub collection: Collection,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub item_count: i64,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub season_count: i64,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub watched_count: i64,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub total_duration_ms: Option<i64>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub(crate) struct LibraryRootSummary {
     pub id: String,
     pub path: String,
     pub display_name: String,
+    #[cfg_attr(test, schemars(with = "super::home_model::RootAvailability"))]
     pub availability: String,
     pub status: LibraryRootStatus,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub last_scanned_at_ms: Option<i64>,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub item_count: i64,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub(crate) enum LibraryRootStatus {
     Linked,
     Orphaned,
@@ -151,15 +169,18 @@ impl LibraryRootStatus {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub(crate) struct LibraryCollectionDeletionResult {
     pub collection_id: String,
     pub root_id: Option<String>,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub preserved_project_count: i64,
     pub root_status: Option<LibraryRootStatus>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub(crate) enum LibraryRootRebuildMatchKind {
     Matched,
     Missing,
@@ -169,13 +190,17 @@ pub(crate) enum LibraryRootRebuildMatchKind {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub(crate) struct LibraryRootRebuildItem {
     pub project_id: String,
     pub candidate_id: Option<String>,
     pub relative_path: String,
     pub display_title: String,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub season_number: Option<i64>,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub episode_number: Option<i64>,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub absolute_order: i64,
     pub previous_availability: ItemAvailability,
     pub match_kind: LibraryRootRebuildMatchKind,
@@ -184,6 +209,7 @@ pub(crate) struct LibraryRootRebuildItem {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub(crate) struct LibraryRootRebuildPreview {
     pub preview_token: String,
     pub root_id: String,
@@ -197,7 +223,9 @@ pub(crate) struct LibraryRootRebuildPreview {
     pub missing_items: Vec<LibraryRootRebuildItem>,
     pub changed_items: Vec<LibraryRootRebuildItem>,
     pub uncertain_items: Vec<LibraryRootRebuildItem>,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub ignored_count: u64,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub expires_at_ms: i64,
 }
 
@@ -226,99 +254,62 @@ pub(crate) struct ApplyLibraryRootRebuildInput {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub(crate) struct LibraryRootRebuildResult {
     pub root: LibraryRootSummary,
     pub collection: CollectionDetail,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub restored_item_count: u64,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub added_item_count: u64,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub created_project_count: u64,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub reused_project_count: u64,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub missing_item_count: u64,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub changed_item_count: u64,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub(crate) struct LibraryRootRevokeResult {
     pub root_id: String,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub detached_collection_count: u64,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub preserved_project_count: u64,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct MediaSummary {
-    pub project_id: String,
-    pub project_title: String,
-    pub display_name: String,
-    pub media_locator: String,
-    pub media_available: bool,
-    pub poster_path: Option<String>,
-    pub position_ms: i64,
-    pub duration_ms: Option<i64>,
-    pub completed_at_ms: Option<i64>,
-    pub last_opened_at_ms: i64,
-    pub created_at_ms: i64,
-    pub original_subtitle_available: bool,
-    pub chinese_translation_available: bool,
-    pub collection_id: Option<String>,
-    pub collection_title: Option<String>,
-    pub season_number: Option<i64>,
-    pub episode_number: Option<i64>,
-    pub absolute_order: Option<i64>,
-    pub episode_title: Option<String>,
-    pub item_availability: Option<ItemAvailability>,
-}
+
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct LibraryHome {
-    pub continue_watching: Vec<MediaSummary>,
-    pub continue_watching_count: i64,
-    pub collections: Vec<CollectionSummary>,
-    pub folders: Vec<LibraryRootSummary>,
-    pub unclassified: Vec<MediaSummary>,
-    pub recently_added: Vec<MediaSummary>,
-    pub total_project_count: i64,
-    pub collection_item_count: i64,
-    pub unclassified_count: i64,
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub(crate) struct SeasonSummary {
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub season_number: Option<i64>,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub episode_count: i64,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub watched_count: i64,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub total_duration_ms: Option<i64>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub(crate) struct CollectionDetail {
     pub summary: CollectionSummary,
     pub seasons: Vec<SeasonSummary>,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct EpisodeReference {
-    pub project_id: String,
-    pub display_title: String,
-    pub season_number: Option<i64>,
-    pub episode_number: Option<i64>,
-    pub absolute_order: i64,
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct EpisodeNeighbors {
-    pub previous: Option<EpisodeReference>,
-    pub next: Option<EpisodeReference>,
-}
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub(crate) enum SearchResultKind {
     Collection,
     Episode,
@@ -340,13 +331,16 @@ impl SearchResultKind {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub(crate) struct SearchResult {
     pub kind: SearchResultKind,
     pub title: String,
     pub subtitle: Option<String>,
     pub collection_id: Option<String>,
     pub project_id: Option<String>,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub season_number: Option<i64>,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub episode_number: Option<i64>,
 }
 
@@ -383,93 +377,6 @@ pub(crate) struct ScanLibraryFolderInput {
     pub root_path: String,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub(crate) enum EpisodeRecognition {
-    SxxExx,
-    SeasonXEpisode,
-    ChineseEpisode,
-    NumericPrefix,
-    SeasonDirectory,
-    Unresolved,
-    Conflict,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct LibraryScanCandidate {
-    pub candidate_id: String,
-    pub relative_path: String,
-    pub display_title: String,
-    pub season_number: Option<i64>,
-    pub episode_number: Option<i64>,
-    pub absolute_order: i64,
-    pub recognition: EpisodeRecognition,
-    pub needs_confirmation: bool,
-    pub confirmation_reason: Option<String>,
-    pub source_size_bytes: u64,
-    pub source_modified_at_ms: Option<i64>,
-    pub quick_fingerprint: String,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub(crate) enum IgnoredEntryReason {
-    Hidden,
-    System,
-    ReparsePoint,
-    IgnoredName,
-    Temporary,
-    UnsupportedExtension,
-    OutsideRoot,
-    Unreadable,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct IgnoredLibraryEntry {
-    pub relative_path: String,
-    pub reason: IgnoredEntryReason,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub(crate) enum LibraryScanPhase {
-    Scanning,
-    Fingerprinting,
-    Completed,
-    Cancelled,
-    Failed,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct LibraryScanProgress {
-    pub scan_id: String,
-    pub phase: LibraryScanPhase,
-    pub scanned_directories: u64,
-    pub scanned_files: u64,
-    pub candidate_files: u64,
-    pub ignored_entries: u64,
-    pub current_relative_path: Option<String>,
-    pub message: Option<String>,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct LibraryScanPreview {
-    pub scan_id: String,
-    pub preview_token: String,
-    pub root_path: String,
-    pub root_display_name: String,
-    pub suggested_collection_title: String,
-    pub candidates: Vec<LibraryScanCandidate>,
-    pub ignored_entries: Vec<IgnoredLibraryEntry>,
-    pub ignored_count: u64,
-    pub needs_confirmation_count: u64,
-    pub expires_at_ms: i64,
-}
-
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct ConfirmLibraryItemInput {
@@ -494,16 +401,21 @@ pub(crate) struct ConfirmLibraryImportInput {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub(crate) struct LibraryImportResult {
     pub root_id: String,
     pub collection: CollectionDetail,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub imported_item_count: u64,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub created_project_count: u64,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub reused_project_count: u64,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub(crate) struct LibraryRecoveryItem {
     pub collection_id: String,
     pub project_id: String,
@@ -514,6 +426,7 @@ pub(crate) struct LibraryRecoveryItem {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub(crate) struct LibraryRescanPreview {
     pub preview_token: String,
     pub root_id: String,
@@ -524,8 +437,11 @@ pub(crate) struct LibraryRescanPreview {
     pub new_candidates: Vec<LibraryScanCandidate>,
     pub missing_items: Vec<LibraryRecoveryItem>,
     pub changed_items: Vec<LibraryRecoveryItem>,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub available_item_count: u64,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub ignored_count: u64,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub expires_at_ms: i64,
 }
 
@@ -544,14 +460,21 @@ pub(crate) struct ApplyLibraryRescanInput {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub(crate) struct LibraryRescanResult {
     pub root: LibraryRootSummary,
     pub collection: CollectionDetail,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub added_item_count: u64,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub created_project_count: u64,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub reused_project_count: u64,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub missing_item_count: u64,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub changed_item_count: u64,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub available_item_count: u64,
 }
 
@@ -564,6 +487,7 @@ pub(crate) struct InspectLibraryRootRelocationInput {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub(crate) enum RelocationMismatchReason {
     Missing,
     FingerprintChanged,
@@ -572,6 +496,7 @@ pub(crate) enum RelocationMismatchReason {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub(crate) struct LibraryRelocationMismatch {
     pub project_id: String,
     pub relative_path: String,
@@ -580,13 +505,16 @@ pub(crate) struct LibraryRelocationMismatch {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub(crate) struct LibraryRootRelocationPreview {
     pub preview_token: String,
     pub root_id: String,
     pub current_root_path: String,
     pub new_root_path: String,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub matched_item_count: u64,
     pub mismatches: Vec<LibraryRelocationMismatch>,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub expires_at_ms: i64,
 }
 
@@ -598,7 +526,9 @@ pub(crate) struct ApplyLibraryRootRelocationInput {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub(crate) struct LibraryRootRelocationResult {
     pub root: LibraryRootSummary,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub updated_item_count: u64,
 }

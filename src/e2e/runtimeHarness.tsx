@@ -1,157 +1,19 @@
+import { TranscriptionPanel } from "../components/TranscriptionPanel";
+import { locationResult } from "../test-fixtures/resourceLocation";
+import { catalog } from "./runtimeCatalog";
 import { StrictMode, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 
 import type { LocalResourcesController } from "../features/resources/useLocalResources";
-import { RuntimeView } from "./RuntimeView";
+import { RuntimeView, LiveRuntimeView } from "./RuntimeView";
 import type {
-  LocalResourceCatalog,
   LocalResourceStatus,
   ResourceDownloadTask,
 } from "../types";
 import "../styles.css";
 
-const catalog: LocalResourceCatalog = {
-  schemaVersion: 1,
-  productId: "siaovplay",
-  updatedAt: "2026-08-08",
-  packageProfile: "app-only",
-  bundlePolicy: {
-    maximumExceptionBytes: 20_000_000,
-    allowlistedResourceIds: [],
-  },
-  capabilities: [
-    {
-      id: "basic_media",
-      title: "基础视频支持",
-      resourceIds: ["ffmpeg-cpu"],
-      profileIds: [],
-      requiresCapabilityIds: [],
-    },
-    {
-      id: "url_import",
-      title: "在线视频导入",
-      resourceIds: ["ffmpeg-cpu", "yt-dlp"],
-      profileIds: [],
-      requiresCapabilityIds: [],
-    },
-    {
-      id: "local_transcription",
-      title: "本地字幕识别",
-      resourceIds: ["ffmpeg-cpu", "whisper-cpu"],
-      profileIds: ["fast", "standard"],
-      requiresCapabilityIds: [],
-    },
-  ],
-  profiles: [
-    {
-      id: "fast",
-      title: "快速",
-      resourceIds: ["whisper-model-base"],
-      recommended: false,
-    },
-    {
-      id: "standard",
-      title: "标准",
-      resourceIds: ["whisper-model-small"],
-      recommended: true,
-    },
-  ],
-  resources: [
-    {
-      id: "ffmpeg-cpu",
-      version: "8.1.2-34-g9b6c8969e0",
-      platform: "windows-x86_64",
-      kind: "archive",
-      bundled: false,
-      installedSize: 175_929_962,
-      license: "LGPL-2.1-or-later",
-      sourcePage: "https://example.com/ffmpeg",
-      artifact: {
-        url: "https://example.com/ffmpeg.zip",
-        size: 70_508_781,
-        sha256: "a".repeat(64),
-        format: "zip",
-      },
-      entrypoints: {},
-      healthCheck: "ffmpeg-version",
-    },
-    {
-      id: "yt-dlp",
-      version: "2026.08.19",
-      platform: "windows-x86_64",
-      kind: "file",
-      bundled: false,
-      installedSize: 17_840_399,
-      license: "GPL-3.0-or-later",
-      sourcePage: "https://example.com/yt-dlp",
-      artifact: {
-        url: "https://example.com/yt-dlp.exe",
-        size: 17_840_399,
-        sha256: "b".repeat(64),
-        format: "file",
-      },
-      entrypoints: {},
-      healthCheck: "yt-dlp-version",
-    },
-    {
-      id: "whisper-cpu",
-      version: "1.9.1",
-      platform: "windows-x86_64",
-      kind: "archive",
-      bundled: false,
-      installedSize: 20_355_072,
-      license: "MIT",
-      sourcePage: "https://example.com/recognition-runtime",
-      artifact: {
-        url: "https://example.com/whisper-bin-x64.zip",
-        size: 7_982_101,
-        sha256: "f".repeat(64),
-        format: "zip",
-        stripComponents: 1,
-      },
-      entrypoints: { whisperCli: "whisper-cli.exe" },
-      healthCheck: "whisper-cli-version",
-    },
-    {
-      id: "whisper-model-base",
-      version: "base",
-      platform: "all",
-      kind: "model",
-      bundled: false,
-      installedSize: 147_951_465,
-      license: "MIT",
-      sourcePage: "https://example.com/recognition-model-base",
-      artifact: {
-        url: "https://example.com/base.bin",
-        size: 147_951_465,
-        sha256: "e".repeat(64),
-        format: "file",
-      },
-      entrypoints: { model: "base.bin" },
-      healthCheck: "sha256",
-    },
-    {
-      id: "whisper-model-small",
-      version: "small",
-      platform: "all",
-      kind: "model",
-      bundled: false,
-      installedSize: 487_601_967,
-      license: "MIT",
-      sourcePage: "https://example.com/recognition-model",
-      artifact: {
-        url: "https://example.com/model.bin",
-        size: 487_601_967,
-        sha256: "c".repeat(64),
-        format: "file",
-      },
-      entrypoints: {},
-      healthCheck: "sha256",
-    },
-  ],
-};
-
 const status: LocalResourceStatus = {
+  snapshotRevision: 1,
   configured: true,
   selectedParent: "W:\\SiaoVPlay",
   resourceRoot: "W:\\SiaoVPlay\\LocalResources",
@@ -201,13 +63,15 @@ const initialTask: ResourceDownloadTask = {
   errorMessage: "下载已暂停",
   createdAtMs: 1,
   updatedAtMs: 2,
-  forceReinstall: false,
+  forceReinstall: false, generation: 1, revision: 1,
 };
 
 export function RuntimeHarness() {
   const [tasks, setTasks] = useState([initialTask]);
+  const [cancellingMove, setCancellingMove] = useState(false);
   const controller = useMemo<LocalResourcesController>(
     () => ({
+      bindingRecovery: null, retryBinding: async () => locationResult(status),
       catalog,
       status,
       tasks,
@@ -215,7 +79,7 @@ export function RuntimeHarness() {
         [initialTask.id]: { bytesPerSecond: 0, remainingSeconds: null },
       },
       networkStatus: {
-        mode: "proxy",
+        snapshotRevision: 1, mode: "proxy",
         proxySource: "windows_system",
         proxyAddress: "http://127.0.0.1:7897",
       },
@@ -224,16 +88,21 @@ export function RuntimeHarness() {
       refresh: async () => status,
       clearError: () => undefined,
       chooseLocation: async () => null,
-      confirmLocation: async () => status,
+      confirmLocation: async () => locationResult(status),
       chooseExistingResources: async () => null,
       adoptResources: async () => ({
-        adoptedResourceIds: [],
+        resourceRoot: status.resourceRoot ?? "", planFingerprint: "a".repeat(64), requestId: "preview-request",
+        interruption: null, adoptedResourceIds: [],
         alreadyActiveResourceIds: [],
         rejectedResourceIds: [],
         reusableBytes: 0,
       }),
       chooseMoveLocation: async () => null,
+      moving: new URLSearchParams(window.location.search).has("moving"),
+      cancellingMove,
+      cancelMove: async () => { setCancellingMove(true); return true; },
       moveLocation: async () => ({
+        planFingerprint: "a".repeat(64), requestId: "preview-request",
         previousRoot: status.resourceRoot ?? "",
         currentRoot: status.resourceRoot ?? "",
         copiedBytes: 0,
@@ -241,23 +110,24 @@ export function RuntimeHarness() {
         crossVolume: false,
         previousRootRetained: true,
       }),
-      repairRoot: async () => status,
-      reconnectRoot: async () => status,
+      repairRoot: async () => locationResult(status),
+      reconnectRoot: async () => locationResult(status),
       planCleanup: async () => ({
+        planFingerprint: "a".repeat(64),
         resourceIds: [],
         reclaimableBytes: 0,
         confirmationRequired: true,
       }),
       cleanupUnused: async () => ({
         removedResourceIds: [],
-        reclaimedBytes: 0,
+        interruption: null, reclaimedBytes: 0,
       }),
       loadDiagnostics: async () => ({
         diagnostics: {
           generatedAtMs: Date.now(),
           catalogSource: "embedded",
           remoteCatalogEnabled: false,
-          remoteSignaturePolicy: "ed25519-detached-v1-required-before-enable",
+          maintenance: { transactionState: "none", scanState: "complete", stagingReviewCount: 0, receiptRecoveryCopyCount: 0 }, remoteSignaturePolicy: "ed25519-detached-v1-required-before-enable",
           rootState: "ready",
           resourceRoot: status.resourceRoot,
           preferredProfile: status.preferredProfile,
@@ -272,7 +142,7 @@ export function RuntimeHarness() {
               artifactSha256: "b".repeat(64),
               artifactUrl: "https://example.com/yt-dlp.exe",
               healthCheck: "yt-dlp-version",
-              versions: [
+              versionsReadable: true, unverifiedReceiptCount: 0, versions: [
                 {
                   version: "2026.05.01",
                   active: true,
@@ -312,6 +182,7 @@ export function RuntimeHarness() {
         activeVersion: version,
       }),
       planOldVersionCleanup: async () => ({
+        planFingerprint: "a".repeat(64),
         candidates: [],
         protectedVersions: [],
         reclaimableBytes: 0,
@@ -319,13 +190,14 @@ export function RuntimeHarness() {
       }),
       cleanupOldVersions: async () => ({
         removedVersions: [],
-        reclaimedBytes: 0,
+        interruption: null, reclaimedBytes: 0,
       }),
       selectProfile: async (profileId) => ({
         ...status,
         preferredProfile: profileId,
       }),
       setProxy: async (proxyUrl) => ({
+        snapshotRevision: 2,
         mode: proxyUrl ? "proxy" : "direct",
         proxySource: proxyUrl ? "custom" : "direct",
         proxyAddress: proxyUrl,
@@ -371,7 +243,7 @@ export function RuntimeHarness() {
         affectedCapabilityIds: [],
       }),
     }),
-    [tasks],
+    [tasks, cancellingMove],
   );
   return <RuntimeView controller={controller} />;
 }
@@ -383,6 +255,6 @@ if (!root) {
 
 createRoot(root).render(
   <StrictMode>
-    <RuntimeHarness />
+    {new URLSearchParams(window.location.search).has("transcription") ? <TranscriptionPanel projectId="project" currentVersion={null} onJobTracked={() => undefined} onVersionReady={() => undefined} /> : new URLSearchParams(window.location.search).has("live") ? <LiveRuntimeView /> : <RuntimeHarness />}
   </StrictMode>,
 );

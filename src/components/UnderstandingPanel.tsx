@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTabNavigation } from "./useTabNavigation";
 
 import { CurrentScenePanel, type CurrentScenePanelProps } from "./CurrentScenePanel";
 import { VideoSummaryPanel } from "../features/summary/VideoSummaryPanel";
@@ -20,6 +21,7 @@ export function UnderstandingPanel({
   ...sceneProps
 }: UnderstandingPanelProps) {
   const [tab, setTab] = useState<"scene" | "summary">("scene");
+  const tabs = useTabNavigation(tab, setTab);
   const PanelElement = embedded ? "section" : "aside";
   return (
     <PanelElement
@@ -32,29 +34,23 @@ export function UnderstandingPanel({
           <button aria-label="关闭理解" className="understanding-close" type="button" onClick={onClose}>×</button>
         </header>
       ) : null}
-      <div className="understanding-inner-tabs" role="tablist" aria-label="理解类型">
+      <div className="understanding-inner-tabs" {...tabs.listProps} aria-label="理解类型">
         <button
           className={tab === "scene" ? "active" : ""}
-          role="tab"
-          aria-selected={tab === "scene"}
-          type="button"
-          onClick={() => setTab("scene")}
+          {...tabs.tabProps("scene")}
         >
           当前场景
         </button>
         <button
           className={tab === "summary" ? "active" : ""}
-          role="tab"
-          aria-selected={tab === "summary"}
-          type="button"
-          onClick={() => setTab("summary")}
+          {...tabs.tabProps("summary")}
         >
           视频总结
         </button>
       </div>
-      <div className="understanding-tab-content">
+      <div className="understanding-tab-content" {...tabs.panelProps}>
         {tab === "scene" ? (
-          <CurrentScenePanel {...sceneProps} embedded onClose={onClose} />
+          <CurrentScenePanel {...sceneProps} embedded onClose={onClose} onJump={onJump} onPausePlayback={onPausePlayback} />
         ) : (
           <VideoSummaryPanel
             projectId={sceneProps.projectId}

@@ -4,6 +4,24 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { PlayerDrawer } from "./PlayerDrawer";
 
 describe("PlayerDrawer reading-first shell", () => {
+  it("moves tab focus without changing the active workflow until activation", () => {
+    const select = vi.fn();
+    render(<PlayerDrawer activeTab="understand" mediaTitle="视频" onSelectTab={select} onClose={vi.fn()}><p>正文</p></PlayerDrawer>);
+    const active = screen.getByRole("tab", { name: "理解" });
+    const next = screen.getByRole("tab", { name: "学习" });
+    active.focus();
+    fireEvent.keyDown(active, { key: "ArrowRight" });
+    expect(next).toHaveFocus();
+    expect(next).toHaveAttribute("tabindex", "0");
+    expect(active).toHaveAttribute("tabindex", "-1");
+    expect(select).not.toHaveBeenCalled();
+    fireEvent.keyDown(next, { key: "Home" });
+    expect(screen.getByRole("tab", { name: "剧集" })).toHaveFocus();
+    fireEvent.keyDown(document.activeElement!, { key: "ArrowLeft" });
+    expect(screen.getByRole("tab", { name: "逐字稿" })).toHaveFocus();
+    fireEvent.click(screen.getByRole("tab", { name: "逐字稿" }));
+    expect(select).toHaveBeenCalledWith("transcript");
+  });
   beforeEach(() => {
     window.localStorage.clear();
   });
@@ -24,8 +42,10 @@ describe("PlayerDrawer reading-first shell", () => {
       name: "当前内容抽屉",
     });
     expect(drawer).toHaveAttribute("data-density", "comfortable");
-    expect(screen.getByText("正在观看")).toBeInTheDocument();
-    expect(screen.getByText("当前场景")).toBeInTheDocument();
+    expect(screen.getByLabelText("当前观看上下文")).toHaveTextContent("Hugging Face Journal Club: Kimi K3");
+    expect(screen.getByRole("tab", { name: "理解" })).toHaveAttribute("title", "当前场景");
+    expect(screen.getByText("阅读设置").parentElement).not.toHaveAttribute("open");
+    fireEvent.click(screen.getByText("阅读设置"));
     expect(
       screen.getByRole("button", { name: "舒适" }),
     ).toHaveAttribute("aria-pressed", "true");
@@ -35,9 +55,7 @@ describe("PlayerDrawer reading-first shell", () => {
     expect(
       screen.getByRole("button", { name: "紧凑" }),
     ).toHaveAttribute("aria-pressed", "true");
-    expect(window.localStorage.getItem("siaovplay-drawer-density")).toBe(
-      "compact",
-    );
+    expect(JSON.parse(window.localStorage.getItem("siaovplay-preferences.drawer-density")!)).toEqual({version: 1, value: "compact"});
 
     view.unmount();
     render(

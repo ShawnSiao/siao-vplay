@@ -2,8 +2,7 @@ use base64::{Engine as _, engine::general_purpose::STANDARD};
 
 use super::{
     connection, material_scope,
-    providers::{self, GenerationInput, ProviderFailure, ProviderOutput},
-    request_coordinator::global_request_coordinator,
+    providers::{self, GenerationInput},
     task_persistence::{self, AiTaskKind},
     task_types::{
         AiTaskError, ResumeAiTaskInput, StartExplanationTaskInput, StartLearningTaskInput,
@@ -17,10 +16,11 @@ use crate::{
     understanding::{self, ExplanationTask, PrepareExplanationTaskInput},
 };
 
-pub fn start_explanation(
+pub fn prepare_explanation(
     store: &ProjectStore,
     input: StartExplanationTaskInput,
 ) -> Result<ExplanationTask, AiTaskError> {
+    let _project_operation = crate::project_operations::Operation::acquire(store, &input.project_id)?;
     validate_authorization(&input.authorization)?;
     let service = api_service(&input.execution, &input.authorization)?;
     let include_frames =
@@ -35,17 +35,16 @@ pub fn start_explanation(
             prompt_selection: input.prompt_selection,
         },
     )?;
-    match input.execution {
-        AiExecutionTarget::Manual => Ok(task),
-        AiExecutionTarget::Codex => run_codex_explanation(store, &task.id, false),
-        AiExecutionTarget::Api { .. } => run_api_explanation(
+    if let Some(service) = service {
+        task_persistence::record_prepared_service(
             store,
+            AiTaskKind::Explanation,
             &task.id,
-            required_service(service)?,
-            input.authorization,
-            false,
-        ),
+            &service,
+            input.authorization.service_revision.unwrap_or_default(),
+        )?;
     }
+    Ok(understanding::get_explanation_task(store, &task.id)?)
 }
 
 pub fn resume_explanation(
@@ -53,13 +52,19 @@ pub fn resume_explanation(
     input: ResumeAiTaskInput,
 ) -> Result<ExplanationTask, AiTaskError> {
     validate_authorization(&input.authorization)?;
+    super::dispatch::verify_choice(
+        store,
+        crate::verified_task_files::TaskDomain::Explanation,
+        &input,
+    )?;
+    let retry = understanding::get_explanation_task(store, &input.task_id)?.status != "queued";
     match &input.execution {
         AiExecutionTarget::Api { .. } => run_api_explanation(
             store,
             &input.task_id,
             connection::resolve_execution(&input.execution, input.authorization.service_revision)?,
             input.authorization,
-            true,
+            retry,
         ),
         AiExecutionTarget::Manual => {
             task_persistence::switch_local(
@@ -71,21 +76,24 @@ pub fn resume_explanation(
             Ok(understanding::get_explanation_task(store, &input.task_id)?)
         }
         AiExecutionTarget::Codex => {
-            task_persistence::switch_local(
-                store,
-                AiTaskKind::Explanation,
-                &input.task_id,
-                &input.execution,
-            )?;
-            run_codex_explanation(store, &input.task_id, true)
+            if retry {
+                task_persistence::switch_local(
+                    store,
+                    AiTaskKind::Explanation,
+                    &input.task_id,
+                    &input.execution,
+                )?;
+            }
+            run_codex_explanation(store, &input.task_id, retry)
         }
     }
 }
 
-pub fn start_learning(
+pub fn prepare_learning(
     store: &ProjectStore,
     input: StartLearningTaskInput,
 ) -> Result<LearningTask, AiTaskError> {
+    let _project_operation = crate::project_operations::Operation::acquire(store, &input.project_id)?;
     validate_authorization(&input.authorization)?;
     let service = api_service(&input.execution, &input.authorization)?;
     let task = learning::prepare_learning_task(
@@ -99,17 +107,16 @@ pub fn start_learning(
             playback_position_ms: input.playback_position_ms,
         },
     )?;
-    match input.execution {
-        AiExecutionTarget::Manual => Ok(task),
-        AiExecutionTarget::Codex => run_codex_learning(store, &task.id, false),
-        AiExecutionTarget::Api { .. } => run_api_learning(
+    if let Some(service) = service {
+        task_persistence::record_prepared_service(
             store,
+            AiTaskKind::Learning,
             &task.id,
-            required_service(service)?,
-            input.authorization,
-            false,
-        ),
+            &service,
+            input.authorization.service_revision.unwrap_or_default(),
+        )?;
     }
+    Ok(learning::get_learning_task(store, &task.id)?)
 }
 
 pub fn resume_learning(
@@ -117,13 +124,19 @@ pub fn resume_learning(
     input: ResumeAiTaskInput,
 ) -> Result<LearningTask, AiTaskError> {
     validate_authorization(&input.authorization)?;
+    super::dispatch::verify_choice(
+        store,
+        crate::verified_task_files::TaskDomain::Learning,
+        &input,
+    )?;
+    let retry = learning::get_learning_task(store, &input.task_id)?.status != "queued";
     match &input.execution {
         AiExecutionTarget::Api { .. } => run_api_learning(
             store,
             &input.task_id,
             connection::resolve_execution(&input.execution, input.authorization.service_revision)?,
             input.authorization,
-            true,
+            retry,
         ),
         AiExecutionTarget::Manual => {
             task_persistence::switch_local(
@@ -135,13 +148,15 @@ pub fn resume_learning(
             Ok(learning::get_learning_task(store, &input.task_id)?)
         }
         AiExecutionTarget::Codex => {
-            task_persistence::switch_local(
-                store,
-                AiTaskKind::Learning,
-                &input.task_id,
-                &input.execution,
-            )?;
-            run_codex_learning(store, &input.task_id, true)
+            if retry {
+                task_persistence::switch_local(
+                    store,
+                    AiTaskKind::Learning,
+                    &input.task_id,
+                    &input.execution,
+                )?;
+            }
+            run_codex_learning(store, &input.task_id, retry)
         }
     }
 }
@@ -154,7 +169,8 @@ fn run_api_explanation(
     resume: bool,
 ) -> Result<ExplanationTask, AiTaskError> {
     let revision = authorization.service_revision.unwrap_or_default();
-    task_persistence::claim_api(
+    let policy = super::interactive_policy::load()?.explanation;
+    let execution = task_persistence::claim_api(
         store,
         AiTaskKind::Explanation,
         task_id,
@@ -162,59 +178,69 @@ fn run_api_explanation(
         revision,
         resume,
     )?;
-    let task = understanding::get_explanation_task(store, task_id)?;
-    let model_id = selected_model(&service)?;
-    let frames_effective =
-        authorization.frames && providers::model_supports_vision(&service, model_id);
-    let frame_ids = task
-        .frames
-        .iter()
-        .map(|frame| frame.id.clone())
-        .collect::<Vec<_>>();
-    let prompt = material_scope::authorized_explanation_prompt(
-        understanding::read_explanation_prompt(store, task_id)?,
-        &frame_ids,
-        frames_effective,
-    );
-    let images = if frames_effective {
-        encode_frames(&task)?
-    } else {
-        Vec::new()
-    };
-    let schema = material_scope::authorized_explanation_schema(
-        understanding::read_explanation_schema(store, task_id)?,
-        frames_effective,
-    );
-    let output = execute_provider(
-        store,
+    super::task_execution::spawn(
+        execution,
+        store.clone(),
+        task_id.to_owned(),
         AiTaskKind::Explanation,
-        task_id,
-        &service,
-        GenerationInput {
-            model_id: model_id.to_owned(),
-            system: "只依据已授权的当前播放点及之前材料进行无剧透场景解释。".to_owned(),
-            prompt,
-            schema_name: "scene_explanation".to_owned(),
-            schema,
-            image_data_urls: images,
-            max_output_tokens: 2_048,
-            timeout: std::time::Duration::from_secs(90),
-        },
-    )?;
-    match understanding::apply_api_result(store, task_id, &output.output_text) {
-        Ok(application) => Ok(application.task),
-        Err(error) => {
-            task_persistence::fail(
+        move |store, task_id| {
+            let task = understanding::get_explanation_task(store, task_id)?;
+            let model_id = selected_model(&service)?;
+            let frames_effective =
+                authorization.frames && providers::model_supports_vision(&service, model_id);
+            let frame_ids = task
+                .frames
+                .iter()
+                .map(|frame| frame.id.clone())
+                .collect::<Vec<_>>();
+            let prompt = material_scope::authorized_explanation_prompt(
+                understanding::read_explanation_prompt(store, task_id)?,
+                &frame_ids,
+                frames_effective,
+            );
+            let images = if frames_effective {
+                encode_frames(store, &task)?
+            } else {
+                Vec::new()
+            };
+            let schema = material_scope::authorized_explanation_schema(
+                understanding::read_explanation_schema(store, task_id)?,
+                frames_effective,
+            );
+            let output = super::task_execution::execute(
                 store,
                 AiTaskKind::Explanation,
                 task_id,
-                error.code(),
-                &error.to_string(),
-                output.provider_request_id.as_deref(),
-            );
-            Err(error.into())
-        }
-    }
+                &service,
+                GenerationInput {
+                    model_id: model_id.to_owned(),
+                    system: "只依据已授权的当前播放点及之前材料进行无剧透场景解释。".to_owned(),
+                    prompt,
+                    schema_name: "scene_explanation".to_owned(),
+                    schema,
+                    image_data_urls: images,
+                    max_output_tokens: policy.max_output_tokens,
+                    timeout: policy.timeout(),
+                    cancellation: None,
+                },
+            )?;
+            match understanding::apply_api_result(store, task_id, &output.output_text) {
+                Ok(application) => Ok(application.task),
+                Err(error) => {
+                    task_persistence::fail(
+                        store,
+                        AiTaskKind::Explanation,
+                        task_id,
+                        error.code(),
+                        &error.to_string(),
+                        output.provider_request_id.as_deref(),
+                    );
+                    Err(error.into())
+                }
+            }
+        },
+    );
+    Ok(understanding::get_explanation_task(store, task_id)?)
 }
 
 fn run_api_learning(
@@ -224,7 +250,8 @@ fn run_api_learning(
     authorization: AiMaterialAuthorization,
     resume: bool,
 ) -> Result<LearningTask, AiTaskError> {
-    task_persistence::claim_api(
+    let policy = super::interactive_policy::load()?.learning;
+    let execution = task_persistence::claim_api(
         store,
         AiTaskKind::Learning,
         task_id,
@@ -232,74 +259,47 @@ fn run_api_learning(
         authorization.service_revision.unwrap_or_default(),
         resume,
     )?;
-    let model_id = selected_model(&service)?;
-    let output = execute_provider(
-        store,
+    super::task_execution::spawn(
+        execution,
+        store.clone(),
+        task_id.to_owned(),
         AiTaskKind::Learning,
-        task_id,
-        &service,
-        GenerationInput {
-            model_id: model_id.to_owned(),
-            system: "只依据用户选择的当前字幕文本提供学习辅助，不补充后续剧情。".to_owned(),
-            prompt: learning::read_learning_prompt(store, task_id)?,
-            schema_name: "contextual_learning".to_owned(),
-            schema: learning::read_learning_schema(store, task_id)?,
-            image_data_urls: Vec::new(),
-            max_output_tokens: 2_048,
-            timeout: std::time::Duration::from_secs(90),
-        },
-    )?;
-    match learning::apply_api_result(store, task_id, &output.output_text) {
-        Ok(application) => Ok(application.task),
-        Err(error) => {
-            task_persistence::fail(
+        move |store, task_id| {
+            let model_id = selected_model(&service)?;
+            let output = super::task_execution::execute(
                 store,
                 AiTaskKind::Learning,
                 task_id,
-                error.code(),
-                &error.to_string(),
-                output.provider_request_id.as_deref(),
-            );
-            Err(error.into())
-        }
-    }
-}
-
-fn execute_provider(
-    store: &ProjectStore,
-    kind: AiTaskKind,
-    task_id: &str,
-    service: &ResolvedAiService,
-    input: GenerationInput,
-) -> Result<ProviderOutput, AiTaskError> {
-    let lane = service
-        .service_config_id
-        .as_deref()
-        .unwrap_or(&service.base_url);
-    let _request_permit = global_request_coordinator().acquire_interactive(lane);
-    let output = providers::generate(service, &input).map_err(|failure| {
-        fail_provider(store, kind, task_id, &failure);
-        AiTaskError::from(failure)
-    })?;
-    task_persistence::record_provider_output(
-        store,
-        kind,
-        task_id,
-        output.provider_request_id.as_deref(),
-        output.usage.as_ref(),
-    )?;
-    Ok(output)
-}
-
-fn fail_provider(store: &ProjectStore, kind: AiTaskKind, task_id: &str, failure: &ProviderFailure) {
-    task_persistence::fail(
-        store,
-        kind,
-        task_id,
-        failure.error.code(),
-        &failure.error.to_string(),
-        failure.provider_request_id.as_deref(),
+                &service,
+                GenerationInput {
+                    model_id: model_id.to_owned(),
+                    system: "只依据用户选择的当前字幕文本提供学习辅助，不补充后续剧情。".to_owned(),
+                    prompt: learning::read_learning_prompt(store, task_id)?,
+                    schema_name: "contextual_learning".to_owned(),
+                    schema: learning::read_learning_schema(store, task_id)?,
+                    image_data_urls: Vec::new(),
+                    max_output_tokens: policy.max_output_tokens,
+                    timeout: policy.timeout(),
+                    cancellation: None,
+                },
+            )?;
+            match learning::apply_api_result(store, task_id, &output.output_text) {
+                Ok(application) => Ok(application.task),
+                Err(error) => {
+                    task_persistence::fail(
+                        store,
+                        AiTaskKind::Learning,
+                        task_id,
+                        error.code(),
+                        &error.to_string(),
+                        output.provider_request_id.as_deref(),
+                    );
+                    Err(error.into())
+                }
+            }
+        },
     );
+    Ok(learning::get_learning_task(store, task_id)?)
 }
 
 fn api_service(
@@ -313,11 +313,6 @@ fn api_service(
         )?)),
         _ => Ok(None),
     }
-}
-
-fn required_service(service: Option<ResolvedAiService>) -> Result<ResolvedAiService, AiTaskError> {
-    service
-        .ok_or_else(|| super::error::AiError::Validation("AI 服务配置未能解析".to_owned()).into())
 }
 
 fn selected_model(service: &ResolvedAiService) -> Result<&str, AiTaskError> {
@@ -338,11 +333,11 @@ fn validate_authorization(authorization: &AiMaterialAuthorization) -> Result<(),
     }
 }
 
-fn encode_frames(task: &ExplanationTask) -> Result<Vec<String>, AiTaskError> {
+fn encode_frames(store: &ProjectStore, task: &ExplanationTask) -> Result<Vec<String>, AiTaskError> {
     task.frames
         .iter()
         .map(|frame| {
-            let data = std::fs::read(&frame.path)?;
+            let data = crate::verified_task_files::explanation_frame(store, &task.id, frame)?;
             Ok(format!("data:image/jpeg;base64,{}", STANDARD.encode(data)))
         })
         .collect()

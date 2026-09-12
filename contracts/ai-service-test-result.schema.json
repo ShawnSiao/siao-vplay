@@ -1,0 +1,133 @@
+{
+  "$defs": {
+    "AiModelInfo": {
+      "properties": {
+        "capabilitySource": {
+          "type": "string"
+        },
+        "displayName": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "vision": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "displayName",
+        "vision",
+        "capabilitySource"
+      ],
+      "type": "object"
+    },
+    "AiServiceCapabilities": {
+      "properties": {
+        "learning": {
+          "type": "boolean"
+        },
+        "understanding": {
+          "type": "boolean"
+        },
+        "vision": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "understanding",
+        "learning",
+        "vision"
+      ],
+      "type": "object"
+    },
+    "ConnectionState": {
+      "enum": [
+        "untested",
+        "ready",
+        "error"
+      ],
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "examples": [
+    {
+      "capabilities": {
+        "learning": true,
+        "understanding": true,
+        "vision": false
+      },
+      "mayIncurUsage": false,
+      "minimalRequestUsed": false,
+      "models": [],
+      "providerRequestId": null,
+      "selectedModelId": null,
+      "state": "ready"
+    },
+    {
+      "capabilities": {
+        "learning": true,
+        "understanding": true,
+        "vision": false
+      },
+      "mayIncurUsage": true,
+      "minimalRequestUsed": true,
+      "models": [
+        {
+          "capabilitySource": "unknown",
+          "displayName": "Model",
+          "id": "model",
+          "vision": false
+        }
+      ],
+      "providerRequestId": "request",
+      "selectedModelId": "model",
+      "state": "ready"
+    }
+  ],
+  "properties": {
+    "capabilities": {
+      "$ref": "#/$defs/AiServiceCapabilities"
+    },
+    "mayIncurUsage": {
+      "type": "boolean"
+    },
+    "minimalRequestUsed": {
+      "type": "boolean"
+    },
+    "models": {
+      "items": {
+        "$ref": "#/$defs/AiModelInfo"
+      },
+      "type": "array"
+    },
+    "providerRequestId": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "selectedModelId": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "state": {
+      "$ref": "#/$defs/ConnectionState"
+    }
+  },
+  "required": [
+    "state",
+    "models",
+    "selectedModelId",
+    "capabilities",
+    "minimalRequestUsed",
+    "mayIncurUsage",
+    "providerRequestId"
+  ],
+  "title": "AiServiceTestResult",
+  "type": "object"
+}

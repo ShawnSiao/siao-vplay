@@ -1,3 +1,11 @@
+#[cfg(test)]
+mod wire_schema;
+pub(crate) mod metadata;
+pub(crate) mod metadata_page;
+mod metadata_snapshot;
+mod read;
+pub use read::{get_subtitle_version, list_current_subtitle_versions, list_subtitle_versions};
+
 use std::{
     collections::{HashMap, HashSet},
     fs,
@@ -68,6 +76,7 @@ impl From<rusqlite::Error> for SubtitleError {
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub enum SubtitleFileFormat {
     Srt,
     Vtt,
@@ -97,16 +106,22 @@ impl SubtitleFileFormat {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct SubtitleCue {
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub ordinal: usize,
+    #[cfg_attr(test, schemars(range(min = -9007199254740991_i64, max = 9007199254740991_i64)))]
     pub start_ms: i64,
+    #[cfg_attr(test, schemars(range(min = -9007199254740991_i64, max = 9007199254740991_i64)))]
     pub end_ms: i64,
     pub text: String,
+    #[cfg_attr(test, schemars(range(min = 0, max = 1)))]
     pub confidence: Option<f64>,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub enum SubtitleIssueSeverity {
     Error,
     Warning,
@@ -114,6 +129,7 @@ pub enum SubtitleIssueSeverity {
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub enum SubtitleIssueCode {
     EmptyText,
     InvalidTiming,
@@ -128,16 +144,20 @@ pub enum SubtitleIssueCode {
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct SubtitlePreflightIssue {
     pub code: SubtitleIssueCode,
     pub severity: SubtitleIssueSeverity,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub ordinal: Option<usize>,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub related_ordinal: Option<usize>,
     pub message: String,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub enum SubtitlePreflightStatus {
     Ready,
     Warning,
@@ -146,25 +166,35 @@ pub enum SubtitlePreflightStatus {
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct SubtitlePreflightReport {
     pub status: SubtitlePreflightStatus,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub segment_count: usize,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub error_count: usize,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub warning_count: usize,
+    #[cfg_attr(test, schemars(range(min = -9007199254740991_i64, max = 9007199254740991_i64)))]
     pub first_start_ms: Option<i64>,
+    #[cfg_attr(test, schemars(range(min = -9007199254740991_i64, max = 9007199254740991_i64)))]
     pub last_end_ms: Option<i64>,
+    #[cfg_attr(test, schemars(range(min = -9007199254740991_i64, max = 9007199254740991_i64)))]
     pub media_duration_ms: Option<i64>,
+    #[cfg_attr(test, schemars(range(min = 0, max = 1)))]
     pub coverage_ratio: Option<f64>,
     pub issues: Vec<SubtitlePreflightIssue>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct SubtitleImportPreview {
     pub format: SubtitleFileFormat,
     pub source_label: String,
     pub source_sha256: String,
     pub language_code: String,
+    #[cfg_attr(test, schemars(range(min = 1, max = 9007199254740991_i64)))]
     pub expected_project_revision: i64,
     pub expected_media_sha256: String,
     pub cues: Vec<SubtitleCue>,
@@ -193,7 +223,9 @@ pub struct ImportSubtitleFileInput {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct EmbeddedSubtitlePreview {
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_i64)))]
     pub stream_index: i64,
     pub codec_name: String,
     pub embedded_language: Option<String>,
@@ -222,47 +254,65 @@ pub struct ImportEmbeddedSubtitleInput {
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct SubtitleWord {
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub ordinal: usize,
+    #[cfg_attr(test, schemars(range(min = -9007199254740991_i64, max = 9007199254740991_i64)))]
     pub start_ms: i64,
+    #[cfg_attr(test, schemars(range(min = -9007199254740991_i64, max = 9007199254740991_i64)))]
     pub end_ms: i64,
     pub text: String,
+    #[cfg_attr(test, schemars(range(min = 0, max = 1)))]
     pub confidence: Option<f64>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct SubtitleSegment {
     pub id: String,
     pub lineage_id: String,
     pub source_segment_id: Option<String>,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub ordinal: usize,
+    #[cfg_attr(test, schemars(range(min = -9007199254740991_i64, max = 9007199254740991_i64)))]
     pub start_ms: i64,
+    #[cfg_attr(test, schemars(range(min = -9007199254740991_i64, max = 9007199254740991_i64)))]
     pub end_ms: i64,
     pub text: String,
+    #[cfg_attr(test, schemars(range(min = 0, max = 1)))]
     pub confidence: Option<f64>,
+    #[cfg_attr(test, schemars(with = "Option<wire_schema::SubtitleCorrection>"))]
     pub issue_kind: Option<String>,
     pub words: Vec<SubtitleWord>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct SubtitleVersion {
     pub id: String,
     pub track_id: String,
     pub project_id: String,
+    #[cfg_attr(test, schemars(with = "metadata::SubtitleTrackRole"))]
     pub role: String,
+    #[cfg_attr(test, schemars(range(min = -9007199254740991_i64, max = 9007199254740991_i64)))]
     pub version_number: i64,
+    #[cfg_attr(test, schemars(with = "metadata::SubtitleRevisionStatus"))]
     pub status: String,
+    #[cfg_attr(test, schemars(with = "wire_schema::SubtitleSource"))]
     pub source_kind: String,
     pub source_label: String,
     pub source_sha256: String,
     pub media_sha256: String,
     pub language_code: String,
+    #[cfg_attr(test, schemars(range(min = -9007199254740991_i64, max = 9007199254740991_i64)))]
     pub project_revision: i64,
     pub parent_version_id: Option<String>,
     pub source_task_id: Option<String>,
     pub preflight: SubtitlePreflightReport,
+    #[cfg_attr(test, schemars(range(min = -9007199254740991_i64, max = 9007199254740991_i64)))]
     pub created_at_ms: i64,
     pub is_current: bool,
     pub segments: Vec<SubtitleSegment>,
@@ -597,75 +647,6 @@ pub(crate) fn persist_transcription(
     )
 }
 
-pub fn list_subtitle_versions(
-    store: &ProjectStore,
-    project_id: &str,
-) -> Result<Vec<SubtitleVersion>, SubtitleError> {
-    let project = store.get_project(project_id)?;
-    let connection = store.connect()?;
-    let mut statement = connection.prepare(
-        "SELECT
-            v.id, v.track_id, v.project_id, t.role, v.version_number, v.status,
-            v.source_kind, v.source_label, v.source_sha256, v.media_sha256,
-            v.language_code, v.project_revision, v.preflight_json,
-            v.parent_version_id, v.source_task_id, v.created_at_ms,
-            CASE WHEN t.current_version_id = v.id THEN 1 ELSE 0 END
-         FROM subtitle_versions v
-         JOIN subtitle_tracks t ON t.id = v.track_id
-         WHERE v.project_id = ?1
-         ORDER BY v.created_at_ms DESC, v.version_number DESC, v.id DESC",
-    )?;
-    let rows = statement
-        .query_map(params![project.id], |row| {
-            Ok((
-                row.get::<_, String>(0)?,
-                row.get::<_, String>(1)?,
-                row.get::<_, String>(2)?,
-                row.get::<_, String>(3)?,
-                row.get::<_, i64>(4)?,
-                row.get::<_, String>(5)?,
-                row.get::<_, String>(6)?,
-                row.get::<_, String>(7)?,
-                row.get::<_, String>(8)?,
-                row.get::<_, String>(9)?,
-                row.get::<_, String>(10)?,
-                row.get::<_, i64>(11)?,
-                row.get::<_, String>(12)?,
-                row.get::<_, Option<String>>(13)?,
-                row.get::<_, Option<String>>(14)?,
-                row.get::<_, i64>(15)?,
-                row.get::<_, bool>(16)?,
-            ))
-        })?
-        .collect::<Result<Vec<_>, _>>()?;
-
-    rows.into_iter()
-        .map(|row| {
-            let preflight = serde_json::from_str(&row.12)?;
-            let segments = load_segments(&connection, &row.0)?;
-            Ok(SubtitleVersion {
-                id: row.0,
-                track_id: row.1,
-                project_id: row.2,
-                role: row.3,
-                version_number: row.4,
-                status: row.5,
-                source_kind: row.6,
-                source_label: row.7,
-                source_sha256: row.8,
-                media_sha256: row.9,
-                language_code: row.10,
-                project_revision: row.11,
-                parent_version_id: row.13,
-                source_task_id: row.14,
-                preflight,
-                created_at_ms: row.15,
-                is_current: row.16,
-                segments,
-            })
-        })
-        .collect()
-}
 
 pub fn revise_subtitle_version(
     store: &ProjectStore,
@@ -687,11 +668,7 @@ pub fn revise_subtitle_version(
         ));
     }
 
-    let versions = list_subtitle_versions(store, &input.project_id)?;
-    let base = versions
-        .into_iter()
-        .find(|version| version.id == input.base_version_id)
-        .ok_or_else(|| SubtitleError::VersionNotFound(input.base_version_id.clone()))?;
+    let base = get_subtitle_version(store, &input.project_id, &input.base_version_id)?;
     if !base.is_current {
         return Err(SubtitleError::VersionChanged);
     }
@@ -847,20 +824,11 @@ pub fn restore_subtitle_version(
             "当前版本不需要恢复".to_owned(),
         ));
     }
-    let versions = list_subtitle_versions(store, &input.project_id)?;
-    let current = versions
-        .iter()
-        .find(|version| version.id == input.current_version_id)
-        .cloned()
-        .ok_or_else(|| SubtitleError::VersionNotFound(input.current_version_id.clone()))?;
+    let current = get_subtitle_version(store, &input.project_id, &input.current_version_id)?;
     if !current.is_current {
         return Err(SubtitleError::VersionChanged);
     }
-    let restore = versions
-        .iter()
-        .find(|version| version.id == input.restore_version_id)
-        .cloned()
-        .ok_or_else(|| SubtitleError::VersionNotFound(input.restore_version_id.clone()))?;
+    let restore = get_subtitle_version(store, &input.project_id, &input.restore_version_id)?;
     if restore.track_id != current.track_id {
         return Err(SubtitleError::InvalidRevision(
             "只能恢复同一字幕轨的历史版本".to_owned(),
@@ -1135,10 +1103,7 @@ fn persist_revision_version(
         return Err(SubtitleError::ProjectChanged);
     }
     transaction.commit()?;
-    list_subtitle_versions(store, &current.project_id)?
-        .into_iter()
-        .find(|version| version.id == version_id)
-        .ok_or_else(|| StoreError::Validation("字幕修正已写入，但无法重新读取".to_owned()).into())
+    get_subtitle_version(store, &current.project_id, &version_id)
 }
 
 fn persist_import(
@@ -1307,10 +1272,7 @@ fn persist_import(
     }
     transaction.commit()?;
 
-    list_subtitle_versions(store, project_id)?
-        .into_iter()
-        .find(|version| version.id == version_id)
-        .ok_or_else(|| StoreError::Validation("字幕版本已写入，但无法重新读取".to_owned()).into())
+    get_subtitle_version(store, project_id, &version_id)
 }
 
 fn load_segments(
@@ -1812,6 +1774,10 @@ fn now_ms() -> Result<i64, StoreError> {
 
 #[cfg(test)]
 mod tests {
+    mod read_tests;
+    mod metadata_page_tests;
+    mod metadata_benchmark;
+    mod current_track_tests;
     use std::{fs, process::Command};
 
     use crate::{domain::CreateLocalProjectInput, media};

@@ -1,3 +1,4 @@
+import type { EpisodePagination } from "../library/useCollectionEpisodePages";
 import { useCallback, useRef, useState } from "react";
 import { formatDuration } from "../../lib/format";
 import type {
@@ -28,7 +29,6 @@ import {
 } from "./playbackPreferences";
 import "./player-feedback.css";
 import "./player-fullscreen.css";
-import { useSummaryCompletionNotice } from "../summary/useSummaryCompletionNotice";
 type PlayerScreenProps = {
   project: Project;
   preparation: MediaPreparation;
@@ -37,6 +37,7 @@ type PlayerScreenProps = {
   drawerTab: ShellDrawerTab | null;
   contextMenu: ShellContextMenu | null;
   episodeNavigation: EpisodeNavigationState;
+  episodePagination?: EpisodePagination;
   onBack: () => void;
   onCloseDrawer: () => void;
   onSelectDrawer: (tab: ShellDrawerTab) => void;
@@ -57,6 +58,7 @@ export function PlayerScreen({
   drawerTab,
   contextMenu,
   episodeNavigation,
+  episodePagination,
   onBack,
   onCloseDrawer,
   onSelectDrawer,
@@ -74,7 +76,6 @@ export function PlayerScreen({
   const [switchingEpisode, setSwitchingEpisode] = useState(false);
   const [playerError, setPlayerError] = useState<string | null>(null);
   const [captionsVisible, setCaptionsVisible] = useState(true);
-  useSummaryCompletionNotice(project.id, onNotice);
   const { seekStepSeconds, changeSeekStep } = useSeekStepPreference();
   const {
     subtitleDisplayPreferences,
@@ -117,6 +118,7 @@ export function PlayerScreen({
     toggleMuted,
     toggleFullscreen,
     seekTo,
+    handleSeekBoundary,
     changeVolume,
     changePlaybackRate,
     changeSubtitleMode,
@@ -143,7 +145,7 @@ export function PlayerScreen({
     useFullscreenControlVisibility(fullscreen);
   const currentEpisode = episodeNavigation.episodes.find(
     (episode) => episode.projectId === project.id,
-  );
+  ) ?? (episodeNavigation.currentEpisode?.projectId === project.id ? episodeNavigation.currentEpisode : null);
   const drawerContextLabel =
     currentEpisode?.seasonNumber !== null &&
     currentEpisode?.seasonNumber !== undefined &&
@@ -244,6 +246,8 @@ export function PlayerScreen({
               onPlay={handlePlay}
               onPause={handlePause}
               onEnded={handlePlaybackEnded}
+              onSeeking={handleSeekBoundary}
+              onSeeked={handleSeekBoundary}
               onError={() => requestProxy("media_element_error")}
             />
 
@@ -357,30 +361,29 @@ export function PlayerScreen({
           />
         </main>
 
-        {drawerTab ? (
-          <PlayerAuxiliaryDrawer
-            activeTab={drawerTab}
-            projectId={project.id}
-            mediaTitle={project.title}
-            contextLabel={drawerContextLabel}
-            contextStatus={drawerContextStatus}
-            episodeSummary={drawerEpisodeSummary}
-            originalVersion={currentSubtitle}
-            translatedVersion={currentTranslation}
-            activeOriginal={activeOriginal}
-            activeTranslation={activeTranslation}
-            episodeNavigation={episodeNavigation}
-            switchingEpisode={switchingEpisode}
-            positionMs={positionMs}
-            durationMs={durationMs}
-            onSelectTab={onSelectDrawer}
-            onClose={closeDrawer}
-            onSwitchEpisode={(episode) => void switchEpisode(episode)}
-            onManageSubtitles={onManageSubtitles}
-            onSeekTo={seekTo}
-            onPausePlayback={pausePlayback}
-          />
-        ) : null}
+        <PlayerAuxiliaryDrawer
+          activeTab={drawerTab}
+          projectId={project.id}
+          mediaTitle={project.title}
+          contextLabel={drawerContextLabel}
+          contextStatus={drawerContextStatus}
+          episodeSummary={drawerEpisodeSummary}
+          originalVersion={currentSubtitle}
+          translatedVersion={currentTranslation}
+          activeOriginal={activeOriginal}
+          activeTranslation={activeTranslation}
+          episodeNavigation={episodeNavigation}
+          episodePagination={episodePagination}
+          switchingEpisode={switchingEpisode}
+          positionMs={positionMs}
+          durationMs={durationMs}
+          onSelectTab={onSelectDrawer}
+          onClose={closeDrawer}
+          onSwitchEpisode={(episode) => void switchEpisode(episode)}
+          onManageSubtitles={onManageSubtitles}
+          onSeekTo={seekTo}
+          onPausePlayback={pausePlayback}
+        />
       </div>
 
       {contextMenu ? (

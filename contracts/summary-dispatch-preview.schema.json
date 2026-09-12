@@ -1,0 +1,191 @@
+{
+  "$defs": {
+    "AnalysisScope": {
+      "enum": [
+        "current_progress",
+        "full_video"
+      ],
+      "type": "string"
+    },
+    "SummaryExecutionKind": {
+      "enum": [
+        "manual",
+        "codex",
+        "api"
+      ],
+      "type": "string"
+    },
+    "SummaryFrame": {
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "ordinal": {
+          "format": "uint",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "relativePath": {
+          "type": "string"
+        },
+        "sha256": {
+          "type": "string"
+        },
+        "timestampMs": {
+          "format": "int64",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "ordinal",
+        "timestampMs",
+        "relativePath",
+        "sha256"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "examples": [
+    {
+      "confirmationSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "endpoint": null,
+      "executionKind": "codex",
+      "firstStartMs": 0,
+      "frames": [
+        {
+          "id": "frame",
+          "ordinal": 0,
+          "relativePath": "input/frames/frame.jpg",
+          "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "timestampMs": 1000
+        }
+      ],
+      "lastEndMs": 16000,
+      "model": "Codex 默认模型",
+      "oneTimeRequirements": "",
+      "playbackCutoffMs": 15000,
+      "promptTemplate": "自动判断",
+      "receiver": "OpenAI（经本机 Codex）",
+      "scope": "current_progress",
+      "segmentCount": 12,
+      "subtitleLanguage": "en",
+      "subtitleRole": "original",
+      "subtitleVersionId": "subtitle-1",
+      "subtitleVersionNumber": 3,
+      "taskId": "summary-task-1"
+    }
+  ],
+  "properties": {
+    "confirmationSha256": {
+      "type": "string"
+    },
+    "endpoint": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "executionKind": {
+      "$ref": "#/$defs/SummaryExecutionKind"
+    },
+    "firstStartMs": {
+      "format": "int64",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "frames": {
+      "items": {
+        "$ref": "#/$defs/SummaryFrame"
+      },
+      "type": "array"
+    },
+    "lastEndMs": {
+      "format": "int64",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "model": {
+      "type": "string"
+    },
+    "oneTimeRequirements": {
+      "type": "string"
+    },
+    "playbackCutoffMs": {
+      "format": "int64",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "promptTemplate": {
+      "type": "string"
+    },
+    "receiver": {
+      "type": "string"
+    },
+    "scope": {
+      "$ref": "#/$defs/AnalysisScope"
+    },
+    "segmentCount": {
+      "format": "uint",
+      "maximum": 9007199254740991,
+      "minimum": 1,
+      "type": "integer"
+    },
+    "subtitleLanguage": {
+      "type": "string"
+    },
+    "subtitleRole": {
+      "type": "string"
+    },
+    "subtitleVersionId": {
+      "type": "string"
+    },
+    "subtitleVersionNumber": {
+      "format": "int64",
+      "maximum": 9007199254740991,
+      "minimum": 1,
+      "type": "integer"
+    },
+    "taskId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "taskId",
+    "confirmationSha256",
+    "executionKind",
+    "receiver",
+    "endpoint",
+    "model",
+    "scope",
+    "playbackCutoffMs",
+    "subtitleVersionId",
+    "subtitleVersionNumber",
+    "subtitleRole",
+    "subtitleLanguage",
+    "segmentCount",
+    "firstStartMs",
+    "lastEndMs",
+    "promptTemplate",
+    "oneTimeRequirements",
+    "frames"
+  ],
+  "title": "SummaryDispatchPreview",
+  "type": "object"
+}

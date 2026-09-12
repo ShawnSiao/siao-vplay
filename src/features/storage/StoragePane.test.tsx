@@ -116,3 +116,33 @@ describe("StoragePane", () => {
     expect(screen.getByRole("button", { name: "继续迁移" })).toBeVisible();
   });
 });
+
+
+it("does not open the saved location under a different draft directory", () => {
+  const value = controller({ reportDirectory: "W:/unsaved-report" });
+  render(<StoragePane controller={value} />);
+  const button = screen.getByTitle("应用设置后可打开新位置");
+  expect(button).toBeDisabled();
+  fireEvent.click(button);
+  expect(value.openLocation).not.toHaveBeenCalled();
+});
+
+
+it("shows the initial read failure and an explicit retry instead of indefinite loading", () => {
+  const value = controller({ settings: null, error: "存储配置暂时不可读", operation: null });
+  render(<StoragePane controller={value} />);
+  expect(screen.getByRole("alert")).toHaveTextContent("存储配置暂时不可读");
+  expect(screen.queryByText("正在读取存储位置…")).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "重新读取存储设置" }));
+  expect(value.reload).toHaveBeenCalledTimes(1);
+});
+
+
+it("offers a read-only refresh when a save result is uncertain", () => {
+  const value = controller({ error: "存储设置保存结果尚未确认", reportDirectory: "W:/draft" });
+  render(<StoragePane controller={value} />);
+  fireEvent.click(screen.getByRole("button", { name: "重新读取存储设置" }));
+  expect(value.reload).toHaveBeenCalledTimes(1);
+  expect(value.saveDefaults).not.toHaveBeenCalled();
+  expect(screen.getByText("W:/draft")).toBeVisible();
+});

@@ -1,0 +1,63 @@
+{
+  "$defs": {
+    "OldResourceVersionCandidate": {
+      "properties": {
+        "reclaimableBytes": {
+          "format": "uint64",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "resourceId": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "resourceId",
+        "version",
+        "reclaimableBytes"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "candidates": {
+      "items": {
+        "$ref": "#/$defs/OldResourceVersionCandidate"
+      },
+      "type": "array"
+    },
+    "confirmationRequired": {
+      "type": "boolean"
+    },
+    "planFingerprint": {
+      "pattern": "^[a-f0-9]{64}$",
+      "type": "string"
+    },
+    "protectedVersions": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "reclaimableBytes": {
+      "format": "uint64",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "planFingerprint",
+    "candidates",
+    "protectedVersions",
+    "reclaimableBytes",
+    "confirmationRequired"
+  ],
+  "title": "OldResourceVersionCleanupPlan",
+  "type": "object"
+}

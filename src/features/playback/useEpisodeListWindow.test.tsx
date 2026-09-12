@@ -1,0 +1,30 @@
+import { act, renderHook } from "@testing-library/react";
+import { expect, it, vi } from "vitest";
+import { mediaSummary } from "../library/libraryControllerTestFixtures";
+import { useEpisodeListWindow } from "./useEpisodeListWindow";
+const episodes = Array.from({ length: 48 }, (_, index) => mediaSummary(`episode-${index + 1}`));
+it("allows a new scope request while the old one is pending without releasing the new request early", async () => {
+  const { result, rerender } = renderHook(({ scope }) => useEpisodeListWindow(scope, episodes, "episode-1"), { initialProps: { scope: "a" } });
+  let finishOld!: (value: boolean) => void, finishNew!: (value: boolean) => void;
+  const oldRead = vi.fn(() => new Promise<boolean>(resolve => { finishOld = resolve; }));
+  const newRead = vi.fn(() => new Promise<boolean>(resolve => { finishNew = resolve; }));
+  act(() => { void result.current.loadMore(oldRead); });
+  rerender({ scope: "b" });
+  act(() => { void result.current.loadMore(newRead); });
+  expect(newRead).toHaveBeenCalledOnce();
+  await act(async () => { finishOld(true); });
+  expect(result.current.start).toBe(0);
+  const duplicate = vi.fn().mockResolvedValue(true);
+  act(() => { void result.current.loadMore(duplicate); });
+  expect(duplicate).not.toHaveBeenCalled();
+  await act(async () => { finishNew(false); });
+});
+it("a previous-page action wins over an append completion", async () => {
+  const { result } = renderHook(() => useEpisodeListWindow("a", episodes, "episode-1"));
+  act(() => { result.current.next?.(); });
+  let finish!: (value: boolean) => void;
+  act(() => { void result.current.loadMore(() => new Promise(resolve => { finish = resolve; })); });
+  act(() => { result.current.previous?.(); });
+  await act(async () => { finish(true); });
+  expect(result.current.start).toBe(0);
+});

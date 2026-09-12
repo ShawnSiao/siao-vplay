@@ -1,0 +1,141 @@
+{
+  "$defs": {
+    "SubtitleBurnMode": {
+      "enum": [
+        "translation",
+        "bilingual"
+      ],
+      "type": "string"
+    },
+    "TaskStatus": {
+      "enum": [
+        "queued",
+        "running",
+        "validating",
+        "completed",
+        "failed",
+        "cancelled",
+        "interrupted"
+      ],
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "completedAtMs": {
+      "format": "int64",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "createdAtMs": {
+      "format": "int64",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+    },
+    "errorCode": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "errorMessage": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "id": {
+      "type": "string"
+    },
+    "manifestPath": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "mode": {
+      "$ref": "#/$defs/SubtitleBurnMode"
+    },
+    "outputPath": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "outputSha256": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "progress": {
+      "format": "double",
+      "maximum": 1,
+      "minimum": 0,
+      "type": "number"
+    },
+    "projectId": {
+      "type": "string"
+    },
+    "runtimeVersion": {
+      "type": "string"
+    },
+    "sourceVersionId": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "stage": {
+      "type": "string"
+    },
+    "startedAtMs": {
+      "format": "int64",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "status": {
+      "$ref": "#/$defs/TaskStatus"
+    },
+    "translationVersionId": {
+      "type": "string"
+    },
+    "updatedAtMs": {
+      "format": "int64",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "id",
+    "projectId",
+    "status",
+    "stage",
+    "progress",
+    "mode",
+    "sourceVersionId",
+    "translationVersionId",
+    "outputPath",
+    "manifestPath",
+    "outputSha256",
+    "runtimeVersion",
+    "errorCode",
+    "errorMessage",
+    "createdAtMs",
+    "updatedAtMs",
+    "startedAtMs",
+    "completedAtMs"
+  ],
+  "title": "SubtitleBurnJob",
+  "type": "object"
+}

@@ -38,6 +38,7 @@ pub struct StartLearningTaskInput {
 #[serde(rename_all = "camelCase")]
 pub struct ResumeAiTaskInput {
     pub task_id: String,
+    pub confirmation_sha256: String,
     pub execution: AiExecutionTarget,
     pub authorization: AiMaterialAuthorization,
 }
@@ -54,6 +55,8 @@ pub enum AiTaskError {
     Understanding(#[from] UnderstandingError),
     #[error(transparent)]
     Learning(#[from] LearningError),
+    #[error(transparent)]
+    Translation(#[from] crate::translation::TranslationError),
     #[error(transparent)]
     Codex(#[from] CodexRunnerError),
     #[error("AI 服务请求失败")]
@@ -77,6 +80,7 @@ impl AiTaskError {
             Self::Learning(error) => {
                 AiCommandError::task(error.code(), error.to_string(), false, None)
             }
+            Self::Translation(error) => AiCommandError::task(error.code(), error.to_string(), false, None),
             Self::Codex(error) => AiCommandError::task(
                 error.code(),
                 error.to_string(),

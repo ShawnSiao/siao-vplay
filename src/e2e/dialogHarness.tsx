@@ -6,6 +6,7 @@ import "../styles.css";
 
 export function DialogHarness() {
   const [open, setOpen] = useState(true);
+  const [nested, setNested] = useState(false);
 
   return (
     <main>
@@ -34,6 +35,11 @@ export function DialogHarness() {
             <span>字幕名称</span>
             <input defaultValue="第一集原文字幕" />
           </label>
+          <button className="button quiet" type="button" onClick={() => setNested(true)}>打开嵌套检查</button>
+          {nested ? <Dialog title="嵌套检查" onClose={() => setNested(false)} actions={<button type="button">末尾操作</button>}>
+            <input aria-label="嵌套输入" />
+            <div hidden><button type="button">隐藏操作</button></div>
+          </Dialog> : null}
           {Array.from({ length: 36 }, (_, index) => (
             <p key={index}>第 {index + 1} 条字幕预览内容，仅正文区域滚动。</p>
           ))}

@@ -1,0 +1,75 @@
+{
+  "$defs": {
+    "LibraryRelocationMismatch": {
+      "properties": {
+        "projectId": {
+          "type": "string"
+        },
+        "reason": {
+          "$ref": "#/$defs/RelocationMismatchReason"
+        },
+        "relativePath": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "projectId",
+        "relativePath",
+        "reason"
+      ],
+      "type": "object"
+    },
+    "RelocationMismatchReason": {
+      "enum": [
+        "missing",
+        "fingerprint_changed",
+        "invalid_relative_path"
+      ],
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "currentRootPath": {
+      "type": "string"
+    },
+    "expiresAtMs": {
+      "format": "int64",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "matchedItemCount": {
+      "format": "uint64",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "mismatches": {
+      "items": {
+        "$ref": "#/$defs/LibraryRelocationMismatch"
+      },
+      "type": "array"
+    },
+    "newRootPath": {
+      "type": "string"
+    },
+    "previewToken": {
+      "type": "string"
+    },
+    "rootId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "previewToken",
+    "rootId",
+    "currentRootPath",
+    "newRootPath",
+    "matchedItemCount",
+    "mismatches",
+    "expiresAtMs"
+  ],
+  "title": "LibraryRootRelocationPreview",
+  "type": "object"
+}

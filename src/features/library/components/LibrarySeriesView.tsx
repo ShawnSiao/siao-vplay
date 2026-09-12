@@ -1,22 +1,25 @@
-import { useState } from "react";
+import type { LibraryCollectionPagination } from "../useLibraryCollectionPaging";
+import { PagedMediaList } from "./PagedMediaList";
+import type { CollectionOverviewReader } from "../useCollectionOverviewPages";
+import { CollectionOverviewGroup } from "./CollectionOverviewGroup";
 
 import { MenuPopover } from "../../../components/MenuPopover";
 import { playbackUrl } from "../../../lib/desktop";
 import { formatDuration } from "../../../lib/format";
 import type {
   CollectionDetail,
-  CollectionSummary,
-  LibraryHome,
   LibraryMediaSummary,
 } from "../../../types";
 import { LibraryMediaItem } from "./LibraryMediaItem";
 
 type LibrarySeriesViewProps = {
-  home: LibraryHome;
+  refreshKey?: unknown;
+  readCollections?: CollectionOverviewReader;
   currentCollection: CollectionDetail | null;
   currentEpisodes: LibraryMediaSummary[];
   selectedSeason: number | null;
   collectionLoading: boolean;
+  collectionPagination?: LibraryCollectionPagination;
   mutationPending: boolean;
   onOpenCollection: (collectionId: string) => void;
   onCloseCollection: () => void;
@@ -32,106 +35,16 @@ type LibrarySeriesViewProps = {
   onAddToCollection: (collectionId: string, projectId: string) => Promise<unknown>;
   onRemoveFromCollection: (collectionId: string, projectId: string) => Promise<unknown>;
   onSetWatchLater: (projectId: string, enabled: boolean) => Promise<unknown>;
+  onSetWatched: (projectId: string, watched: boolean) => Promise<unknown>;
 };
-
-function SeriesCard({
-  collection,
-  onOpen,
-}: {
-  collection: CollectionSummary;
-  onOpen: () => void;
-}) {
-  const progress = collection.itemCount
-    ? Math.round((collection.watchedCount / collection.itemCount) * 100)
-    : 0;
-  return (
-    <button
-      className="library-series-tile"
-      type="button"
-      aria-label={`打开合集 ${collection.title}`}
-      onClick={onOpen}
-    >
-      <span className="library-series-tile-poster">
-        {collection.posterPath ? (
-          <img src={playbackUrl(collection.posterPath)} alt="" />
-        ) : (
-          <span aria-hidden="true">{collection.rootId ? "▦" : "▤"}</span>
-        )}
-        <i className="library-series-kind">
-          {collection.rootId ? "文件夹剧集" : "自建合集"}
-        </i>
-      </span>
-      <span className="library-series-tile-copy">
-        <strong>{collection.title}</strong>
-        <small>
-          {collection.itemCount} 集
-          {collection.seasonCount ? ` · ${collection.seasonCount} 季` : ""}
-          {collection.totalDurationMs
-            ? ` · ${formatDuration(collection.totalDurationMs)}`
-            : ""}
-        </small>
-        <span className="library-progress-track" aria-label={`观看进度 ${progress}%`}>
-          <i style={{ width: `${progress}%` }} />
-        </span>
-        <small>{collection.watchedCount} 集已看</small>
-      </span>
-    </button>
-  );
-}
-
-function CollectionGroup({
-  title,
-  description,
-  collections,
-  onOpenCollection,
-}: {
-  title: string;
-  description: string;
-  collections: CollectionSummary[];
-  onOpenCollection: (collectionId: string) => void;
-}) {
-  return (
-    <section className="library-section" aria-labelledby={`${title}-title`}>
-      <div className="library-section-heading">
-        <div>
-          <h2 id={`${title}-title`}>{title}</h2>
-          <p>{description}</p>
-        </div>
-        <span>{collections.length} 个</span>
-      </div>
-      {collections.length ? (
-        <div className="library-series-grid">
-          {collections.map((collection) => (
-            <SeriesCard
-              key={collection.id}
-              collection={collection}
-              onOpen={() => onOpenCollection(collection.id)}
-            />
-          ))}
-        </div>
-      ) : (
-        <div className="library-empty-panel compact">当前分组还没有内容。</div>
-      )}
-    </section>
-  );
-}
 
 function CollectionDetailView(props: LibrarySeriesViewProps) {
   const { currentCollection } = props;
-  const paginationKey = `${currentCollection?.summary.id ?? "none"}:${props.selectedSeason ?? "all"}`;
-  const [episodePage, setEpisodePage] = useState({
-    key: paginationKey,
-    count: 50,
-  });
-  const visibleEpisodeCount =
-    episodePage.key === paginationKey ? episodePage.count : 50;
   if (!currentCollection) return null;
   const { summary } = currentCollection;
   const progress = summary.itemCount
     ? Math.round((summary.watchedCount / summary.itemCount) * 100)
     : 0;
-  const visibleEpisodes = props.currentEpisodes.slice(0, visibleEpisodeCount);
-  const hiddenEpisodeCount = props.currentEpisodes.length - visibleEpisodes.length;
 
   return (
     <div className="library-page library-collection-detail">
@@ -221,13 +134,12 @@ function CollectionDetailView(props: LibrarySeriesViewProps) {
           </div>
           {props.collectionLoading ? (
             <div className="library-loading"><span className="spinner" />正在读取单集…</div>
-          ) : props.currentEpisodes.length ? (
-            <div className="library-media-list">
-              {visibleEpisodes.map((media) => (
+          ) : <PagedMediaList key={`${summary.id}:${props.selectedSeason ?? "all"}`} items={props.currentEpisodes} page={props.collectionPagination}
+              empty={<div className="library-empty-panel"><strong>合集还是空的</strong><p>可从「未分类」将现有视频加入这个合集。</p></div>}
+              renderItem={(media) => (
                 <LibraryMediaItem
                   key={media.projectId}
                   media={media}
-                  collections={props.home.collections}
                   context={{
                     kind: "collection",
                     collectionId: summary.id,
@@ -241,34 +153,9 @@ function CollectionDetailView(props: LibrarySeriesViewProps) {
                   onAddToCollection={props.onAddToCollection}
                   onRemoveFromCollection={props.onRemoveFromCollection}
                   onSetWatchLater={props.onSetWatchLater}
+                  onSetWatched={props.onSetWatched}
                 />
-              ))}
-              {hiddenEpisodeCount > 0 ? (
-                <div className="library-episode-load-more">
-                  <span>
-                    已显示 {visibleEpisodes.length} / {props.currentEpisodes.length} 集
-                  </span>
-                  <button
-                    className="library-heading-primary"
-                    type="button"
-                    onClick={() =>
-                      setEpisodePage({
-                        key: paginationKey,
-                        count: visibleEpisodeCount + 50,
-                      })
-                    }
-                  >
-                    再显示 {Math.min(50, hiddenEpisodeCount)} 集
-                  </button>
-                </div>
-              ) : null}
-            </div>
-          ) : (
-            <div className="library-empty-panel">
-              <strong>合集还是空的</strong>
-              <p>可从「未分类」将现有视频加入这个合集。</p>
-            </div>
-          )}
+              )} />}
         </section>
       </div>
     </div>
@@ -277,15 +164,6 @@ function CollectionDetailView(props: LibrarySeriesViewProps) {
 
 export function LibrarySeriesView(props: LibrarySeriesViewProps) {
   if (props.currentCollection) return <CollectionDetailView {...props} />;
-  const allCollections = props.home.collections.filter(
-    (collection) => collection.systemKey === null,
-  );
-  const folderCollections = allCollections.filter(
-    (collection) => collection.rootId !== null,
-  );
-  const manualCollections = allCollections.filter(
-    (collection) => collection.rootId === null,
-  );
 
   return (
     <div className="library-page library-series-page">
@@ -299,16 +177,16 @@ export function LibrarySeriesView(props: LibrarySeriesViewProps) {
           新建合集
         </button>
       </header>
-      <CollectionGroup
+      <CollectionOverviewGroup
         title="文件夹剧集"
         description="由授权文件夹识别并保持目录关联"
-        collections={folderCollections}
+        rootLinked={true} refreshKey={props.refreshKey} readCollections={props.readCollections}
         onOpenCollection={props.onOpenCollection}
       />
-      <CollectionGroup
+      <CollectionOverviewGroup
         title="自建合集"
         description="手动整理现有视频，不复制源文件"
-        collections={manualCollections}
+        rootLinked={false} refreshKey={props.refreshKey} readCollections={props.readCollections}
         onOpenCollection={props.onOpenCollection}
       />
     </div>

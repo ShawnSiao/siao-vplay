@@ -2,13 +2,16 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct SubtitleBurnStyle {
     pub text_size: SubtitleBurnTextSize,
+    #[cfg_attr(test, schemars(range(min = 0, max = 1)))]
     pub position_y: f64,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub enum SubtitleBurnTextSize {
     Small,
     Medium,

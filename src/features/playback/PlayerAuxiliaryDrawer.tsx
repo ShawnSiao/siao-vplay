@@ -1,4 +1,6 @@
+import type { EpisodePagination } from "../library/useCollectionEpisodePages";
 import { LearningPanel } from "../../components/LearningPanel";
+import { useState } from "react";
 import { UnderstandingPanel } from "../../components/UnderstandingPanel";
 import type {
   EpisodeReference,
@@ -12,7 +14,7 @@ import { PlayerDrawer } from "./PlayerDrawer";
 import { SubtitleTranscriptPanel } from "./SubtitleTranscriptPanel";
 
 type PlayerAuxiliaryDrawerProps = {
-  activeTab: ShellDrawerTab;
+  activeTab: ShellDrawerTab | null;
   projectId: string;
   mediaTitle: string;
   contextLabel: string;
@@ -23,6 +25,7 @@ type PlayerAuxiliaryDrawerProps = {
   activeOriginal: SubtitleSegment | null;
   activeTranslation: SubtitleSegment | null;
   episodeNavigation: EpisodeNavigationState;
+  episodePagination?: EpisodePagination;
   switchingEpisode: boolean;
   positionMs: number;
   durationMs: number | null;
@@ -46,6 +49,7 @@ export function PlayerAuxiliaryDrawer({
   activeOriginal,
   activeTranslation,
   episodeNavigation,
+  episodePagination,
   switchingEpisode,
   positionMs,
   durationMs,
@@ -56,11 +60,14 @@ export function PlayerAuxiliaryDrawer({
   onSeekTo,
   onPausePlayback,
 }: PlayerAuxiliaryDrawerProps) {
+  const [learningProject, setLearningProject] = useState<string | null>(null);
+  if (activeTab === "learn" && learningProject !== projectId) setLearningProject(projectId);
   const transcriptVersionKey = `${originalVersion?.id ?? "none"}:${originalVersion?.versionNumber ?? 0}:${translatedVersion?.id ?? "none"}:${translatedVersion?.versionNumber ?? 0}`;
 
   return (
     <PlayerDrawer
-      activeTab={activeTab}
+      activeTab={activeTab ?? "learn"}
+      hidden={activeTab === null}
       mediaTitle={mediaTitle}
       contextLabel={contextLabel}
       contextStatus={contextStatus}
@@ -68,11 +75,31 @@ export function PlayerAuxiliaryDrawer({
       onSelectTab={onSelectTab}
       onClose={onClose}
     >
+      {learningProject === projectId ? (
+        <LearningPanel
+          embedded
+          visible={activeTab === "learn"}
+          key={projectId}
+          projectId={projectId}
+          playbackPositionMs={positionMs}
+          sourceVersion={originalVersion}
+          translationVersion={translatedVersion}
+          sourceSegment={activeOriginal}
+          translationSegment={activeTranslation}
+          onPrepareSubtitles={onManageSubtitles}
+          onClose={onClose}
+          onJump={onSeekTo}
+          onPausePlayback={onPausePlayback}
+        />
+      ) : null}
       {activeTab === "episodes" ? (
         <EpisodeDrawer
           projectId={projectId}
+          mediaTitle={mediaTitle}
+          pagination={episodePagination}
           detail={episodeNavigation.detail}
           episodes={episodeNavigation.episodes}
+          currentEpisode={episodeNavigation.currentEpisode}
           neighbors={episodeNavigation.neighbors}
           loading={episodeNavigation.loading}
           error={episodeNavigation.error}
@@ -95,22 +122,7 @@ export function PlayerAuxiliaryDrawer({
           onJump={onSeekTo}
           onPausePlayback={onPausePlayback}
         />
-      ) : activeTab === "learn" ? (
-        <LearningPanel
-          embedded
-          key={`${projectId}:${activeOriginal?.id ?? "no-line"}`}
-          projectId={projectId}
-          playbackPositionMs={positionMs}
-          sourceVersion={originalVersion}
-          translationVersion={translatedVersion}
-          sourceSegment={activeOriginal}
-          translationSegment={activeTranslation}
-          onPrepareSubtitles={onManageSubtitles}
-          onClose={onClose}
-          onJump={onSeekTo}
-          onPausePlayback={onPausePlayback}
-        />
-      ) : (
+      ) : activeTab === "transcript" ? (
         <SubtitleTranscriptPanel
           key={transcriptVersionKey}
           originalVersion={originalVersion}
@@ -119,7 +131,7 @@ export function PlayerAuxiliaryDrawer({
           onPause={onPausePlayback}
           onSeekTo={onSeekTo}
         />
-      )}
+      ) : null}
     </PlayerDrawer>
   );
 }

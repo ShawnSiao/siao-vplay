@@ -25,6 +25,7 @@ const catalog: LocalResourceCatalog = {
   }],
   profiles: [],
   resources: resourceIds.map((id) => ({
+    ...{ installedSize: null, expectedDownloadSize: null, artifact: null, entrypoints: {}, sourceCommit: null, patchSha256: null, requires: null, distribution: null },
     id,
     version: "current",
     platform: "windows-x86_64",
@@ -34,6 +35,7 @@ const catalog: LocalResourceCatalog = {
     license: "test",
     sourcePage: "https://example.com",
     artifact: {
+      stripComponents: null,
       url: `https://example.com/${id}`,
       size: 1,
       sha256: "a".repeat(64),
@@ -44,6 +46,7 @@ const catalog: LocalResourceCatalog = {
   })),
 };
 const status: LocalResourceStatus = {
+  snapshotRevision: 1,
   configured: true,
   selectedParent: "W:\\SiaoVPlay",
   resourceRoot: "W:\\SiaoVPlay\\SiaoVPlay",
@@ -62,7 +65,7 @@ const diagnostics: LocalResourceDiagnostics = {
   generatedAtMs: 1,
   catalogSource: "embedded",
   remoteCatalogEnabled: false,
-  remoteSignaturePolicy: "required",
+  maintenance: { transactionState: "none", scanState: "complete", stagingReviewCount: 0, receiptRecoveryCopyCount: 0 }, remoteSignaturePolicy: "required",
   rootState: "ready",
   resourceRoot: status.resourceRoot,
   preferredProfile: "standard",
@@ -76,7 +79,7 @@ const diagnostics: LocalResourceDiagnostics = {
     artifactSha256: "a".repeat(64),
     artifactUrl: `https://example.com/${id}`,
     healthCheck: "sha256",
-    versions: [],
+    versionsReadable: true, unverifiedReceiptCount: 0, versions: [],
   })),
   tasks: [],
 };

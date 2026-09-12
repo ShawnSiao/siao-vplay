@@ -5,6 +5,7 @@ import type { Explanation } from "../types";
 
 const desktopMocks = vi.hoisted(() => ({
   getCodexRuntimeStatus: vi.fn(),
+  getExplanationTask: vi.fn(),
   listExplanationTasks: vi.fn(),
   listExplanations: vi.fn(),
 }));

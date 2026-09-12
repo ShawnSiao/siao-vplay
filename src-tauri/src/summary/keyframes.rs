@@ -1,8 +1,8 @@
 use std::{
     collections::BTreeMap,
     fs,
-    path::{Path, PathBuf},
-    process::{Command, Stdio},
+    path::Path,
+    process::Command,
 };
 
 use serde::{Deserialize, Serialize};
@@ -16,15 +16,21 @@ use crate::{
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub(crate) struct SummaryFrame {
     pub id: String,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub ordinal: usize,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub timestamp_ms: i64,
     pub relative_path: String,
     pub sha256: String,
 }
 
-pub(crate) fn planned_timestamps(chunks: &[PlannedChunk]) -> Vec<(usize, i64)> {
+pub(crate) fn planned_timestamps(
+    chunks: &[PlannedChunk],
+    cutoff: Option<i64>,
+) -> Vec<(usize, i64)> {
     if chunks.is_empty() {
         return Vec::new();
     }
@@ -39,10 +45,25 @@ pub(crate) fn planned_timestamps(chunks: &[PlannedChunk]) -> Vec<(usize, i64)> {
             let chunk = &chunks[index];
             (
                 chunk.ordinal,
-                chunk.start_ms + (chunk.end_ms - chunk.start_ms) / 2,
+                (chunk.start_ms + (chunk.end_ms - chunk.start_ms) / 2)
+                    .min(cutoff.unwrap_or(i64::MAX)),
             )
         })
         .collect()
+}
+
+pub(super) fn frame_resource_lease() -> std::io::Result<crate::resource_usage::ResourceLease> {
+    crate::resource_leases::configured(&["ffmpeg-cpu"])
+}
+
+fn check_cancellation(store: &ProjectStore, task_id: &str) -> std::io::Result<()> {
+    let task = super::task_repository::SummaryTaskRepository::new(store)
+        .get(task_id)
+        .map_err(|error| std::io::Error::other(error.to_string()))?;
+    if task.status == "cancelled" || task.cancel_requested {
+        return Err(std::io::Error::new(std::io::ErrorKind::Interrupted, "总结已取消"));
+    }
+    Ok(())
 }
 
 pub(crate) fn extract(
@@ -55,6 +76,8 @@ pub(crate) fn extract(
     if timestamps.is_empty() {
         return Ok(Vec::new());
     }
+    check_cancellation(store, task_id)?;
+    let _lease = frame_resource_lease()?;
     let ffmpeg = media::ffmpeg_path().map_err(|error| StoreError::Validation(error.to_string()))?;
     let frames_directory = task_directory.join("frames");
     fs::create_dir_all(&frames_directory)?;
@@ -62,7 +85,8 @@ pub(crate) fn extract(
     for (index, (ordinal, timestamp)) in timestamps.iter().enumerate() {
         let name = format!("frame-{:03}.jpg", index + 1);
         let output = frames_directory.join(&name);
-        let status = hidden_command(&ffmpeg)
+        let mut command = hidden_command(&ffmpeg);
+        command
             .args([
                 "-hide_banner",
                 "-loglevel",
@@ -79,12 +103,12 @@ pub(crate) fn extract(
                 "3",
                 "-y",
             ])
-            .arg(&output)
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status()?;
-        if !status.success() || !output.is_file() {
+            .arg(&output);
+        let result = crate::cancellable_process::output_checked(&mut command, || {
+            check_cancellation(store, task_id)
+        })?;
+        check_cancellation(store, task_id)?;
+        if !result.status.success() || !output.is_file() {
             return Err(StoreError::Validation(format!(
                 "无法提取总结关键帧：{timestamp} ms"
             )));
@@ -97,6 +121,7 @@ pub(crate) fn extract(
             sha256: format!("{:x}", Sha256::digest(fs::read(&output)?)),
         });
     }
+    check_cancellation(store, task_id)?;
     fs::write(
         task_directory.join("frames.json"),
         serde_json::to_vec_pretty(&frames)
@@ -119,26 +144,6 @@ pub(crate) fn extract(
     Ok(frames)
 }
 
-pub(crate) fn for_chunk(directory: &Path, ordinal: usize) -> Result<Vec<PathBuf>, StoreError> {
-    let path = directory.join("frames.json");
-    if !path.is_file() {
-        return Ok(Vec::new());
-    }
-    let frames: Vec<SummaryFrame> = serde_json::from_slice(&fs::read(path)?)
-        .map_err(|error| StoreError::Validation(error.to_string()))?;
-    frames
-        .into_iter()
-        .filter(|frame| frame.ordinal == ordinal)
-        .map(|frame| {
-            let path = directory.join(frame.relative_path);
-            if !path.is_file() {
-                return Err(StoreError::Validation("总结关键帧文件缺失".to_owned()));
-            }
-            Ok(path)
-        })
-        .collect()
-}
-
 fn hidden_command(program: &Path) -> Command {
     let mut command = Command::new(program);
     #[cfg(windows)]
@@ -152,6 +157,109 @@ fn hidden_command(program: &Path) -> Command {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn cancelled_preparation_does_not_start_frame_extraction() {
+        let (directory, store, task) = super::super::test_support::prepared_summary();
+        let repository = super::super::task_repository::SummaryTaskRepository::new(&store);
+        repository.finish_cancelled(&task.id).unwrap();
+        let result = extract(&store, &task.id, "missing-media", directory.path(), &[(0, 100)]);
+        assert!(matches!(result, Err(StoreError::FileSystem(ref error))
+            if error.kind() == std::io::ErrorKind::Interrupted));
+        assert!(!directory.path().join("frames").exists());
+        assert!(repository.set_task_state(&task.id, "failed", "frame_extraction_failed", 0.0).is_err());
+        assert_eq!(repository.get(&task.id).unwrap().status, "cancelled");
+    }
+
+    #[test]
+    fn cancelling_prepared_task_stops_its_running_frame_process() {
+        use std::{thread, time::{Duration, Instant}};
+        let (directory, store, task) = super::super::test_support::prepared_summary();
+        let marker = directory.path().join("running-frame.txt");
+        thread::scope(|scope| {
+            let worker = scope.spawn(|| {
+                let mut command = Command::new(std::env::current_exe().unwrap());
+                command.args(["--exact", "cancellable_process::tests::slow_child", "--ignored"])
+                    .env("SIAOVPLAY_CANCEL_TEST_MARKER", &marker);
+                crate::cancellable_process::output_checked(&mut command, || check_cancellation(&store, &task.id))
+            });
+            let started = Instant::now();
+            while !marker.exists() && started.elapsed() < Duration::from_secs(5) {
+                thread::sleep(Duration::from_millis(10));
+            }
+            assert!(marker.exists(), "owned child must start before cancellation");
+            super::super::task_repository::SummaryTaskRepository::new(&store)
+                .finish_cancelled(&task.id).unwrap();
+            let cancelled_at = Instant::now();
+            assert_eq!(worker.join().unwrap().unwrap_err().kind(), std::io::ErrorKind::Interrupted);
+            assert!(cancelled_at.elapsed() < Duration::from_secs(2));
+        });
+        let stopped = fs::read(&marker).unwrap();
+        thread::sleep(Duration::from_millis(150));
+        assert_eq!(fs::read(&marker).unwrap(), stopped);
+    }
+    #[test]
+    fn frame_work_excludes_ffmpeg_component_maintenance_until_released() {
+        const CHILD: &str = "SIAOVPLAY_FRAME_LEASE_TEST_CHILD";
+        if std::env::var_os(CHILD).is_none() {
+            let status = std::process::Command::new(std::env::current_exe().unwrap())
+                .args(["summary::keyframes::tests::frame_work_excludes_ffmpeg_component_maintenance_until_released", "--exact"])
+                .env(CHILD, "1").status().unwrap();
+            assert!(status.success());
+            return;
+        }
+        let lease = frame_resource_lease().unwrap();
+        assert!(crate::resource_leases::maintain_resource("ffmpeg-cpu").is_err());
+        drop(lease);
+        assert!(crate::resource_leases::maintain_resource("ffmpeg-cpu").is_ok());
+    }
+
+    #[test]
+    fn rejects_a_frame_manifest_that_points_outside_the_task_directory() {
+        let directory = tempfile::tempdir().unwrap();
+        let task = directory.path().join("task");
+        fs::create_dir_all(&task).unwrap();
+        fs::write(directory.path().join("outside.jpg"), b"isolated fixture").unwrap();
+        let frames = vec![SummaryFrame {
+            id: "frame-001".to_owned(),
+            ordinal: 0,
+            timestamp_ms: 100,
+            relative_path: "../outside.jpg".to_owned(),
+            sha256: format!("{:x}", Sha256::digest(b"isolated fixture")),
+        }];
+        fs::write(
+            task.join("frames.json"),
+            serde_json::to_vec(&frames).unwrap(),
+        )
+        .unwrap();
+        assert!(super::super::verified_materials::verify_frame(&task, frames[0].clone()).is_err());
+    }
+
+    #[test]
+    fn rejects_frame_bytes_changed_after_preparation() {
+        let directory = tempfile::tempdir().unwrap();
+        fs::create_dir_all(directory.path().join("frames")).unwrap();
+        fs::write(
+            directory.path().join("frames/frame-001.jpg"),
+            b"changed bytes",
+        )
+        .unwrap();
+        let frames = vec![SummaryFrame {
+            id: "frame-001".to_owned(),
+            ordinal: 0,
+            timestamp_ms: 100,
+            relative_path: "frames/frame-001.jpg".to_owned(),
+            sha256: format!("{:x}", Sha256::digest(b"original bytes")),
+        }];
+        fs::write(
+            directory.path().join("frames.json"),
+            serde_json::to_vec(&frames).unwrap(),
+        )
+        .unwrap();
+        assert!(
+            super::super::verified_materials::verify_frame(directory.path(), frames[0].clone())
+                .is_err()
+        );
+    }
 
     #[test]
     fn selects_no_more_than_twelve_representative_chunks() {
@@ -164,9 +272,21 @@ mod tests {
                 context_segment_ids: vec![],
             })
             .collect::<Vec<_>>();
-        let selected = planned_timestamps(&chunks);
+        let selected = planned_timestamps(&chunks, None);
         assert_eq!(selected.len(), 12);
         assert_eq!(selected.first().unwrap().0, 0);
         assert_eq!(selected.last().unwrap().0, 29);
+    }
+
+    #[test]
+    fn frame_in_current_caption_never_exceeds_playback_cutoff() {
+        let chunk = PlannedChunk {
+            ordinal: 0,
+            start_ms: 900,
+            end_ms: 3_000,
+            segment_ids: vec![],
+            context_segment_ids: vec![],
+        };
+        assert_eq!(planned_timestamps(&[chunk], Some(1_000)), vec![(0, 1_000)]);
     }
 }

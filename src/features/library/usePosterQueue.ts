@@ -7,27 +7,26 @@ import {
 } from "react";
 
 import { ensureProjectPoster } from "../../lib/desktop";
-import type { Project } from "../../types";
+import type { LibraryMediaSummary, Project } from "../../types";
 
 const refreshBatchSize = 4;
 const queueDelayMs = 300;
 
 type PosterQueueOptions = {
   enabled: boolean;
-  projects: Project[];
+  media: LibraryMediaSummary[];
   refreshLibrary: () => Promise<unknown> | unknown;
-  setProjects: Dispatch<SetStateAction<Project[]>>;
   setActiveProject: Dispatch<SetStateAction<Project | null>>;
 };
 
 export function usePosterQueue({
   enabled,
-  projects,
+  media,
   refreshLibrary,
-  setProjects,
   setActiveProject,
 }: PosterQueueOptions) {
   const busyRef = useRef(false);
+  const completedRef = useRef(new Set<string>());
   const enabledRef = useRef(enabled);
   const failuresRef = useRef(new Set<string>());
   const timerRef = useRef<number | null>(null);
@@ -44,6 +43,7 @@ export function usePosterQueue({
 
   useEffect(
     () => () => {
+      enabledRef.current = false;
       if (timerRef.current !== null) window.clearTimeout(timerRef.current);
     },
     [],
@@ -51,12 +51,9 @@ export function usePosterQueue({
 
   useEffect(() => {
     if (!enabled || busyRef.current) return;
-    const project = projects.find(
-      (candidate) =>
-        candidate.status === "ready" &&
-        !candidate.mediaSource.posterPath &&
-        !failuresRef.current.has(candidate.id),
-    );
+    const key = (candidate: LibraryMediaSummary) => `${candidate.projectId}:${candidate.mediaLocator}`;
+    const project = media.find((candidate) => candidate.mediaAvailable && candidate.durationMs !== null &&
+      !candidate.posterPath && !failuresRef.current.has(key(candidate)) && !completedRef.current.has(key(candidate)));
     if (!project) {
       if (refreshPendingRef.current > 0) {
         refreshPendingRef.current = 0;
@@ -66,21 +63,20 @@ export function usePosterQueue({
     }
 
     busyRef.current = true;
-    void ensureProjectPoster(project.id)
+    void ensureProjectPoster(project.projectId)
       .then((updated) => {
-        setProjects((current) =>
-          current.map((item) => (item.id === updated.id ? updated : item)),
-        );
-        setActiveProject((current) =>
-          current?.id === updated.id ? updated : current,
-        );
+        if (updated.id !== project.projectId) throw new Error("Poster response project mismatch");
+        completedRef.current.add(key(project));
+        setActiveProject((current) => current?.id === updated.id &&
+          current.mediaSource.locator === project.mediaLocator && updated.mediaSource.locator === project.mediaLocator
+          ? { ...current, mediaSource: { ...current.mediaSource, posterPath: updated.mediaSource.posterPath } } : current);
         refreshPendingRef.current += 1;
-        if (refreshPendingRef.current >= refreshBatchSize) {
+        if (enabledRef.current && refreshPendingRef.current >= refreshBatchSize) {
           refreshPendingRef.current = 0;
           void refreshLibrary();
         }
       })
-      .catch(() => failuresRef.current.add(project.id))
+      .catch(() => failuresRef.current.add(key(project)))
       .finally(() => {
         busyRef.current = false;
         if (enabledRef.current) {
@@ -90,5 +86,5 @@ export function usePosterQueue({
           }, queueDelayMs);
         }
       });
-  }, [enabled, projects, queueTick, refreshLibrary, setActiveProject, setProjects]);
+  }, [enabled, media, queueTick, refreshLibrary, setActiveProject]);
 }

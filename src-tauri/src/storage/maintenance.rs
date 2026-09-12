@@ -1,12 +1,10 @@
 use std::{
-    fs,
     path::{Path, PathBuf},
     process::Command,
 };
 
 use super::{
     ClearPlaybackCacheResult, StorageError, StorageLocationKind, StorageManager, database,
-    paths::directory_size,
 };
 
 pub(crate) fn open_location(
@@ -30,6 +28,12 @@ pub(crate) fn clear_playback_cache(
     if !confirmed {
         return Err(StorageError::ConfirmationRequired);
     }
+    // Hold admission until cleanup finishes; starting a migration uses this same lock.
+    let migration = storage.migration.lock().map_err(|_| StorageError::StatePoisoned)?;
+    if migration.users > 0 || migration.task.as_ref().is_some_and(|task| task.status == super::StorageMigrationStatus::Running) {
+        return Err(StorageError::MigrationBusy);
+    }
+    let _database_owner = super::database_access::exclusive(database_path)?;
     database::ensure_idle(database_path)?;
     let root = storage.media_cache_root()?;
     let app_root = storage.app_data_root()?;
@@ -40,25 +44,7 @@ pub(crate) fn clear_playback_cache(
             "播放缓存位置与应用数据根目录边界不安全".to_owned(),
         ));
     }
-    let reclaimed_bytes = directory_size(&root);
-    let entries = fs::read_dir(&root)?.collect::<Result<Vec<_>, _>>()?;
-    for entry in &entries {
-        let metadata = entry.metadata()?;
-        if metadata.is_symlink() {
-            return Err(StorageError::MigrationIntegrity(
-                "缓存位置包含不支持的符号链接".to_owned(),
-            ));
-        }
-    }
-    for entry in entries {
-        let metadata = entry.metadata()?;
-        if metadata.is_dir() {
-            fs::remove_dir_all(entry.path())?;
-        } else if metadata.is_file() {
-            fs::remove_file(entry.path())?;
-        }
-    }
-    database::clear_cache_references(database_path)?;
+    let reclaimed_bytes = super::cache_inventory::clear_recorded_cache(database_path, &root)?;
     Ok(ClearPlaybackCacheResult { reclaimed_bytes })
 }
 

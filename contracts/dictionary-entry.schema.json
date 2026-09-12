@@ -1,0 +1,102 @@
+{
+  "$defs": {
+    "SelectionKind": {
+      "enum": [
+        "word",
+        "phrase",
+        "sentence"
+      ],
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "contextualMeaning": {
+      "type": "string"
+    },
+    "createdAtMs": {
+      "format": "int64",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+    },
+    "id": {
+      "type": "string"
+    },
+    "languageCode": {
+      "type": "string"
+    },
+    "partOfSpeech": {
+      "type": "string"
+    },
+    "playbackPositionMs": {
+      "format": "int64",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "projectId": {
+      "type": "string"
+    },
+    "pronunciation": {
+      "type": "string"
+    },
+    "selectedText": {
+      "type": "string"
+    },
+    "selectionKind": {
+      "$ref": "#/$defs/SelectionKind"
+    },
+    "sourceSegmentId": {
+      "type": "string"
+    },
+    "sourceSentence": {
+      "type": "string"
+    },
+    "sourceVersionId": {
+      "type": "string"
+    },
+    "taskId": {
+      "type": "string"
+    },
+    "translatedSentence": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "translationVersionId": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "usageNote": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "required": [
+    "id",
+    "projectId",
+    "taskId",
+    "sourceVersionId",
+    "translationVersionId",
+    "sourceSegmentId",
+    "selectedText",
+    "selectionKind",
+    "pronunciation",
+    "partOfSpeech",
+    "contextualMeaning",
+    "usageNote",
+    "sourceSentence",
+    "translatedSentence",
+    "languageCode",
+    "playbackPositionMs",
+    "createdAtMs"
+  ],
+  "title": "DictionaryEntry",
+  "type": "object"
+}

@@ -1,23 +1,41 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { translationCompletionNotice } from "./features/ai-tasks/translationCompletionNotice";
+import { usePlaybackTools } from "./features/playback/usePlaybackTools";
+import { startupRecoveryNotice } from "./features/playback/startupRecoveryNotice";
+import { ProjectCleanupNotice } from "./components/ProjectCleanupNotice";
+import { ExternalResultNotice } from "./components/ExternalResultNotice";
+import { useSettingsNavigation } from "./features/environment-settings/useSettingsNavigation";
+import { TrackedTranscriptions } from "./features/playback/TrackedTranscriptions";
+import { useTranscriptionRegistry } from "./features/playback/useTranscriptionRegistry";
+import { posterCandidates } from "./features/library/posterCandidates";
+import { SubtitleHistoryLoader } from "./features/subtitle-revision/SubtitleHistoryLoader";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { useOpeningIntent, type IsCurrentOpening } from "./features/playback/useOpeningIntent";
+import { useLibrarySearchOpening } from "./features/library/useLibrarySearchOpening";
+import { SummaryActivityMenu } from "./features/summary/SummaryActivityMenu";
 import { Dialog } from "./components/Dialog";
 import { AppToast, type ToastNotice } from "./components/AppToast";
+import { usePreferenceNotices } from "./components/usePreferenceNotices";
 import { LibraryFolderImportDialog } from "./components/LibraryFolderImportDialog";
 import { LibraryRecoveryDialog } from "./components/LibraryRecoveryDialog";
 import { LibraryScreen } from "./components/LibraryScreen";
 import { PlayerScreen } from "./features/playback/PlayerScreen";
+import { useMediaPreparation } from "./features/playback/useMediaPreparation";
+import { usePlaybackPersistence } from "./features/playback/usePlaybackPersistence";
 import { useLibraryController } from "./features/library/useLibraryController";
 import { usePosterQueue } from "./features/library/usePosterQueue";
 import { openProjectMediaLocation } from "./features/library/libraryGateway";
+import { mergeCurrentSubtitleVersion } from "./features/playback/currentSubtitleVersions";
 import {
   useEpisodeNavigation,
   type EpisodePlaybackContext,
 } from "./features/library/useEpisodeNavigation";
 import { PreparationScreen } from "./components/PreparationScreen";
 import { RemoteUrlDialog } from "./components/RemoteUrlDialog";
-import { EnvironmentSettingsDialog } from "./features/environment-settings/EnvironmentSettingsDialog";
+import { createDeferredDialog } from "./components/createDeferredDialog";
+import { useExternalAgentResults } from "./features/ai-tasks/useExternalAgentResults";
 import { backgroundResultNotice } from "./features/ai-tasks/backgroundNotice";
-import type { PendingResourceAction } from "./features/environment-settings/LocalFeaturesDialog";
+import { useCapabilityPreparation } from "./features/resources/useCapabilityPreparation";
 import { SubtitleImportDialog } from "./components/SubtitleImportDialog";
 import { SubtitleDeliveryDialog } from "./components/SubtitleDeliveryDialog";
 import { SubtitleRevisionDialog } from "./components/SubtitleRevisionDialog";
@@ -29,20 +47,19 @@ import { useLocalResources } from "./features/resources/useLocalResources";
 import {
   chooseLocalFolder,
   chooseLocalVideo,
-  createLocalProject,
+  openLocalProject,
   deleteProject,
   getAppStatus,
   getTranscriptionJob,
   getProject,
   isDesktopApp,
-  listProjects,
   listSubtitleVersions,
+  getSubtitleVersion,
   markProjectOpened,
-  prepareProjectMedia,
   reconcileExternalAgentResults,
+  acknowledgeExternalAgentResults,
   relinkProjectMedia,
   setMainWindowMediaTitle,
-  updatePlaybackState,
 } from "./lib/desktop";
 import { userFacingCommandError } from "./lib/userFacingError";
 import type {
@@ -50,24 +67,22 @@ import type {
   MediaPreparation,
   Project,
   SubtitleVersion,
-  TranscriptionJob,
   TranslationTask,
   LibraryMediaSummary,
-  LibrarySearchResult,
   EpisodeReference,
 } from "./types";
 
-const activeTranscriptionStatuses = new Set<TranscriptionJob["status"]>(
-  ["queued", "extracting", "transcribing", "validating"],
+const EnvironmentSettingsDialog = createDeferredDialog(
+  () => import("./features/environment-settings/EnvironmentSettingsDialog").then(module => module.EnvironmentSettingsDialog),
+  "设置",
 );
-
-const firstRunResourceDismissedKey = "siaovplay.local-resources.first-run-dismissed.v1";
-type PendingResourceResume = PendingResourceAction & { resume: () => Promise<void> | void };
 
 export default function App() {
   const shellController = useShellController();
+  const mediaPreparation = useMediaPreparation();
+  const startMediaPreparation = mediaPreparation.start;
+  const resetMediaPreparation = mediaPreparation.reset;
   const localResources = useLocalResources();
-  const localResourceLoading = localResources.loading;
   const localResourceStatus = localResources.status;
   const refreshLocalResources = localResources.refresh;
   const {
@@ -76,8 +91,10 @@ export default function App() {
     setSection: setLibrarySection,
     loadSectionPage,
     loadMoreSection,
+    loadPreviousSection, retrySection,
     setSearchQuery,
     openCollection,
+    collectionPagination,
     closeCollection,
     selectSeason,
     createManualCollection,
@@ -86,6 +103,7 @@ export default function App() {
     addToCollection,
     removeFromCollection,
     changeWatchLater,
+    changeWatched,
     startFolderScan,
     cancelFolderScan,
     closeFolderImport,
@@ -108,11 +126,12 @@ export default function App() {
   const screen = shellController.state.activeView;
   const setScreen = shellController.setActiveView;
   const operationTokenRef = useRef(0);
+  const openingIntent = useOpeningIntent();
+  const [sessionId, setSessionId] = useState(0);
+  const [cleanupRevision, setCleanupRevision] = useState(0);
   const startupMediaHandledRef = useRef(false);
-  const externalResultScanRef = useRef(false);
-  const pendingResourceResumeRef = useRef<PendingResourceResume | null>(null);
   const [appStatus, setAppStatus] = useState<AppStatus | null>(null);
-  const [projects, setProjects] = useState<Project[]>([]);
+  const [startupError, setStartupError] = useState<string | null>(null);
   const [libraryError, setLibraryError] = useState<string | null>(null);
   const [activeProject, setActiveProject] = useState<Project | null>(null);
   const [episodeContext, setEpisodeContext] =
@@ -126,49 +145,38 @@ export default function App() {
   const [subtitleVersions, setSubtitleVersions] = useState<SubtitleVersion[]>(
     [],
   );
-  const [subtitleDialogOpen, setSubtitleDialogOpen] = useState(false);
-  const [trackedTranscriptionJobId, setTrackedTranscriptionJobId] = useState<
-    string | null
-  >(null);
-  const [translationDialogOpen, setTranslationDialogOpen] = useState(false);
-  const [translationSegmentIds, setTranslationSegmentIds] = useState<
-    string[] | undefined
-  >(undefined);
-  const [revisionDialogOpen, setRevisionDialogOpen] = useState(false);
-  const [deliveryDialogOpen, setDeliveryDialogOpen] = useState(false);
+  const {
+    transcriptionPreparationChoice, setTranscriptionPreparationChoice,
+    beginSubtitlePreparation, dismissSubtitleDialog,
+    subtitleDialogOpen, setSubtitleDialogOpen, translationDialogOpen, setTranslationDialogOpen,
+    translationSegmentIds, setTranslationSegmentIds, revisionDialogOpen, setRevisionDialogOpen,
+    deliveryDialogOpen, setDeliveryDialogOpen,
+  } = usePlaybackTools(sessionId);
+  const { jobs: trackedTranscriptions, register: registerTranscription, finish: finishTranscription } = useTranscriptionRegistry();
   const [remoteUrlDialogOpen, setRemoteUrlDialogOpen] = useState(false);
   const [deleteCandidate, setDeleteCandidate] = useState<Project | null>(null);
   const [busyMessage, setBusyMessage] = useState<string | null>(null);
   const [toast, setToast] = useState<ToastNotice | null>(null);
-  const [localResourcesOpen, setLocalResourcesOpen] = useState(false);
-  const [firstRunResourceSetup, setFirstRunResourceSetup] = useState(false);
-  const [pendingResourceAction, setPendingResourceAction] =
-    useState<PendingResourceAction | null>(null);
+  usePreferenceNotices(setToast);
+  const { localResourcesOpen, pendingResourceAction, openLocalResources, closeLocalResources, requestCapability } =
+    useCapabilityPreparation({ isDesktopApp, localResourceStatus, refreshLocalResources, setToast });
+  const settingsNavigation = useSettingsNavigation(openLocalResources);
   const episodeNavigation = useEpisodeNavigation(
     episodeContext,
     activeProject?.id ?? null,
+    screen === "player" && shellController.state.drawerTab === "episodes",
   );
 
+  const posterMedia = useMemo(() => posterCandidates(libraryState), [libraryState]);
   usePosterQueue({
     enabled: isDesktopApp && screen === "library",
-    projects,
+    media: posterMedia,
     refreshLibrary,
-    setProjects,
     setActiveProject,
   });
 
-  const openLocalResources = useCallback(() => {
-    pendingResourceResumeRef.current = null;
-    setPendingResourceAction(null);
-    setFirstRunResourceSetup(false);
-    setLocalResourcesOpen(true);
-    void refreshLocalResources().catch(() => undefined);
-  }, [refreshLocalResources]);
-
-  const refreshProjects = useCallback(async () => {
+  const refreshLibraryView = useCallback(async () => {
     try {
-      const nextProjects = await listProjects();
-      setProjects(nextProjects);
       setLibraryError(null);
       await refreshLibrary();
     } catch (error) {
@@ -182,137 +190,20 @@ export default function App() {
       .then((status) => {
         if (active) {
           setAppStatus(status);
+          setStartupError(null);
+          const notice = startupRecoveryNotice(status.interruptedTranscriptionCount);
+          if (notice) setToast(notice);
         }
       })
-      .catch((error: unknown) => {
+      .catch(() => {
         if (active) {
-          setLibraryError(userFacingCommandError(error, "library"));
+          setStartupError("应用启动信息读取失败，请重新启动应用。");
         }
       });
-    void listProjects()
-      .then((nextProjects) => {
-        if (active) {
-          setProjects(nextProjects);
-          setLibraryError(null);
-        }
-      })
-      .catch((error: unknown) => {
-        if (active) {
-          setLibraryError(userFacingCommandError(error, "library"));
-        }
-      })
     return () => {
       active = false;
     };
   }, []);
-
-  useEffect(() => {
-    if (
-      !isDesktopApp ||
-      localResourceLoading ||
-      !localResourceStatus ||
-      localResourceStatus.configured ||
-      localResourcesOpen ||
-      window.localStorage.getItem(firstRunResourceDismissedKey) === "1"
-    ) {
-      return;
-    }
-    const timer = window.setTimeout(() => {
-      setFirstRunResourceSetup(true);
-      setLocalResourcesOpen(true);
-    }, 0);
-    return () => window.clearTimeout(timer);
-  }, [localResourceLoading, localResourceStatus, localResourcesOpen]);
-
-  useEffect(() => {
-    if (localResourceStatus?.configured) {
-      window.localStorage.removeItem(firstRunResourceDismissedKey);
-    }
-  }, [localResourceStatus?.configured]);
-
-  const requestCapability = useCallback(
-    async (
-      capabilityId: string,
-      label: string,
-      resume: () => Promise<void> | void,
-      profileId?: "fast" | "standard",
-    ) => {
-      if (!isDesktopApp) {
-        await resume();
-        return;
-      }
-      const currentStatus = await refreshLocalResources();
-      const capability = currentStatus.capabilities.find(
-        (item) => item.id === capabilityId,
-      );
-      if (capability?.state === "ready") {
-        await resume();
-        return;
-      }
-      const pending: PendingResourceResume = {
-        id: crypto.randomUUID(),
-        capabilityId,
-        label,
-        profileId,
-        resume,
-      };
-      pendingResourceResumeRef.current = pending;
-      setPendingResourceAction({
-        id: pending.id,
-        capabilityId: pending.capabilityId,
-        label: pending.label,
-        profileId: pending.profileId,
-      });
-      setFirstRunResourceSetup(false);
-      setLocalResourcesOpen(true);
-    },
-    [refreshLocalResources],
-  );
-
-  const closeLocalResources = useCallback(() => {
-    if (firstRunResourceSetup) {
-      window.localStorage.setItem(firstRunResourceDismissedKey, "1");
-    }
-    if (pendingResourceResumeRef.current) {
-      setToast("此次操作已取消；已开始的功能准备任务不会被删除。");
-    }
-    pendingResourceResumeRef.current = null;
-    setPendingResourceAction(null);
-    setFirstRunResourceSetup(false);
-    setLocalResourcesOpen(false);
-  }, [firstRunResourceSetup]);
-
-  const dismissFirstRunResources = useCallback(() => {
-    window.localStorage.setItem(firstRunResourceDismissedKey, "1");
-    setFirstRunResourceSetup(false);
-    setLocalResourcesOpen(false);
-  }, []);
-
-  useEffect(() => {
-    const pending = pendingResourceResumeRef.current;
-    if (!pending || pending.id !== pendingResourceAction?.id) {
-      return;
-    }
-    const capability = localResourceStatus?.capabilities.find(
-      (item) => item.id === pending.capabilityId,
-    );
-    if (capability?.state !== "ready") {
-      return;
-    }
-    const timer = window.setTimeout(() => {
-      if (pendingResourceResumeRef.current?.id !== pending.id) {
-        return;
-      }
-      pendingResourceResumeRef.current = null;
-      setPendingResourceAction(null);
-      setLocalResourcesOpen(false);
-      setToast(`${pending.label}：所需功能已准备完成。`);
-      void Promise.resolve(pending.resume()).catch((error: unknown) =>
-        setToast(userFacingCommandError(error, "settings")),
-      );
-    }, 0);
-    return () => window.clearTimeout(timer);
-  }, [localResourceStatus, pendingResourceAction?.id]);
 
   useEffect(() => {
     const mediaTitle =
@@ -335,10 +226,16 @@ export default function App() {
       project: Project,
       shouldForceProxy: boolean,
       nextEpisodeContext: EpisodePlaybackContext | null,
+      isCurrent: IsCurrentOpening = () => true,
     ) => {
+      if (!isCurrent()) return;
+      setBusyMessage(null);
+      resetMediaPreparation();
       const token = operationTokenRef.current + 1;
       operationTokenRef.current = token;
+      setSessionId(token);
       setActiveProject(project);
+      setSubtitleVersions([]);
       setPreparation(null);
       setPreparationError(null);
       setForceProxy(shouldForceProxy);
@@ -354,7 +251,11 @@ export default function App() {
         const openedProject = shouldForceProxy
           ? project
           : await markProjectOpened(project.id);
-        const result = await prepareProjectMedia(
+        if (operationTokenRef.current !== token) {
+          window.clearTimeout(preparationTimer);
+          return;
+        }
+        const result = await startMediaPreparation(
           openedProject.id,
           shouldForceProxy,
         );
@@ -366,7 +267,7 @@ export default function App() {
         setActiveProject(openedProject);
         setPreparation(result);
         setScreen("player");
-        void listSubtitleVersions(openedProject.id)
+        void listSubtitleVersions(openedProject.id, false)
           .then((versions) => {
             if (operationTokenRef.current === token) {
               setSubtitleVersions(versions);
@@ -377,7 +278,7 @@ export default function App() {
               setToast(userFacingCommandError(error, "subtitle"));
             }
           });
-        void refreshProjects();
+        void refreshLibraryView();
       } catch (error) {
         if (operationTokenRef.current !== token) {
           window.clearTimeout(preparationTimer);
@@ -388,26 +289,25 @@ export default function App() {
         setPreparationError(userFacingCommandError(error, "playback"));
       }
     },
-    [refreshProjects, setScreen],
+    [refreshLibraryView, setScreen, startMediaPreparation, resetMediaPreparation],
   );
 
   const prepareAndOpen = useCallback(
-    async (
-      project: Project,
-      shouldForceProxy: boolean,
-      nextEpisodeContext: EpisodePlaybackContext | null,
-    ) => {
-      await requestCapability(
-        "basic_media",
-        `继续播放「${project.title}」`,
-        () => prepareAndOpenReady(project, shouldForceProxy, nextEpisodeContext),
-      );
-    },
-    [prepareAndOpenReady, requestCapability],
+    async (source: Project | (() => Promise<Project>), shouldForceProxy: boolean, context: EpisodePlaybackContext | null) => {
+      await openingIntent.run(async (isCurrent) => {
+        const project = typeof source === "function" ? await source() : source;
+        if (!isCurrent()) return;
+        await requestCapability("basic_media", `继续播放「${project.title}」`,
+          () => prepareAndOpenReady(project, shouldForceProxy, context, isCurrent), undefined, isCurrent);
+      });
+    }, [openingIntent, prepareAndOpenReady, requestCapability],
   );
 
   const returnToLibrary = useCallback(() => {
+    openingIntent.invalidate();
+    setBusyMessage(null);
     operationTokenRef.current += 1;
+    setSessionId(operationTokenRef.current);
     setLibrarySection("home");
     setScreen("library");
     setPreparation(null);
@@ -415,46 +315,37 @@ export default function App() {
     setForceProxy(false);
     setSubtitleVersions([]);
     setEpisodeContext(null);
-    setSubtitleDialogOpen(false);
-    setTranslationDialogOpen(false);
-    setTranslationSegmentIds(undefined);
-    setRevisionDialogOpen(false);
     setRemoteUrlDialogOpen(false);
-    void refreshProjects();
-  }, [refreshProjects, setLibrarySection, setScreen]);
+    void refreshLibraryView();
+  }, [openingIntent, refreshLibraryView, setLibrarySection, setScreen]);
 
   const importMediaPathReady = useCallback(
-    async (mediaPath: string) => {
+    async (mediaPath: string, isCurrent: IsCurrentOpening) => {
       try {
-        const existingProject = projects.find(
-          (project) =>
-            project.mediaSource.locator.toLocaleLowerCase() ===
-            mediaPath.toLocaleLowerCase(),
-        );
-        setBusyMessage(
-          existingProject
-            ? "正在打开已有项目…"
-            : "正在建立本地项目…",
-        );
-        const project =
-          existingProject ?? (await createLocalProject(mediaPath));
+        if (!isCurrent()) return;
+        setBusyMessage("正在打开本地视频…");
+        const project = await openLocalProject(mediaPath);
+        if (!isCurrent()) return;
         setBusyMessage(null);
-        await prepareAndOpenReady(project, false, null);
+        await prepareAndOpenReady(project, false, null, isCurrent);
       } catch (error) {
+        if (!isCurrent()) return;
         setBusyMessage(null);
         setLibraryError(userFacingCommandError(error, "library"));
       }
     },
-    [prepareAndOpenReady, projects],
+    [prepareAndOpenReady],
   );
 
   const importMediaPath = useCallback(
-    async (mediaPath: string) => {
-      await requestCapability("basic_media", "继续打开本地视频", () =>
-        importMediaPathReady(mediaPath),
-      );
-    },
-    [importMediaPathReady, requestCapability],
+    async (source: string | (() => Promise<string | null>)) => {
+      await openingIntent.run(async (isCurrent) => {
+        const path = typeof source === "function" ? await source() : source;
+        if (!path || !isCurrent()) return;
+        await requestCapability("basic_media", "继续打开本地视频",
+          () => importMediaPathReady(path, isCurrent), undefined, isCurrent);
+      });
+    }, [importMediaPathReady, openingIntent, requestCapability],
   );
 
   const importLocalVideo = useCallback(async () => {
@@ -463,11 +354,7 @@ export default function App() {
       return;
     }
     try {
-      const mediaPath = await chooseLocalVideo();
-      if (!mediaPath) {
-        return;
-      }
-      await importMediaPath(mediaPath);
+      await importMediaPath(chooseLocalVideo);
     } catch (error) {
       setBusyMessage(null);
       setLibraryError(userFacingCommandError(error, "library"));
@@ -590,28 +477,32 @@ export default function App() {
     translationDialogOpen,
   ]);
 
-  const relinkProject = useCallback(async (project: Project) => {
-    try {
-      const mediaPath = await chooseLocalVideo();
-      if (!mediaPath) {
-        return;
+  const relinkProject = useCallback(async (source: Project | (() => Promise<Project>)) => {
+    await openingIntent.run(async (isCurrent) => {
+      try {
+        const project = typeof source === "function" ? await source() : source;
+        if (!isCurrent()) return;
+        const mediaPath = await chooseLocalVideo();
+        if (!mediaPath || !isCurrent()) return;
+        setBusyMessage("正在重新关联媒体…");
+        const relinked = await relinkProjectMedia(project.id, mediaPath);
+        if (!isCurrent()) return;
+        setBusyMessage(null);
+        await requestCapability("basic_media", `继续播放「${project.title}」`,
+          () => prepareAndOpenReady(relinked, false, null, isCurrent), undefined, isCurrent);
+      } catch (error) {
+        if (!isCurrent()) return;
+        setBusyMessage(null);
+        setLibraryError(userFacingCommandError(error, "library"));
       }
-      setBusyMessage("正在重新关联媒体…");
-      const relinked = await relinkProjectMedia(project.id, mediaPath);
-      setBusyMessage(null);
-      await prepareAndOpen(relinked, false, null);
-    } catch (error) {
-      setBusyMessage(null);
-      setLibraryError(userFacingCommandError(error, "library"));
-    }
-  }, [prepareAndOpen]);
+    });
+  }, [openingIntent, prepareAndOpenReady, requestCapability]);
 
   const openLibraryMedia = useCallback(
     async (media: LibraryMediaSummary) => {
       try {
-        const project = await getProject(media.projectId);
         await prepareAndOpen(
-          project,
+          () => getProject(media.projectId),
           false,
           media.collectionId
             ? {
@@ -629,8 +520,7 @@ export default function App() {
 
   const relinkLibraryMedia = useCallback(async (media: LibraryMediaSummary) => {
     try {
-      const project = await getProject(media.projectId);
-      await relinkProject(project);
+      await relinkProject(() => getProject(media.projectId));
     } catch (error) {
       setLibraryError(userFacingCommandError(error, "library"));
     }
@@ -646,44 +536,20 @@ export default function App() {
 
   const selectLibrarySection = useCallback(
     (section: Parameters<typeof setLibrarySection>[0]) => {
+      openingIntent.invalidate();
       if (screen !== "library") {
         returnToLibrary();
       }
       setLibrarySection(section);
     },
-    [returnToLibrary, screen, setLibrarySection],
+    [openingIntent, returnToLibrary, screen, setLibrarySection],
   );
 
-  const openLibrarySearchResult = useCallback(
-    (result: LibrarySearchResult) => {
-      setSearchQuery("");
-      if (result.kind === "collection" && result.collectionId) {
-        selectLibrarySection("series");
-        void openCollection(result.collectionId);
-      } else if (result.projectId) {
-        void getProject(result.projectId)
-          .then((project) =>
-            prepareAndOpen(
-              project,
-              false,
-              result.collectionId
-                ? {
-                    collectionId: result.collectionId,
-                    seasonNumber: result.seasonNumber,
-                  }
-                : null,
-            ),
-          )
-          .catch((error: unknown) => setLibraryError(userFacingCommandError(error, "library")));
-      }
-    },
-    [
-      openCollection,
-      prepareAndOpen,
-      setSearchQuery,
-      selectLibrarySection,
-    ],
-  );
+  const reportLibraryError = useCallback((error: unknown) => setLibraryError(userFacingCommandError(error, "library")), []);
+  const openLibrarySearchResult = useLibrarySearchOpening({
+    clearSearch: setSearchQuery, selectSection: selectLibrarySection, openCollection,
+    openProject: prepareAndOpen, onError: reportLibraryError,
+  });
 
   const switchEpisode = useCallback(
     async (episode: EpisodeReference) => {
@@ -691,8 +557,7 @@ export default function App() {
         throw new Error("当前视频不属于可导航的剧集");
       }
       try {
-        const project = await getProject(episode.projectId);
-        await prepareAndOpen(project, false, {
+        await prepareAndOpen(() => getProject(episode.projectId), false, {
           collectionId: episodeContext.collectionId,
           seasonNumber: episode.seasonNumber,
         });
@@ -712,9 +577,12 @@ export default function App() {
     setBusyMessage("正在删除项目记录…");
     try {
       const result = await deleteProject(project.id);
+      setCleanupRevision(value => value + 1);
       setDeleteCandidate(null);
       setBusyMessage(null);
-      if (result.deleted && !result.sourceMediaDeleted) {
+      if (result.cleanupPending > 0) {
+        setToast("项目已删除，部分文件尚未清理，可在媒体库重试。");
+      } else if (result.deleted && !result.sourceMediaDeleted) {
         setToast(
           project.mediaSource.originUrl
             ? result.cachedMediaDeleted
@@ -723,7 +591,7 @@ export default function App() {
             : "项目已删除，源视频保持不变。",
         );
       }
-      await refreshProjects();
+      await refreshLibraryView();
     } catch (error) {
       setBusyMessage(null);
       setDeleteCandidate(null);
@@ -731,226 +599,75 @@ export default function App() {
     }
   };
 
-  const persistPlayback = useCallback(
-    async (values: {
-      positionMs: number;
-      durationMs: number | null;
-      volume: number;
-      playbackRate: number;
-      subtitleMode: "original" | "translation" | "bilingual";
-    }) => {
-      if (!activeProject) {
-        return;
-      }
-      const updated = await updatePlaybackState(activeProject.id, values);
-      setActiveProject(updated);
-      setProjects((current) =>
-        current.map((project) =>
-          project.id === updated.id ? updated : project,
-        ),
-      );
-    },
-    [activeProject],
-  );
+  const persistPlayback = usePlaybackPersistence({
+    project: screen === "player" ? activeProject : null, sessionId, currentSession: operationTokenRef,
+    setProject: setActiveProject, onFailure: setToast,
+  });
+  const isCurrentSession = useCallback((projectId: string) =>
+    operationTokenRef.current === sessionId && activeProject?.id === projectId,
+  [activeProject?.id, sessionId]);
 
   const mergeSubtitleVersion = useCallback((version: SubtitleVersion) => {
-    setSubtitleVersions((current) => [
-      version,
-      ...current
-        .filter((item) => item.id !== version.id)
-        .map((item) =>
-          item.trackId === version.trackId
-            ? { ...item, isCurrent: false }
-            : item,
-        ),
-    ]);
-  }, []);
+    if (!isCurrentSession(version.projectId)) return;
+    setSubtitleVersions((current) => mergeCurrentSubtitleVersion(current, version));
+  }, [isCurrentSession]);
 
   const handleTranslationCompleted = useCallback(
     async (task: TranslationTask, version?: SubtitleVersion) => {
       if (version) {
         mergeSubtitleVersion(version);
       } else {
-        const versions = await listSubtitleVersions(task.projectId);
-        setSubtitleVersions(versions);
+        const versions = await listSubtitleVersions(task.projectId, false);
+        if (isCurrentSession(task.projectId)) setSubtitleVersions(versions);
       }
-      setToast(
-        task.validation?.warningCount
-          ? {
-              title: "中文字幕草稿已生成",
-              message: `另有 ${task.validation.warningCount} 项一致性提示，建议抽查后再使用。`,
-              tone: "warning",
-            }
-          : {
-              title: "中文字幕已准备好",
-              message: `已生成 ${task.segmentCount} 条草稿，当前视频可以切换为中文或双语字幕。`,
-              tone: "success",
-            },
-      );
+      setToast(translationCompletionNotice(task, isCurrentSession(task.projectId)));
       const updatedProject = await getProject(task.projectId);
-      setActiveProject(updatedProject);
-      setProjects((current) =>
-        current.map((project) =>
-          project.id === updatedProject.id ? updatedProject : project,
-        ),
-      );
-      void refreshProjects();
+      if (isCurrentSession(task.projectId)) setActiveProject(updatedProject);
+      void refreshLibraryView();
     },
-    [mergeSubtitleVersion, refreshProjects],
+    [isCurrentSession, mergeSubtitleVersion, refreshLibraryView],
   );
   const activeProjectId = activeProject?.id;
+  const trackTranscription = useCallback((jobId: string) => {
+    if (!activeProjectId) return;
+    registerTranscription(jobId, activeProjectId);
+  }, [activeProjectId, registerTranscription]);
 
-  useEffect(() => {
-    if (!isDesktopApp) {
-      return undefined;
-    }
-    let active = true;
-    const reconcile = async () => {
-      if (externalResultScanRef.current) {
-        return;
+  const externalResults = useExternalAgentResults({
+    enabled: isDesktopApp,
+    reconcile: reconcileExternalAgentResults,
+    acknowledge: acknowledgeExternalAgentResults,
+    onUpdates: async (updates, isActive) => {
+      const latest = updates.filter(update => update.status !== "validating").at(-1);
+      if (latest) {
+        const notice = backgroundResultNotice(latest, latest.projectId === activeProjectId);
+        if (notice) setToast(notice);
       }
-      externalResultScanRef.current = true;
-      try {
-        const updates = await reconcileExternalAgentResults();
-        if (!active || !updates.length) {
-          return;
+      if (activeProjectId && updates.some(update => update.status === "completed" &&
+        update.taskKind === "translation" && update.projectId === activeProjectId)) {
+        const [versions, updatedProject] = await Promise.all([
+          listSubtitleVersions(activeProjectId, false), getProject(activeProjectId),
+        ]);
+        if (isActive() && isCurrentSession(activeProjectId)) {
+          setSubtitleVersions(versions);
+          setActiveProject(updatedProject);
         }
-        const currentProjectUpdates = activeProjectId
-          ? updates.filter(
-              (update) =>
-                update.projectId === activeProjectId &&
-                update.status !== "validating",
-            )
-          : [];
-        const latest = currentProjectUpdates.at(-1);
-        const resultNotice = latest ? backgroundResultNotice(latest) : null;
-        if (resultNotice) setToast(resultNotice);
-        if (
-          updates.some(
-            (update) =>
-              update.status === "completed" &&
-              update.taskKind === "translation" &&
-              update.projectId === activeProjectId,
-          ) &&
-          activeProjectId
-        ) {
-          const [versions, updatedProject] = await Promise.all([
-            listSubtitleVersions(activeProjectId),
-            getProject(activeProjectId),
-          ]);
-          if (active) {
-            setSubtitleVersions(versions);
-            setActiveProject(updatedProject);
-            setProjects((current) =>
-              current.map((project) =>
-                project.id === updatedProject.id ? updatedProject : project,
-              ),
-            );
-          }
-        }
-      } catch {
-        // 自动检测是后台增强能力；显式导入入口仍可继续使用。
-      } finally {
-        externalResultScanRef.current = false;
       }
-    };
-    void reconcile();
-    const timer = window.setInterval(() => void reconcile(), 1_000);
-    return () => {
-      active = false;
-      window.clearInterval(timer);
-    };
-  }, [activeProjectId]);
+    },
+  });
 
   const handleSubtitleVersionCreated = useCallback(
-    async (version: SubtitleVersion, message: string) => {
+    async (version: SubtitleVersion, message: string, isActive: () => boolean = () => true) => {
+      if (!isActive()) return;
       mergeSubtitleVersion(version);
       const updatedProject = await getProject(version.projectId);
-      setActiveProject(updatedProject);
-      setProjects((current) =>
-        current.map((project) =>
-          project.id === updatedProject.id ? updatedProject : project,
-        ),
-      );
+      if (!isActive()) return;
+      if (isCurrentSession(version.projectId)) setActiveProject(updatedProject);
       setToast(message);
-      void refreshProjects();
+      void refreshLibraryView();
     },
-    [mergeSubtitleVersion, refreshProjects],
+    [isCurrentSession, mergeSubtitleVersion, refreshLibraryView],
   );
-
-  useEffect(() => {
-    if (
-      !trackedTranscriptionJobId ||
-      subtitleDialogOpen ||
-      !activeProjectId
-    ) {
-      return undefined;
-    }
-
-    let active = true;
-    let timer: number | undefined;
-    const poll = async () => {
-      try {
-        const job = await getTranscriptionJob(trackedTranscriptionJobId);
-        if (!active) {
-          return;
-        }
-        if (activeTranscriptionStatuses.has(job.status)) {
-          timer = window.setTimeout(() => void poll(), 900);
-          return;
-        }
-
-        if (
-          job.status !== "completed" ||
-          !job.subtitleVersionId ||
-          job.projectId !== activeProjectId
-        ) {
-          setTrackedTranscriptionJobId((current) =>
-            current === job.id ? null : current,
-          );
-          return;
-        }
-        const versions = await listSubtitleVersions(activeProjectId);
-        if (!active) {
-          return;
-        }
-        const version = versions.find(
-          (item) => item.id === job.subtitleVersionId,
-        );
-        if (!version) {
-          throw new Error("生成的字幕版本暂时无法读取");
-        }
-        if (!subtitleVersions.some((item) => item.id === version.id)) {
-          await handleSubtitleVersionCreated(
-            version,
-            `已生成 ${version.segments.length} 条原文字幕草稿，可以开始抽查。`,
-          );
-        }
-        setTrackedTranscriptionJobId((current) =>
-          current === job.id ? null : current,
-        );
-      } catch (error) {
-        if (active) {
-          setToast(userFacingCommandError(error, "subtitle"));
-          timer = window.setTimeout(() => void poll(), 1_500);
-        }
-      }
-    };
-
-    void poll();
-    return () => {
-      active = false;
-      if (timer !== undefined) {
-        window.clearTimeout(timer);
-      }
-    };
-  }, [
-    activeProjectId,
-    handleSubtitleVersionCreated,
-    subtitleDialogOpen,
-    subtitleVersions,
-    trackedTranscriptionJobId,
-  ]);
 
   const currentSubtitle =
     subtitleVersions.find(
@@ -968,6 +685,12 @@ export default function App() {
 
   return (
     <div className="app-root">
+      <TrackedTranscriptions
+        jobs={trackedTranscriptions} projectId={screen === "player" ? activeProjectId : undefined}
+        sessionId={sessionId} pausedProjectId={subtitleDialogOpen ? activeProjectId : undefined}
+        versions={subtitleVersions} getTranscriptionJob={getTranscriptionJob} getSubtitleVersion={getSubtitleVersion}
+        onVersion={handleSubtitleVersionCreated} onNotice={setToast} onFinished={finishTranscription}
+      />
       <DesktopShell
         activeView={screen}
         navigationCollapsed={shellController.state.navigationCollapsed}
@@ -987,14 +710,9 @@ export default function App() {
             libraryState.sectionPages.continue_watching.totalCount ??
             libraryState.home.continueWatching.length,
           episodeFiles: libraryState.home.totalProjectCount,
-          series: libraryState.home.collections.filter(
-            (collection) => collection.systemKey === null,
-          ).length,
-          folders: libraryState.home.folders.length,
-          watchLater:
-            libraryState.home.collections.find(
-              (collection) => collection.systemKey === "watch_later",
-            )?.itemCount ?? 0,
+          series: libraryState.home.collectionCount,
+          folders: libraryState.home.folderCount,
+          watchLater: libraryState.home.watchLaterCount,
           unclassified: libraryState.home.unclassifiedCount,
         }}
         librarySection={libraryState.section}
@@ -1007,6 +725,7 @@ export default function App() {
         onSelectLibrarySection={selectLibrarySection}
         onSearchQueryChange={setSearchQuery}
         onOpenSearchResult={openLibrarySearchResult}
+        activityControl={<SummaryActivityMenu onNotice={setToast} onOpen={openLibrarySearchResult} />}
         onOpenFile={() => void importLocalVideo()}
         onOpenFolder={() => void importLocalFolder()}
         onOpenUrl={openRemoteUrlImport}
@@ -1017,8 +736,11 @@ export default function App() {
         }}
         onReviseSubtitles={() => setRevisionDialogOpen(true)}
         onDeliverSubtitles={() => setDeliveryDialogOpen(true)}
-        onOpenSettings={openLocalResources}
+        onOpenSettings={settingsNavigation.openDefault}
       >
+        {startupError ? <div className="notice danger" role="alert">{startupError}</div> : null}
+        {isDesktopApp && screen === "library" ? <ProjectCleanupNotice revision={cleanupRevision} /> : null}
+        <ExternalResultNotice failure={externalResults.failure} slowPhase={externalResults.slowPhase} onRetry={externalResults.retry} />
         {screen === "library" ? (
           <LibraryScreen
             home={libraryState.home}
@@ -1029,6 +751,7 @@ export default function App() {
             selectedSeason={libraryState.selectedSeason}
             loading={libraryState.loading}
             collectionLoading={libraryState.collectionLoading}
+            collectionPagination={collectionPagination}
             mutationPending={libraryState.mutationPending}
             error={libraryError ?? libraryState.error}
             previewMode={!isDesktopApp}
@@ -1050,7 +773,9 @@ export default function App() {
               )
             }
             onSelectSection={selectLibrarySection}
-            onLoadMoreSection={(section) => void loadMoreSection(section)}
+            onLoadMoreSection={async (section) => Boolean(await loadMoreSection(section))}
+            onPreviousSection={async (section) => Boolean(await loadPreviousSection(section))}
+            onRetrySectionPage={async (section) => Boolean(await retrySection(section))}
             onReloadSection={(section) => void loadSectionPage(section, 0)}
             onOpenCollection={(collectionId) =>
               void openCollection(collectionId)
@@ -1063,6 +788,7 @@ export default function App() {
             onAddToCollection={addToCollection}
             onRemoveFromCollection={removeFromCollection}
             onSetWatchLater={changeWatchLater}
+            onSetWatched={changeWatched}
           />
         ) : null}
 
@@ -1071,6 +797,15 @@ export default function App() {
             project={activeProject}
             forceProxy={forceProxy}
             error={preparationError}
+            progress={mediaPreparation.progress}
+            cancelling={mediaPreparation.cancelling}
+            canCancel={mediaPreparation.canCancel}
+            onCancel={() => {
+              const token = operationTokenRef.current;
+              void mediaPreparation.cancel().then(() => {
+                if (operationTokenRef.current === token) returnToLibrary();
+              }).catch((error: unknown) => setToast(userFacingCommandError(error, "playback")));
+            }}
             onRetry={() =>
               void prepareAndOpen(activeProject, forceProxy, episodeContext)
             }
@@ -1080,7 +815,7 @@ export default function App() {
 
         {screen === "player" && activeProject && preparation ? (
           <PlayerScreen
-            key={preparation.playbackPath}
+            key={`${sessionId}:${preparation.playbackPath}`}
             project={activeProject}
             preparation={preparation}
             currentSubtitle={currentSubtitle}
@@ -1088,6 +823,7 @@ export default function App() {
             drawerTab={shellController.state.drawerTab}
             contextMenu={shellController.state.contextMenu}
             episodeNavigation={episodeNavigation.state}
+            episodePagination={episodeNavigation.pagination}
             onBack={returnToLibrary}
             onCloseDrawer={shellController.closeDrawer}
             onSelectDrawer={shellController.selectDrawer}
@@ -1115,12 +851,14 @@ export default function App() {
 
       {localResourcesOpen ? (
         <EnvironmentSettingsDialog
+          selectedTab={pendingResourceAction ? undefined : settingsNavigation.tab}
+          onTabChange={pendingResourceAction ? undefined : settingsNavigation.setTab}
           localResources={localResources}
-          firstRun={firstRunResourceSetup}
+          firstRun={false}
           pendingAction={pendingResourceAction}
           previewMode={!isDesktopApp}
           onClose={closeLocalResources}
-          onDismissFirstRun={dismissFirstRunResources}
+          onDismissFirstRun={closeLocalResources}
           onNotice={setToast}
         />
       ) : null}
@@ -1162,22 +900,34 @@ export default function App() {
           translationVersions={subtitleVersions.filter(
             (version) => version.role === "translation",
           )}
-          onClose={() => setSubtitleDialogOpen(false)}
-          onTranscriptionTracked={setTrackedTranscriptionJobId}
+          initialPreparationChoice={transcriptionPreparationChoice}
+          onClose={dismissSubtitleDialog}
+          onTranscriptionTracked={trackTranscription}
           onTranslationTaskCompleted={handleTranslationCompleted}
           localResourceCatalog={localResources.catalog}
           localResourceStatus={localResources.status}
-          onPrepareTranscriptionResources={async (profileId) => {
-            if (localResources.status?.configured) {
-              await localResources.selectProfile(profileId);
+          onPrepareTranscriptionResources={async (profileId, language) => {
+            const projectId = activeProject.id;
+            const isPending = beginSubtitlePreparation();
+            const isCurrent = () => isPending() && isCurrentSession(projectId);
+            try {
+              if (!isCurrent()) return;
+              if (localResources.status?.configured) {
+                await localResources.selectProfile(profileId);
+              }
+              if (!isCurrent()) return;
+              setTranscriptionPreparationChoice({ profileId, language });
+              setSubtitleDialogOpen(false);
+              await requestCapability(
+                "local_transcription",
+                "继续生成原文字幕",
+                () => setSubtitleDialogOpen(true),
+                profileId,
+                isCurrent,
+              );
+            } catch (error) {
+              if (isCurrent()) setToast(userFacingCommandError(error, "settings"));
             }
-            setSubtitleDialogOpen(false);
-            await requestCapability(
-              "local_transcription",
-              "继续生成原文字幕",
-              () => setSubtitleDialogOpen(true),
-              profileId,
-            );
           }}
           onImported={(version) => {
             void handleSubtitleVersionCreated(
@@ -1215,9 +965,16 @@ export default function App() {
       ) : null}
 
       {revisionDialogOpen && activeProject ? (
+        <SubtitleHistoryLoader
+          key={`revision:${sessionId}`}
+          projectId={activeProject.id}
+          onClose={() => setRevisionDialogOpen(false)}
+        >{({ currentVersions, history, pagination }) => (
         <SubtitleRevisionDialog
           project={activeProject}
-          versions={subtitleVersions}
+          versions={currentVersions}
+          historyVersions={history}
+          historyPagination={pagination}
           onClose={() => setRevisionDialogOpen(false)}
           onVersionCreated={handleSubtitleVersionCreated}
           onRetranslate={(segmentIds) => {
@@ -1226,25 +983,33 @@ export default function App() {
             setTranslationDialogOpen(true);
           }}
         />
+        )}</SubtitleHistoryLoader>
       ) : null}
 
       {deliveryDialogOpen && activeProject ? (
+        <SubtitleHistoryLoader
+          key={`delivery:${sessionId}`}
+          projectId={activeProject.id}
+          onClose={() => setDeliveryDialogOpen(false)}
+        >{({ currentVersions, history, pagination }) => (
         <SubtitleDeliveryDialog
           project={activeProject}
-          versions={subtitleVersions}
+          historyPagination={pagination}
+          versions={history}
           currentSubtitle={
-            subtitleVersions.find(
+            currentVersions.find(
               (version) => version.role === "original" && version.isCurrent,
             ) ?? null
           }
           currentTranslation={
-            subtitleVersions.find(
+            currentVersions.find(
               (version) =>
                 version.role === "translation" && version.isCurrent,
             ) ?? null
           }
           onClose={() => setDeliveryDialogOpen(false)}
         />
+        )}</SubtitleHistoryLoader>
       ) : null}
 
       {remoteUrlDialogOpen ? (
@@ -1253,10 +1018,6 @@ export default function App() {
           onClose={() => setRemoteUrlDialogOpen(false)}
           onImported={(project) => {
             setRemoteUrlDialogOpen(false);
-            setProjects((current) => [
-              project,
-              ...current.filter((item) => item.id !== project.id),
-            ]);
             setToast("远程媒体已保存为本地副本。");
             void prepareAndOpen(project, false, null);
           }}

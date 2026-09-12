@@ -1,0 +1,424 @@
+{
+  "$defs": {
+    "AiExecutionKind": {
+      "enum": [
+        "manual",
+        "codex",
+        "api"
+      ],
+      "type": "string"
+    },
+    "AiTaskExecutionInfo": {
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/AiExecutionKind"
+        },
+        "modelId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "providerId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "providerRequestId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "serviceConfigId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "serviceRevision": {
+          "format": "uint64",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "usage": true
+      },
+      "required": [
+        "kind",
+        "serviceConfigId",
+        "serviceRevision",
+        "providerId",
+        "modelId",
+        "providerRequestId",
+        "usage"
+      ],
+      "type": "object"
+    },
+    "Explanation": {
+      "properties": {
+        "confirmedFacts": {
+          "items": {
+            "$ref": "#/$defs/ExplanationEntry"
+          },
+          "type": "array"
+        },
+        "createdAtMs": {
+          "format": "int64",
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": "integer"
+        },
+        "id": {
+          "type": "string"
+        },
+        "materialSummary": {
+          "$ref": "#/$defs/ExplanationMaterialSummary"
+        },
+        "playbackCutoffMs": {
+          "format": "int64",
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": "integer"
+        },
+        "possibleInterpretations": {
+          "items": {
+            "$ref": "#/$defs/ExplanationEntry"
+          },
+          "type": "array"
+        },
+        "projectId": {
+          "type": "string"
+        },
+        "protocolVersion": {
+          "type": "string"
+        },
+        "sceneStartMs": {
+          "format": "int64",
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": "integer"
+        },
+        "sourceVersionId": {
+          "type": "string"
+        },
+        "taskId": {
+          "type": "string"
+        },
+        "translationVersionId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "withheldReason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "projectId",
+        "taskId",
+        "sourceVersionId",
+        "translationVersionId",
+        "playbackCutoffMs",
+        "sceneStartMs",
+        "protocolVersion",
+        "materialSummary",
+        "confirmedFacts",
+        "possibleInterpretations",
+        "withheldReason",
+        "createdAtMs"
+      ],
+      "type": "object"
+    },
+    "ExplanationEntry": {
+      "properties": {
+        "frameIds": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "subtitleSegmentIds": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "text",
+        "subtitleSegmentIds",
+        "frameIds"
+      ],
+      "type": "object"
+    },
+    "ExplanationFrame": {
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "ordinal": {
+          "format": "uint",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "path": {
+          "type": "string"
+        },
+        "sha256": {
+          "type": "string"
+        },
+        "timestampMs": {
+          "format": "int64",
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "ordinal",
+        "timestampMs",
+        "path",
+        "sha256"
+      ],
+      "type": "object"
+    },
+    "ExplanationMaterialSummary": {
+      "properties": {
+        "endMs": {
+          "format": "int64",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "frameCount": {
+          "format": "uint",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "startMs": {
+          "format": "int64",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "subtitleCount": {
+          "format": "uint",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "subtitleCount",
+        "frameCount",
+        "startMs",
+        "endMs"
+      ],
+      "type": "object"
+    },
+    "ExplanationTask": {
+      "properties": {
+        "authorizedSegmentIds": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "completedAtMs": {
+          "format": "int64",
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "createdAtMs": {
+          "format": "int64",
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": "integer"
+        },
+        "errorCode": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "errorMessage": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "execution": {
+          "$ref": "#/$defs/AiTaskExecutionInfo"
+        },
+        "expectedProjectRevision": {
+          "format": "int64",
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": "integer"
+        },
+        "frames": {
+          "items": {
+            "$ref": "#/$defs/ExplanationFrame"
+          },
+          "type": "array"
+        },
+        "handoffKind": {
+          "$ref": "#/$defs/AiExecutionKind"
+        },
+        "id": {
+          "type": "string"
+        },
+        "materialScope": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "materialSummary": {
+          "$ref": "#/$defs/ExplanationMaterialSummary"
+        },
+        "outputExplanationId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "playbackCutoffMs": {
+          "format": "int64",
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": "integer"
+        },
+        "progress": {
+          "format": "double",
+          "maximum": 1,
+          "minimum": 0,
+          "type": "number"
+        },
+        "projectId": {
+          "type": "string"
+        },
+        "protocolVersion": {
+          "type": "string"
+        },
+        "receiverLabel": {
+          "type": "string"
+        },
+        "sceneStartMs": {
+          "format": "int64",
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": "integer"
+        },
+        "sourceVersionId": {
+          "type": "string"
+        },
+        "stage": {
+          "type": "string"
+        },
+        "startedAtMs": {
+          "format": "int64",
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "status": {
+          "$ref": "#/$defs/TaskStatus"
+        },
+        "translationVersionId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "updatedAtMs": {
+          "format": "int64",
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "projectId",
+        "handoffKind",
+        "execution",
+        "protocolVersion",
+        "status",
+        "stage",
+        "progress",
+        "receiverLabel",
+        "materialScope",
+        "sourceVersionId",
+        "translationVersionId",
+        "authorizedSegmentIds",
+        "playbackCutoffMs",
+        "sceneStartMs",
+        "expectedProjectRevision",
+        "outputExplanationId",
+        "errorCode",
+        "errorMessage",
+        "createdAtMs",
+        "updatedAtMs",
+        "startedAtMs",
+        "completedAtMs",
+        "frames",
+        "materialSummary"
+      ],
+      "type": "object"
+    },
+    "TaskStatus": {
+      "enum": [
+        "awaiting_external_result",
+        "queued",
+        "running",
+        "validating",
+        "completed",
+        "failed",
+        "cancelled",
+        "interrupted"
+      ],
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "explanation": {
+      "$ref": "#/$defs/Explanation"
+    },
+    "task": {
+      "$ref": "#/$defs/ExplanationTask"
+    }
+  },
+  "required": [
+    "task",
+    "explanation"
+  ],
+  "title": "ExplanationApplication",
+  "type": "object"
+}

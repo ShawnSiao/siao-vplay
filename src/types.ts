@@ -1,9 +1,15 @@
+export interface PromptSelection {
+  templateId: string;
+  oneTimeRequirements: string;
+}
+
+export type { ExplanationFrame, ExplanationTask, ExplanationMaterialSummary } from "./generated/explanation-task";
+export type { Explanation, ExplanationEntry } from "./generated/explanation";
+export type { ExplanationApplication } from "./generated/explanation-application";
+export type { SubtitleIssueSeverity, SubtitleIssueCode, SubtitlePreflightIssue, SubtitlePreflightReport, SubtitleWord, SubtitleSegment, SubtitleVersion } from "./generated/subtitle-version";
 import type {
-  CollectionDetail,
   LibraryItemAvailability,
-  LibraryRootStatus,
-  LibraryRootSummary,
-} from "./features/library/libraryTypes";
+} from "./lib/libraryTypes";
 
 export type {
   CollectionDetail,
@@ -22,15 +28,9 @@ export type {
   LibrarySectionPage,
   ListLibrarySectionInput,
   SeasonSummary,
-} from "./features/library/libraryTypes";
+} from "./lib/libraryTypes";
 
-export type AppStatus = {
-  appName: string;
-  version: string;
-  platform: string;
-  dataDirectory: string;
-  startupMediaPath: string | null;
-};
+export type { AppStatus } from "./generated/app-status";
 
 export type ProjectStatus = "ready" | "needs_relink";
 
@@ -60,27 +60,9 @@ export type PlaybackState = {
 
 export type SubtitleDisplayMode = "original" | "translation" | "bilingual";
 
-export type Project = {
-  id: string;
-  title: string;
-  status: ProjectStatus;
-  revision: number;
-  createdAtMs: number;
-  updatedAtMs: number;
-  lastOpenedAtMs: number;
-  mediaSource: MediaSource;
-  playbackState: PlaybackState;
-};
+export type { Project } from "./generated/project";
 
-export type LibrarySearchResult = {
-  kind: "collection" | "episode" | "unclassified";
-  title: string;
-  subtitle: string | null;
-  collectionId: string | null;
-  projectId: string | null;
-  seasonNumber: number | null;
-  episodeNumber: number | null;
-};
+export type { SearchResult as LibrarySearchResult } from "./generated/library-search-result";
 
 export type EpisodeRecognition =
   | "sxx_exx"
@@ -119,36 +101,9 @@ export type IgnoredLibraryEntry = {
     | "unreadable";
 };
 
-export type LibraryScanPhase =
-  | "scanning"
-  | "fingerprinting"
-  | "completed"
-  | "cancelled"
-  | "failed";
+export type { LibraryScanPhase, LibraryScanProgress } from "./generated/library-scan-progress";
 
-export type LibraryScanProgress = {
-  scanId: string;
-  phase: LibraryScanPhase;
-  scannedDirectories: number;
-  scannedFiles: number;
-  candidateFiles: number;
-  ignoredEntries: number;
-  currentRelativePath: string | null;
-  message: string | null;
-};
-
-export type LibraryScanPreview = {
-  scanId: string;
-  previewToken: string;
-  rootPath: string;
-  rootDisplayName: string;
-  suggestedCollectionTitle: string;
-  candidates: LibraryScanCandidate[];
-  ignoredEntries: IgnoredLibraryEntry[];
-  ignoredCount: number;
-  needsConfirmationCount: number;
-  expiresAtMs: number;
-};
+export type { LibraryScanPreview } from "./generated/library-scan-preview";
 
 export type ConfirmLibraryItemInput = {
   candidateId: string;
@@ -166,13 +121,7 @@ export type ConfirmLibraryImportInput = {
   confirmFingerprintDuplicates: boolean;
 };
 
-export type LibraryImportResult = {
-  rootId: string;
-  collection: CollectionDetail;
-  importedItemCount: number;
-  createdProjectCount: number;
-  reusedProjectCount: number;
-};
+export type { LibraryImportResult } from "./generated/library-import-result";
 
 export type LibraryRecoveryItem = {
   collectionId: string;
@@ -182,20 +131,7 @@ export type LibraryRecoveryItem = {
   previousAvailability: LibraryItemAvailability;
 };
 
-export type LibraryRescanPreview = {
-  previewToken: string;
-  rootId: string;
-  rootPath: string;
-  rootDisplayName: string;
-  collectionId: string;
-  rootOffline: boolean;
-  newCandidates: LibraryScanCandidate[];
-  missingItems: LibraryRecoveryItem[];
-  changedItems: LibraryRecoveryItem[];
-  availableItemCount: number;
-  ignoredCount: number;
-  expiresAtMs: number;
-};
+export type { LibraryRescanPreview } from "./generated/library-rescan-preview";
 
 export type ApplyLibraryRescanInput = {
   previewToken: string;
@@ -205,16 +141,7 @@ export type ApplyLibraryRescanInput = {
   confirmFingerprintDuplicates: boolean;
 };
 
-export type LibraryRescanResult = {
-  root: LibraryRootSummary;
-  collection: CollectionDetail;
-  addedItemCount: number;
-  createdProjectCount: number;
-  reusedProjectCount: number;
-  missingItemCount: number;
-  changedItemCount: number;
-  availableItemCount: number;
-};
+export type { LibraryRescanResult } from "./generated/library-rescan-result";
 
 export type RelocationMismatchReason =
   | "missing"
@@ -227,27 +154,11 @@ export type LibraryRelocationMismatch = {
   reason: RelocationMismatchReason;
 };
 
-export type LibraryRootRelocationPreview = {
-  previewToken: string;
-  rootId: string;
-  currentRootPath: string;
-  newRootPath: string;
-  matchedItemCount: number;
-  mismatches: LibraryRelocationMismatch[];
-  expiresAtMs: number;
-};
+export type { LibraryRootRelocationPreview } from "./generated/library-relocation-preview";
 
-export type LibraryRootRelocationResult = {
-  root: LibraryRootSummary;
-  updatedItemCount: number;
-};
+export type { LibraryRootRelocationResult } from "./generated/library-relocation-result";
 
-export type LibraryCollectionDeletionResult = {
-  collectionId: string;
-  rootId: string | null;
-  preservedProjectCount: number;
-  rootStatus: LibraryRootStatus | null;
-};
+export type { LibraryCollectionDeletionResult } from "./generated/collection-deletion-result";
 
 export type LibraryRootRebuildMatchKind =
   | "matched"
@@ -268,22 +179,7 @@ export type LibraryRootRebuildItem = {
   reason: string | null;
 };
 
-export type LibraryRootRebuildPreview = {
-  previewToken: string;
-  rootId: string;
-  currentRootPath: string;
-  rootPath: string;
-  rootDisplayName: string;
-  suggestedCollectionTitle: string;
-  rootOffline: boolean;
-  newCandidates: LibraryScanCandidate[];
-  matchedItems: LibraryRootRebuildItem[];
-  missingItems: LibraryRootRebuildItem[];
-  changedItems: LibraryRootRebuildItem[];
-  uncertainItems: LibraryRootRebuildItem[];
-  ignoredCount: number;
-  expiresAtMs: number;
-};
+export type { LibraryRootRebuildPreview } from "./generated/library-rebuild-preview";
 
 export type InspectLibraryRootRebuildInput = {
   rootId: string;
@@ -300,22 +196,9 @@ export type ApplyLibraryRootRebuildInput = {
   confirmFingerprintDuplicates: boolean;
 };
 
-export type LibraryRootRebuildResult = {
-  root: LibraryRootSummary;
-  collection: CollectionDetail;
-  restoredItemCount: number;
-  addedItemCount: number;
-  createdProjectCount: number;
-  reusedProjectCount: number;
-  missingItemCount: number;
-  changedItemCount: number;
-};
+export type { LibraryRootRebuildResult } from "./generated/library-rebuild-result";
 
-export type LibraryRootRevokeResult = {
-  rootId: string;
-  detachedCollectionCount: number;
-  preservedProjectCount: number;
-};
+export type { LibraryRootRevokeResult } from "./generated/library-root-revoke-result";
 
 export type MediaArtifactStatus =
   | "queued"
@@ -394,354 +277,51 @@ export type MediaInspection = {
   reusedProbe: boolean;
 };
 
-export type MediaPreparation = {
-  inspection: MediaInspection;
-  playbackSourceKind: "original" | "proxy";
-  playbackPath: string;
-  proxyArtifact: MediaArtifact | null;
-  reusedProxy: boolean;
-};
+export type { MediaPreparation } from "./generated/media-preparation-result";
 
-export type MediaRuntimeStatus = {
-  available: boolean;
-  ffmpegPath: string | null;
-  ffprobePath: string | null;
-  version: string | null;
-  errorMessage: string | null;
-};
 
-export type RuntimeSettings = {
-  storageRoot: string | null;
-  preferredModel: "small" | "base";
-};
 
-export type RuntimeComponent = {
-  id: string;
-  title: string;
-  componentKind: "bundled" | "download";
-  version: string;
-  available: boolean;
-  installedPath: string | null;
-  expectedSizeBytes: number;
-  installedSizeBytes: number | null;
-  expectedSha256: string;
-  sourceUrl: string;
-  sourcePage: string;
-  license: string;
-  errorMessage: string | null;
-};
+export type { LocalResourceRootState, LocalResourceCapabilityState, LocalResourceCapabilityStatus, LocalResourceStatus } from "./generated/local-resource-status";
 
-export type RuntimeCatalog = {
-  settings: RuntimeSettings;
-  components: RuntimeComponent[];
-};
+export type { LocalResourceLocationPlan } from "./generated/local-resource-location-plan";
 
-export type LocalResourceRootState =
-  | "setup_required"
-  | "ready"
-  | "root_unavailable"
-  | "repair_required";
+export type { ResourceArtifact as LocalResourceArtifact, ResourceDefinition as LocalResourceDefinition, LocalResourceCatalog } from "./generated/local-resource-catalog";
 
-export type LocalResourceCapabilityState =
-  | "setup_required"
-  | "not_ready"
-  | "preparing"
-  | "ready"
-  | "repair_required"
-  | "root_unavailable"
-  | "update_available";
+export type { ResourceDownloadTaskState, ResourceDownloadTask } from "./generated/resource-download-task";
 
-export type LocalResourceCapabilityStatus = {
-  id: string;
-  title: string;
-  state: LocalResourceCapabilityState;
-  requiredResourceIds: string[];
-  missingResourceIds: string[];
-};
+export type { ResourceNetworkStatus } from "./generated/resource-network-status";
 
-export type LocalResourceStatus = {
-  configured: boolean;
-  selectedParent: string | null;
-  resourceRoot: string | null;
-  rootState: LocalResourceRootState;
-  freeSpaceBytes: number | null;
-  preferredProfile: string;
-  capabilities: LocalResourceCapabilityStatus[];
-};
+export type { CapabilityPreparation } from "./generated/capability-preparation";
 
-export type LocalResourceLocationPlan = {
-  selectedParent: string;
-  resourceRoot: string;
-  parentExists: boolean;
-  resourceRootExists: boolean;
-  freeSpaceBytes: number | null;
-  confirmationRequired: boolean;
-};
+export type { ResourceRemovalResult } from "./generated/resource-removal-result";
 
-export type LocalResourceArtifact = {
-  url: string;
-  size: number;
-  sha256: string;
-  format: string;
-  stripComponents?: number;
-};
+export type { ResourceMigrationPreview, ResourceMigrationSource, ResourceMigrationCandidate } from "./generated/resource-migration-preview";
 
-export type LocalResourceDefinition = {
-  id: string;
-  version: string;
-  platform: string;
-  kind: string;
-  bundled: boolean;
-  installedSize?: number;
-  expectedDownloadSize?: number;
-  license: string;
-  sourcePage: string;
-  artifact?: LocalResourceArtifact;
-  entrypoints: Record<string, string>;
-  healthCheck: string;
-  sourceCommit?: string;
-  patchSha256?: string;
-  requires?: string;
-  distribution?: { status: string };
-};
+export type { ResourceAdoptionResult } from "./generated/resource-adoption-result";
 
-export type LocalResourceCatalog = {
-  schemaVersion: number;
-  productId: string;
-  updatedAt: string;
-  packageProfile: string;
-  bundlePolicy: {
-    maximumExceptionBytes: number;
-    allowlistedResourceIds: string[];
-  };
-  capabilities: Array<{
-    id: string;
-    title: string;
-    resourceIds: string[];
-    profileIds: string[];
-    requiresCapabilityIds: string[];
-  }>;
-  profiles: Array<{
-    id: string;
-    title: string;
-    resourceIds: string[];
-    recommended: boolean;
-  }>;
-  resources: LocalResourceDefinition[];
-};
+export type { LocalResourceMovePlan } from "./generated/local-resource-move-plan";
 
-export type ResourceDownloadTaskState =
-  | "queued"
-  | "downloading"
-  | "paused"
-  | "verifying"
-  | "installing"
-  | "completed"
-  | "failed"
-  | "cancelled";
+export type { LocalResourceMoveResult } from "./generated/local-resource-move-result";
 
-export type ResourceDownloadTask = {
-  id: string;
-  resourceId: string;
-  version: string;
-  state: ResourceDownloadTaskState;
-  downloadedBytes: number;
-  totalBytes: number;
-  requestedByCapabilityIds: string[];
-  pendingActionIds: string[];
-  attempt: number;
-  errorCode: string | null;
-  errorMessage: string | null;
-  createdAtMs: number;
-  updatedAtMs: number;
-  forceReinstall: boolean;
-};
+export type { UnusedResourceCleanupPlan } from "./generated/unused-resource-cleanup-plan";
 
-export type ResourceNetworkStatus = {
-  mode: "direct" | "proxy";
-  proxySource: "custom" | "environment" | "windows_system" | "direct";
-  proxyAddress: string | null;
-};
+export type { UnusedResourceCleanupResult } from "./generated/unused-resource-cleanup-result";
 
-export type CapabilityPreparation = {
-  capabilityId: string;
-  pendingActionId: string | null;
-  state: "ready" | "preparing";
-  resourceIds: string[];
-  readyResourceIds: string[];
-  taskIds: string[];
-};
+export type { ResourceVersionDiagnostic, ResourceDiagnosticItem, ResourceTaskDiagnostic, LocalResourceDiagnostics } from "./generated/local-resource-diagnostics";
 
-export type ResourceRemovalResult = {
-  resourceId: string;
-  removed: boolean;
-  affectedCapabilityIds: string[];
-};
+export type { ResourceRollbackResult } from "./generated/resource-rollback-result";
 
-export type ResourceMigrationSource = {
-  kind: "selected_directory";
-  path: string;
-};
+export type { OldResourceVersionCandidate } from "./generated/old-resource-version-cleanup-plan";
 
-export type ResourceMigrationCandidate = {
-  sourceKind: ResourceMigrationSource["kind"];
-  sourceRoot: string;
-  resourceId: string;
-  resourcePath: string;
-  state: "verified" | "rejected";
-  reusableBytes: number;
-  message: string | null;
-};
+export type { OldResourceVersionCleanupPlan } from "./generated/old-resource-version-cleanup-plan";
 
-export type ResourceMigrationPreview = {
-  sources: ResourceMigrationSource[];
-  candidates: ResourceMigrationCandidate[];
-  verifiedResourceIds: string[];
-  reusableBytes: number;
-  rejectedCount: number;
-};
+export type { OldResourceVersionCleanupResult } from "./generated/old-resource-version-cleanup-result";
 
-export type ResourceAdoptionResult = {
-  adoptedResourceIds: string[];
-  alreadyActiveResourceIds: string[];
-  rejectedResourceIds: string[];
-  reusableBytes: number;
-};
+export type { DeleteProjectResult } from "./generated/delete-project-result";
 
-export type LocalResourceMovePlan = {
-  previousRoot: string;
-  selectedParent: string;
-  resourceRoot: string;
-  bytesToCopy: number;
-  fileCount: number;
-  freeSpaceBytes: number | null;
-  crossVolume: boolean;
-  destinationExists: boolean;
-  confirmationRequired: boolean;
-};
+export type { RemoteMediaKind, RemoteMediaPreview } from "./generated/remote-media-preview";
 
-export type LocalResourceMoveResult = {
-  previousRoot: string;
-  currentRoot: string;
-  copiedBytes: number;
-  verifiedFileCount: number;
-  crossVolume: boolean;
-  previousRootRetained: boolean;
-};
-
-export type UnusedResourceCleanupPlan = {
-  resourceIds: string[];
-  reclaimableBytes: number;
-  confirmationRequired: boolean;
-};
-
-export type UnusedResourceCleanupResult = {
-  removedResourceIds: string[];
-  reclaimedBytes: number;
-};
-
-export type ResourceVersionDiagnostic = {
-  version: string;
-  active: boolean;
-  installPath: string;
-  fileCount: number;
-  installedBytes: number;
-  manifestSha256: string;
-  healthStatus: string;
-  activatedAtMs: number | null;
-  entrypointsAvailable: boolean;
-};
-
-export type ResourceDiagnosticItem = {
-  id: string;
-  catalogVersion: string;
-  activeVersion: string | null;
-  state: "not_installed" | "ready" | "update_available" | "repair_required";
-  license: string;
-  sourcePage: string;
-  artifactSha256: string | null;
-  artifactUrl: string | null;
-  healthCheck: string;
-  versions: ResourceVersionDiagnostic[];
-};
-
-export type ResourceTaskDiagnostic = {
-  id: string;
-  resourceId: string;
-  version: string;
-  state: string;
-  downloadedBytes: number;
-  totalBytes: number;
-  errorCode: string | null;
-  errorMessage: string | null;
-};
-
-export type LocalResourceDiagnostics = {
-  generatedAtMs: number;
-  catalogSource: "embedded";
-  remoteCatalogEnabled: false;
-  remoteSignaturePolicy: string;
-  rootState: LocalResourceRootState;
-  resourceRoot: string | null;
-  preferredProfile: string;
-  resources: ResourceDiagnosticItem[];
-  tasks: ResourceTaskDiagnostic[];
-};
-
-export type ResourceRollbackResult = {
-  resourceId: string;
-  previousVersion: string;
-  activeVersion: string;
-};
-
-export type OldResourceVersionCandidate = {
-  resourceId: string;
-  version: string;
-  reclaimableBytes: number;
-};
-
-export type OldResourceVersionCleanupPlan = {
-  candidates: OldResourceVersionCandidate[];
-  protectedVersions: string[];
-  reclaimableBytes: number;
-  confirmationRequired: boolean;
-};
-
-export type OldResourceVersionCleanupResult = {
-  removedVersions: string[];
-  reclaimedBytes: number;
-};
-
-export type DeleteProjectResult = {
-  projectId: string;
-  deleted: boolean;
-  sourceMediaDeleted: false;
-  cachedMediaDeleted: boolean;
-};
-
-export type RemoteMediaKind = "direct_file" | "hls";
-
-export type RemoteMediaPreview = {
-  originalUrl: string;
-  finalUrl: string;
-  displayName: string;
-  mediaKind: RemoteMediaKind;
-  contentType: string | null;
-  contentLength: number | null;
-  previewToken: string;
-};
-
-export type YouTubeMediaPreview = {
-  originalUrl: string;
-  webpageUrl: string;
-  videoId: string;
-  title: string;
-  durationSeconds: number;
-  fileSizeBytes: number | null;
-  importerVersion: string;
-  importerSha256: string;
-  previewToken: string;
-};
+export type { YouTubeMediaPreview } from "./generated/public-video-preview";
 
 export type DesktopCommandError = {
   code: string;
@@ -758,72 +338,8 @@ export type SubtitleCue = {
   confidence: number | null;
 };
 
-export type SubtitleIssueSeverity = "error" | "warning";
-
-export type SubtitleIssueCode =
-  | "empty_text"
-  | "invalid_timing"
-  | "out_of_order"
-  | "out_of_bounds"
-  | "overlap"
-  | "long_gap"
-  | "duration_too_short"
-  | "duration_too_long"
-  | "reading_speed_high";
-
-export type SubtitlePreflightIssue = {
-  code: SubtitleIssueCode;
-  severity: SubtitleIssueSeverity;
-  ordinal: number | null;
-  relatedOrdinal: number | null;
-  message: string;
-};
-
-export type SubtitlePreflightReport = {
-  status: "ready" | "warning" | "blocked";
-  segmentCount: number;
-  errorCount: number;
-  warningCount: number;
-  firstStartMs: number | null;
-  lastEndMs: number | null;
-  mediaDurationMs: number | null;
-  coverageRatio: number | null;
-  issues: SubtitlePreflightIssue[];
-};
-
-export type SubtitleImportPreview = {
-  format: SubtitleFileFormat;
-  sourceLabel: string;
-  sourceSha256: string;
-  languageCode: string;
-  expectedProjectRevision: number;
-  expectedMediaSha256: string;
-  cues: SubtitleCue[];
-  preflight: SubtitlePreflightReport;
-  canImport: boolean;
-};
-
-export type EmbeddedSubtitlePreview = SubtitleImportPreview & {
-  streamIndex: number;
-  codecName: string;
-  embeddedLanguage: string | null;
-};
-
-export type SubtitleWord = {
-  ordinal: number;
-  startMs: number;
-  endMs: number;
-  text: string;
-  confidence: number | null;
-};
-
-export type SubtitleSegment = SubtitleCue & {
-  id: string;
-  lineageId: string;
-  sourceSegmentId: string | null;
-  issueKind: "missing" | "duplicate" | "incorrect" | null;
-  words: SubtitleWord[];
-};
+export type { SubtitleImportPreview } from "./generated/subtitle-import-preview";
+export type { EmbeddedSubtitlePreview } from "./generated/embedded-subtitle-preview";
 
 export type SubtitleSegmentEdit = {
   segmentId: string;
@@ -836,397 +352,49 @@ export type SubtitleGlobalReplacement = {
   replaceText: string;
 };
 
-export type SubtitleVersion = {
-  id: string;
-  trackId: string;
-  projectId: string;
-  role: "original" | "translation";
-  versionNumber: number;
-  status: "draft" | "ready" | "rejected";
-  sourceKind:
-    | "imported_file"
-    | "embedded"
-    | "transcription"
-    | "agent_translation";
-  sourceLabel: string;
-  sourceSha256: string;
-  mediaSha256: string;
-  languageCode: string;
-  projectRevision: number;
-  parentVersionId: string | null;
-  sourceTaskId: string | null;
-  preflight: SubtitlePreflightReport;
-  createdAtMs: number;
-  isCurrent: boolean;
-  segments: SubtitleSegment[];
-};
 
-export type TranscriptionRuntimeOption = {
-  backend: "vulkan" | "cpu";
-  available: boolean;
-  version: string | null;
-  errorMessage: string | null;
-};
 
-export type TranscriptionModelStatus = {
-  modelKind: "small" | "base";
-  available: boolean;
-  errorMessage: string | null;
-};
 
-export type TranscriptionRuntimeStatus = {
-  available: boolean;
-  preferredBackend: "vulkan" | "cpu" | null;
-  runtimes: TranscriptionRuntimeOption[];
-  models: TranscriptionModelStatus[];
-};
 
-export type TranscriptionJob = {
-  id: string;
-  projectId: string;
-  status:
-    | "queued"
-    | "extracting"
-    | "transcribing"
-    | "validating"
-    | "completed"
-    | "failed"
-    | "cancelled"
-    | "interrupted";
-  stage: string;
-  progress: number;
-  languageCode: "auto" | "en" | "th" | "ja" | "ko";
-  modelKind: "small" | "base";
-  runtimeBackend: "vulkan" | "cpu";
-  runtimeVersion: string;
-  subtitleVersionId: string | null;
-  errorCode: string | null;
-  errorMessage: string | null;
-  createdAtMs: number;
-  updatedAtMs: number;
-  startedAtMs: number | null;
-  completedAtMs: number | null;
-};
 
-export type TranslationTask = {
-  id: string;
-  projectId: string;
-  taskType: "subtitle_translation";
-  handoffKind: "manual" | "codex";
-  protocolVersion: string;
-  status:
-    | "awaiting_external_result"
-    | "queued"
-    | "running"
-    | "validating"
-    | "completed"
-    | "failed"
-    | "cancelled"
-    | "interrupted";
-  stage: string;
-  progress: number;
-  receiverLabel: string;
-  materialScope: string[];
-  sourceVersionId: string;
-  sourceLanguageCode: string;
-  targetLanguageCode: string;
-  authorizedSegmentIds: string[];
-  segmentCount: number;
-  expectedProjectRevision: number;
-  baseTranslationVersionId: string | null;
-  outputVersionId: string | null;
-  validation: TranslationValidation | null;
-  errorCode: string | null;
-  errorMessage: string | null;
-  createdAtMs: number;
-  updatedAtMs: number;
-  startedAtMs: number | null;
-  completedAtMs: number | null;
-};
 
-export type TranslationValidation = {
-  status: "accepted" | "accepted_with_warnings";
-  translationCount: number;
-  warningCount: number;
-  warnings: string[];
-};
+export type { TranscriptionJob } from "./generated/transcription-job";
 
-export type TranslationApplication = {
-  task: TranslationTask;
-  subtitleVersion: SubtitleVersion;
-  validation: TranslationValidation;
-};
+export type { TranslationTask, TranslationValidation } from "./generated/translation-task";
+export type { TranslationApplication } from "./generated/translation-application";
 
-export type ExternalAgentTaskKind =
-  | "translation"
-  | "explanation"
-  | "learning";
+export type { ExternalAgentTaskKind, ExternalAgentResultUpdate } from "./generated/external-agent-result-update";
 
-export type ExternalAgentResultUpdate = {
-  taskKind: ExternalAgentTaskKind;
-  taskId: string;
-  projectId: string;
-  status: "validating" | "completed" | "rejected";
-  outputId: string | null;
-  message: string;
-};
+export type { CodexRuntimeStatus } from "./generated/codex-runtime-status";
+export type { AiTaskExecutionInfo } from "./generated/learning-task";
 
-export type CodexRuntimeStatus = {
-  available: boolean;
-  authenticated: boolean;
-  supported: boolean;
-  version: string | null;
-  authMode: "chatgpt" | "api_key" | null;
-  minimumVersion: string;
-  errorCode: string | null;
-  errorMessage: string | null;
-};
-export type AiTaskExecutionInfo = { kind: "manual" | "codex" | "api"; serviceConfigId: string | null; serviceRevision: number | null; providerId: string | null; modelId: string | null; providerRequestId: string | null; usage: Record<string, unknown> | null };
-export type ExplanationFrame = {
-  id: string;
-  ordinal: number;
-  timestampMs: number;
-  path: string;
-  sha256: string;
-};
-
-export type StorageSettings = {
-  revision: number;
-  appDataRoot: string;
-  appDataRootLockedByEnvironment: boolean;
-  remoteMediaRoot: string;
-  remoteMediaUsesDefault: boolean;
-  mediaCacheRoot: string;
-  mediaCacheUsesDefault: boolean;
-  defaultSubtitleExportDirectory: string | null;
-  defaultVideoReportExportDirectory: string | null;
-  appDataUsedBytes: number;
-  appDataFreeSpaceBytes: number | null;
-  remoteMediaUsedBytes: number;
-  mediaCacheUsedBytes: number;
-  appDataAvailable: boolean;
-  remoteMediaAvailable: boolean;
-  mediaCacheAvailable: boolean;
-  pendingAppDataRoot: string | null;
-};
-
-export type SaveStorageSettingsInput = {
-  expectedRevision: number;
-  remoteMediaRoot: string | null;
-  mediaCacheRoot: string | null;
-  defaultSubtitleExportDirectory: string | null;
-  defaultVideoReportExportDirectory: string | null;
-};
-
-export type ExplanationMaterialSummary = {
-  subtitleCount: number;
-  frameCount: number;
-  startMs: number;
-  endMs: number;
-};
-
-export type ExplanationEntry = {
-  text: string;
-  subtitleSegmentIds: string[];
-  frameIds: string[];
-};
-
-export type ExplanationTask = {
-  id: string;
-  projectId: string;
-  handoffKind: "manual" | "codex" | "api";
-  execution?: AiTaskExecutionInfo;
-  protocolVersion: string;
-  status:
-    | "awaiting_external_result"
-    | "queued"
-    | "running"
-    | "validating"
-    | "completed"
-    | "failed"
-    | "cancelled"
-    | "interrupted";
-  stage: string;
-  progress: number;
-  receiverLabel: string;
-  materialScope: string[];
-  sourceVersionId: string;
-  translationVersionId: string | null;
-  authorizedSegmentIds: string[];
-  playbackCutoffMs: number;
-  sceneStartMs: number;
-  expectedProjectRevision: number;
-  outputExplanationId: string | null;
-  errorCode: string | null;
-  errorMessage: string | null;
-  createdAtMs: number;
-  updatedAtMs: number;
-  startedAtMs: number | null;
-  completedAtMs: number | null;
-  frames: ExplanationFrame[];
-  materialSummary: ExplanationMaterialSummary;
-};
-export type Explanation = {
-  id: string;
-  projectId: string;
-  taskId: string;
-  sourceVersionId: string;
-  translationVersionId: string | null;
-  playbackCutoffMs: number;
-  sceneStartMs: number;
-  protocolVersion: string;
-  materialSummary: ExplanationMaterialSummary;
-  confirmedFacts: ExplanationEntry[];
-  possibleInterpretations: ExplanationEntry[];
-  withheldReason: string | null;
-  createdAtMs: number;
-};
-
-export type ExplanationApplication = {
-  task: ExplanationTask;
-  explanation: Explanation;
-};
+export type { StorageSettingsView as StorageSettings } from "./generated/storage-settings";
+export type { SaveStorageSettingsInput } from "./generated/save-storage-settings-input";
 
 export type LearningSelectionKind = "word" | "phrase" | "sentence";
 
-export type LearningTask = {
-  id: string;
-  projectId: string;
-  handoffKind: "manual" | "codex" | "api";
-  execution?: AiTaskExecutionInfo;
-  protocolVersion: string;
-  status:
-    | "awaiting_external_result"
-    | "queued"
-    | "running"
-    | "validating"
-    | "completed"
-    | "failed"
-    | "cancelled"
-    | "interrupted";
-  stage: string;
-  progress: number;
-  receiverLabel: string;
-  materialScope: string[];
-  sourceVersionId: string;
-  translationVersionId: string | null;
-  sourceSegmentId: string;
-  selectedText: string;
-  selectionKind: LearningSelectionKind;
-  playbackPositionMs: number;
-  expectedProjectRevision: number;
-  outputDictionaryEntryId: string | null;
-  errorCode: string | null;
-  errorMessage: string | null;
-  createdAtMs: number;
-  updatedAtMs: number;
-  startedAtMs: number | null;
-  completedAtMs: number | null;
-};
-export type DictionaryEntry = {
-  id: string;
-  projectId: string;
-  taskId: string;
-  sourceVersionId: string;
-  translationVersionId: string | null;
-  sourceSegmentId: string;
-  selectedText: string;
-  selectionKind: LearningSelectionKind;
-  pronunciation: string;
-  partOfSpeech: string;
-  contextualMeaning: string;
-  usageNote: string | null;
-  sourceSentence: string;
-  translatedSentence: string | null;
-  languageCode: string;
-  playbackPositionMs: number;
-  createdAtMs: number;
-};
+export type { LearningTask } from "./generated/learning-task";
+export type { DictionaryEntry } from "./generated/dictionary-entry";
 
-export type LearningApplication = {
-  task: LearningTask;
-  dictionaryEntry: DictionaryEntry;
-};
+export type { LearningApplication } from "./generated/learning-application";
 
-export type LearningCard = {
-  id: string;
-  projectId: string;
-  dictionaryEntryId: string | null;
-  sourceVersionId: string;
-  translationVersionId: string | null;
-  sourceSegmentId: string;
-  selectedText: string;
-  selectionKind: LearningSelectionKind;
-  pronunciation: string;
-  partOfSpeech: string;
-  contextualMeaning: string;
-  usageNote: string | null;
-  sourceSentence: string;
-  translatedSentence: string | null;
-  languageCode: string;
-  playbackPositionMs: number;
-  screenshotPath: string;
-  screenshotSha256: string;
-  screenshotAvailable: boolean;
-  createdAtMs: number;
-  updatedAtMs: number;
-};
+export type { LearningCard } from "./generated/learning-card";
 
-export type LearningCardsExport = {
-  directory: string;
-  jsonPath: string;
-  markdownPath: string;
-  cardCount: number;
-};
+export type { LearningCardsExport } from "./generated/learning-cards-export";
 
-export type SubtitleExportMode = "original" | "translation" | "bilingual";
 
-export type SubtitleExportFormat = "srt" | "vtt";
 
-export type SubtitleExport = {
-  filePath: string;
-  manifestPath: string;
-  fileSha256: string;
-  mode: SubtitleExportMode;
-  format: SubtitleExportFormat;
-  cueCount: number;
-  sourceVersionId: string | null;
-  translationVersionId: string | null;
-  mediaSha256: string;
-  exportedAtMs: number;
-};
 
-export type SubtitleBurnMode = "translation" | "bilingual";
 
-export type SubtitleBurnStyle = {
-  textSize: "small" | "medium" | "large";
-  positionY: number;
-};
+export type { SubtitleExport, SubtitleExportMode, SubtitleExportFormat } from "./generated/subtitle-export";
 
-export type SubtitleBurnJob = {
-  id: string;
-  projectId: string;
-  status:
-    | "queued"
-    | "running"
-    | "validating"
-    | "completed"
-    | "failed"
-    | "cancelled"
-    | "interrupted";
-  stage: string;
-  progress: number;
-  mode: SubtitleBurnMode;
-  sourceVersionId: string | null;
-  translationVersionId: string;
-  outputPath: string | null;
-  manifestPath: string | null;
-  outputSha256: string | null;
-  runtimeVersion: string;
-  errorCode: string | null;
-  errorMessage: string | null;
-  createdAtMs: number;
-  updatedAtMs: number;
-  startedAtMs: number | null;
-  completedAtMs: number | null;
-};
+export type { SubtitleBurnMode, SubtitleBurnJob } from "./generated/subtitle-burn-job";
+
+export type { SubtitleBurnStyle } from "./generated/subtitle-burn-input";
+
+export type { ResourceDownloadSnapshot } from "./generated/resource-download-snapshot";
+
+export type ResourceLocationResult = import("./generated/resource-location-result").ResourceLocationResult;
+
+export type { MediaRuntimeStatus } from "./generated/media-runtime-status";
+export type { TranscriptionRuntimeStatus, TranscriptionRuntimeOption, TranscriptionModelStatus } from "./generated/transcription-runtime-status";

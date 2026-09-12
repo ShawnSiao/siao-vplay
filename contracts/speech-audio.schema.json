@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "bytes": {
+      "items": {
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "maxItems": 16777216,
+      "minItems": 1,
+      "type": "array"
+    },
+    "language": {
+      "type": "string"
+    },
+    "mimeType": {
+      "type": "string"
+    },
+    "voiceId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "bytes",
+    "mimeType",
+    "voiceId",
+    "language"
+  ],
+  "title": "SpeechAudio",
+  "type": "object"
+}

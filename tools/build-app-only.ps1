@@ -1,10 +1,13 @@
 [CmdletBinding()]
 param(
     [Parameter()]
-    [string]$BuildRoot = 'W:\SiaoVPlay\build-cache\v0.4-ai-insight-summary',
+    [string]$BuildRoot,
 
     [Parameter()]
-    [string]$OutputDirectory = 'W:\SiaoVPlay\candidate-packages\v0.4-ai-insight-summary'
+    [string]$OutputDirectory,
+
+    [Parameter()]
+    [string]$TauriConfig
 )
 
 $ErrorActionPreference = 'Stop'
@@ -26,27 +29,26 @@ function Get-Sha256([string]$Path) {
     }
 }
 
-function Get-SignatureStatus([string]$Path) {
-    try {
-        $certificate = [System.Security.Cryptography.X509Certificates.X509Certificate]::CreateFromSignedFile($Path)
-        if ($null -ne $certificate) {
-            return 'Signed'
-        }
-    }
-    catch [System.Security.Cryptography.CryptographicException] {
-        return 'NotSigned'
-    }
-    return 'NotSigned'
-}
-
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-$buildRootPath = [System.IO.Path]::GetFullPath($BuildRoot)
-if ($buildRootPath -match '^(?i)C:\\') {
-    throw "Installer build directory cannot be on the C drive: $buildRootPath"
+. (Join-Path $PSScriptRoot 'build-policy.ps1')
+& node (Join-Path $PSScriptRoot 'release-metadata.mjs')
+if ($LASTEXITCODE -ne 0) { throw 'Release metadata check failed' }
+$metadata = Get-Content -LiteralPath (Join-Path $repoRoot 'release.json') -Raw | ConvertFrom-Json
+if ([string]::IsNullOrWhiteSpace($BuildRoot)) {
+    $BuildRoot = if ($env:CARGO_TARGET_DIR) { $env:CARGO_TARGET_DIR } else { Join-Path $repoRoot 'src-tauri\target' }
 }
+if ([string]::IsNullOrWhiteSpace($OutputDirectory)) {
+    $OutputDirectory = if ($env:SIAOVPLAY_ARTIFACT_DIR) { $env:SIAOVPLAY_ARTIFACT_DIR } else { Join-Path $repoRoot ('artifacts\' + $metadata.version) }
+}
+$buildRootPath = [System.IO.Path]::GetFullPath($BuildRoot)
 $outputDirectoryPath = [System.IO.Path]::GetFullPath($OutputDirectory)
-if ($outputDirectoryPath -match '^(?i)C:\\') {
-    throw "Candidate output directory cannot be on the C drive: $outputDirectoryPath"
+$sourceCommit = (& git -C $repoRoot rev-parse HEAD).Trim()
+if ($LASTEXITCODE -ne 0) { throw 'Build from a Git checkout to retain source provenance' }
+$dirty = [bool](& git -C $repoRoot status --porcelain --untracked-files=normal)
+Assert-CandidateSourceState $metadata.channel $dirty
+if ($TauriConfig) {
+    $signingConfig = Get-Content -LiteralPath (Resolve-Path -LiteralPath $TauriConfig).Path -Raw | ConvertFrom-Json
+    Assert-SigningConfig $signingConfig
 }
 
 $tauriCli = Join-Path $repoRoot 'node_modules\.bin\tauri.cmd'
@@ -64,7 +66,9 @@ $previousLocation = Get-Location
 try {
     $env:CARGO_TARGET_DIR = $cargoTargetPath
     Set-Location -LiteralPath $repoRoot
-    & $tauriCli build
+    $tauriArguments = @('build')
+    if ($TauriConfig) { $tauriArguments += @('--config', (Resolve-Path -LiteralPath $TauriConfig).Path) }
+    & $tauriCli @tauriArguments
     if ($LASTEXITCODE -ne 0) {
         throw "Tauri installer build failed with exit code $LASTEXITCODE"
     }
@@ -79,12 +83,16 @@ finally {
 }
 
 $installerDirectory = Join-Path $cargoTargetPath 'release\bundle\nsis'
-$installers = @(Get-ChildItem -LiteralPath $installerDirectory -Filter '*.exe' -File -ErrorAction SilentlyContinue)
+$installers = @(Get-ChildItem -LiteralPath $installerDirectory -Filter ("SiaoVPlay_" + $metadata.version + "_x64-setup.exe") -File -ErrorAction SilentlyContinue)
 if ($installers.Count -ne 1) {
     throw "Expected exactly one NSIS installer in $installerDirectory, found $($installers.Count)"
 }
 
 $installer = $installers[0]
+$signature = Get-AuthenticodeSignature -LiteralPath $installer.FullName
+$appExecutable = Join-Path $cargoTargetPath 'release\siao-vplay.exe'
+$appSignature = Get-AuthenticodeSignature -LiteralPath $appExecutable
+Assert-CandidateSignatures $metadata.channel @($signature, $appSignature)
 New-Item -ItemType Directory -Force -Path $outputDirectoryPath | Out-Null
 $candidatePath = Join-Path $outputDirectoryPath $installer.Name
 if (Test-Path -LiteralPath $candidatePath) {
@@ -93,14 +101,26 @@ if (Test-Path -LiteralPath $candidatePath) {
 Copy-Item -LiteralPath $installer.FullName -Destination $candidatePath
 $candidate = Get-Item -LiteralPath $candidatePath
 $hash = Get-Sha256 $candidate.FullName
-$signatureStatus = Get-SignatureStatus $candidate.FullName
-
-[pscustomobject]@{
-    path = $candidate.FullName
-    buildPath = $installer.FullName
-    version = '0.4.1'
+$manifest = [pscustomobject]@{
+    schemaVersion = 1
+    artifact = $candidate.Name
+    version = $metadata.version
+    channel = $metadata.channel
+    sourceCommit = $sourceCommit
+    sourceDirty = $dirty
+    builtAtUtc = [DateTime]::UtcNow.ToString('o')
     sizeBytes = $candidate.Length
     sha256 = $hash
-    signatureStatus = $signatureStatus
+    signatureStatus = $signature.Status.ToString()
+    appSignatureStatus = $appSignature.Status.ToString()
     packageProfile = 'app-only'
-} | ConvertTo-Json -Depth 4
+    catalogSha256 = Get-Sha256 (Join-Path $repoRoot 'src-tauri\resources\local-resource-catalog.json')
+    npmLockSha256 = Get-Sha256 (Join-Path $repoRoot 'package-lock.json')
+    cargoLockSha256 = Get-Sha256 (Join-Path $repoRoot 'src-tauri\Cargo.lock')
+    releaseReady = $false
+}
+$manifest | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath ($candidatePath + '.manifest.json') -Encoding UTF8
+($hash.ToLowerInvariant() + '  ' + $candidate.Name) | Set-Content -LiteralPath ($candidatePath + '.sha256') -Encoding ASCII
+Copy-Item -LiteralPath (Join-Path $repoRoot 'src-tauri\resources\local-resource-catalog.json') -Destination (Join-Path $outputDirectoryPath 'local-resource-catalog.json')
+$manifest | Add-Member -NotePropertyName path -NotePropertyValue $candidate.FullName
+$manifest | ConvertTo-Json -Depth 4

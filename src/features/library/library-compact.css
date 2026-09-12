@@ -1,0 +1,57 @@
+.library-screen .library-continue-hero[data-has-poster="false"] {
+  grid-template-columns: 64px minmax(0, 1fr);
+  align-items: center;
+  padding-left: 16px;
+}
+.library-screen .library-continue-hero[data-has-poster="false"] .library-continue-visual {
+  height: 64px;
+  min-height: 0;
+  border-radius: 5px;
+  background: var(--bg-control);
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+.library-screen .library-continue-hero[data-has-poster="false"] .library-continue-shade { display: none; }
+.library-screen .library-continue-strip-poster[data-has-poster="false"] {
+  height: 40px;
+  margin: 10px 10px 0;
+  border-radius: 4px;
+  font-size: 12px;
+}
+.library-screen .library-media-item[data-has-poster="false"] {
+  grid-template-columns: 44px minmax(0, 1fr) auto;
+}
+.library-screen .library-media-item[data-has-poster="false"] .library-media-poster {
+  width: 44px;
+  height: 44px;
+  font-size: 11px;
+}
+@media (max-width: 760px) {
+  .library-screen .library-media-item[data-has-poster="false"] { grid-template-columns: 44px minmax(0, 1fr); }
+}
+
+.library-screen .library-series-card[data-has-poster="false"],
+.library-screen .library-series-tile[data-has-poster="false"] { align-items: center; border-radius: 7px; }
+.library-screen .library-series-card[data-has-poster="false"] .library-series-poster,
+.library-screen .library-series-tile[data-has-poster="false"] .library-series-tile-poster {
+  width: 44px;
+  height: 44px;
+  border-radius: 4px;
+  background: var(--bg-control);
+  font-size: 18px;
+}
+.library-screen .library-series-tile[data-has-poster="false"] .library-series-kind { display: none; }
+.library-screen .library-recent-grid > button[data-has-poster="false"] {
+  grid-template-columns: 40px minmax(0, 1fr);
+  padding: 12px;
+  border-radius: 7px;
+  align-items: center;
+}
+.library-screen .library-recent-grid > button[data-has-poster="false"] > span {
+  grid-row: 1 / 3;
+  height: 40px;
+  border-radius: 4px;
+  font-size: 11px;
+}
+.library-screen .library-home-page .library-section { margin-top: 24px; }
+.library-screen .library-home-page .library-section-heading h2 { font-size: 16px; }

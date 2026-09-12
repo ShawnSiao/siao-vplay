@@ -1,3 +1,6 @@
+mod operations;
+pub use operations::{import_remote_media_url};
+
 use std::{
     collections::HashMap,
     fs::{self, File},
@@ -103,6 +106,7 @@ pub struct CancelRemoteMediaImportInput {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub enum RemoteMediaKind {
     DirectFile,
     Hls,
@@ -110,12 +114,14 @@ pub enum RemoteMediaKind {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct RemoteMediaPreview {
     pub original_url: String,
     pub final_url: String,
     pub display_name: String,
     pub media_kind: RemoteMediaKind,
     pub content_type: Option<String>,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub content_length: Option<u64>,
     pub preview_token: String,
 }
@@ -275,66 +281,6 @@ pub fn inspect_remote_media_url(
     Ok(preflight_remote_media(&input.url)?.preview)
 }
 
-pub fn import_remote_media_url(
-    store: &ProjectStore,
-    remote_media_root: &Path,
-    input: ImportRemoteMediaUrlInput,
-) -> Result<Project, RemoteMediaError> {
-    let operation = ImportOperation::register(&input.operation_id)?;
-    let preflight = preflight_remote_media(&input.url)?;
-    operation.check()?;
-    if preflight.preview.preview_token != input.expected_preview_token {
-        return Err(RemoteMediaError::PreviewChanged);
-    }
-
-    let import_directory = remote_media_root.join(Uuid::new_v4().to_string());
-    fs::create_dir_all(&import_directory)?;
-
-    let result = (|| {
-        let media_path = match preflight.preview.media_kind {
-            RemoteMediaKind::DirectFile => {
-                let extension = safe_extension(&preflight.preview.display_name)
-                    .unwrap_or_else(|| "media".to_owned());
-                let destination = import_directory.join(format!("source.{extension}"));
-                download_direct_media(
-                    &preflight.preview.original_url,
-                    &preflight.preview.final_url,
-                    &destination,
-                    &operation.cancelled,
-                )?;
-                destination
-            }
-            RemoteMediaKind::Hls => {
-                let mirror_directory = import_directory.join("hls");
-                fs::create_dir_all(&mirror_directory)?;
-                let local_playlist =
-                    HlsMirror::new(&mirror_directory, Arc::clone(&operation.cancelled))
-                        .mirror(&preflight.preview.final_url)?;
-                let destination = import_directory.join("source.mkv");
-                operation.check()?;
-                media::remux_local_hls(&local_playlist, &destination)?;
-                destination
-            }
-        };
-
-        operation.check()?;
-        media::validate_media_path(&media_path)?;
-        operation.check()?;
-        store
-            .create_remote_project(
-                &media_path,
-                &preflight.preview.original_url,
-                &preflight.preview.display_name,
-                input.title.as_deref(),
-            )
-            .map_err(RemoteMediaError::from)
-    })();
-
-    if result.is_err() {
-        let _ = fs::remove_dir_all(&import_directory);
-    }
-    result
-}
 
 pub fn cancel_remote_media_import(
     input: CancelRemoteMediaImportInput,
@@ -502,7 +448,7 @@ pub(crate) fn validate_public_https_url(input: &str) -> Result<Url, RemoteMediaE
     Ok(url)
 }
 
-fn validate_url_syntax(input: &str) -> Result<Url, RemoteMediaError> {
+pub(crate) fn validate_url_syntax(input: &str) -> Result<Url, RemoteMediaError> {
     let url = Url::parse(input.trim()).map_err(|_| RemoteMediaError::InvalidUrl)?;
     if url.scheme() != "https" {
         return Err(RemoteMediaError::HttpsRequired);
@@ -1349,6 +1295,7 @@ mod tests {
         let resumed_position_ms = 8 * 60 * 1_000;
         store
             .update_playback_state(crate::domain::UpdatePlaybackStateInput {
+                completed: None,
                 project_id: project.id.clone(),
                 position_ms: resumed_position_ms,
                 duration_ms: Some(duration_ms),

@@ -1,3 +1,8 @@
+mod contract;
+pub use contract::TranscriptionJob;
+mod jobs;
+pub(crate) use jobs::{run_job};
+
 use std::{
     collections::HashMap,
     env,
@@ -106,6 +111,7 @@ impl From<rusqlite::Error> for TranscriptionError {
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub enum TranscriptionLanguage {
     Auto,
     En,
@@ -139,6 +145,7 @@ impl TranscriptionLanguage {
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub enum TranscriptionModelKind {
     Small,
     Base,
@@ -196,29 +203,10 @@ pub struct TranscriptionJobInput {
     pub job_id: String,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct TranscriptionJob {
-    pub id: String,
-    pub project_id: String,
-    pub status: String,
-    pub stage: String,
-    pub progress: f64,
-    pub language_code: String,
-    pub model_kind: String,
-    pub runtime_backend: String,
-    pub runtime_version: String,
-    pub subtitle_version_id: Option<String>,
-    pub error_code: Option<String>,
-    pub error_message: Option<String>,
-    pub created_at_ms: i64,
-    pub updated_at_ms: i64,
-    pub started_at_ms: Option<i64>,
-    pub completed_at_ms: Option<i64>,
-}
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct TranscriptionRuntimeOption {
     pub backend: String,
     pub available: bool,
@@ -229,6 +217,7 @@ pub struct TranscriptionRuntimeOption {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct TranscriptionModelStatus {
     pub model_kind: String,
     pub available: bool,
@@ -238,6 +227,7 @@ pub struct TranscriptionModelStatus {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct TranscriptionRuntimeStatus {
     pub available: bool,
     pub preferred_backend: Option<String>,
@@ -948,6 +938,7 @@ pub fn start_transcription(
     store: &ProjectStore,
     input: StartTranscriptionInput,
 ) -> Result<TranscriptionJob, TranscriptionError> {
+    let _project_operation = crate::project_operations::Operation::acquire(store, &input.project_id)?;
     let language = TranscriptionLanguage::parse(&input.language_code)?;
     let model_kind = TranscriptionModelKind::parse(&input.model_kind)?;
     let runtime = preferred_runtime()?;
@@ -1085,12 +1076,12 @@ fn map_public_job(row: &rusqlite::Row<'_>) -> rusqlite::Result<TranscriptionJob>
     Ok(TranscriptionJob {
         id: row.get(0)?,
         project_id: row.get(1)?,
-        status: row.get(2)?,
+        status: contract::read_enum(row, 2)?,
         stage: row.get(3)?,
         progress: row.get(4)?,
-        language_code: row.get(5)?,
-        model_kind: row.get(6)?,
-        runtime_backend: row.get(7)?,
+        language_code: contract::read_enum(row, 5)?,
+        model_kind: contract::read_enum(row, 6)?,
+        runtime_backend: contract::read_enum(row, 7)?,
         runtime_version: row.get(8)?,
         subtitle_version_id: row.get(9)?,
         error_code: row.get(10)?,
@@ -1144,9 +1135,13 @@ pub fn spawn_transcription_job(
     job_id: String,
 ) -> Result<(), TranscriptionError> {
     let job = load_stored_job(&store, &job_id)?;
-    if job.public.status != "queued" {
-        return Err(TranscriptionError::InvalidJobState(job.public.status));
+    let project_operation = crate::project_operations::Operation::acquire(&store, &job.public.project_id)?;
+    if job.public.status.as_str() != "queued" {
+        return Err(TranscriptionError::InvalidJobState(job.public.status.as_str().to_owned()));
     }
+    let model_id = format!("whisper-model-{}", job.public.model_kind.as_str());
+    let resources = crate::resource_leases::configured(&["ffmpeg-cpu", "whisper-cpu", "whisper-vad-silero-6.2", &model_id])
+        .map_err(TranscriptionError::from).inspect_err(|error| { let _ = finish_with_error(&store, &job_id, error); })?;
     let cancellation = Arc::new(AtomicBool::new(false));
     {
         let mut jobs = active_jobs()
@@ -1162,6 +1157,8 @@ pub fn spawn_transcription_job(
     let spawn_result = thread::Builder::new()
         .name(format!("transcription-{job_id}"))
         .spawn(move || {
+            let _project_operation = project_operation;
+            let _resources = resources;
             let result = run_job(&store, &worker_job_id, &cancellation);
             if let Err(error) = result {
                 let _ = finish_with_error(&store, &worker_job_id, &error);
@@ -1192,7 +1189,7 @@ pub fn cancel_transcription_job(
         job.public.status.as_str(),
         "completed" | "failed" | "cancelled" | "interrupted"
     ) {
-        return Err(TranscriptionError::InvalidJobState(job.public.status));
+        return Err(TranscriptionError::InvalidJobState(job.public.status.as_str().to_owned()));
     }
     let timestamp = now_ms()?;
     store.connect()?.execute(
@@ -1207,47 +1204,12 @@ pub fn cancel_transcription_job(
     {
         flag.store(true, Ordering::SeqCst);
     }
-    if job.public.status == "queued" {
+    if job.public.status.as_str() == "queued" {
         mark_cancelled(store, job_id)?;
     }
     get_transcription_job(store, job_id)
 }
 
-pub fn cancel_project_transcriptions(
-    store: &ProjectStore,
-    project_id: &str,
-) -> Result<usize, TranscriptionError> {
-    let ids = {
-        let connection = store.connect()?;
-        let mut statement = connection.prepare(
-            "SELECT id FROM transcription_jobs
-             WHERE project_id = ?1
-               AND status IN ('queued', 'extracting', 'transcribing', 'validating')",
-        )?;
-        statement
-            .query_map(params![project_id], |row| row.get::<_, String>(0))?
-            .collect::<Result<Vec<_>, _>>()?
-    };
-    for id in &ids {
-        let _ = cancel_transcription_job(store, id);
-    }
-    for _ in 0..100 {
-        let active = store.connect()?.query_row(
-            "SELECT COUNT(*) FROM transcription_jobs
-             WHERE project_id = ?1
-               AND status IN ('queued', 'extracting', 'transcribing', 'validating')",
-            params![project_id],
-            |row| row.get::<_, i64>(0),
-        )?;
-        if active == 0 {
-            return Ok(ids.len());
-        }
-        thread::sleep(POLL_INTERVAL);
-    }
-    Err(TranscriptionError::InvalidJobState(
-        "取消转写任务超时，项目尚未删除".to_owned(),
-    ))
-}
 
 pub fn resume_transcription_job(
     store: &ProjectStore,
@@ -1258,7 +1220,7 @@ pub fn resume_transcription_job(
         job.public.status.as_str(),
         "failed" | "cancelled" | "interrupted"
     ) {
-        return Err(TranscriptionError::InvalidJobState(job.public.status));
+        return Err(TranscriptionError::InvalidJobState(job.public.status.as_str().to_owned()));
     }
     validate_baseline(store, &job)?;
     let active_exists = store
@@ -1275,8 +1237,8 @@ pub fn resume_transcription_job(
     if active_exists {
         return Err(TranscriptionError::ActiveJobExists);
     }
-    let language = TranscriptionLanguage::parse(&job.public.language_code)?;
-    let model_kind = TranscriptionModelKind::parse(&job.public.model_kind)?;
+    let language = job.public.language_code;
+    let model_kind = job.public.model_kind;
     let runtime = preferred_runtime()?;
     let model = verify_model(model_kind)?;
     let vad_model = runtime
@@ -1312,7 +1274,7 @@ pub fn resume_transcription_job(
         ],
     )?;
     if changed != 1 {
-        return Err(TranscriptionError::InvalidJobState(job.public.status));
+        return Err(TranscriptionError::InvalidJobState(job.public.status.as_str().to_owned()));
     }
     get_transcription_job(store, job_id)
 }
@@ -1385,7 +1347,7 @@ fn verify_job_assets(
             "任务固定的运行时身份与当前文件不一致".to_owned(),
         ));
     }
-    let kind = TranscriptionModelKind::parse(&job.public.model_kind)?;
+    let kind = job.public.model_kind;
     let model = verify_model(kind)?;
     if model.path != job.model_path || !model.sha256.eq_ignore_ascii_case(&job.model_sha256) {
         return Err(TranscriptionError::ModelIntegrity(
@@ -1456,169 +1418,6 @@ fn verify_job_assets(
     Ok((runtime, model, Some(vad_model)))
 }
 
-pub(crate) fn run_job(
-    store: &ProjectStore,
-    job_id: &str,
-    cancellation: &AtomicBool,
-) -> Result<(), TranscriptionError> {
-    let job = load_stored_job(store, job_id)?;
-    if job.public.status != "queued" {
-        return Err(TranscriptionError::InvalidJobState(job.public.status));
-    }
-    if job.cancel_requested_at_ms.is_some() || cancellation.load(Ordering::SeqCst) {
-        return Err(TranscriptionError::Cancelled);
-    }
-    transition_job(
-        store,
-        job_id,
-        "queued",
-        "extracting",
-        "extracting_audio",
-        0.05,
-    )?;
-    let media_path = validate_baseline(store, &job)?;
-    let (mut runtime, model, mut vad_model) = verify_job_assets(&job)?;
-    let work_directory = reset_job_directory(store, job_id)?;
-    let audio_path = work_directory.join("audio-16khz-mono.wav");
-    let ffmpeg_log = work_directory.join("ffmpeg.log");
-    let ffmpeg_path = media::ffmpeg_path()?;
-    let mut extraction = hidden_command(&ffmpeg_path);
-    extraction
-        .args(["-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-i"])
-        .arg(&media_path)
-        .args([
-            "-map",
-            "0:a:0",
-            "-vn",
-            "-ac",
-            "1",
-            "-ar",
-            "16000",
-            "-c:a",
-            "pcm_s16le",
-        ])
-        .arg(&audio_path);
-    let extraction_status = run_child(store, job_id, cancellation, &mut extraction, &ffmpeg_log)?;
-    if !extraction_status.success()
-        || fs::metadata(&audio_path)
-            .map(|metadata| metadata.len() <= 44)
-            .unwrap_or(true)
-    {
-        return Err(TranscriptionError::AudioExtractionFailed(read_log_tail(
-            &ffmpeg_log,
-        )));
-    }
-
-    check_cancelled(store, job_id, cancellation)?;
-    transition_job(
-        store,
-        job_id,
-        "extracting",
-        "transcribing",
-        "transcribing",
-        0.3,
-    )?;
-    let output_prefix = work_directory.join("whisper-result");
-    let mut whisper_log = work_directory.join("whisper-vulkan.log");
-    let mut transcription_status = run_whisper(
-        store,
-        job_id,
-        cancellation,
-        &runtime,
-        &model,
-        vad_model.as_ref(),
-        &audio_path,
-        &job.public.language_code,
-        &output_prefix,
-        &whisper_log,
-    )?;
-    if !transcription_status.success() && runtime.backend == "vulkan" {
-        check_cancelled(store, job_id, cancellation)?;
-        let cpu_runtime = verify_runtime("cpu")?;
-        if !cpu_runtime.vad_timeline_verified {
-            vad_model = None;
-        }
-        let parameters_json =
-            transcription_parameters(&job.public.language_code, &cpu_runtime, vad_model.as_ref())?;
-        update_job_runtime(store, job_id, &cpu_runtime, &parameters_json)?;
-        runtime = cpu_runtime;
-        let _ = fs::remove_file(output_prefix.with_extension("json"));
-        whisper_log = work_directory.join("whisper-cpu.log");
-        transcription_status = run_whisper(
-            store,
-            job_id,
-            cancellation,
-            &runtime,
-            &model,
-            vad_model.as_ref(),
-            &audio_path,
-            &job.public.language_code,
-            &output_prefix,
-            &whisper_log,
-        )?;
-    }
-    let output_path = output_prefix.with_extension("json");
-    if !transcription_status.success() || !output_path.is_file() {
-        return Err(TranscriptionError::TranscriptionFailed(read_log_tail(
-            &whisper_log,
-        )));
-    }
-
-    check_cancelled(store, job_id, cancellation)?;
-    transition_job(
-        store,
-        job_id,
-        "transcribing",
-        "validating",
-        "validating_output",
-        0.85,
-    )?;
-    let output_hash = hash_file(&output_path)?;
-    let parsed = parse_whisper_output(
-        &output_path,
-        &job.public.language_code,
-        job.media_duration_ms,
-    )?;
-    let report = subtitles::inspect_generated_cues(&parsed.cues, Some(job.media_duration_ms));
-    if report.error_count > 0 {
-        return Err(TranscriptionError::InvalidOutput(format!(
-            "字幕预检包含 {} 项错误",
-            report.error_count
-        )));
-    }
-    check_cancelled(store, job_id, cancellation)?;
-    validate_baseline(store, &job)?;
-    let version = subtitles::persist_transcription(
-        store,
-        PersistTranscriptionInput {
-            project_id: job.public.project_id.clone(),
-            source_label: format!("本地字幕识别 · {}", model.kind.product_label()),
-            source_sha256: output_hash,
-            language_code: parsed.language_code,
-            expected_project_revision: job.expected_project_revision,
-            expected_media_sha256: job.expected_media_sha256.clone(),
-            media_duration_ms: Some(job.media_duration_ms),
-            cues: parsed.cues,
-        },
-    )?;
-    let timestamp = now_ms()?;
-    let changed = store.connect()?.execute(
-        "UPDATE transcription_jobs
-         SET status = 'completed', stage = 'completed', progress = 1.0,
-             subtitle_version_id = ?2, error_code = NULL, error_message = NULL,
-             cancel_requested_at_ms = NULL,
-             updated_at_ms = ?3, completed_at_ms = ?3
-         WHERE id = ?1 AND status = 'validating'",
-        params![job_id, version.id, timestamp],
-    )?;
-    if changed != 1 {
-        return Err(TranscriptionError::InvalidJobState(
-            "完成写入时任务状态已变化".to_owned(),
-        ));
-    }
-    remove_job_directory(store, job_id)?;
-    Ok(())
-}
 
 #[allow(clippy::too_many_arguments)]
 fn run_whisper(
@@ -1713,7 +1512,7 @@ fn transition_job(
         if job.cancel_requested_at_ms.is_some() {
             Err(TranscriptionError::Cancelled)
         } else {
-            Err(TranscriptionError::InvalidJobState(job.public.status))
+            Err(TranscriptionError::InvalidJobState(job.public.status.as_str().to_owned()))
         }
     } else {
         Ok(())
@@ -2122,6 +1921,10 @@ fn is_non_speech_caption(value: &str) -> bool {
 }
 
 #[cfg(test)]
+#[path = "transcription/cancellation_acceptance.rs"]
+mod cancellation_acceptance;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::domain::CreateLocalProjectInput;
@@ -2405,7 +2208,7 @@ mod tests {
             1
         );
         let jobs = list_transcription_jobs(&store, &project_id).expect("jobs should be listed");
-        assert_eq!(jobs[0].status, "interrupted");
+        assert_eq!(jobs[0].status.as_str(), "interrupted");
         assert_eq!(jobs[0].error_code.as_deref(), Some("app_interrupted"));
     }
 
@@ -2441,7 +2244,7 @@ mod tests {
 
         let cancelled = cancel_transcription_job(&store, &job_id).expect("job should cancel");
 
-        assert_eq!(cancelled.status, "cancelled");
+        assert_eq!(cancelled.status.as_str(), "cancelled");
         assert_eq!(cancelled.stage, "cancelled");
         assert_eq!(cancelled.error_code.as_deref(), Some("cancelled"));
     }
@@ -2520,7 +2323,7 @@ mod tests {
                 .expect("real transcription should complete");
 
             let completed = get_transcription_job(&store, &job.id).expect("job should be readable");
-            assert_eq!(completed.status, "completed", "{language}");
+            assert_eq!(completed.status.as_str(), "completed", "{language}");
             let versions = subtitles::list_subtitle_versions(&store, &project.id)
                 .expect("subtitle should be readable");
             assert_eq!(versions.len(), 1, "{language}");
@@ -2584,13 +2387,13 @@ mod tests {
             .expect("legacy failed job should be simulated");
         let resumed =
             resume_transcription_job(&store, &job.id).expect("legacy failed job should resume");
-        assert_eq!(resumed.status, "queued");
+        assert_eq!(resumed.status.as_str(), "queued");
 
         run_job(&store, &job.id, &AtomicBool::new(false))
             .expect("real transcription should complete");
 
         let completed = get_transcription_job(&store, &job.id).expect("job should be readable");
-        assert_eq!(completed.status, "completed");
+        assert_eq!(completed.status.as_str(), "completed");
         let versions = subtitles::list_subtitle_versions(&store, &project.id)
             .expect("subtitle should be readable");
         assert_eq!(versions.len(), 1);
@@ -2627,7 +2430,7 @@ mod tests {
             list_transcription_jobs(&store, &project_id)
                 .expect("transcription jobs should be readable")
                 .into_iter()
-                .find(|job| job.status == "completed")
+                .find(|job| job.status.as_str() == "completed")
         } else {
             let resumable = list_transcription_jobs(&store, &project_id)
                 .expect("transcription jobs should be readable")

@@ -1,6 +1,6 @@
 use std::{
     path::{Path, PathBuf},
-    sync::{Mutex, OnceLock},
+    sync::{Mutex, OnceLock, atomic::{AtomicU64, Ordering}},
 };
 
 use reqwest::{
@@ -17,10 +17,22 @@ use super::{
 
 const SETTINGS_FILE_NAME: &str = "network-settings.json";
 const SETTINGS_SCHEMA_VERSION: u32 = 1;
+static OBSERVATION: AtomicU64 = AtomicU64::new(0);
+pub struct NetworkObservation {
+    pub revision: u64,
+    pub settings: NetworkSettings,
+}
+fn observe(settings: NetworkSettings) -> Result<NetworkObservation, AiError> {
+    let revision = OBSERVATION.fetch_update(Ordering::SeqCst, Ordering::SeqCst,
+        |value| value.checked_add(1).filter(|next| *next <= 9_007_199_254_740_991))
+        .map_err(|_| AiError::ConfigurationRead)? + 1;
+    Ok(NetworkObservation { revision, settings })
+}
 static STORE: OnceLock<NetworkStore> = OnceLock::new();
 
 pub struct NetworkStore {
     path: PathBuf,
+    storage: Option<crate::storage::StorageManager>,
     mutation_lock: Mutex<()>,
 }
 
@@ -28,8 +40,14 @@ impl NetworkStore {
     pub fn new(path: PathBuf) -> Self {
         Self {
             path,
+            storage: None,
             mutation_lock: Mutex::new(()),
         }
+    }
+
+    pub(crate) fn with_storage(mut self, storage: crate::storage::StorageManager) -> Self {
+        self.storage = Some(storage);
+        self
     }
 
     fn load(&self) -> Result<NetworkSettingsFile, AiError> {
@@ -40,9 +58,10 @@ impl NetworkStore {
                 revision: 0,
                 custom_proxy_url: None,
             });
-        if settings.schema_version != SETTINGS_SCHEMA_VERSION {
+        if settings.schema_version != SETTINGS_SCHEMA_VERSION || settings.revision > 9_007_199_254_740_991 {
             return Err(AiError::ConfigurationRead);
         }
+        normalize_proxy_url(settings.custom_proxy_url.as_deref()).map_err(|_| AiError::ConfigurationRead)?;
         Ok(settings)
     }
 
@@ -65,24 +84,27 @@ impl NetworkStore {
         })
     }
 
+    pub fn effective_proxy(&self) -> Result<(Option<String>, &'static str), AiError> {
+        let _guard = self.mutation_lock.lock().map_err(|_| AiError::ConfigurationRead)?;
+        Ok(effective_proxy_from(self.load()?.custom_proxy_url))
+    }
+
     pub fn snapshot(&self) -> Result<NetworkSettings, AiError> {
-        let settings = self.load()?;
-        let (proxy_address, source) = effective_proxy_from(settings.custom_proxy_url.clone());
-        Ok(NetworkSettings {
-            schema_version: settings.schema_version,
-            revision: settings.revision,
-            custom_proxy_url: settings.custom_proxy_url,
-            effective_mode: if proxy_address.is_some() || source == "environment" {
-                "proxy".to_owned()
-            } else {
-                "direct".to_owned()
-            },
-            effective_source: source.to_owned(),
-            effective_proxy_address: proxy_address,
-        })
+        self.snapshot_observed().map(|value| value.settings)
+    }
+
+    pub fn snapshot_observed(&self) -> Result<NetworkObservation, AiError> {
+        let _guard = self.mutation_lock.lock().map_err(|_| AiError::ConfigurationRead)?;
+        observe(snapshot_from_settings(self.load()?))
     }
 
     pub fn set(&self, input: SetNetworkSettingsInput) -> Result<NetworkSettings, AiError> {
+        self.set_observed(input).map(|value| value.settings)
+    }
+
+    fn set_observed(&self, input: SetNetworkSettingsInput) -> Result<NetworkObservation, AiError> {
+        let _usage = self.storage.as_ref().map(|storage| storage.acquire_usage()).transpose()
+            .map_err(|_| AiError::Validation("存储目录正在迁移或等待重启，暂时无法保存设置；迁移完成后请重启应用".into()))?;
         let _guard = self
             .mutation_lock
             .lock()
@@ -92,23 +114,40 @@ impl NetworkStore {
             return Err(AiError::RevisionConflict);
         }
         settings.custom_proxy_url = normalize_proxy_url(input.custom_proxy_url.as_deref())?;
-        settings.revision += 1;
+        settings.revision = settings.revision.checked_add(1)
+            .filter(|revision| *revision <= 9_007_199_254_740_991).ok_or(AiError::ConfigurationWrite)?;
         self.persist(&settings)?;
-        drop(_guard);
-        self.snapshot()
+        observe(snapshot_from_settings(settings))
     }
 
+    #[cfg(test)]
     pub fn set_compat(&self, proxy_url: Option<&str>) -> Result<NetworkSettings, AiError> {
+        self.set_compat_observed(proxy_url).map(|value| value.settings)
+    }
+
+    fn set_compat_observed(&self, proxy_url: Option<&str>) -> Result<NetworkObservation, AiError> {
         let revision = self.load()?.revision;
-        self.set(SetNetworkSettingsInput {
+        self.set_observed(SetNetworkSettingsInput {
             expected_revision: revision,
             custom_proxy_url: proxy_url.map(str::to_owned),
         })
     }
 }
 
-pub fn initialize(data_directory: &Path, legacy_proxy: Option<&str>) -> Result<(), AiError> {
-    let store = NetworkStore::new(data_directory.join(SETTINGS_FILE_NAME));
+fn snapshot_from_settings(settings: NetworkSettingsFile) -> NetworkSettings {
+    let (proxy_address, source) = effective_proxy_from(settings.custom_proxy_url.clone());
+    NetworkSettings {
+        schema_version: settings.schema_version,
+        revision: settings.revision,
+        custom_proxy_url: settings.custom_proxy_url,
+        effective_mode: if proxy_address.is_some() || source == "environment" { "proxy" } else { "direct" }.to_owned(),
+        effective_source: source.to_owned(),
+        effective_proxy_address: proxy_address,
+    }
+}
+
+pub fn initialize(data_directory: &Path, legacy_proxy: Option<&str>, storage: crate::storage::StorageManager) -> Result<(), AiError> {
+    let store = NetworkStore::new(data_directory.join(SETTINGS_FILE_NAME)).with_storage(storage);
     store.migrate_legacy_proxy(legacy_proxy)?;
     let _ = store.snapshot()?;
     STORE
@@ -128,20 +167,32 @@ pub fn set_settings(input: SetNetworkSettingsInput) -> Result<NetworkSettings, A
     store()?.set(input)
 }
 
-pub fn set_custom_proxy_compat(proxy_url: Option<&str>) -> Result<NetworkSettings, AiError> {
-    store()?.set_compat(proxy_url)
+pub fn observed_settings() -> Result<NetworkObservation, AiError> {
+    store()?.snapshot_observed()
 }
 
-pub fn effective_proxy() -> (Option<String>, &'static str) {
-    let custom = store()
-        .and_then(NetworkStore::load)
-        .ok()
-        .and_then(|settings| settings.custom_proxy_url);
-    effective_proxy_from(custom)
+pub fn set_custom_proxy_compat(proxy_url: Option<&str>) -> Result<NetworkObservation, AiError> {
+    store()?.set_compat_observed(proxy_url)
+}
+
+fn resolve_proxy(store: Option<&NetworkStore>) -> Result<(Option<String>, &'static str), AiError> {
+    match store {
+        Some(store) => store.effective_proxy(),
+        // Before initialization there is no stored choice; initialized read failures propagate.
+        None => Ok(effective_proxy_from(None)),
+    }
+}
+
+fn proxy_read_error(_: AiError) -> String {
+    "无法读取网络设置，已停止连接；请检查设置后重试".to_owned()
 }
 
 pub fn apply_to_client(builder: ClientBuilder) -> Result<ClientBuilder, String> {
-    let (proxy_url, source) = effective_proxy();
+    apply_to_client_from(builder, STORE.get())
+}
+
+fn apply_to_client_from(builder: ClientBuilder, store: Option<&NetworkStore>) -> Result<ClientBuilder, String> {
+    let (proxy_url, source) = resolve_proxy(store).map_err(proxy_read_error)?;
     if let Some(proxy_url) = proxy_url {
         let proxy = Proxy::all(&proxy_url).map_err(|_| "代理地址无效".to_owned())?;
         Ok(builder.proxy(proxy))
@@ -156,6 +207,20 @@ pub fn build_client(builder: ClientBuilder) -> Result<Client, String> {
     apply_to_client(builder)?
         .build()
         .map_err(|_| "无法创建网络连接".to_owned())
+}
+
+pub(crate) fn build_async_client(builder: reqwest::ClientBuilder) -> Result<reqwest::Client, String> {
+    build_async_client_from(builder, STORE.get())
+}
+
+fn build_async_client_from(mut builder: reqwest::ClientBuilder, store: Option<&NetworkStore>) -> Result<reqwest::Client, String> {
+    let (proxy_url, source) = resolve_proxy(store).map_err(proxy_read_error)?;
+    if let Some(proxy_url) = proxy_url {
+        builder = builder.proxy(Proxy::all(&proxy_url).map_err(|_| "代理地址无效".to_owned())?);
+    } else if source != "environment" {
+        builder = builder.no_proxy();
+    }
+    builder.build().map_err(|_| "无法创建网络连接".to_owned())
 }
 
 fn effective_proxy_from(custom: Option<String>) -> (Option<String>, &'static str) {
@@ -247,36 +312,4 @@ fn parse_windows_proxy_server(raw: &str) -> Option<String> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use tempfile::tempdir;
-
-    #[test]
-    fn validates_proxy_and_migrates_legacy_setting_once() {
-        let data = tempdir().expect("tempdir");
-        let store = NetworkStore::new(data.path().join(SETTINGS_FILE_NAME));
-        store
-            .migrate_legacy_proxy(Some("http://127.0.0.1:7897"))
-            .expect("migration");
-        let snapshot = store.snapshot().expect("snapshot");
-        assert_eq!(snapshot.revision, 1);
-        assert_eq!(
-            snapshot.custom_proxy_url.as_deref(),
-            Some("http://127.0.0.1:7897")
-        );
-        assert!(normalize_proxy_url(Some("http://user:secret@proxy.example")).is_err());
-    }
-
-    #[test]
-    fn windows_proxy_parser_prefers_https_and_normalizes_address() {
-        assert_eq!(
-            parse_windows_proxy_server("http=127.0.0.1:8080;https=127.0.0.1:7897"),
-            Some("http://127.0.0.1:7897".to_owned())
-        );
-        assert_eq!(
-            parse_windows_proxy_server("http://proxy.example:3128"),
-            Some("http://proxy.example:3128".to_owned())
-        );
-        assert_eq!(parse_windows_proxy_server("socks=127.0.0.1:1080"), None);
-    }
-}
+mod tests;

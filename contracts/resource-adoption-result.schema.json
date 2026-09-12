@@ -1,0 +1,85 @@
+{
+  "$defs": {
+    "ResourceAdoptionInterruption": {
+      "properties": {
+        "message": {
+          "type": "string"
+        },
+        "resourceId": {
+          "type": "string"
+        },
+        "unattemptedResourceIds": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "resourceId",
+        "message",
+        "unattemptedResourceIds"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "adoptedResourceIds": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "alreadyActiveResourceIds": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "interruption": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ResourceAdoptionInterruption"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "planFingerprint": {
+      "pattern": "^[a-f0-9]{64}$",
+      "type": "string"
+    },
+    "rejectedResourceIds": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "requestId": {
+      "type": "string"
+    },
+    "resourceRoot": {
+      "type": "string"
+    },
+    "reusableBytes": {
+      "format": "uint64",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "interruption",
+    "resourceRoot",
+    "requestId",
+    "planFingerprint",
+    "adoptedResourceIds",
+    "alreadyActiveResourceIds",
+    "rejectedResourceIds",
+    "reusableBytes"
+  ],
+  "title": "ResourceAdoptionResult",
+  "type": "object"
+}

@@ -1,5 +1,3 @@
-use std::time::Duration;
-
 use serde_json::Value;
 
 use super::{
@@ -21,7 +19,27 @@ pub(crate) struct SummaryProviderInput<'a> {
     pub image_data_urls: Vec<String>,
 }
 
-pub(crate) fn generate(input: SummaryProviderInput<'_>) -> Result<ProviderOutput, ProviderFailure> {
+pub(crate) fn receiver(
+    id: &str,
+    revision: u64,
+) -> Result<super::types::AiServiceConfig, super::AiError> {
+    let service = super::config::store()?.configured_service(id)?;
+    if service.revision != revision {
+        return Err(super::AiError::RevisionConflict);
+    }
+    Ok(service)
+}
+
+pub(crate) fn generate(
+    input: SummaryProviderInput<'_>,
+    store: &crate::store::ProjectStore,
+    task_id: &str,
+) -> Result<ProviderOutput, ProviderFailure> {
+    let policy = super::transport_policy::load()?;
+    let cancelled = super::task_cancellation::for_task(store, task_id);
+    if cancelled()? {
+        return Err(super::AiError::Cancelled.into());
+    }
     let execution = AiExecutionTarget::Api {
         service_config_id: input.service_config_id.to_owned(),
         model_id: input.model_id.to_owned(),
@@ -32,7 +50,9 @@ pub(crate) fn generate(input: SummaryProviderInput<'_>) -> Result<ProviderOutput
         .service_config_id
         .as_deref()
         .unwrap_or(&service.base_url);
-    let _permit = global_request_coordinator().acquire_summary(lane);
+    let _permit = global_request_coordinator()
+        .acquire_summary_cancellable(lane, || cancelled())?
+        .ok_or(super::AiError::Cancelled)?;
     providers::generate(
         &service,
         &GenerationInput {
@@ -43,7 +63,8 @@ pub(crate) fn generate(input: SummaryProviderInput<'_>) -> Result<ProviderOutput
             schema: input.schema,
             image_data_urls: input.image_data_urls,
             max_output_tokens: input.max_output_tokens,
-            timeout: Duration::from_secs(180),
+            timeout: policy.summary_timeout(),
+            cancellation: Some(cancelled),
         },
     )
 }

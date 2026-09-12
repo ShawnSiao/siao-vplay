@@ -4,6 +4,32 @@ use crate::{domain::CreateLocalProjectInput, store::ProjectStore};
 
 use super::*;
 
+#[cfg(windows)]
+#[test]
+fn app_data_migration_retains_live_webview_data_at_bootstrap() {
+    use std::os::windows::fs::OpenOptionsExt;
+    let directory = tempfile::tempdir().unwrap();
+    let root = directory.path().join("app");
+    let destination = directory.path().join("destination");
+    fs::create_dir(&destination).unwrap();
+    let manager = StorageManager::initialize(&root, root.clone(), None).unwrap();
+    let store = ProjectStore::open(root.join("projects/siaovplay.db")).unwrap();
+    let profile = root.join("EBWebView/Default");
+    fs::create_dir_all(&profile).unwrap();
+    let preferences = profile.join("Preferences");
+    fs::write(&preferences, b"retained browser preferences").unwrap();
+    fs::write(root.join("asset.txt"), b"user asset").unwrap();
+    let held = fs::OpenOptions::new().read(true).share_mode(0).open(&preferences).unwrap();
+    let task = prepare(&manager, StorageArea::AppData, &destination, StorageMigrationMode::Copy);
+    manager.start_migration(store.database_path().to_path_buf(), StartStorageMigrationInput { task_id: task.id.clone(), confirmed: true }).unwrap();
+    let completed = wait_for_task(&manager, &task.id);
+    drop(held);
+    assert_eq!(completed.status, StorageMigrationStatus::RestartRequired, "{:?}", completed.error_message);
+    assert!(!destination.join("EBWebView").exists());
+    assert_eq!(fs::read(preferences).unwrap(), b"retained browser preferences");
+    assert_eq!(fs::read(destination.join("asset.txt")).unwrap(), b"user asset");
+}
+
 fn wait_for_task(manager: &StorageManager, task_id: &str) -> StorageMigrationTask {
     for _ in 0..200 {
         let task = manager.get_migration(task_id).unwrap();
@@ -189,3 +215,24 @@ fn running_migration_is_recovered_as_interrupted() {
         StorageMigrationStatus::Interrupted
     );
 }
+
+#[path = "migration_receipt_tests.rs"]
+mod receipt_tests;
+
+#[path = "migration_receipt_recovery_tests.rs"]
+mod receipt_recovery_tests;
+
+#[path = "migration_library_roundtrip_tests.rs"]
+mod library_roundtrip_tests;
+
+#[path = "migration_area_reference_tests.rs"]
+mod area_reference_tests;
+
+#[path = "migration_configuration_tests.rs"]
+mod configuration_tests;
+
+#[path = "migration_material_tests.rs"]
+mod material_tests;
+
+#[path = "migration_language_material_tests.rs"]
+mod language_material_tests;

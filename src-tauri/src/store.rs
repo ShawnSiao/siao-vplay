@@ -1,3 +1,10 @@
+pub(crate) mod playback_sessions;
+mod local_projects;
+mod project_cleanup;
+pub use project_cleanup::PendingProjectCleanup;
+#[cfg(test)]
+mod library_benchmark;
+
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -15,7 +22,7 @@ use crate::domain::{
 };
 use crate::library::migration::{self as library_migration, MigrationError};
 
-const CURRENT_SCHEMA_VERSION: i64 = 19;
+const CURRENT_SCHEMA_VERSION: i64 = 21;
 
 #[derive(Clone, Debug)]
 pub(crate) struct RemoteImportProvenance {
@@ -57,6 +64,7 @@ pub enum StoreError {
 #[derive(Clone, Debug)]
 pub struct ProjectStore {
     database_path: PathBuf,
+    playback_sessions: std::sync::Arc<playback_sessions::Registry>,
 }
 
 impl ProjectStore {
@@ -66,7 +74,7 @@ impl ProjectStore {
             fs::create_dir_all(parent)?;
         }
 
-        let store = Self { database_path };
+        let store = Self { database_path, playback_sessions: Default::default() };
         let mut connection = store.connect()?;
         Self::migrate(&mut connection, &store.database_path)?;
         Ok(store)
@@ -92,51 +100,6 @@ impl ProjectStore {
             |row| row.get(0),
         )?;
         Ok(version)
-    }
-
-    pub fn create_local_project(
-        &self,
-        input: CreateLocalProjectInput,
-    ) -> Result<Project, StoreError> {
-        let media_path = canonical_media_path(&input.media_path)?;
-        let display_name = file_display_name(&media_path)?;
-        let title = normalize_project_title(input.title.as_deref(), &media_path)?;
-        let timestamp = now_ms()?;
-        let project_id = Uuid::new_v4().to_string();
-        let media_source_id = Uuid::new_v4().to_string();
-
-        let mut connection = self.connect()?;
-        let transaction = connection.transaction()?;
-        transaction.execute(
-            "INSERT INTO projects (
-                id, title, revision, created_at_ms, updated_at_ms, last_opened_at_ms
-             ) VALUES (?1, ?2, 1, ?3, ?3, ?3)",
-            params![project_id, title, timestamp],
-        )?;
-        transaction.execute(
-            "INSERT INTO media_sources (
-                id, project_id, kind, locator, display_name, is_primary,
-                created_at_ms, updated_at_ms
-             ) VALUES (?1, ?2, ?3, ?4, ?5, 1, ?6, ?6)",
-            params![
-                media_source_id,
-                project_id,
-                MediaSourceKind::LocalFile.as_database_value(),
-                path_to_string(&media_path),
-                display_name,
-                timestamp
-            ],
-        )?;
-        transaction.execute(
-            "INSERT INTO playback_states (
-                project_id, position_ms, duration_ms, volume, playback_rate,
-                subtitle_mode, updated_at_ms
-             ) VALUES (?1, 0, NULL, 1.0, 1.0, 'translation', ?2)",
-            params![project_id, timestamp],
-        )?;
-        transaction.commit()?;
-
-        self.get_project(&project_id)
     }
 
     pub fn create_remote_project(
@@ -309,9 +272,9 @@ impl ProjectStore {
              SET position_ms = ?2,
                  duration_ms = ?3,
                  completed_at_ms = CASE
-                     WHEN completed_at_ms IS NOT NULL THEN completed_at_ms
-                     WHEN ?3 IS NOT NULL AND ?3 > 0 AND ?2 * 10 >= ?3 * 9 THEN ?7
-                     ELSE NULL
+                     WHEN ?8 = 1 THEN COALESCE(completed_at_ms, ?7)
+                     WHEN ?8 = 0 THEN NULL
+                     ELSE completed_at_ms
                  END,
                  volume = ?4,
                  playback_rate = ?5,
@@ -325,7 +288,8 @@ impl ProjectStore {
                 input.volume,
                 input.playback_rate,
                 input.subtitle_mode.as_database_value(),
-                timestamp
+                timestamp,
+                input.completed
             ],
         )?;
         transaction.execute(
@@ -334,9 +298,9 @@ impl ProjectStore {
              WHERE id = ?1",
             params![input.project_id, timestamp],
         )?;
+        let project = Self::load_project(&transaction, &input.project_id)?;
         transaction.commit()?;
-
-        self.get_project(&input.project_id)
+        Ok(project)
     }
 
     pub fn relink_project_media(
@@ -665,84 +629,55 @@ impl ProjectStore {
         )
     }
 
+    #[cfg(test)]
     pub fn delete_project_with_remote_media_root(
         &self,
         project_id: &str,
         remote_media_root: &Path,
     ) -> Result<DeleteProjectResult, StoreError> {
         validate_project_id(project_id)?;
+        let deletion = crate::project_operations::Deletion::acquire(self, project_id)?;
+        self.delete_project_with_permit(project_id, remote_media_root, &deletion)
+    }
+
+    pub(crate) fn delete_project_with_permit(
+        &self, project_id: &str, remote_media_root: &Path,
+        deletion: &crate::project_operations::Deletion,
+    ) -> Result<DeleteProjectResult, StoreError> {
+        validate_project_id(project_id)?;
+        deletion.ensure_ready(self, project_id)?;
         let project = match self.get_project(project_id) {
             Ok(project) => Some(project),
             Err(StoreError::ProjectNotFound(_)) => None,
             Err(error) => return Err(error),
         };
-        let connection = self.connect()?;
-        let agent_task_ids = connection
-            .prepare(
-                "SELECT id FROM agent_tasks WHERE project_id = ?1
-                 UNION
-                 SELECT id FROM explanation_tasks WHERE project_id = ?1
-                 UNION
-                 SELECT id FROM learning_tasks WHERE project_id = ?1",
-            )?
-            .query_map(params![project_id], |row| row.get::<_, String>(0))?
-            .collect::<Result<Vec<_>, _>>()?;
-        let changed =
-            connection.execute("DELETE FROM projects WHERE id = ?1", params![project_id])?;
-        let cached_media_deleted = if changed > 0 {
-            project
-                .as_ref()
-                .filter(|project| project.media_source.origin_url.is_some())
-                .is_some_and(|project| {
-                    crate::storage::remove_remote_project_directory(
-                        remote_media_root,
-                        &project.media_source.locator,
-                    )
-                })
-        } else {
-            false
-        };
-        if changed > 0 {
-            self.remove_agent_task_materials(&agent_task_ids);
-            self.remove_learning_card_materials(project_id);
-            self.remove_subtitle_burn_materials(project_id);
+        let mut connection = self.connect()?;
+        let transaction = connection.transaction()?;
+        for (table, kind) in [("agent_tasks", "agent-tasks"), ("explanation_tasks", "agent-tasks"), ("learning_tasks", "agent-tasks"), ("summary_tasks", "summary-tasks")] {
+            let ids = transaction.prepare(&format!("SELECT id FROM {table} WHERE project_id = ?1"))?
+                .query_map([project_id], |row| row.get::<_, String>(0))?
+                .collect::<Result<Vec<_>, _>>()?;
+            for id in ids { project_cleanup::record(&transaction, project_id, kind, &id)?; }
         }
-
+        if project.is_some() {
+            for kind in ["learning-cards", "subtitle-burn-jobs"] {
+                project_cleanup::record(&transaction, project_id, kind, project_id)?;
+            }
+        }
+        if let Some(project) = project.as_ref().filter(|project| project.media_source.origin_url.is_some()) {
+            project_cleanup::record_remote(&transaction, project_id, remote_media_root, &project.media_source.locator)?;
+        }
+        let changed = transaction.execute("DELETE FROM projects WHERE id = ?1", params![project_id])?;
+        transaction.commit()?;
+        self.playback_sessions.retire(project_id);
+        let (cleanup_pending, cached_media_deleted) = project_cleanup::retry_remote(&connection, self.data_directory(), remote_media_root, project_id)?;
         Ok(DeleteProjectResult {
             project_id: project_id.to_owned(),
             deleted: changed > 0,
             source_media_deleted: false,
             cached_media_deleted,
+            cleanup_pending,
         })
-    }
-
-    fn remove_agent_task_materials(&self, task_ids: &[String]) {
-        let task_root = self.data_directory().join("agent-tasks");
-        for task_id in task_ids {
-            if Uuid::parse_str(task_id).is_ok() {
-                let _ = fs::remove_dir_all(task_root.join(task_id));
-            }
-        }
-    }
-
-    fn remove_learning_card_materials(&self, project_id: &str) {
-        if Uuid::parse_str(project_id).is_ok() {
-            let _ = fs::remove_dir_all(
-                self.data_directory()
-                    .join("learning-cards")
-                    .join(project_id),
-            );
-        }
-    }
-
-    fn remove_subtitle_burn_materials(&self, project_id: &str) {
-        if Uuid::parse_str(project_id).is_ok() {
-            let _ = fs::remove_dir_all(
-                self.data_directory()
-                    .join("subtitle-burn-jobs")
-                    .join(project_id),
-            );
-        }
     }
 
     fn get_media_artifact(&self, artifact_id: &str) -> Result<MediaArtifact, StoreError> {
@@ -750,8 +685,9 @@ impl ProjectStore {
         Self::load_media_artifact(&connection, artifact_id)
     }
 
-    pub(crate) fn connect(&self) -> Result<Connection, StoreError> {
-        let connection = Connection::open(&self.database_path)?;
+    pub(crate) fn connect(&self) -> Result<crate::storage::database_access::GuardedConnection, StoreError> {
+        let connection = crate::storage::database_access::connect(&self.database_path)?;
+        crate::database_upgrade::check_version(&connection, CURRENT_SCHEMA_VERSION)?;
         connection.execute_batch(
             "PRAGMA foreign_keys = ON;
              PRAGMA journal_mode = WAL;
@@ -762,6 +698,11 @@ impl ProjectStore {
     }
 
     fn migrate(connection: &mut Connection, database_path: &Path) -> Result<(), StoreError> {
+        crate::database_upgrade::backup_before_upgrade(
+            connection,
+            database_path,
+            CURRENT_SCHEMA_VERSION,
+        )?;
         connection.execute_batch(
             "CREATE TABLE IF NOT EXISTS schema_migrations (
                 version INTEGER PRIMARY KEY,
@@ -774,12 +715,6 @@ impl ProjectStore {
             |row| row.get(0),
         )?;
         let existing_database = current_version > 0;
-        if current_version > CURRENT_SCHEMA_VERSION {
-            return Err(StoreError::UnsupportedSchema {
-                found: current_version,
-                supported: CURRENT_SCHEMA_VERSION,
-            });
-        }
 
         if current_version < 1 {
             let transaction = connection.transaction()?;
@@ -952,6 +887,12 @@ impl ProjectStore {
         )?;
         if current_version < 19 {
             crate::burn_migration::migrate_schema_19(connection, now_ms()?)?;
+        }
+        if current_version < 20 {
+            crate::external_result_delivery::migrate(connection, now_ms()?)?;
+        }
+        if current_version < 21 {
+            project_cleanup::migrate(connection, now_ms()?)?;
         }
         Ok(())
     }
@@ -2383,6 +2324,7 @@ mod tests {
         fixture
             .store
             .update_playback_state(UpdatePlaybackStateInput {
+                completed: None,
                 project_id: project.id.clone(),
                 position_ms: 75_000,
                 duration_ms: Some(120_000),
@@ -2405,57 +2347,6 @@ mod tests {
         assert_eq!(
             restored.playback_state.subtitle_mode,
             SubtitleDisplayMode::Bilingual
-        );
-    }
-
-    #[test]
-    fn records_completion_at_ninety_percent_and_never_clears_it_implicitly() {
-        let fixture = Fixture::new();
-        let project = fixture.create_project(&fixture.media_file("completion.mp4"));
-
-        let before_threshold = fixture
-            .store
-            .update_playback_state(UpdatePlaybackStateInput {
-                project_id: project.id.clone(),
-                position_ms: 89_999,
-                duration_ms: Some(100_000),
-                volume: 1.0,
-                playback_rate: 1.0,
-                subtitle_mode: SubtitleDisplayMode::Original,
-            })
-            .expect("playback below threshold should save");
-        assert_eq!(before_threshold.playback_state.completed_at_ms, None);
-
-        let completed = fixture
-            .store
-            .update_playback_state(UpdatePlaybackStateInput {
-                project_id: project.id.clone(),
-                position_ms: 90_000,
-                duration_ms: Some(100_000),
-                volume: 1.0,
-                playback_rate: 1.0,
-                subtitle_mode: SubtitleDisplayMode::Original,
-            })
-            .expect("playback at threshold should save");
-        let completed_at_ms = completed
-            .playback_state
-            .completed_at_ms
-            .expect("completion should be recorded");
-
-        let replayed = fixture
-            .store
-            .update_playback_state(UpdatePlaybackStateInput {
-                project_id: project.id,
-                position_ms: 0,
-                duration_ms: Some(100_000),
-                volume: 1.0,
-                playback_rate: 1.0,
-                subtitle_mode: SubtitleDisplayMode::Original,
-            })
-            .expect("replay position should save");
-        assert_eq!(
-            replayed.playback_state.completed_at_ms,
-            Some(completed_at_ms)
         );
     }
 
@@ -2558,7 +2449,7 @@ mod tests {
         let cache_directory = temporary
             .path()
             .join("remote-media")
-            .join("authorized-import");
+            .join(Uuid::new_v4().to_string());
         fs::create_dir_all(&cache_directory).expect("cache directory should be created");
         let cached_media = cache_directory.join("source.mp4");
         fs::write(&cached_media, b"remote-media-copy").expect("cached media should be written");
@@ -2640,6 +2531,7 @@ mod tests {
         let result = fixture
             .store
             .update_playback_state(UpdatePlaybackStateInput {
+                completed: None,
                 project_id: project.id,
                 position_ms: -1,
                 duration_ms: None,
@@ -2859,7 +2751,7 @@ mod tests {
     }
 
     #[test]
-    fn rolls_back_schema_15_when_foreign_key_check_fails() {
+    fn rejects_schema_15_before_migration_when_backup_has_foreign_key_errors() {
         let temp_dir = tempfile::tempdir().expect("temporary directory should be created");
         let database_path = temp_dir.path().join("foreign-key-failure.sqlite3");
         create_v14_database(&database_path);
@@ -2882,9 +2774,7 @@ mod tests {
         let result = ProjectStore::open(&database_path);
         assert!(matches!(
             result,
-            Err(StoreError::LibraryMigration(
-                MigrationError::ForeignKeyViolation(_)
-            ))
+            Err(StoreError::Validation(message)) if message.contains("备份未通过完整性检查")
         ));
 
         let connection = Connection::open(&database_path).expect("database should reopen");

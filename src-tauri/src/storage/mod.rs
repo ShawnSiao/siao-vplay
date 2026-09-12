@@ -1,12 +1,23 @@
 pub mod commands;
 mod database;
+mod cache_inventory;
 mod maintenance;
 mod migration;
+mod migration_commit;
 mod migration_copy;
+mod migration_stream;
+mod migration_receipt;
+mod migration_configuration;
+mod migration_scope;
+mod asset_policy;
 mod migration_state;
 mod model;
 mod paths;
 mod settings;
+mod settings_io;
+mod usage;
+#[cfg(test)]
+mod settings_recovery_tests;
 
 #[cfg(test)]
 #[path = "migration_tests.rs"]
@@ -24,7 +35,7 @@ pub use model::{
     StorageLocationKind, StorageMigrationMode, StorageMigrationStatus, StorageMigrationTask,
     StorageMigrationTaskInput, StorageSettingsView,
 };
-pub(crate) use paths::remove_remote_project_directory;
+
 pub use settings::StorageManager;
 
 #[derive(Debug, Error)]
@@ -45,7 +56,7 @@ pub enum StorageError {
     StatePoisoned,
     #[error("数据库迁移操作失败：{0}")]
     Database(#[from] rusqlite::Error),
-    #[error("已有存储迁移正在执行")]
+    #[error("存储位置正被任务使用或维护，请等待完成或取消任务后重试")]
     MigrationBusy,
     #[error("找不到存储迁移任务")]
     MigrationNotFound,
@@ -91,3 +102,28 @@ impl StorageError {
         }
     }
 }
+
+#[cfg(test)]
+mod migration_write_tests;
+
+#[cfg(test)]
+mod migration_recovery_tests;
+
+#[cfg(test)]
+mod migration_destination_tests;
+
+#[cfg(test)]
+mod migration_commit_tests;
+
+#[cfg(test)]
+mod app_data_recovery_tests;
+
+#[cfg(test)]
+mod startup_owner_tests;
+
+#[cfg(test)]
+mod maintenance_conflict_tests;
+
+pub(crate) mod database_access;
+
+pub(crate) use usage::StorageLease;

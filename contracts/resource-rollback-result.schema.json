@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "activeVersion": {
+      "type": "string"
+    },
+    "previousVersion": {
+      "type": "string"
+    },
+    "resourceId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "resourceId",
+    "previousVersion",
+    "activeVersion"
+  ],
+  "title": "ResourceRollbackResult",
+  "type": "object"
+}

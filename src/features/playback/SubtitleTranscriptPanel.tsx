@@ -188,14 +188,14 @@ export function SubtitleTranscriptPanel({
             type="button"
             onClick={() => setScope("nearby")}
           >
-            当前附近
+            当前及之前
           </button>
           <button
             aria-pressed={scope === "all"}
             type="button"
             onClick={() => setScope("all")}
           >
-            全部字幕
+            全部字幕（含后续剧情）
           </button>
         </div>
       </div>
@@ -228,8 +228,8 @@ export function SubtitleTranscriptPanel({
           </div>
         ) : visibleCues.length === 0 ? (
           <div className="transcript-empty">
-            <strong>没有匹配内容</strong>
-            <span>可以搜索原文、译文或 02:37 这样的时间。</span>
+            <strong>{!query.trim() && scope === "nearby" ? "尚未播放到字幕" : "没有匹配内容"}</strong>
+            <span>{!query.trim() && scope === "nearby" ? "播放后显示当前及之前的字幕；全部字幕包含后续剧情。" : "可以搜索原文、译文或 02:37 这样的时间。"}</span>
           </div>
         ) : (
           <div

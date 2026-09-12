@@ -1,9 +1,15 @@
+#[cfg(test)]
+mod wire_schema;
+mod activity;
+#[cfg(test)]
+pub(crate) use activity::SummaryActivity;
 pub mod commands;
 
 mod backup;
 mod chunker;
 mod citations;
 mod codex_executor;
+mod dispatch;
 mod execution_prompts;
 mod executor;
 mod keyframes;
@@ -19,8 +25,14 @@ mod repository;
 mod result_model;
 mod result_repository;
 mod result_validation;
+mod retry_policy;
 mod schema;
 mod task_repository;
+mod verified_materials;
+#[cfg(test)]
+pub(crate) mod test_support;
+#[cfg(test)]
+pub(crate) use dispatch::{SummaryDispatchPreview, dispatch_contract_example};
 
 pub use model::{
     AnalysisPromptTemplate, AnalysisTaskType, DeleteAnalysisPromptTemplateInput,
@@ -39,3 +51,9 @@ pub(crate) fn recover_summary_tasks(
     task_repository::SummaryTaskRepository::new(store).recover_interrupted()?;
     Ok(())
 }
+
+mod project_cancellation;
+pub(crate) use project_cancellation::cancel_project_tasks;
+
+#[cfg(test)]
+mod storage_relocation_tests;

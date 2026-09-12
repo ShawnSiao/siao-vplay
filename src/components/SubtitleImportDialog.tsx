@@ -1,3 +1,4 @@
+import type { TranscriptionPreparationChoice } from "../features/playback/usePlaybackTools";
 import { useMemo, useState } from "react";
 
 import {
@@ -22,6 +23,7 @@ import { TranscriptionPanel } from "./TranscriptionPanel";
 import { TranslationDialog } from "./TranslationDialog";
 import {
   SubtitleWorkflowTabs,
+  SubtitleCurrentNote,
   type SubtitleWorkflow,
 } from "./SubtitleWorkflowTabs";
 
@@ -50,8 +52,9 @@ type SubtitleImportDialogProps = {
   ) => Promise<void>;
   localResourceCatalog?: LocalResourceCatalog | null;
   localResourceStatus?: LocalResourceStatus | null;
+  initialPreparationChoice?: TranscriptionPreparationChoice | null;
   onPrepareTranscriptionResources?: (
-    profileId: "fast" | "standard",
+    profileId: "fast" | "standard", language: string,
   ) => Promise<void> | void;
 };
 
@@ -103,9 +106,9 @@ export function SubtitleImportDialog({
   onTranslationTaskCompleted,
   localResourceCatalog,
   localResourceStatus,
-  onPrepareTranscriptionResources,
+  onPrepareTranscriptionResources, initialPreparationChoice,
 }: SubtitleImportDialogProps) {
-  const [workflow, setWorkflow] = useState<SubtitleWorkflow>("import");
+  const [workflow, setWorkflow] = useState<SubtitleWorkflow>(initialPreparationChoice ? "transcribe" : "import");
   const [selection, setSelection] = useState<SubtitleSelection | null>(null);
   const [language, setLanguage] = useState("");
   const [otherLanguage, setOtherLanguage] = useState("");
@@ -276,19 +279,10 @@ export function SubtitleImportDialog({
           setWorkflow(nextWorkflow);
           if (nextWorkflow !== "import") resetPreview();
         }}
-      />
+      >
 
       {currentVersion ? (
-        <div className="subtitle-current-note">
-          <span>当前原文字幕</span>
-          <strong>{currentVersion.sourceLabel}</strong>
-          <small>
-            {currentVersion.languageCode.toUpperCase()} ·{" "}
-            {currentVersion.segments.length} 条 · 版本{" "}
-            {currentVersion.versionNumber} ·{" "}
-            {currentVersion.status === "draft" ? "草稿" : "已检查"}
-          </small>
-        </div>
+        <SubtitleCurrentNote version={currentVersion} />
       ) : workflow === "import" ? (
         <p className="dialog-copy">
           可以导入 UTF-8 SRT、WebVTT，或读取视频中的文本字幕轨。确认导入前会检查时间轴和媒体范围。
@@ -463,6 +457,7 @@ export function SubtitleImportDialog({
           onVersionReady={onImported}
           localResourceCatalog={localResourceCatalog}
           localResourceStatus={localResourceStatus}
+          initialPreparationChoice={initialPreparationChoice}
           onPrepareResources={onPrepareTranscriptionResources}
         />
       ) : (
@@ -476,6 +471,7 @@ export function SubtitleImportDialog({
           onTaskCompleted={onTranslationTaskCompleted}
         />
       )}
+      </SubtitleWorkflowTabs>
     </Dialog>
   );
 }

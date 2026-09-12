@@ -1,0 +1,39 @@
+import { cancelLocalResourceMove } from "../../lib/resourceMigrationGateway";
+import type { LocalResourceMovePlan } from "../../types";
+import { useRef, useState } from "react";
+import { moveLocalResourceRoot } from "../../lib/desktop";
+
+export function useResourceMove(onMoved: () => Promise<void>, onError: (error: unknown) => void) {
+  const activeId = useRef<string | null>(null);
+  const [moving, setMoving] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+  const move = async (plan: LocalResourceMovePlan) => {
+    if (activeId.current) throw new Error("已有资源复制正在进行。");
+    const id = crypto.randomUUID();
+    activeId.current = id;
+    setMoving(true);
+    setCancelling(false);
+    try {
+      const result = await moveLocalResourceRoot(plan, id);
+      await onMoved();
+      return result;
+    } catch (error) {
+      onError(error);
+      throw error;
+    } finally {
+      if (activeId.current === id) {
+        activeId.current = null;
+        setMoving(false);
+        setCancelling(false);
+      }
+    }
+  };
+  const cancel = async () => {
+    const id = activeId.current;
+    if (!id) return false;
+    const accepted = await cancelLocalResourceMove(id);
+    if (activeId.current === id) setCancelling(accepted);
+    return accepted;
+  };
+  return { moving, cancelling, move, cancel };
+}

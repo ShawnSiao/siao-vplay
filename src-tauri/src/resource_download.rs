@@ -1,3 +1,11 @@
+mod binding;
+use binding::task_paths;
+pub use binding::{bind_configured_root, initialize_for_startup};
+#[cfg(test)]
+mod binding_tests;
+mod contract;
+mod ordering;
+pub use contract::{ResourceNetworkStatus, ResourceDownloadSnapshot, ResourceDownloadTask, ResourceDownloadTaskState, CapabilityPreparation};
 use std::{
     collections::{BTreeMap, HashMap},
     fs::{self, File, OpenOptions},
@@ -49,6 +57,8 @@ const MAX_ARCHIVE_EXPANSION_FACTOR: u64 = 20;
 
 #[derive(Debug, Error)]
 pub enum ResourceDownloadError {
+    #[error("资源任务状态尚未恢复，已暂停任务操作：{0}")]
+    BindingUnavailable(String),
     #[error(transparent)]
     LocalResource(#[from] LocalResourceError),
     #[error("资源任务文件操作失败：{0}")]
@@ -91,6 +101,7 @@ pub enum ResourceDownloadError {
 impl ResourceDownloadError {
     pub fn code(&self) -> &'static str {
         match self {
+            Self::BindingUnavailable(_) => "local_resource_binding_unavailable",
             Self::LocalResource(LocalResourceError::RootUnavailable(_)) => "root_unavailable",
             Self::LocalResource(LocalResourceError::UnknownCapability(_)) => {
                 "local_resource_capability_invalid"
@@ -115,72 +126,6 @@ impl ResourceDownloadError {
             Self::ResourceBusy(_) => "local_resource_busy",
         }
     }
-}
-
-#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum ResourceDownloadTaskState {
-    Queued,
-    Downloading,
-    Paused,
-    Verifying,
-    Installing,
-    Completed,
-    Failed,
-    Cancelled,
-}
-
-impl ResourceDownloadTaskState {
-    fn is_worker_active(self) -> bool {
-        matches!(
-            self,
-            Self::Queued | Self::Downloading | Self::Verifying | Self::Installing
-        )
-    }
-
-    fn is_terminal(self) -> bool {
-        matches!(self, Self::Completed | Self::Failed | Self::Cancelled)
-    }
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub struct ResourceDownloadTask {
-    pub id: String,
-    pub resource_id: String,
-    pub version: String,
-    pub state: ResourceDownloadTaskState,
-    pub downloaded_bytes: u64,
-    pub total_bytes: u64,
-    pub requested_by_capability_ids: Vec<String>,
-    #[serde(default)]
-    pub pending_action_ids: Vec<String>,
-    pub attempt: u32,
-    pub error_code: Option<String>,
-    pub error_message: Option<String>,
-    pub created_at_ms: i64,
-    pub updated_at_ms: i64,
-    #[serde(default)]
-    force_reinstall: bool,
-}
-
-#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub struct ResourceNetworkStatus {
-    pub mode: String,
-    pub proxy_source: String,
-    pub proxy_address: Option<String>,
-}
-
-#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub struct CapabilityPreparation {
-    pub capability_id: String,
-    pub pending_action_id: Option<String>,
-    pub state: String,
-    pub resource_ids: Vec<String>,
-    pub ready_resource_ids: Vec<String>,
-    pub task_ids: Vec<String>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -212,6 +157,7 @@ pub struct RemoveLocalResourceInput {
 
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct ResourceRemovalResult {
     pub resource_id: String,
     pub removed: bool,
@@ -226,6 +172,8 @@ struct DownloadTaskStore {
 }
 
 struct DownloadManager {
+    binding_error: Option<String>,
+    generation: u64,
     root: Option<PathBuf>,
     tasks: BTreeMap<String, ResourceDownloadTask>,
 }
@@ -246,35 +194,24 @@ enum DownloadOutcome {
 static DOWNLOAD_MANAGER: OnceLock<RwLock<DownloadManager>> = OnceLock::new();
 static ACTIVE_CONTROLS: OnceLock<Mutex<HashMap<String, Arc<DownloadControl>>>> = OnceLock::new();
 
+#[cfg(test)]
 pub fn initialize() -> Result<(), ResourceDownloadError> {
     bind_configured_root()
-}
-
-pub fn bind_configured_root() -> Result<(), ResourceDownloadError> {
-    let manager = DownloadManager::load(local_resources::configured_root())?;
-    let state = DOWNLOAD_MANAGER.get_or_init(|| RwLock::new(manager));
-    let mut state = state
-        .write()
-        .map_err(|_| io::Error::other("资源下载任务锁不可用"))?;
-    *state = DownloadManager::load(local_resources::configured_root())?;
-    Ok(())
 }
 
 pub fn list_tasks() -> Result<Vec<ResourceDownloadTask>, ResourceDownloadError> {
     with_manager_read(|manager| Ok(manager.tasks.values().cloned().collect()))
 }
 
-pub fn network_status() -> ResourceNetworkStatus {
-    let (proxy_url, proxy_source) = effective_proxy();
-    ResourceNetworkStatus {
-        mode: if proxy_url.is_some() || proxy_source == "environment" {
-            "proxy".to_owned()
-        } else {
-            "direct".to_owned()
-        },
-        proxy_source: proxy_source.to_owned(),
-        proxy_address: proxy_url,
-    }
+pub fn task_snapshot_list() -> Result<ResourceDownloadSnapshot, ResourceDownloadError> {
+    with_manager_read(|manager| Ok(ResourceDownloadSnapshot {
+        generation: manager.generation,
+        tasks: manager.tasks.values().cloned().collect(),
+    }))
+}
+
+pub fn network_status() -> Result<ResourceNetworkStatus, ai::AiError> {
+    ai::network::observed_settings().map(Into::into)
 }
 
 pub(crate) fn has_active_tasks() -> Result<bool, ResourceDownloadError> {
@@ -288,7 +225,7 @@ pub(crate) fn resource_is_preparing(resource_id: &str) -> bool {
         .get()
         .and_then(|manager| manager.read().ok())
         .is_some_and(|manager| {
-            manager
+            manager.binding_error.is_none() && manager
                 .tasks
                 .values()
                 .any(|task| task.resource_id == resource_id && task.state.is_worker_active())
@@ -412,6 +349,9 @@ pub fn cancel_task(task_id: &str) -> Result<ResourceDownloadTask, ResourceDownlo
             Ok(())
         });
     }
+    let task = task_snapshot(task_id)?;
+    let _maintenance = crate::resource_leases::maintain_resource(&task.resource_id)?;
+    local_resources::recover_changes_for_use()?;
     let (partial_path, staging_path) = task_paths(task_id)?;
     remove_file_if_exists(&partial_path)?;
     remove_directory_if_exists(&staging_path)?;
@@ -509,6 +449,7 @@ pub fn remove_resource(
     resource_id: &str,
     confirmed: bool,
 ) -> Result<ResourceRemovalResult, ResourceDownloadError> {
+    let _maintenance = crate::resource_leases::maintain_resource(resource_id)?;
     if !confirmed {
         return Err(ResourceDownloadError::RemovalConfirmationRequired);
     }
@@ -519,31 +460,10 @@ pub fn remove_resource(
         return Err(ResourceDownloadError::ResourceBusy(resource_id.to_owned()));
     }
     let affected_capability_ids = affected_capabilities(resource_id)?;
-    let Some(receipt) = local_resources::active_receipt(resource_id)? else {
-        return Ok(ResourceRemovalResult {
-            resource_id: resource_id.to_owned(),
-            removed: false,
-            affected_capability_ids,
-        });
-    };
-    let root = configured_available_root()?;
-    let install_path = join_safe_relative(&root, &receipt.install_relative_path)?;
-    let removal_path = root
-        .join("staging")
-        .join(format!("removal-{}", Uuid::new_v4()));
-    if install_path.exists() {
-        fs::rename(&install_path, &removal_path)?;
-    }
-    if let Err(error) = local_resources::deactivate_resource(resource_id) {
-        if removal_path.exists() && !install_path.exists() {
-            let _ = fs::rename(&removal_path, &install_path);
-        }
-        return Err(error.into());
-    }
-    remove_directory_if_exists(&removal_path)?;
+    let removed = local_resources::deactivate_resource(resource_id)?.is_some();
     Ok(ResourceRemovalResult {
         resource_id: resource_id.to_owned(),
-        removed: true,
+        removed,
         affected_capability_ids,
     })
 }
@@ -559,6 +479,7 @@ fn with_manager_read<T>(
     let state = state
         .read()
         .map_err(|_| io::Error::other("资源下载任务锁不可用"))?;
+    state.ensure_bound()?;
     operation(&state)
 }
 
@@ -573,12 +494,15 @@ fn with_manager_write<T>(
     let mut state = state
         .write()
         .map_err(|_| io::Error::other("资源下载任务锁不可用"))?;
+    state.ensure_bound()?;
     operation(&mut state)
 }
 
 impl DownloadManager {
     fn load(root: Option<PathBuf>) -> Result<Self, ResourceDownloadError> {
         let mut manager = Self {
+            binding_error: None,
+            generation: ordering::next_generation()?,
             root,
             tasks: BTreeMap::new(),
         };
@@ -597,11 +521,13 @@ impl DownloadManager {
                 )));
             }
             let mut discarded_invalid_task = false;
-            for task in store.tasks {
+            for mut task in store.tasks {
                 if validate_task_record(&task).is_err() || manager.tasks.contains_key(&task.id) {
                     discarded_invalid_task = true;
                     continue;
                 }
+                task.generation = manager.generation;
+                task.revision = 1;
                 manager.tasks.insert(task.id.clone(), task);
             }
             if discarded_invalid_task {
@@ -614,6 +540,7 @@ impl DownloadManager {
                 task.state = ResourceDownloadTaskState::Paused;
                 task.error_code = Some("interrupted".to_owned());
                 task.error_message = Some("应用上次退出后，下载等待继续".to_owned());
+                task.advance_revision()?;
                 task.updated_at_ms = now_ms();
                 recovered = true;
             }
@@ -633,6 +560,7 @@ impl DownloadManager {
     }
 
     fn ensure_root_available(&self) -> Result<&Path, ResourceDownloadError> {
+        self.ensure_bound()?;
         let root = self
             .root
             .as_deref()
@@ -661,6 +589,7 @@ impl DownloadManager {
                     ResourceDownloadTaskState::Completed | ResourceDownloadTaskState::Cancelled
                 )
         }) {
+            let previous = task.clone();
             if !task
                 .requested_by_capability_ids
                 .iter()
@@ -679,6 +608,7 @@ impl DownloadManager {
                 task.pending_action_ids.push(pending_action_id.to_owned());
                 task.pending_action_ids.sort();
             }
+            if *task != previous { task.advance_revision()?; task.updated_at_ms = now_ms(); }
             return Ok((task.id.clone(), false));
         }
         let artifact = resource
@@ -690,6 +620,8 @@ impl DownloadManager {
         self.tasks.insert(
             id.clone(),
             ResourceDownloadTask {
+                generation: self.generation,
+                revision: 1,
                 id: id.clone(),
                 resource_id: resource.id.clone(),
                 version: resource.version.clone(),
@@ -724,6 +656,7 @@ fn active_controls() -> &'static Mutex<HashMap<String, Arc<DownloadControl>>> {
 }
 
 fn spawn_task(task_id: String, app: Option<AppHandle>) -> Result<(), ResourceDownloadError> {
+    let storage_usage = crate::resource_leases::storage_usage()?;
     let control = Arc::new(DownloadControl::default());
     {
         let mut controls = active_controls()
@@ -739,6 +672,7 @@ fn spawn_task(task_id: String, app: Option<AppHandle>) -> Result<(), ResourceDow
     let spawn_result = thread::Builder::new()
         .name(format!("resource-download-{task_id}"))
         .spawn(move || {
+            let _storage_usage = storage_usage;
             execute_task(&worker_task_id, &control, worker_app.as_ref());
             if let Ok(mut controls) = active_controls().lock() {
                 controls.remove(&worker_task_id);
@@ -770,7 +704,8 @@ fn execute_task(task_id: &str, control: &DownloadControl, app: Option<&AppHandle
         {
             let _ = remove_file_if_exists(partial_path);
         }
-        if let Some((_, staging_path)) = paths.as_ref() {
+        if !local_resources::resource_change_pending().unwrap_or(true)
+            && let Some((_, staging_path)) = paths.as_ref() {
             let _ = remove_directory_if_exists(staging_path);
         }
         let code = error.code().to_owned();
@@ -792,6 +727,8 @@ fn execute_task_inner(
     app: Option<&AppHandle>,
 ) -> Result<(), ResourceDownloadError> {
     let task = task_snapshot(task_id)?;
+    let _maintenance = crate::resource_leases::maintain_resource(&task.resource_id)?;
+    local_resources::recover_changes_for_use()?;
     let resource = local_resources::resource_definition(&task.resource_id)?;
     if resource.version != task.version {
         return Err(ResourceDownloadError::Integrity(format!(
@@ -925,9 +862,6 @@ fn build_download_client() -> Result<Client, ResourceDownloadError> {
     ai::network::build_client(builder).map_err(ResourceDownloadError::Network)
 }
 
-pub(crate) fn effective_proxy() -> (Option<String>, &'static str) {
-    ai::network::effective_proxy()
-}
 
 fn download_artifact(
     client: &Client,
@@ -1429,21 +1363,6 @@ pub(crate) fn activate_staged_resource(
     files: Vec<ReceiptFile>,
 ) -> Result<(), ResourceDownloadError> {
     let install_relative_path = install_relative_path(resource);
-    let destination = join_safe_relative(root, &install_relative_path)?;
-    let destination_parent = destination
-        .parent()
-        .ok_or_else(|| ResourceDownloadError::Integrity("资源安装目录没有父目录".to_owned()))?;
-    fs::create_dir_all(destination_parent)?;
-    let backup = destination_parent.join(format!(".backup-{}", Uuid::new_v4()));
-    if destination.exists() {
-        fs::rename(&destination, &backup)?;
-    }
-    if let Err(error) = fs::rename(staged_payload, &destination) {
-        if backup.exists() && !destination.exists() {
-            let _ = fs::rename(&backup, &destination);
-        }
-        return Err(error.into());
-    }
     let receipt = ResourceReceipt {
         schema_version: 1,
         resource_id: resource.id.clone(),
@@ -1454,14 +1373,7 @@ pub(crate) fn activate_staged_resource(
         health_status: "passed".to_owned(),
         activated_at_ms: None,
     };
-    if let Err(error) = local_resources::activate_resource(receipt) {
-        let _ = remove_directory_if_exists(&destination);
-        if backup.exists() {
-            let _ = fs::rename(&backup, &destination);
-        }
-        return Err(error.into());
-    }
-    remove_directory_if_exists(&backup)?;
+    local_resources::install_resource(root, staged_payload, receipt)?;
     Ok(())
 }
 
@@ -1590,17 +1502,7 @@ fn update_task(
     app: Option<&AppHandle>,
     update: impl FnOnce(&mut ResourceDownloadTask) -> Result<(), ResourceDownloadError>,
 ) -> Result<ResourceDownloadTask, ResourceDownloadError> {
-    let task = with_manager_write(|manager| {
-        let task = manager
-            .tasks
-            .get_mut(task_id)
-            .ok_or_else(|| ResourceDownloadError::TaskNotFound(task_id.to_owned()))?;
-        update(task)?;
-        task.updated_at_ms = now_ms();
-        let task = task.clone();
-        manager.persist()?;
-        Ok(task)
-    })?;
+    let task = with_manager_write(|manager| manager.update_task_record(task_id, update))?;
     emit_task(app, &task);
     Ok(task)
 }
@@ -1613,17 +1515,6 @@ fn task_snapshot(task_id: &str) -> Result<ResourceDownloadTask, ResourceDownload
             .cloned()
             .ok_or_else(|| ResourceDownloadError::TaskNotFound(task_id.to_owned()))
     })
-}
-
-fn task_paths(task_id: &str) -> Result<(PathBuf, PathBuf), ResourceDownloadError> {
-    Uuid::parse_str(task_id)
-        .map_err(|_| ResourceDownloadError::Integrity(format!("下载任务 ID 无效：{task_id}")))?;
-    task_snapshot(task_id)?;
-    let root = configured_available_root()?;
-    Ok((
-        root.join("downloads").join(format!("{task_id}.part")),
-        root.join("staging").join(task_id),
-    ))
 }
 
 fn validate_task_record(task: &ResourceDownloadTask) -> Result<(), ResourceDownloadError> {
@@ -2190,6 +2081,7 @@ mod tests {
             .expect("FFmpeg should have an artifact")
             .size;
         let task = ResourceDownloadTask {
+            generation: 0, revision: 0,
             id: task_id.to_owned(),
             resource_id: "ffmpeg-cpu".to_owned(),
             version,
@@ -2235,6 +2127,7 @@ mod tests {
             &DownloadTaskStore {
                 schema_version: TASK_STORE_SCHEMA_VERSION,
                 tasks: vec![ResourceDownloadTask {
+                    generation: 0, revision: 0,
                     id: "../outside".to_owned(),
                     resource_id: "ffmpeg-cpu".to_owned(),
                     version: "8.1".to_owned(),
@@ -2266,6 +2159,8 @@ mod tests {
         let resource = local_resources::resource_definition("ffmpeg-cpu")
             .expect("catalog resource should exist");
         let mut manager = DownloadManager {
+            binding_error: None,
+            generation: 1,
             root: Some(root.path().to_path_buf()),
             tasks: BTreeMap::new(),
         };
@@ -2399,6 +2294,9 @@ mod tests {
             .map(PathBuf::from)
             .expect("SIAOVPLAY_PROXY_DOWNLOAD_ROOT is required");
         fs::create_dir_all(&evidence_root).expect("evidence root should create");
+        ai::network::initialize(&evidence_root.join("network-settings"), None,
+            crate::storage::StorageManager::initialize(&evidence_root, evidence_root.clone(), None).unwrap())
+            .expect("isolated network settings should initialize");
         let resource = local_resources::resource_definition("whisper-cpu")
             .expect("Whisper CPU resource should exist");
         let artifact = resource
@@ -2429,7 +2327,7 @@ mod tests {
         fs::write(
             evidence_root.join("proxy-download-evidence.json"),
             serde_json::to_vec_pretty(&serde_json::json!({
-                "network": network_status(),
+                "network": network_status().expect("network status should read"),
                 "resourceId": resource.id,
                 "version": resource.version,
                 "artifactSize": artifact.size,
@@ -2496,5 +2394,23 @@ mod tests {
             assert!(Instant::now() < deadline, "resource preparation timed out");
             thread::sleep(Duration::from_millis(250));
         }
+    }
+}
+
+#[cfg(test)]
+mod activation_preflight_tests {
+    use super::*;
+    #[test]
+    fn invalid_entrypoint_definition_preserves_both_old_and_staged_payloads() {
+        let root = tempfile::tempdir().unwrap();
+        let mut resource = local_resources::resource_definition("ffmpeg-cpu").unwrap();
+        resource.entrypoints.clear(); resource.artifact = None;
+        let destination = root.path().join(install_relative_path(&resource));
+        let staged = root.path().join("staging/test/payload");
+        fs::create_dir_all(&destination).unwrap(); fs::write(destination.join("old"), b"old").unwrap();
+        fs::create_dir_all(&staged).unwrap(); fs::write(staged.join("new"), b"new").unwrap();
+        assert!(activate_staged_resource(root.path(), &resource, &staged, Vec::new()).is_err());
+        assert_eq!(fs::read(destination.join("old")).unwrap(), b"old");
+        assert_eq!(fs::read(staged.join("new")).unwrap(), b"new");
     }
 }

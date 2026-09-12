@@ -2,9 +2,15 @@ mod anthropic_messages;
 mod gemini_generate_content;
 mod openai_compatible;
 mod openai_responses;
+mod generation_transport;
+use generation_transport::{client as generation_client, send as send_generation};
 
 #[cfg(test)]
 pub(crate) mod test_support;
+#[cfg(test)]
+mod cancellation_tests;
+#[cfg(test)]
+mod redirect_tests;
 
 use std::time::Duration;
 
@@ -21,6 +27,8 @@ use super::{
     types::{AiModelInfo, AiProtocol, AiProviderId, ResolvedAiService},
 };
 
+pub type CancellationCheck = std::sync::Arc<dyn Fn() -> Result<bool, AiError> + Send + Sync>;
+
 pub struct GenerationInput {
     pub model_id: String,
     pub system: String,
@@ -30,6 +38,7 @@ pub struct GenerationInput {
     pub image_data_urls: Vec<String>,
     pub max_output_tokens: u32,
     pub timeout: Duration,
+    pub cancellation: Option<CancellationCheck>,
 }
 
 #[derive(Clone, Debug)]
@@ -99,19 +108,17 @@ pub fn model_supports_vision(service: &ResolvedAiService, model_id: &str) -> boo
 }
 
 pub(super) fn client() -> Result<Client, ProviderFailure> {
-    client_with_timeout(Duration::from_secs(90))
+    client_with_timeout(super::transport_policy::load()?.model_list_timeout())
 }
 
 fn client_with_timeout(timeout: Duration) -> Result<Client, ProviderFailure> {
+    let policy = super::transport_policy::load()?;
     let builder = Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
         .user_agent(format!("SiaoVPlay/{}", env!("CARGO_PKG_VERSION")))
-        .connect_timeout(timeout.min(Duration::from_secs(30)))
+        .connect_timeout(policy.connect_timeout(timeout))
         .timeout(timeout);
     network::build_client(builder).map_err(|_| ProviderFailure::from(AiError::ProviderUnavailable))
-}
-
-pub(super) fn generation_client(input: &GenerationInput) -> Result<Client, ProviderFailure> {
-    client_with_timeout(input.timeout)
 }
 
 pub(super) fn endpoint(base_url: &str, path: &str) -> String {
@@ -132,6 +139,7 @@ pub(super) fn checked(response: Response, not_found: AiError) -> Result<Response
         StatusCode::FORBIDDEN => AiError::Forbidden,
         StatusCode::NOT_FOUND => not_found,
         StatusCode::TOO_MANY_REQUESTS => AiError::RateLimited,
+        status if status.is_redirection() => AiError::EndpointRedirected,
         status if status.is_server_error() => AiError::ProviderUnavailable,
         _ => AiError::InvalidResponse,
     };

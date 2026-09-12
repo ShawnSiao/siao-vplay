@@ -1,3 +1,8 @@
+mod contract;
+pub use contract::SubtitleBurnJob;
+mod jobs;
+use jobs::{run_job};
+
 use std::{
     collections::HashMap,
     fs::{self, File},
@@ -22,7 +27,6 @@ use crate::{
     burn_style::subtitle_force_style,
     delivery::{
         DeliveryError, ExportSubtitlesInput, SubtitleExportFormat, SubtitleExportMode,
-        export_subtitles,
     },
     media::{self, MediaError},
     store::{ProjectStore, StoreError},
@@ -31,6 +35,8 @@ use crate::{
 pub use crate::burn_style::SubtitleBurnStyle;
 #[cfg(test)]
 use crate::burn_style::SubtitleBurnTextSize;
+#[cfg(test)]
+use crate::delivery::export_subtitles;
 
 const POLL_INTERVAL: Duration = Duration::from_millis(100);
 const BURN_MANIFEST_FORMAT: &str = "siaovplay-subtitle-burn-v1";
@@ -103,6 +109,7 @@ impl SubtitleBurnError {
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub enum SubtitleBurnMode {
     Translation,
     Bilingual,
@@ -136,6 +143,7 @@ impl SubtitleBurnMode {
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct StartSubtitleBurnInput {
     pub project_id: String,
     pub mode: SubtitleBurnMode,
@@ -150,29 +158,6 @@ pub struct StartSubtitleBurnInput {
 #[serde(rename_all = "camelCase")]
 pub struct SubtitleBurnJobInput {
     pub job_id: String,
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SubtitleBurnJob {
-    pub id: String,
-    pub project_id: String,
-    pub status: String,
-    pub stage: String,
-    pub progress: f64,
-    pub mode: SubtitleBurnMode,
-    pub source_version_id: Option<String>,
-    pub translation_version_id: String,
-    pub output_path: Option<String>,
-    pub manifest_path: Option<String>,
-    pub output_sha256: Option<String>,
-    pub runtime_version: String,
-    pub error_code: Option<String>,
-    pub error_message: Option<String>,
-    pub created_at_ms: i64,
-    pub updated_at_ms: i64,
-    pub started_at_ms: Option<i64>,
-    pub completed_at_ms: Option<i64>,
 }
 
 #[derive(Clone, Debug)]
@@ -215,6 +200,7 @@ pub fn start_subtitle_burn(
     store: &ProjectStore,
     input: StartSubtitleBurnInput,
 ) -> Result<SubtitleBurnJob, SubtitleBurnError> {
+    let _project_operation = crate::project_operations::Operation::acquire(store, &input.project_id)?;
     validate_burn_style(input.style)?;
     if !input.confirm_version_selection {
         return Err(SubtitleBurnError::Delivery(DeliveryError::InvalidExport(
@@ -245,6 +231,7 @@ pub fn start_subtitle_burn(
     let job_directory = reset_job_directory(store, &project.id, &job_id)?;
     let subtitle = match prepare_internal_subtitle(
         store,
+        &_project_operation,
         &project.id,
         input.mode,
         input.source_version_id.clone(),
@@ -337,9 +324,12 @@ pub fn spawn_subtitle_burn_job(
     job_id: String,
 ) -> Result<(), SubtitleBurnError> {
     let job = load_stored_job(&store, &job_id)?;
+    let project_operation = crate::project_operations::Operation::acquire(&store, &job.public.project_id)?;
     if job.public.status != "queued" {
         return Err(SubtitleBurnError::InvalidJobState(job.public.status));
     }
+    let resources = crate::resource_leases::configured(&["ffmpeg-cpu"])
+        .map_err(SubtitleBurnError::from).inspect_err(|error| { let _ = finish_with_error(&store, &job_id, error); })?;
     let cancellation = Arc::new(AtomicBool::new(false));
     {
         let mut jobs = active_jobs()
@@ -355,6 +345,8 @@ pub fn spawn_subtitle_burn_job(
     let spawn_result = thread::Builder::new()
         .name(format!("subtitle-burn-{job_id}"))
         .spawn(move || {
+            let _project_operation = project_operation;
+            let _resources = resources;
             let result = run_job(&store, &worker_job_id, &cancellation);
             if let Err(error) = result {
                 let _ = finish_with_error(&store, &worker_job_id, &error);
@@ -438,47 +430,13 @@ pub fn cancel_subtitle_burn_job(
     get_subtitle_burn_job(store, job_id)
 }
 
-pub fn cancel_project_subtitle_burn_jobs(
-    store: &ProjectStore,
-    project_id: &str,
-) -> Result<usize, SubtitleBurnError> {
-    let ids = {
-        let connection = store.connect()?;
-        let mut statement = connection.prepare(
-            "SELECT id FROM subtitle_burn_jobs
-             WHERE project_id = ?1
-               AND status IN ('queued', 'running', 'validating')",
-        )?;
-        statement
-            .query_map(params![project_id], |row| row.get::<_, String>(0))?
-            .collect::<Result<Vec<_>, _>>()?
-    };
-    for id in &ids {
-        let _ = cancel_subtitle_burn_job(store, id);
-    }
-    for _ in 0..100 {
-        let active = store.connect()?.query_row(
-            "SELECT COUNT(*) FROM subtitle_burn_jobs
-             WHERE project_id = ?1
-               AND status IN ('queued', 'running', 'validating')",
-            params![project_id],
-            |row| row.get::<_, i64>(0),
-        )?;
-        if active == 0 {
-            return Ok(ids.len());
-        }
-        thread::sleep(POLL_INTERVAL);
-    }
-    Err(SubtitleBurnError::InvalidJobState(
-        "取消字幕烧录任务超时，项目尚未删除".to_owned(),
-    ))
-}
 
 pub fn resume_subtitle_burn_job(
     store: &ProjectStore,
     job_id: &str,
 ) -> Result<SubtitleBurnJob, SubtitleBurnError> {
     let job = load_stored_job(store, job_id)?;
+    let _project_operation = crate::project_operations::Operation::acquire(store, &job.public.project_id)?;
     if !matches!(
         job.public.status.as_str(),
         "failed" | "cancelled" | "interrupted"
@@ -492,6 +450,7 @@ pub fn resume_subtitle_burn_job(
     let job_directory = reset_job_directory(store, &project.id, job_id)?;
     let subtitle = prepare_internal_subtitle(
         store,
+        &_project_operation,
         &project.id,
         job.public.mode,
         job.public.source_version_id.clone(),
@@ -563,136 +522,6 @@ pub fn recover_subtitle_burn_jobs(store: &ProjectStore) -> Result<usize, Subtitl
     Ok(changed)
 }
 
-fn run_job(
-    store: &ProjectStore,
-    job_id: &str,
-    cancellation: &AtomicBool,
-) -> Result<(), SubtitleBurnError> {
-    transition_job(store, job_id, "queued", "running", "verifying", 0.02)?;
-    let job = load_stored_job(store, job_id)?;
-    let media_path = validate_baseline(store, &job)?;
-    verify_runtime(&job)?;
-    verify_subtitle(&job)?;
-    let media_probe = media::validate_media_path(&media_path)?;
-    check_cancelled(store, job_id, cancellation)?;
-    if job.intended_output_path.exists() || job.intended_manifest_path.exists() {
-        return Err(SubtitleBurnError::BurnFailed(
-            "目标文件已经存在，请重新开始烧录".to_owned(),
-        ));
-    }
-    remove_file_if_present(&job.temporary_output_path)?;
-    remove_file_if_present(&temporary_manifest_path(&job))?;
-    update_running_progress(store, job_id, "burning", 0.05)?;
-
-    let job_directory = job_directory(store, &job.public.project_id, &job.public.id)?;
-    let log_path = job_directory.join("ffmpeg.log");
-    let progress_path = job_directory.join("progress.txt");
-    remove_file_if_present(&progress_path)?;
-    let subtitle_file_name = job
-        .subtitle_path
-        .file_name()
-        .and_then(|value| value.to_str())
-        .ok_or_else(|| SubtitleBurnError::BurnFailed("临时字幕文件名无效".to_owned()))?;
-    let filter = format!(
-        "subtitles={subtitle_file_name}:force_style='{}'",
-        subtitle_force_style(job.style)
-    );
-    let mut command = hidden_command(&job.runtime_path);
-    command
-        .current_dir(&job_directory)
-        .args([
-            "-hide_banner",
-            "-nostdin",
-            "-loglevel",
-            "warning",
-            "-n",
-            "-i",
-        ])
-        .arg(&media_path)
-        .args(["-map", "0:v:0", "-map", "0:a?", "-vf"])
-        .arg(filter)
-        .args(media::h264_video_encode_args(&media_probe))
-        .args([
-            "-c:a",
-            "aac",
-            "-b:a",
-            "192k",
-            "-movflags",
-            "+faststart",
-            "-max_muxing_queue_size",
-            "1024",
-            "-progress",
-            "progress.txt",
-            "-nostats",
-        ])
-        .arg(&job.temporary_output_path);
-    let status = run_ffmpeg(
-        store,
-        &job,
-        cancellation,
-        &mut command,
-        &log_path,
-        &progress_path,
-    )?;
-    if !status.success() {
-        return Err(SubtitleBurnError::BurnFailed(read_log_tail(&log_path)));
-    }
-    check_cancelled(store, job_id, cancellation)?;
-    transition_job(store, job_id, "running", "validating", "validating", 0.96)?;
-    media::validate_media_path(&job.temporary_output_path).map_err(|error| {
-        SubtitleBurnError::BurnFailed(format!("生成的视频无法通过媒体检查：{error}"))
-    })?;
-    let output_sha256 = hash_file(&job.temporary_output_path)?;
-    let project = store.get_project(&job.public.project_id)?;
-    let completed_at_ms = now_ms()?;
-    let output_file_name = job
-        .intended_output_path
-        .file_name()
-        .and_then(|value| value.to_str())
-        .ok_or_else(|| SubtitleBurnError::BurnFailed("输出文件名无效".to_owned()))?;
-    let manifest = SubtitleBurnManifest {
-        format: BURN_MANIFEST_FORMAT,
-        project_id: &project.id,
-        project_title: &project.title,
-        mode: job.public.mode,
-        source_version_id: job.public.source_version_id.as_deref(),
-        translation_version_id: &job.public.translation_version_id,
-        source_media_sha256: &job.expected_media_sha256,
-        output_file: output_file_name,
-        output_file_sha256: &output_sha256,
-        runtime_version: &job.public.runtime_version,
-        runtime_sha256: &job.runtime_sha256,
-        style: job.style,
-        completed_at_ms,
-    };
-    let temporary_manifest_path = temporary_manifest_path(&job);
-    fs::write(
-        &temporary_manifest_path,
-        serde_json::to_vec_pretty(&manifest)?,
-    )?;
-    check_cancelled(store, job_id, cancellation)?;
-    fs::rename(&job.temporary_output_path, &job.intended_output_path)?;
-    if let Err(error) = fs::rename(&temporary_manifest_path, &job.intended_manifest_path) {
-        let _ = fs::remove_file(&job.intended_output_path);
-        return Err(error.into());
-    }
-    let changed = store.connect()?.execute(
-        "UPDATE subtitle_burn_jobs
-         SET status = 'completed', stage = 'completed', progress = 1.0,
-             output_sha256 = ?2, updated_at_ms = ?3, completed_at_ms = ?3
-         WHERE id = ?1 AND status = 'validating' AND cancel_requested_at_ms IS NULL",
-        params![job_id, output_sha256, completed_at_ms],
-    )?;
-    if changed != 1 {
-        let _ = fs::remove_file(&job.intended_output_path);
-        let _ = fs::remove_file(&job.intended_manifest_path);
-        return Err(SubtitleBurnError::InvalidJobState(
-            "保存烧录完成状态时任务已经变化".to_owned(),
-        ));
-    }
-    let _ = remove_job_directory(store, &job.public.project_id, job_id);
-    Ok(())
-}
 
 fn validate_burn_style(style: SubtitleBurnStyle) -> Result<(), SubtitleBurnError> {
     if !style.position_y.is_finite() || !(0.0..=1.0).contains(&style.position_y) {
@@ -822,13 +651,14 @@ fn ensure_no_active_job(
 
 fn prepare_internal_subtitle(
     store: &ProjectStore,
+    operation: &crate::project_operations::Operation,
     project_id: &str,
     mode: SubtitleBurnMode,
     source_version_id: Option<String>,
     translation_version_id: String,
     job_directory: &Path,
 ) -> Result<crate::delivery::SubtitleExport, SubtitleBurnError> {
-    let exported = export_subtitles(
+    let exported = crate::delivery::export_subtitles_owned(
         store,
         ExportSubtitlesInput {
             project_id: project_id.to_owned(),
@@ -839,6 +669,7 @@ fn prepare_internal_subtitle(
             destination_directory: path_to_string(job_directory),
             confirm_version_selection: true,
         },
+        operation,
     )?;
     let subtitle_path = job_directory.join("burn.srt");
     let manifest_path = job_directory.join("burn.srt.siaovplay.json");
@@ -1384,6 +1215,10 @@ impl ProcessGroup {
 }
 
 #[cfg(test)]
+#[path = "burn/cancellation_acceptance.rs"]
+mod cancellation_acceptance;
+
+#[cfg(test)]
 mod tests {
     use rusqlite::params;
 
@@ -1811,7 +1646,7 @@ mod tests {
         }
     }
 
-    fn insert_subtitle_fixture(
+    pub(super) fn insert_subtitle_fixture(
         store: &ProjectStore,
         project_id: &str,
         media_sha256: &str,

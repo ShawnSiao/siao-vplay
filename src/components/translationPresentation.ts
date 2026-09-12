@@ -10,7 +10,7 @@ export function translationTaskStage(task: TranslationTask): string {
     return "等待导入 Agent 返回的结果";
   }
   if (task.status === "queued") {
-    return "任务已经准备好，等待启动本机 Codex";
+    return "材料已经准备好，等待确认发送清单";
   }
   if (task.status === "validating") {
     return "正在检查任务、版本、字幕范围和完整性";
@@ -21,6 +21,8 @@ export function translationTaskStage(task: TranslationTask): string {
   if (task.status === "interrupted") return "应用上次关闭时任务尚未完成";
   if (task.status === "cancelled") return "任务已经取消";
   if (task.status === "failed") return "任务处理失败";
+  if (task.stage === "cancelling") return "正在停止翻译请求";
+  if (task.handoffKind === "api") return "正在分批翻译，已完成批次会保留";
   const match = /^translating_batch_(\d+)_of_(\d+)$/.exec(task.stage);
   return match
     ? `正在翻译第 ${match[1]} / ${match[2]} 批字幕`
@@ -45,4 +47,14 @@ export function translationValidationCopy(
   return validation.warningCount > 0
     ? `结构检查通过，另有 ${validation.warningCount} 项一致性提示。`
     : `已检查 ${validation.translationCount} 条字幕的任务、版本、范围和完整性。`;
+}
+
+export async function copyTranslationPrompt(prompt: string): Promise<string> {
+  if (!navigator.clipboard?.writeText) return "系统未授权自动复制，可以在下方选择完整提示词。";
+  try {
+    await navigator.clipboard.writeText(prompt);
+    return "完整任务提示词已复制。";
+  } catch {
+    return "自动复制没有完成，可以在下方选择完整提示词。";
+  }
 }

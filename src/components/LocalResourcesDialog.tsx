@@ -1,4 +1,10 @@
+import { confirmLocationPlan } from "../features/resources/confirmLocationPlan";
+import { ResourceBindingRecovery } from "../features/resources/ResourceBindingRecovery";
+import { adoptionFeedback } from "../features/resources/adoptionFeedback";
+import { cleanupFeedback } from "../features/resources/cleanupFeedback";
+import { ResourceMaintenanceNotice } from "../features/resources/ResourceMaintenanceNotice";
 import { useMemo, useRef, useState } from "react";
+import { ResourcePreparationAction } from "../features/resources/ResourcePreparationAction";
 
 import type { LocalResourcesController } from "../features/resources/useLocalResources";
 import { updateCapabilityResources } from "../features/environment-settings/updateCapabilityResources";
@@ -23,12 +29,8 @@ import type {
 } from "../types";
 import { Dialog } from "./Dialog";
 
-export type PendingResourceAction = {
-  id: string;
-  capabilityId: string;
-  label: string;
-  profileId?: "fast" | "standard";
-};
+import type { PendingResourceAction } from "../features/resources/pendingResourceAction";
+export type { PendingResourceAction } from "../features/resources/pendingResourceAction";
 
 type LocalResourcesDialogProps = {
   controller: LocalResourcesController;
@@ -61,7 +63,6 @@ export function LocalResourcesDialog({
   );
   const [locationPlan, setLocationPlan] =
     useState<LocalResourceLocationPlan | null>(null);
-  const [migrationSourcePath, setMigrationSourcePath] = useState<string | undefined>();
   const [migrationPreview, setMigrationPreview] =
     useState<ResourceMigrationPreview | null>(null);
   const [movePlan, setMovePlan] = useState<LocalResourceMovePlan | null>(null);
@@ -70,7 +71,7 @@ export function LocalResourcesDialog({
   const [diagnostics, setDiagnostics] = useState<LocalResourceDiagnostics | null>(null);
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
   const [maintenanceOpen, setMaintenanceOpen] = useState(
-    Boolean(pendingAction) || !controller.status?.configured,
+    !controller.status?.configured,
   );
   const diagnosticsRef = useRef<HTMLDetailsElement>(null);
   const [thirdPartyNotices, setThirdPartyNotices] = useState<string | null>(null);
@@ -174,7 +175,7 @@ export function LocalResourcesDialog({
     .filter((capability): capability is LocalResourceCapabilityStatus =>
       Boolean(capability),
     );
-  const selectionCanPrepare =
+  const selectionCanPrepare = !controller.bindingRecovery &&
     selectedCapabilities.length > 0 &&
     selectedCapabilities.every(capabilityInstallable) &&
     selectedCapabilities.some(
@@ -209,14 +210,17 @@ export function LocalResourcesDialog({
 
   const runAction = async (action: string, operation: () => Promise<unknown>) => {
     setBusyAction(action);
-    setLocalError(null);
-    controller.clearError();
+    if (action !== "load-diagnostics") {
+      setLocalError(null);
+      controller.clearError();
+    }
     try {
       await operation();
     } catch (cause) {
-      setLocalError(cause instanceof Error ? cause.message : String(cause));
+      const message = cause instanceof Error ? cause.message : String(cause);
+      setLocalError(previous => action === "load-diagnostics" ? previous ?? message : message);
     } finally {
-      setBusyAction(null);
+      setBusyAction(current => current === action ? null : current);
     }
   };
 
@@ -232,20 +236,19 @@ export function LocalResourcesDialog({
     runAction("inspect-existing", async () => {
       const selection = await controller.chooseExistingResources();
       if (selection) {
-        setMigrationSourcePath(selection.sourcePath);
         setMigrationPreview(selection.preview);
       }
     });
 
   const adoptExistingResources = () =>
     runAction("adopt-existing", async () => {
-      const result = await controller.adoptResources(migrationSourcePath);
+      if (!migrationPreview) return;
+      const confirmedPreview = migrationPreview;
       setMigrationPreview(null);
-      onNotice(
-        result.adoptedResourceIds.length > 0
-          ? `已接管 ${result.adoptedResourceIds.length} 项本地功能资源，无需重复下载。`
-          : "没有需要接管的新资源。",
-      );
+      const result = await controller.adoptResources(confirmedPreview);
+      const feedback = adoptionFeedback(result);
+      if (feedback.error) setLocalError(feedback.error);
+      onNotice(feedback.notice);
     });
 
   const chooseMoveLocation = () =>
@@ -261,21 +264,23 @@ export function LocalResourcesDialog({
       if (!movePlan) {
         return;
       }
-      await controller.moveLocation(movePlan.selectedParent);
+      const confirmedPlan = movePlan;
       setMovePlan(null);
+      await controller.moveLocation(confirmedPlan);
       onNotice("资源已复制、校验并切换到新位置；原目录仍保留，可确认后自行清理。");
     });
 
   const repairRoot = () =>
     runAction("repair-root", async () => {
-      await controller.repairRoot();
+      const result = await controller.repairRoot();
+      if (result.bindingError) return;
       onNotice("资源目录结构已修复，媒体库和项目数据未改变。");
     });
 
   const reconnectRoot = () =>
     runAction("reconnect-root", async () => {
       const result = await controller.reconnectRoot();
-      if (result) {
+      if (result && !result.bindingError) {
         onNotice("已重新连接并验证现有资源目录。");
       }
     });
@@ -291,13 +296,15 @@ export function LocalResourcesDialog({
 
   const confirmCleanup = () =>
     runAction("cleanup-unused", async () => {
-      const result = await controller.cleanupUnused();
+      if (!cleanupPlan) throw new Error("请先检查清理清单。");
+      const plan = cleanupPlan;
       setCleanupPlan(null);
-      onNotice(
-        result.removedResourceIds.length > 0
-          ? `已清理 ${result.removedResourceIds.length} 项未使用资源。`
-          : "当前没有需要清理的资源。",
-      );
+      setOldVersionCleanupPlan(null);
+      setDiagnostics(null);
+      const result = await controller.cleanupUnused(plan.planFingerprint);
+      const feedback = cleanupFeedback(plan.resourceIds, result.removedResourceIds, result.interruption, "unused");
+      if (feedback.interrupted) setLocalError(feedback.message);
+      else onNotice(feedback.message);
     });
 
   const loadDiagnostics = () =>
@@ -374,14 +381,16 @@ export function LocalResourcesDialog({
 
   const confirmOldVersionCleanup = () =>
     runAction("cleanup-old-versions", async () => {
-      const result = await controller.cleanupOldVersions();
+      if (!oldVersionCleanupPlan) throw new Error("请先检查旧版本清理清单。");
+      const plan = oldVersionCleanupPlan;
       setOldVersionCleanupPlan(null);
+      setCleanupPlan(null);
       setDiagnostics(null);
-      onNotice(
-        result.removedVersions.length > 0
-          ? `已清理 ${result.removedVersions.length} 个旧资源版本。`
-          : "当前没有需要清理的旧版本。",
-      );
+      const result = await controller.cleanupOldVersions(plan.planFingerprint);
+      const ids = plan.candidates.map(item => `${item.resourceId}@${item.version}`);
+      const feedback = cleanupFeedback(ids, result.removedVersions, result.interruption, "old");
+      if (feedback.interrupted) setLocalError(feedback.message);
+      else onNotice(feedback.message);
     });
 
   const prepareSelection = async () => {
@@ -404,10 +413,8 @@ export function LocalResourcesDialog({
   const confirmAndPrepare = () =>
     runAction("prepare", async () => {
       if (!status?.configured) {
-        if (!locationPlan) {
-          throw new Error("需要先选择并核对保存位置。");
-        }
-        const configured = await controller.confirmLocation(locationPlan.selectedParent);
+        const configured = await confirmLocationPlan(locationPlan, () => setLocationPlan(null), controller.confirmLocation);
+        if (configured.bindingError) return;
         if (configured.preferredProfile !== selectedProfileId) {
           await controller.selectProfile(selectedProfileId);
         }
@@ -418,10 +425,8 @@ export function LocalResourcesDialog({
 
   const confirmFirstRunLocation = () =>
     runAction("first-run-location", async () => {
-      if (!locationPlan) {
-        throw new Error("请先选择保存位置。");
-      }
-      await controller.confirmLocation(locationPlan.selectedParent);
+      const result = await confirmLocationPlan(locationPlan, () => setLocationPlan(null), controller.confirmLocation);
+      if (result.bindingError) return;
       onNotice("本地功能保存位置已设置；需要其他能力时再按需下载。");
       onDismissFirstRun();
     });
@@ -487,14 +492,27 @@ export function LocalResourcesDialog({
           </div>
         ) : null}
 
+        {controller.moving ? <div className="notice" role="status">
+          <strong>{controller.cancellingMove ? "正在停止资源复制…" : "正在复制并校验资源，原位置仍保留"}</strong>
+          <button className="button quiet" type="button" disabled={controller.cancellingMove || !controller.cancelMove} onClick={() => {
+            void controller.cancelMove?.().then((accepted) => {
+              if (!accepted) onNotice("已进入保存位置切换，请等待完成。");
+            }).catch((error: unknown) => setLocalError(error instanceof Error ? error.message : "取消请求没有完成，请重试。"));
+          }}>取消复制</button>
+        </div> : null}
         {localError || controller.error ? (
           <div className="notice danger" role="alert">
             <strong>本地功能未完成准备</strong>
             <p>{localError ?? controller.error}</p>
+            {controller.error && (controller.canRetryRead || !catalog || !status) ? <button className="button quiet" type="button" disabled={controller.loading || busyAction !== null} onClick={() => void runAction("refresh", controller.refresh)}>重新读取资源状态</button> : null}
           </div>
         ) : null}
 
-        {firstRun && !pendingAction ? (
+        <ResourceBindingRecovery result={controller.bindingRecovery} busy={busyAction !== null} onRetry={() => void runAction("retry-binding", async () => {
+          const result = await controller.retryBinding();
+          if (!result.bindingError) { onNotice("保存位置已保留，资源任务状态已恢复。"); if (firstRun) onDismissFirstRun(); }
+        })} />
+        {firstRun && !pendingAction && !controller.bindingRecovery ? (
           <section className="local-resources-welcome" aria-labelledby="resource-welcome-title">
             <h3 id="resource-welcome-title">选择本地功能的保存位置</h3>
             <p>
@@ -571,7 +589,9 @@ export function LocalResourcesDialog({
                   <p>只下载所选功能缺少的内容，共享内容不会重复下载。</p>
                 </div>
               </div>
-              {catalog?.profiles.length ? (
+              {catalog?.profiles.length && (!pendingAction || selectedCapabilities.some(capability =>
+                catalog.capabilities.find(item => item.id === capability.id)?.profileIds.length,
+              )) ? (
                 <fieldset className="local-resource-profiles">
                   <legend>字幕识别方式</legend>
                   <p>方式只影响字幕识别。下载量按可信资源清单计算，并直接展示真实大小。</p>
@@ -608,7 +628,7 @@ export function LocalResourcesDialog({
                 </fieldset>
               ) : null}
               <div className="local-capability-list">
-                {capabilityStatuses.map((capability) => {
+                {capabilityStatuses.filter(capability => !pendingAction || capability.id === pendingAction.capabilityId).map((capability) => {
                   const installable = capabilityInstallable(capability);
                   const selected = selectedCapabilityIds.has(capability.id);
                   const ready =
@@ -683,10 +703,18 @@ export function LocalResourcesDialog({
               </div>
             </section>
 
+            <ResourcePreparationAction
+              downloadBytes={selectedDownloadBytes} installedBytes={selectedInstalledBytes}
+              path={status.resourceRoot ?? locationPlan?.resourceRoot ?? null}
+              busy={busyAction === "prepare"} configured={status.configured}
+              canPrepare={selectionCanPrepare} preparing={selectionPreparing} unavailable={selectionUnavailable}
+              disabled={previewMode || busyAction !== null || !selectionCanPrepare || (!status.configured && !locationPlan)}
+              onPrepare={() => void confirmAndPrepare()}
+            />
+
             <details
               className="local-resources-maintenance"
               open={
-                Boolean(pendingAction) ||
                 !status.configured ||
                 status.rootState !== "ready" ||
                 maintenanceOpen
@@ -821,7 +849,8 @@ export function LocalResourcesDialog({
                         )}。只检查了明确选择的目录，不会读取其他应用的数据。`
                       : "候选文件未通过当前版本、大小、哈希、文件清单或健康检查。"}
                   </p>
-                  {migrationPreview.verifiedResourceIds.length > 0 ? (
+                  <p>{migrationPreview.resourceRoot ? `接管到：${migrationPreview.resourceRoot}` : "请先选择资源保存位置。"}</p>
+                  {migrationPreview.verifiedResourceIds.length > 0 && migrationPreview.resourceRoot ? (
                     <button
                       className="button quiet"
                       type="button"
@@ -839,6 +868,7 @@ export function LocalResourcesDialog({
                   <p>{movePlan.resourceRoot}</p>
                   <p>
                     复制并校验 {formatBytes(movePlan.bytesToCopy)}；切换成功后原目录仍保留。
+                    中断后选择同一位置可继续，空间按剩余复制量检查。
                   </p>
                   <button
                     className="button quiet"
@@ -846,9 +876,7 @@ export function LocalResourcesDialog({
                     disabled={
                       previewMode ||
                       busyAction !== null ||
-                      movePlan.destinationExists ||
-                      (movePlan.freeSpaceBytes !== null &&
-                        movePlan.freeSpaceBytes < movePlan.bytesToCopy)
+                      movePlan.destinationExists
                     }
                     onClick={() => void confirmMoveLocation()}
                   >
@@ -856,29 +884,7 @@ export function LocalResourcesDialog({
                   </button>
                 </div>
               ) : null}
-              <button
-                className="button primary local-resources-primary-action"
-                type="button"
-                disabled={
-                  previewMode ||
-                  busyAction !== null ||
-                  !selectionCanPrepare ||
-                  (!status.configured && !locationPlan)
-                }
-                onClick={() => void confirmAndPrepare()}
-              >
-                {busyAction === "prepare"
-                  ? "正在建立准备任务…"
-                  : !status.configured
-                    ? "确认位置并开始准备"
-                    : selectionCanPrepare
-                      ? "开始准备所选功能"
-                      : selectionPreparing
-                        ? "正在准备所选功能"
-                        : selectionUnavailable
-                          ? "当前不能开始准备"
-                          : "所选功能已准备"}
-              </button>
+
             </section>
             </details>
           </>
@@ -1074,6 +1080,7 @@ export function LocalResourcesDialog({
               </div>
             )}
             <div className="local-resource-diagnostic-list">
+              {diagnostics ? <ResourceMaintenanceNotice diagnostic={diagnostics.maintenance} /> : null}
               {catalog.resources.map((resource) => {
                 const diagnostic = diagnostics?.resources.find(
                   (item) => item.id === resource.id,
@@ -1119,6 +1126,8 @@ export function LocalResourcesDialog({
                   <a href={resource.sourcePage} target="_blank" rel="noreferrer">
                     查看来源与许可说明
                   </a>
+                  {diagnostic?.versionsReadable === false ? <p role="status">版本检查未完成，安装记录或资源目录无法读取。已保留文件，请检查目录访问权限后重试。</p> : null}
+                  {diagnostic && diagnostic.unverifiedReceiptCount > 0 ? <p role="status">发现 {diagnostic.unverifiedReceiptCount} 项无法验证的安装记录；未将其载入版本列表，现有文件已保留。请核对应用版本或联系维护者。</p> : null}
                   {diagnostic?.versions.map((version) => (
                     <div className="local-resource-version" key={version.version}>
                       <div>

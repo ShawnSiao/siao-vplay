@@ -27,3 +27,12 @@ describe("backgroundResultNotice", () => {
     expect(JSON.stringify(completed)).not.toMatch(/Agent|C:\\/);
   });
 });
+
+it("announces other-project completion and rejection without claiming the current video changed", () => {
+  for (const status of ["completed", "rejected"] as const) {
+    const notice = backgroundResultNotice({ taskKind: "translation", taskId: "other-task", projectId: "other-project", status, outputId: null, message: "C:\\private\\output.json" }, false);
+    expect(notice).toMatchObject({ tone: status === "completed" ? "success" : "warning" });
+    expect(JSON.stringify(notice)).toContain("其他视频");
+    expect(JSON.stringify(notice)).not.toMatch(/当前视频|C:\\/);
+  }
+});

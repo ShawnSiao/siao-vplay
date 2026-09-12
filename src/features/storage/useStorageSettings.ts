@@ -1,3 +1,5 @@
+import { useStorageMigrationCancellation } from "./useStorageMigrationCancellation";
+import { useStorageMigrationPolling } from "./useStorageMigrationPolling";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import type {
@@ -10,11 +12,9 @@ import type {
   StorageMigrationTask,
 } from "./types";
 import {
-  cancelStorageMigration,
   chooseStorageDirectory,
   clearPlaybackCache,
   getCurrentStorageMigration,
-  getStorageMigration,
   getStorageSettings,
   openStorageLocation,
   prepareStorageMigration,
@@ -67,14 +67,23 @@ export function useStorageSettings(
   const [operation, setOperation] = useState<Operation | null>(null);
   const [error, setError] = useState<string | null>(null);
   const lastStatus = useRef<string | null>(null);
+  const settingsReadEpoch = useRef(0);
+  const noticeRef = useRef(onNotice);
+  useEffect(() => { noticeRef.current = onNotice; }, [onNotice]);
 
-  const applySettings = useCallback((next: StorageSettings) => {
+  const appliedSettings = useRef<StorageSettings | null>(null);
+  const applySettings = useCallback((next: StorageSettings, saved?: { subtitle: string | null; report: string | null }) => {
+    const previous = appliedSettings.current;
+    appliedSettings.current = next;
     setSettings(next);
-    setSubtitleDirectory(next.defaultSubtitleExportDirectory);
-    setReportDirectory(next.defaultVideoReportExportDirectory);
+    setSubtitleDirectory(current => !previous || current === (saved ? saved.subtitle : previous.defaultSubtitleExportDirectory)
+      ? next.defaultSubtitleExportDirectory : current);
+    setReportDirectory(current => !previous || current === (saved ? saved.report : previous.defaultVideoReportExportDirectory)
+      ? next.defaultVideoReportExportDirectory : current);
   }, []);
 
   const load = useCallback(async () => {
+    const epoch = ++settingsReadEpoch.current;
     setOperation("loading");
     setError(null);
     try {
@@ -86,13 +95,14 @@ export function useStorageSettings(
           getStorageSettings(),
           getCurrentStorageMigration(),
         ]);
+        if (epoch !== settingsReadEpoch.current) return;
         applySettings(nextSettings);
         setMigration(currentMigration);
       }
     } catch (cause) {
-      setError(message(cause));
+      if (epoch === settingsReadEpoch.current) setError(message(cause));
     } finally {
-      setOperation(null);
+      if (epoch === settingsReadEpoch.current) setOperation(null);
     }
   }, [applySettings, previewMode]);
 
@@ -102,24 +112,24 @@ export function useStorageSettings(
     return () => window.clearTimeout(timer);
   }, [active, load]);
 
-  useEffect(() => {
-    if (!active || previewMode || migration?.status !== "running") return;
-    const timer = window.setInterval(() => {
-      void getStorageMigration(migration.id)
-        .then((task) => setMigration(task))
-        .catch((cause) => setError(message(cause)));
-    }, 500);
-    return () => window.clearInterval(timer);
-  }, [active, migration?.id, migration?.status, previewMode]);
+  useStorageMigrationPolling(active && !previewMode, migration, setMigration, cause => setError(message(cause)));
 
   useEffect(() => {
+    let active = true;
     const status = migration?.status ?? null;
-    if (status && status !== lastStatus.current && ["completed", "restart_required"].includes(status)) {
-      onNotice(status === "restart_required" ? "应用数据已校验，重启后切换到新位置。" : "存储位置迁移完成，旧目录仍保留。");
-      if (!previewMode) void getStorageSettings().then(applySettings);
+    const identity = migration?.id ? `${migration.id}:${status}` : null;
+    const epoch = settingsReadEpoch.current;
+    if (status && identity !== lastStatus.current && ["completed", "restart_required"].includes(status)) {
+      noticeRef.current(status === "restart_required" ? "应用数据已校验，重启后切换到新位置。" : "存储位置迁移完成，旧目录仍保留。");
+      if (!previewMode) void getStorageSettings().then(next => {
+        if (active && epoch === settingsReadEpoch.current) applySettings(next);
+      }).catch(cause => {
+        if (active && epoch === settingsReadEpoch.current) setError(`迁移状态已更新，但存储设置刷新失败：${message(cause)}`);
+      });
     }
-    lastStatus.current = status;
-  }, [applySettings, migration?.status, onNotice, previewMode]);
+    lastStatus.current = identity;
+    return () => { active = false; };
+  }, [applySettings, migration?.id, migration?.status, previewMode]);
 
   const chooseDefault = useCallback(async (kind: "subtitle" | "report") => {
     const selected = previewMode
@@ -135,11 +145,12 @@ export function useStorageSettings(
 
   const saveDefaults = useCallback(async () => {
     if (!settings) return;
+    ++settingsReadEpoch.current;
     setOperation("saving");
     setError(null);
     try {
       if (previewMode) {
-        applySettings({ ...settings, defaultSubtitleExportDirectory: subtitleDirectory, defaultVideoReportExportDirectory: reportDirectory });
+        applySettings({ ...settings, defaultSubtitleExportDirectory: subtitleDirectory, defaultVideoReportExportDirectory: reportDirectory }, { subtitle: subtitleDirectory, report: reportDirectory });
       } else {
         applySettings(await saveStorageSettings({
           expectedRevision: settings.revision,
@@ -147,7 +158,7 @@ export function useStorageSettings(
           mediaCacheRoot: settings.mediaCacheUsesDefault ? null : settings.mediaCacheRoot,
           defaultSubtitleExportDirectory: subtitleDirectory,
           defaultVideoReportExportDirectory: reportDirectory,
-        }));
+        }), { subtitle: subtitleDirectory, report: reportDirectory });
       }
       onNotice("默认保存位置已更新；导出时仍可临时改选。");
     } catch (cause) {
@@ -218,25 +229,19 @@ export function useStorageSettings(
     }
   }, [migration, previewMode]);
 
-  const cancel = useCallback(async () => {
-    if (!migration || previewMode) return;
-    setOperation("cancelling");
-    try {
-      setMigration(await cancelStorageMigration(migration.id));
-    } catch (cause) {
-      setError(message(cause));
-    } finally {
-      setOperation(null);
-    }
-  }, [migration, previewMode]);
+  const cancellation = useStorageMigrationCancellation(migration, previewMode, setMigration, cause => setError(message(cause)));
 
   const clearCache = useCallback(async () => {
     setOperation("clearing");
     setError(null);
     try {
-      if (!previewMode) await clearPlaybackCache();
-      if (settings) applySettings({ ...settings, mediaCacheUsedBytes: 0 });
-      onNotice("播放缓存已清理，需要时会自动重新生成。");
+      if (previewMode) {
+        if (settings) applySettings({ ...settings, mediaCacheUsedBytes: 0 });
+      } else {
+        await clearPlaybackCache();
+        applySettings(await getStorageSettings());
+      }
+      onNotice("已清理应用登记的播放缓存，其他文件已保留；需要时会重新生成缓存。");
     } catch (cause) {
       setError(message(cause));
     } finally {
@@ -255,9 +260,9 @@ export function useStorageSettings(
   }, [previewMode]);
 
   return {
-    settings, subtitleDirectory, reportDirectory, migration, operation, error,
+    settings, subtitleDirectory, reportDirectory, migration, operation: cancellation.cancelling ? "cancelling" as const : operation, error,
     setSubtitleDirectory, setReportDirectory, chooseDefault, saveDefaults, prepare,
-    start: () => runTask(false), resume: () => runTask(true), cancel, clearCache,
+    start: () => runTask(false), resume: () => runTask(true), cancel: cancellation.cancel, clearCache,
     openLocation,
     chooseMigrationDirectory: () => previewMode ? Promise.resolve("W:\\SiaoVPlay\\Storage") : chooseStorageDirectory("选择空的迁移目标文件夹"),
     restart: () => previewMode ? Promise.resolve() : restartAfterStorageMigration(),

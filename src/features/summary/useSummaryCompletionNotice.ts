@@ -1,49 +1,54 @@
-import { useEffect, useRef } from "react";
-
+import { useEffect, useRef, useState } from "react";
+import type { ToastNotice } from "../../components/AppToast";
 import { isDesktopApp } from "../../lib/desktop";
-import { listSummaryTasks } from "./gateway";
+import { listSummaryActivity, type SummaryActivity } from "./activityGateway";
 
-export function useSummaryCompletionNotice(
-  projectId: string,
-  onNotice: (message: string) => void,
-) {
-  const initializedRef = useRef(false);
-  const completedRef = useRef(new Set<string>());
+export function useSummaryCompletionNotice(onNotice: (message: ToastNotice) => void) {
+  const [activities, setActivities] = useState<SummaryActivity[]>([]);
+  const [error, setError] = useState(false);
+  const [incomplete, setIncomplete] = useState(false);
   const onNoticeRef = useRef(onNotice);
-
+  useEffect(() => { onNoticeRef.current = onNotice; }, [onNotice]);
   useEffect(() => {
-    onNoticeRef.current = onNotice;
-  }, [onNotice]);
-
-  useEffect(() => {
-    initializedRef.current = false;
-    completedRef.current = new Set();
     if (!isDesktopApp) return;
     let active = true;
+    let polling = false;
+    let initialized = false;
+    const seen = new Map<string, string>();
     const poll = async () => {
+      if (polling) return;
+      polling = true;
       try {
-        const tasks = await listSummaryTasks(projectId);
+        const snapshot = await listSummaryActivity();
+        const tasks = snapshot.activities;
         if (!active) return;
-        const completed = tasks.filter(
-          (task) => task.status === "completed" && Boolean(task.outputSummaryId),
-        );
-        if (initializedRef.current) {
-          const fresh = completed.find((task) => !completedRef.current.has(task.id));
-          if (fresh) {
-            onNoticeRef.current("视频总结已完成，可在「理解 → 视频总结」中查看和导出。");
-          }
+        const fresh = tasks.filter((task) => seen.get(task.id) !== `${task.status}:${task.hasResult}` &&
+          ((task.status === "completed" && task.hasResult) || task.status === "failed" || task.status === "interrupted"));
+        if (initialized && fresh.length) {
+          const failures = fresh.some((task) => task.status !== "completed");
+          onNoticeRef.current({
+            title: fresh.length === 1 ? `「${fresh[0].projectTitle}」的总结${failures ? "需要处理" : "已完成"}` : `${fresh.length} 项视频总结有新动态`,
+            message: "可从「处理动态」返回对应视频，在「理解 → 视频总结」中查看或重试。",
+            tone: failures ? "warning" : "success",
+          });
         }
-        completedRef.current = new Set(completed.map((task) => task.id));
-        initializedRef.current = true;
-      } catch {
-        // 后台提示失败不影响播放器与总结任务本身。
-      }
+        // Keep notification history across rejected rows, bounded to the activity window.
+        if (!snapshot.incomplete) seen.clear();
+        for (const task of tasks) {
+          seen.delete(task.id);
+          seen.set(task.id, `${task.status}:${task.hasResult}`);
+        }
+        while (seen.size > 100) seen.delete(seen.keys().next().value!);
+        initialized = true;
+        setActivities(tasks);
+        setIncomplete(snapshot.incomplete);
+        setError(false);
+      } catch { if (active) setError(true); }
+      finally { polling = false; }
     };
     void poll();
-    const timer = window.setInterval(() => void poll(), 2_000);
-    return () => {
-      active = false;
-      window.clearInterval(timer);
-    };
-  }, [projectId]);
+    const timer = window.setInterval(() => { void poll(); }, 2000);
+    return () => { active = false; window.clearInterval(timer); };
+  }, []);
+  return { activities, error, incomplete };
 }

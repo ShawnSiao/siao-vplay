@@ -1,0 +1,95 @@
+{
+  "$defs": {
+    "SubtitleRevisionStatus": {
+      "enum": [
+        "draft",
+        "ready",
+        "rejected"
+      ],
+      "type": "string"
+    },
+    "SubtitleTrackRole": {
+      "enum": [
+        "original",
+        "translation"
+      ],
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "examples": [
+    {
+      "createdAtMs": 1,
+      "id": "v",
+      "isCurrent": true,
+      "languageCode": "en",
+      "projectId": "p",
+      "role": "original",
+      "segmentCount": 75,
+      "sourceLabel": "字幕",
+      "status": "ready",
+      "trackId": "t",
+      "versionNumber": 1
+    }
+  ],
+  "properties": {
+    "createdAtMs": {
+      "format": "int64",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+    },
+    "id": {
+      "type": "string"
+    },
+    "isCurrent": {
+      "type": "boolean"
+    },
+    "languageCode": {
+      "type": "string"
+    },
+    "projectId": {
+      "type": "string"
+    },
+    "role": {
+      "$ref": "#/$defs/SubtitleTrackRole"
+    },
+    "segmentCount": {
+      "format": "int64",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "sourceLabel": {
+      "type": "string"
+    },
+    "status": {
+      "$ref": "#/$defs/SubtitleRevisionStatus"
+    },
+    "trackId": {
+      "type": "string"
+    },
+    "versionNumber": {
+      "format": "int64",
+      "maximum": 9007199254740991,
+      "minimum": 1,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "id",
+    "trackId",
+    "projectId",
+    "role",
+    "versionNumber",
+    "status",
+    "sourceLabel",
+    "languageCode",
+    "createdAtMs",
+    "isCurrent",
+    "segmentCount"
+  ],
+  "title": "SubtitleVersionMetadata",
+  "type": "object"
+}

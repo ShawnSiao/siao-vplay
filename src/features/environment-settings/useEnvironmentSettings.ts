@@ -41,6 +41,8 @@ export function useEnvironmentSettings(open: boolean, previewMode: boolean) {
   const [operation, setOperation] = useState<Operation | null>(null);
   const [error, setError] = useState<string | null>(null);
   const selectionRef = useRef(codexSelectionId);
+  const draftsRef = useRef(new Map<string, AiServiceDraft>());
+  const [dirtySelectionIds, setDirtySelectionIds] = useState<string[]>([]);
 
   const applySettings = useCallback((next: AiServiceSettings, selectInitial = false) => {
     setSettings(next);
@@ -51,7 +53,7 @@ export function useEnvironmentSettings(open: boolean, previewMode: boolean) {
     const resolvedSelection = validSelection ? nextSelection : initialSelection(next);
     selectionRef.current = resolvedSelection;
     setSelectionId(resolvedSelection);
-    setDraft(draftForSelection(next, resolvedSelection));
+    setDraft(draftsRef.current.get(resolvedSelection) ?? draftForSelection(next, resolvedSelection));
   }, []);
 
   const load = useCallback(async () => {
@@ -83,19 +85,25 @@ export function useEnvironmentSettings(open: boolean, previewMode: boolean) {
   }, [load, open]);
 
   const select = useCallback((id: string) => {
-    if (!settings) return;
+    if (!settings || operation) return;
     selectionRef.current = id;
     setSelectionId(id);
-    setDraft(draftForSelection(settings, id));
+    setDraft(draftsRef.current.get(id) ?? draftForSelection(settings, id));
     setModels([]);
     setTestResult(null);
     setError(null);
-  }, [settings]);
+  }, [operation, settings]);
 
   const updateDraft = useCallback((patch: Partial<AiServiceDraft>) => {
-    setDraft((current) => current ? { ...current, ...patch } : current);
+    if (!draft || !settings || operation) return;
+    const next = { ...draft, ...patch };
+    const id = selectionRef.current;
+    if (JSON.stringify(next) === JSON.stringify(draftForSelection(settings, id))) draftsRef.current.delete(id);
+    else draftsRef.current.set(id, next);
+    setDirtySelectionIds([...draftsRef.current.keys()]);
+    setDraft(next);
     setTestResult(null);
-  }, []);
+  }, [draft, operation, settings]);
 
   const probeInput = useCallback((): AiServiceProbeInput | null => {
     if (!draft) return null;
@@ -158,12 +166,26 @@ export function useEnvironmentSettings(open: boolean, previewMode: boolean) {
       if (previewMode) return;
       let next = await saveAiService(settings.revision, draft);
       const saved = findSavedService(draft, next);
+      // The service write has committed even if the subsequent default update fails.
+      setSettings(next);
+      if (saved) {
+        const remainingDraft = { ...draft, id: saved.id, apiKey: "" };
+        draftsRef.current.delete(selectionRef.current);
+        draftsRef.current.set(saved.id, remainingDraft);
+        selectionRef.current = saved.id;
+        setSelectionId(saved.id);
+        setDraft(remainingDraft);
+        setDirtySelectionIds([...draftsRef.current.keys()]);
+      }
       if (saved && draft.makeDefault && !saved.isDefault) {
         next = await setDefaultAiService(next.revision, saved.id);
       } else if (saved?.isDefault && !draft.makeDefault) {
         next = await setDefaultAiService(next.revision, null);
       }
       if (saved) {
+        draftsRef.current.delete(selectionRef.current);
+        draftsRef.current.delete(saved.id);
+        setDirtySelectionIds([...draftsRef.current.keys()]);
         selectionRef.current = saved.id;
         setSelectionId(saved.id);
       }
@@ -183,6 +205,8 @@ export function useEnvironmentSettings(open: boolean, previewMode: boolean) {
     setError(null);
     try {
       const next = await deleteAiService(settings.revision, draft.id);
+      draftsRef.current.delete(selectionRef.current);
+      setDirtySelectionIds([...draftsRef.current.keys()]);
       applySettings(next, true);
     } catch (cause) {
       setError(commandMessage(cause));
@@ -207,7 +231,7 @@ export function useEnvironmentSettings(open: boolean, previewMode: boolean) {
   const service = settings ? selectedService(settings, selectionId) : null;
   const provider = settings ? selectedProvider(settings, selectionId) : null;
   return {
-    settings, network, selectionId, draft, models, testResult, operation, error,
+    settings, network, selectionId, draft, models, testResult, operation, error, dirtySelectionIds,
     service, provider,
     select, updateDraft, refreshModels, test, save, remove, saveProxy, clearError: () => setError(null),
   };

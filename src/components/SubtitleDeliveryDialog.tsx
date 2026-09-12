@@ -1,14 +1,14 @@
+import { useDeliverySubmission, type DeliveryOperation } from "../features/subtitle-delivery/useDeliverySubmission";
+import { useBurnPolling } from "../features/subtitle-delivery/useBurnPolling";
+import type { SubtitleVersionMetadata } from "../features/subtitle-revision/subtitleMetadata";
 import { useEffect, useMemo, useState } from "react";
 
 import {
   cancelSubtitleBurnJob,
-  chooseSubtitleDeliveryDirectory,
   commandError,
-  exportSubtitles,
   getSubtitleBurnJob,
   listSubtitleBurnJobs,
   resumeSubtitleBurnJob,
-  startSubtitleBurn,
 } from "../lib/desktop";
 import type {
   Project,
@@ -19,12 +19,14 @@ import type {
   SubtitleVersion,
 } from "../types";
 import { Dialog } from "./Dialog";
-import { readSubtitleDisplayPreferences } from "../features/playback/playbackPreferences";
-import { translationLanguageLabel } from "../config/translationLanguages";
+import { versionLabel, jobStatusLabel } from "../features/subtitle-delivery/deliveryLabels";
+import { SubtitleHistoryPager } from "../features/subtitle-revision/SubtitleHistoryPager";
+import type { HistoryPagination } from "../features/subtitle-revision/useSubtitleHistoryPages";
 
 type SubtitleDeliveryDialogProps = {
   project: Project;
-  versions: SubtitleVersion[];
+  versions: SubtitleVersionMetadata[];
+  historyPagination?: HistoryPagination;
   currentSubtitle: SubtitleVersion | null;
   currentTranslation: SubtitleVersion | null;
   onClose: () => void;
@@ -35,40 +37,33 @@ type OutputKind = "subtitle" | "video";
 const activeStatuses = new Set(["queued", "running", "validating"]);
 const retryableStatuses = new Set(["failed", "cancelled", "interrupted"]);
 
-function versionLabel(version: SubtitleVersion) {
-  const role =
-    version.role === "original"
-      ? "原文"
-      : translationLanguageLabel(version.languageCode);
-  const current = version.isCurrent ? " · 当前" : "";
-  const status = version.status === "draft" ? " · 草稿" : "";
-  return `${role} · 版本 ${version.versionNumber}${current}${status}`;
-}
-
-function jobStatusLabel(job: SubtitleBurnJob) {
-  if (job.status === "queued") return "等待开始";
-  if (job.status === "running") return "正在烧录";
-  if (job.status === "validating") return "正在检查视频";
-  if (job.status === "completed") return "烧录已完成";
-  if (job.status === "interrupted") return "上次任务已中断";
-  if (job.status === "cancelled") return "任务已取消";
-  return "烧录失败";
-}
-
 export function SubtitleDeliveryDialog({
   project,
   versions,
+  historyPagination,
   currentSubtitle,
   currentTranslation,
   onClose,
 }: SubtitleDeliveryDialogProps) {
+  const [retainedVersions, setRetainedVersions] = useState(() => [
+    versions.find(version => version.id === currentSubtitle?.id) ?? versions.find(version => version.role === "original"),
+    versions.find(version => version.id === currentTranslation?.id) ?? versions.find(version => version.role === "translation"),
+  ].filter((version): version is SubtitleVersionMetadata => Boolean(version)));
+  const availableVersions = useMemo(() => [...new Map([
+    ...retainedVersions.map(version => ({ ...version, isCurrent: versions.some(item => item.id === version.id && item.isCurrent) })),
+    ...versions,
+  ].map(version => [version.id, version])).values()], [retainedVersions, versions]);
+  const retainVersion = (id: string) => {
+    const version = availableVersions.find(item => item.id === id);
+    if (version) setRetainedVersions(current => [...current.filter(item => item.role !== version.role), version]);
+  };
   const sourceVersions = useMemo(
-    () => versions.filter((version) => version.role === "original"),
-    [versions],
+    () => availableVersions.filter((version) => version.role === "original"),
+    [availableVersions],
   );
   const translationVersions = useMemo(
-    () => versions.filter((version) => version.role === "translation"),
-    [versions],
+    () => availableVersions.filter((version) => version.role === "translation"),
+    [availableVersions],
   );
   const [outputKind, setOutputKind] = useState<OutputKind>("subtitle");
   const [mode, setMode] = useState<SubtitleExportMode>(
@@ -82,15 +77,16 @@ export function SubtitleDeliveryDialog({
     currentTranslation?.id ?? translationVersions[0]?.id ?? "",
   );
   const [confirmed, setConfirmed] = useState(false);
-  const [operation, setOperation] = useState<
-    "loading" | "exporting" | "starting" | "cancelling" | "resuming" | null
-  >("loading");
+  const [operation, setOperation] = useState<DeliveryOperation>("loading");
   const [error, setError] = useState<string | null>(null);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  const [historyAttempt, setHistoryAttempt] = useState(0);
   const [exported, setExported] = useState<SubtitleExport | null>(null);
   const [job, setJob] = useState<SubtitleBurnJob | null>(null);
   const [recentJob, setRecentJob] = useState<SubtitleBurnJob | null>(null);
-  const activeJobId =
-    job && activeStatuses.has(job.status) ? job.id : undefined;
+  const [pollFailure, setPollFailure] = useState<{ jobId: string; projectId: string; message: string } | null>(null);
+  const jobError = error ?? (pollFailure?.jobId === job?.id && pollFailure?.projectId === project.id && job && activeStatuses.has(job.status)
+    ? pollFailure.message : null);
 
   useEffect(() => {
     let active = true;
@@ -102,11 +98,11 @@ export function SubtitleDeliveryDialog({
         if (latest && activeStatuses.has(latest.status)) {
           setJob(latest);
         }
-        setError(null);
+        setHistoryError(null);
       })
       .catch((caught: unknown) => {
         if (active) {
-          setError(commandError(caught).message);
+          setHistoryError(commandError(caught).message);
         }
       })
       .finally(() => {
@@ -117,31 +113,18 @@ export function SubtitleDeliveryDialog({
     return () => {
       active = false;
     };
-  }, [project.id]);
+  }, [project.id, historyAttempt]);
 
-  useEffect(() => {
-    if (!activeJobId) {
-      return undefined;
-    }
-    let active = true;
-    const timer = window.setInterval(() => {
-      void getSubtitleBurnJob(activeJobId)
-        .then((nextJob) => {
-          if (!active) return;
-          setJob(nextJob);
-          setRecentJob(nextJob);
-        })
-        .catch((caught: unknown) => {
-          if (active) {
-            setError(commandError(caught).message);
-          }
-        });
-    }, 500);
-    return () => {
-      active = false;
-      window.clearInterval(timer);
-    };
-  }, [activeJobId]);
+  useBurnPolling({ projectId: project.id, task: job, read: getSubtitleBurnJob,
+    onTask: nextJob => {
+      const acceptPoll = (current: SubtitleBurnJob | null) => {
+        if (!current || current.id !== nextJob.id || current.projectId !== nextJob.projectId || !activeStatuses.has(current.status)) return current;
+        if (current.stage === "cancelling" && nextJob.stage !== "cancelling" && activeStatuses.has(nextJob.status)) return current;
+        return nextJob;
+      };
+      setJob(acceptPoll); setRecentJob(acceptPoll); setPollFailure(null);
+    },
+    onError: caught => { if (job) setPollFailure({ jobId: job.id, projectId: project.id, message: commandError(caught).message }); } });
 
   const needsSource = mode === "original" || mode === "bilingual";
   const needsTranslation = mode === "translation" || mode === "bilingual";
@@ -149,64 +132,14 @@ export function SubtitleDeliveryDialog({
     confirmed &&
     (!needsSource || Boolean(sourceVersionId)) &&
     (!needsTranslation || Boolean(translationVersionId)) &&
+    (outputKind === "subtitle" || historyError === null) &&
     operation === null;
 
-  const createDelivery = async () => {
-    if (!canSubmit) return;
-    setError(null);
-    let destination: string | null;
-    try {
-      destination = await chooseSubtitleDeliveryDirectory(outputKind);
-    } catch (caught) {
-      setError(commandError(caught).message);
-      return;
-    }
-    if (!destination) return;
-    if (outputKind === "subtitle") {
-      setOperation("exporting");
-      try {
-        const result = await exportSubtitles(
-          project.id,
-          mode,
-          format,
-          needsSource ? sourceVersionId : null,
-          needsTranslation ? translationVersionId : null,
-          destination,
-        );
-        setExported(result);
-      } catch (caught) {
-        setError(commandError(caught).message);
-      } finally {
-        setOperation(null);
-      }
-      return;
-    }
-
-    if (!translationVersionId) return;
-    setOperation("starting");
-    try {
-      const nextJob = await startSubtitleBurn(
-        project.id,
-        mode === "bilingual" ? "bilingual" : "translation",
-        mode === "bilingual" ? sourceVersionId : null,
-        translationVersionId,
-        destination,
-        (() => {
-          const preferences = readSubtitleDisplayPreferences();
-          return {
-            textSize: preferences.textSize,
-            positionY: preferences.position.y,
-          };
-        })(),
-      );
-      setJob(nextJob);
-      setRecentJob(nextJob);
-    } catch (caught) {
-      setError(commandError(caught).message);
-    } finally {
-      setOperation(null);
-    }
-  };
+  const submission = useDeliverySubmission({ projectId: project.id, outputKind, mode, format,
+    sourceVersionId, translationVersionId, canSubmit, onOperation: setOperation,
+    onError: setError, onExported: setExported,
+    onJob: nextJob => { setJob(nextJob); setRecentJob(nextJob); } });
+  const closeDelivery = () => { submission.invalidate(); onClose(); };
 
   const cancelJob = async () => {
     if (!job || !activeStatuses.has(job.status)) return;
@@ -246,17 +179,17 @@ export function SubtitleDeliveryDialog({
         key={`${job.id}:${active ? "active" : "settled"}`}
         title={jobStatusLabel(job)}
         eyebrow="字幕烧录 · 后台任务"
-        onClose={onClose}
+        onClose={closeDelivery}
         actions={
           <>
             {active ? (
               <button
                 className="button danger"
-                disabled={operation !== null}
+                disabled={operation !== null || job.stage === "cancelling"}
                 type="button"
                 onClick={() => void cancelJob()}
               >
-                {operation === "cancelling" ? "正在取消…" : "取消烧录"}
+                {operation === "cancelling" || job.stage === "cancelling" ? "正在取消…" : "取消烧录"}
               </button>
             ) : null}
             {retryable ? (
@@ -281,7 +214,7 @@ export function SubtitleDeliveryDialog({
                 继续导出
               </button>
             ) : null}
-            <button className="button quiet" type="button" onClick={onClose}>
+            <button className="button quiet" type="button" onClick={closeDelivery}>
               {active ? "返回观影" : "关闭"}
             </button>
           </>
@@ -322,10 +255,10 @@ export function SubtitleDeliveryDialog({
               <p>{job.errorMessage}</p>
             </div>
           ) : null}
-          {error ? (
+          {jobError ? (
             <div className="notice danger delivery-error">
               <strong>操作失败</strong>
-              <p>{error}</p>
+              <p>{jobError}</p>
             </div>
           ) : null}
         </div>
@@ -339,7 +272,7 @@ export function SubtitleDeliveryDialog({
         key="subtitle-exported"
         title="字幕已导出"
         eyebrow="版本与文件指纹已记录"
-        onClose={onClose}
+        onClose={closeDelivery}
         actions={
           <>
             <button
@@ -352,7 +285,7 @@ export function SubtitleDeliveryDialog({
             >
               继续导出
             </button>
-            <button className="button primary" type="button" onClick={onClose}>
+            <button className="button primary" type="button" onClick={closeDelivery}>
               完成
             </button>
           </>
@@ -383,19 +316,19 @@ export function SubtitleDeliveryDialog({
       key="delivery-form"
       title="导出与烧录"
       eyebrow="使用明确的字幕版本"
-      onClose={onClose}
+      onClose={closeDelivery}
       actions={
         <>
-          <button className="button quiet" type="button" onClick={onClose}>
+          <button className="button quiet" type="button" onClick={closeDelivery}>
             取消
           </button>
           <button
             className="button primary"
             disabled={!canSubmit}
             type="button"
-            onClick={() => void createDelivery()}
+            onClick={() => void submission.submit()}
           >
-            {operation === "exporting"
+            {operation === "selecting" ? "正在选择保存位置…" : operation === "exporting"
               ? "正在导出…"
               : operation === "starting"
                 ? "正在创建任务…"
@@ -406,7 +339,7 @@ export function SubtitleDeliveryDialog({
         </>
       }
     >
-      <div className="delivery-dialog">
+      <div className="delivery-dialog" inert={submission.pending}>
         <p className="delivery-copy">
           字幕文件会附带版本清单。烧录会生成新视频，不修改源视频；解释和学习卡片不会写入。
         </p>
@@ -471,6 +404,7 @@ export function SubtitleDeliveryDialog({
           </div>
         </section>
 
+        <SubtitleHistoryPager page={historyPagination} />
         <section className="delivery-section delivery-version-grid">
           {needsSource ? (
             <label>
@@ -480,6 +414,7 @@ export function SubtitleDeliveryDialog({
                 value={sourceVersionId}
                 onChange={(event) => {
                   setSourceVersionId(event.target.value);
+                  retainVersion(event.target.value);
                   setConfirmed(false);
                 }}
               >
@@ -499,6 +434,7 @@ export function SubtitleDeliveryDialog({
                 value={translationVersionId}
                 onChange={(event) => {
                   setTranslationVersionId(event.target.value);
+                  retainVersion(event.target.value);
                   setConfirmed(false);
                 }}
               >
@@ -558,6 +494,17 @@ export function SubtitleDeliveryDialog({
 
         {operation === "loading" ? (
           <p className="delivery-loading">正在读取本地任务…</p>
+        ) : null}
+        {historyError ? (
+          <div className="notice danger delivery-error">
+            <strong>无法读取烧录记录</strong>
+            <p>{historyError}</p>
+            <p>仍可导出字幕文件。重新读取后可查看和恢复已有烧录。</p>
+            <button className="button quiet" type="button" disabled={operation !== null}
+              onClick={() => { setOperation("loading"); setHistoryAttempt(value => value + 1); }}>
+              重新读取烧录记录
+            </button>
+          </div>
         ) : null}
         {error ? (
           <div className="notice danger delivery-error">

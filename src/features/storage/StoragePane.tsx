@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useModalFocus } from "../../components/useModalFocus";
 
 import type { StorageArea, StorageLocationKind, StorageMigrationMode } from "./types";
 import type { StorageSettingsController } from "./useStorageSettings";
@@ -64,6 +65,7 @@ function MigrationDialog({
   const [mode, setMode] = useState<StorageMigrationMode>(existing?.mode ?? "copy");
   const task = controller.migration?.id === taskId ? controller.migration : existing?.id === taskId ? existing : null;
   const active = task?.status === "running";
+  const dialogRef = useModalFocus(() => { if (!active) onClose(); });
   const terminal = task && ["completed", "restart_required"].includes(task.status);
   const resumable = task && ["interrupted", "cancelled", "failed"].includes(task.status);
   const progress = task?.bytesToCopy
@@ -84,12 +86,12 @@ function MigrationDialog({
 
   return (
     <div className="storage-modal-scrim" role="presentation">
-      <section className="storage-migration-dialog" role="dialog" aria-modal="true" aria-label={`迁移${areaLabels[area]}`} onKeyDown={(event) => { if (event.key === "Escape" && !active) { event.preventDefault(); onClose(); } }}>
+      <section ref={dialogRef} tabIndex={-1} className="storage-migration-dialog" role="dialog" aria-modal="true" aria-label={`迁移${areaLabels[area]}`}>
         <header><h2>迁移{areaLabels[area]}</h2><button type="button" aria-label="关闭迁移窗口" autoFocus disabled={active} onClick={onClose}>×</button></header>
         <div className="storage-migration-body">
           {!task ? (
             <>
-              <p>{area === "app_data" ? "项目、字幕、观看记录、学习卡片和任务状态会整体复制。校验完成后，重启应用才会切换。" : area === "remote_media" ? "URL 导入的原视频会复制到新位置，全部校验通过后才更新项目路径。" : "播放缓存可以复制，也可以在新位置按需重新生成。"}</p>
+              <p>{area === "app_data" ? "项目、字幕、观看记录、学习卡片和任务状态会整体复制。界面偏好保留在原系统位置。校验完成后，重启应用才会切换。" : area === "remote_media" ? "URL 导入的原视频会复制到新位置，全部校验通过后才更新项目路径。" : "播放缓存可以复制，也可以在新位置按需重新生成。"}</p>
               {area === "media_cache" ? (
                 <fieldset className="storage-mode-choice">
                   <legend>处理现有缓存</legend>
@@ -114,13 +116,13 @@ function MigrationDialog({
               {task.status === "restart_required" ? <div className="storage-notice"><strong>新目录已通过校验。</strong><span>重启后切换；确认运行正常前请保留旧目录。</span></div> : null}
             </>
           )}
-          {controller.error ? <div className="storage-error">{controller.error}</div> : null}
+          {controller.error ? <div className="storage-error" role="alert"><span>{controller.error}</span><button className="button quiet" type="button" disabled={controller.operation !== null} onClick={() => void controller.reload()}>重新读取存储设置</button></div> : null}
         </div>
         <footer>
           <button className="button text" type="button" disabled={active} onClick={onClose}>{terminal ? "稍后处理" : "关闭"}</button>
           {!task ? <button className="button primary" type="button" disabled={!destination || controller.operation !== null} onClick={() => void inspect()}>检查迁移条件</button> : null}
           {task?.status === "prepared" ? <button className="button primary" type="button" disabled={controller.operation !== null} onClick={() => void controller.start()}>开始迁移</button> : null}
-          {active ? <button className="button danger" type="button" disabled={controller.operation === "cancelling"} onClick={() => void controller.cancel()}>取消迁移</button> : null}
+          {active ? <button className="button danger" type="button" disabled={controller.operation === "cancelling"} onClick={() => void controller.cancel()}>{controller.operation === "cancelling" ? "正在停止迁移…" : "取消迁移"}</button> : null}
           {resumable ? <button className="button primary" type="button" disabled={controller.operation !== null} onClick={() => void controller.resume()}>继续迁移</button> : null}
           {task?.status === "restart_required" ? <button className="button primary" type="button" onClick={() => void controller.restart()}>重启并切换</button> : null}
         </footer>
@@ -134,8 +136,16 @@ export function StoragePane({ controller }: StoragePaneProps) {
   const [confirmCacheClear, setConfirmCacheClear] = useState(false);
   const settings = controller.settings;
 
+  if (!settings && controller.error && controller.operation !== "loading") {
+    return <section className="storage-settings-pane" aria-label="存储位置">
+      <div className="storage-settings-loading storage-settings-recovery">
+        <p className="storage-error" role="alert">{controller.error}</p>
+        <button className="button secondary" type="button" disabled={controller.operation !== null} onClick={() => void controller.reload()}>重新读取存储设置</button>
+      </div>
+    </section>;
+  }
   if (!settings || controller.operation === "loading") {
-    return <section className="storage-settings-pane"><div className="storage-settings-loading">正在读取存储位置…</div></section>;
+    return <section className="storage-settings-pane"><div className="storage-settings-loading" role="status">正在读取存储位置…</div></section>;
   }
 
   const open = (kind: StorageLocationKind) => void controller.openLocation(kind);
@@ -169,20 +179,20 @@ export function StoragePane({ controller }: StoragePaneProps) {
             </StorageRow>
           </div></section>
 
-          {confirmCacheClear ? <div className="storage-inline-confirm"><span>只删除代理视频与封面，原视频、字幕和项目记录不受影响。</span><button className="button text" type="button" onClick={() => setConfirmCacheClear(false)}>取消</button><button className="button danger" type="button" onClick={() => { setConfirmCacheClear(false); void controller.clearCache(); }}>确认清理</button></div> : null}
+          {confirmCacheClear ? <div className="storage-inline-confirm"><span>只删除当前缓存位置中应用登记的代理视频与封面，未登记文件会保留。原视频、字幕和项目记录不受影响。</span><button className="button text" type="button" onClick={() => setConfirmCacheClear(false)}>取消</button><button className="button danger" type="button" onClick={() => { setConfirmCacheClear(false); void controller.clearCache(); }}>确认清理</button></div> : null}
 
           <section className="storage-settings-section"><h3>默认导出位置</h3><div className="storage-settings-list">
             <StorageRow index={4} title="字幕" helper="SRT 或 WebVTT；导出时仍可临时改选" path={controller.subtitleDirectory ?? "每次询问"}>
-              {controller.subtitleDirectory ? <button className="button quiet" type="button" onClick={() => open("subtitle_export")}>打开位置</button> : null}
+              {controller.subtitleDirectory ? <button className="button quiet" type="button" disabled={controller.subtitleDirectory !== settings.defaultSubtitleExportDirectory} title={controller.subtitleDirectory !== settings.defaultSubtitleExportDirectory ? "应用设置后可打开新位置" : undefined} onClick={() => open("subtitle_export")}>打开位置</button> : null}
               <button className="button secondary" type="button" onClick={() => void controller.chooseDefault("subtitle")}>{controller.subtitleDirectory ? "更改" : "选择默认位置"}</button>
             </StorageRow>
             <StorageRow index={5} title="视频与分析报告" helper="烧录 MP4、Markdown 报告和报告素材" path={controller.reportDirectory ?? "每次询问"}>
-              {controller.reportDirectory ? <button className="button quiet" type="button" onClick={() => open("video_report_export")}>打开位置</button> : null}
+              {controller.reportDirectory ? <button className="button quiet" type="button" disabled={controller.reportDirectory !== settings.defaultVideoReportExportDirectory} title={controller.reportDirectory !== settings.defaultVideoReportExportDirectory ? "应用设置后可打开新位置" : undefined} onClick={() => open("video_report_export")}>打开位置</button> : null}
               <button className="button secondary" type="button" onClick={() => void controller.chooseDefault("report")}>{controller.reportDirectory ? "更改" : "选择默认位置"}</button>
             </StorageRow>
           </div></section>
           {settings.pendingAppDataRoot ? <div className="storage-notice"><strong>等待重启切换。</strong><span>新应用数据位置：{settings.pendingAppDataRoot}</span></div> : <div className="storage-notice"><strong>核心数据迁移会保留旧目录。</strong><span>新位置验证正常后，再手动清理旧数据。</span></div>}
-          {controller.error ? <div className="storage-error">{controller.error}</div> : null}
+          {controller.error ? <div className="storage-error" role="alert"><span>{controller.error}</span><button className="button quiet" type="button" disabled={controller.operation !== null} onClick={() => void controller.reload()}>重新读取存储设置</button></div> : null}
         </div>
       </section>
       {dialogArea ? <MigrationDialog area={dialogArea} controller={controller} onClose={() => setDialogArea(null)} /> : null}

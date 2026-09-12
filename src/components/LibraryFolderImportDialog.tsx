@@ -148,7 +148,7 @@ export function LibraryFolderImportDialog({
         {scanning ? (
           <div className="library-scan-progress" aria-live="polite">
             <span className="spinner large" />
-            <strong>{state.progress?.phase === "fingerprinting" ? "正在核对媒体指纹" : "正在读取文件夹"}</strong>
+            <strong>{state.progress?.phase === "fingerprinting" ? "正在检查重复视频" : "正在读取文件夹"}</strong>
             <p title={state.progress?.currentRelativePath ?? state.rootPath ?? undefined}>
               {state.progress?.currentRelativePath ?? state.rootPath}
             </p>
@@ -272,7 +272,7 @@ export function LibraryFolderImportDialog({
                 }
               />
               <span>
-                已人工核对并允许导入「内容指纹相同但路径不同」的视频。默认关闭；只有后端提示重复时才需要开启。
+                允许导入不同位置的疑似重复视频。仅在出现重复提示、且已人工确认需要保留这些副本时勾选。
               </span>
             </label>
 

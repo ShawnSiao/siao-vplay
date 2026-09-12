@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useLayoutEffect,
   useId,
   useRef,
   useState,
@@ -16,6 +17,7 @@ type MenuPopoverProps = {
   triggerClassName?: string;
   panelClassName?: string;
   trigger?: ReactNode;
+  constrainToViewport?: boolean;
 };
 
 export function MenuPopover({
@@ -25,11 +27,23 @@ export function MenuPopover({
   triggerClassName = "",
   panelClassName = "",
   trigger = "•••",
+  constrainToViewport = false,
 }: MenuPopoverProps) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuId = useId();
+
+  useLayoutEffect(() => {
+    if (!open || !constrainToViewport) return;
+    const panel = rootRef.current?.querySelector<HTMLElement>("[role='menu']");
+    if (!panel) return;
+    panel.style.translate = "none";
+    const bounds = panel.getBoundingClientRect();
+    const inset = 8;
+    const left = Math.max(inset, Math.min(bounds.left, document.documentElement.clientWidth - inset - bounds.width));
+    panel.style.translate = `${left - bounds.left}px 0`;
+  }, [open, constrainToViewport]);
 
   useEffect(() => {
     const closeOtherMenu = (event: Event) => {

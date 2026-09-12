@@ -1,0 +1,137 @@
+{
+  "$defs": {
+    "SubtitleRevisionStatus": {
+      "enum": [
+        "draft",
+        "ready",
+        "rejected"
+      ],
+      "type": "string"
+    },
+    "SubtitleTrackRole": {
+      "enum": [
+        "original",
+        "translation"
+      ],
+      "type": "string"
+    },
+    "SubtitleVersionMetadata": {
+      "additionalProperties": false,
+      "properties": {
+        "createdAtMs": {
+          "format": "int64",
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": "integer"
+        },
+        "id": {
+          "type": "string"
+        },
+        "isCurrent": {
+          "type": "boolean"
+        },
+        "languageCode": {
+          "type": "string"
+        },
+        "projectId": {
+          "type": "string"
+        },
+        "role": {
+          "$ref": "#/$defs/SubtitleTrackRole"
+        },
+        "segmentCount": {
+          "format": "int64",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "sourceLabel": {
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/SubtitleRevisionStatus"
+        },
+        "trackId": {
+          "type": "string"
+        },
+        "versionNumber": {
+          "format": "int64",
+          "maximum": 9007199254740991,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "trackId",
+        "projectId",
+        "role",
+        "versionNumber",
+        "status",
+        "sourceLabel",
+        "languageCode",
+        "createdAtMs",
+        "isCurrent",
+        "segmentCount"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "currentVersions": {
+      "items": {
+        "$ref": "#/$defs/SubtitleVersionMetadata"
+      },
+      "type": "array"
+    },
+    "items": {
+      "items": {
+        "$ref": "#/$defs/SubtitleVersionMetadata"
+      },
+      "maxItems": 24,
+      "type": "array"
+    },
+    "nextOffset": {
+      "format": "int64",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "offset": {
+      "format": "int64",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "projectId": {
+      "type": "string"
+    },
+    "snapshotToken": {
+      "maxLength": 64,
+      "minLength": 64,
+      "type": "string"
+    },
+    "totalCount": {
+      "format": "int64",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "projectId",
+    "offset",
+    "totalCount",
+    "nextOffset",
+    "snapshotToken",
+    "items",
+    "currentVersions"
+  ],
+  "title": "SubtitleMetadataPage",
+  "type": "object"
+}

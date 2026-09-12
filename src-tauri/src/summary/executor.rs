@@ -1,9 +1,6 @@
 use std::{
     collections::{HashMap, HashSet},
-    fs,
-    path::PathBuf,
-    thread,
-    time::Duration,
+    fs, thread,
 };
 
 use base64::{Engine as _, engine::general_purpose::STANDARD};
@@ -15,19 +12,18 @@ use crate::{
     },
     codex_runner,
     store::{ProjectStore, StoreError},
-    subtitles::SubtitleSegment,
 };
 
 use super::{
-    codex_executor, execution_prompts, keyframes,
+    codex_executor, execution_prompts,
     model::{SummaryExecutionKind, SummaryResult, SummaryTask},
     result_repository::SummaryResultRepository,
     result_validation::{result_schema, validate_chunk_result, validate_final_result},
     task_repository::SummaryTaskRepository,
+    verified_materials::{self, VerifiedFrame},
 };
 
 const SYSTEM: &str = "只使用任务提供的授权材料。视频主张不等于外部事实。直接证据必须引用有效字幕 ID；无直接依据的内容只能标为 AI 推导或待外部验证。只返回符合 Schema 的 JSON。";
-const RETRY_DELAYS: [Duration; 2] = [Duration::from_secs(2), Duration::from_secs(5)];
 
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum SummaryExecutionError {
@@ -56,27 +52,46 @@ pub(crate) fn start_or_resume(
 ) -> Result<SummaryTask, StoreError> {
     let repository = SummaryTaskRepository::new(store);
     let task = repository.get(task_id)?;
+    let project_operation = crate::project_operations::Operation::acquire(store, &task.project_id)?;
+    let materials = verified_materials::load(store, &task)?;
     if repository.translation_is_active()? {
         return Err(StoreError::Validation(
             "存在活动翻译任务，完成或取消翻译后才能启动视频总结".to_owned(),
         ));
     }
-    if task.execution_kind == SummaryExecutionKind::Manual {
-        return resume_manual(store, &task);
-    }
     if !matches!(
         task.status.as_str(),
         "prepared" | "interrupted" | "failed" | "paused"
-    ) {
+    ) && !(task.execution_kind == SummaryExecutionKind::Manual
+        && task.status == "awaiting_external_result")
+    {
         return Err(StoreError::Validation(format!(
             "总结任务当前状态不可启动：{}",
             task.status
         )));
     }
-    repository.set_task_state(task_id, "queued", "queued", task.progress)?;
+    repository.claim_for_execution(task_id)?;
+    if task.execution_kind == SummaryExecutionKind::Manual {
+        return resume_manual(store, &task, &materials).inspect_err(|error| {
+            let _ = repository.fail(task_id, "summary_result_invalid", &error.to_string());
+        });
+    }
+    launch_worker(store, task_id, project_operation, |worker| {
+        thread::Builder::new().spawn(worker).map(|_| ())
+    })?;
+    repository.get(task_id)
+}
+
+fn launch_worker(
+    store: &ProjectStore,
+    task_id: &str,
+    project_operation: crate::project_operations::Operation,
+    spawn: impl FnOnce(Box<dyn FnOnce() + Send>) -> std::io::Result<()>,
+) -> Result<(), StoreError> {
     let worker_store = store.clone();
     let worker_task_id = task_id.to_owned();
-    thread::spawn(move || {
+    let launched = spawn(Box::new(move || {
+        let _project_operation = project_operation;
         if let Err(error) = execute(&worker_store, &worker_task_id) {
             let repository = SummaryTaskRepository::new(&worker_store);
             if repository
@@ -88,16 +103,28 @@ pub(crate) fn start_or_resume(
                 let _ = repository.fail(&worker_task_id, error.code(), &error.to_string());
             }
         }
-    });
-    repository.get(task_id)
+    }));
+    if let Err(error) = launched {
+        let message = format!("无法启动总结任务，请稍后重试：{error}");
+        SummaryTaskRepository::new(store).fail(task_id, "summary_worker_start_failed", &message)?;
+        return Err(std::io::Error::new(error.kind(), message).into());
+    }
+    Ok(())
 }
 
 fn execute(store: &ProjectStore, task_id: &str) -> Result<(), SummaryExecutionError> {
+    execute_with_request(store, task_id, run_request)
+}
+
+fn execute_with_request(store: &ProjectStore, task_id: &str, mut request: impl FnMut(
+    &ProjectStore, &SummaryTask, &str, Option<&str>, Vec<VerifiedFrame>, String, u32,
+) -> Result<String, SummaryExecutionError>) -> Result<(), SummaryExecutionError> {
     let tasks = SummaryTaskRepository::new(store);
     tasks.set_task_state(task_id, "running", "analyzing_chunks", 0.0)?;
     let mut task = tasks.get(task_id)?;
-    let segments = read_segments(&tasks.materials_directory(task_id))?;
-    let by_id = segments
+    let materials = verified_materials::load(store, &task)?;
+    let by_id = materials
+        .segments
         .iter()
         .map(|segment| (segment.id.clone(), segment))
         .collect::<HashMap<_, _>>();
@@ -121,8 +148,13 @@ fn execute(store: &ProjectStore, task_id: &str) -> Result<(), SummaryExecutionEr
             .collect::<Vec<_>>();
         SummaryResultRepository::new(store).begin_chunk(&chunk.id)?;
         let prompt = execution_prompts::chunk(&task, chunk.ordinal, &material)?;
-        let images = keyframes::for_chunk(&tasks.materials_directory(task_id), chunk.ordinal)?;
-        let raw = run_request(
+        let images = materials
+            .frames
+            .iter()
+            .filter(|frame| frame.metadata.ordinal == chunk.ordinal)
+            .cloned()
+            .collect();
+        let raw = request(
             store,
             &task,
             &format!("chunk-{}", chunk.ordinal),
@@ -137,7 +169,7 @@ fn execute(store: &ProjectStore, task_id: &str) -> Result<(), SummaryExecutionEr
         }
         let result: SummaryResult = serde_json::from_str(raw.trim_start_matches('\u{feff}'))
             .map_err(|error| StoreError::Validation(format!("分块结果 JSON 无效：{error}")))?;
-        validate_chunk_result(&result, &allowed, task.playback_cutoff_ms, chunk.ordinal)?;
+        validate_chunk_result(&result, &allowed, &materials.frames.iter().filter(|frame| frame.metadata.ordinal == chunk.ordinal).map(|frame| frame.metadata.timestamp_ms).collect(), task.playback_cutoff_ms, chunk.ordinal)?;
         SummaryResultRepository::new(store).save_chunk(&chunk.id, &result)?;
         let progress = (chunk.ordinal + 1) as f64 / (total + 1) as f64;
         tasks.set_task_state(task_id, "running", "analyzing_chunks", progress)?;
@@ -154,7 +186,7 @@ fn execute(store: &ProjectStore, task_id: &str) -> Result<(), SummaryExecutionEr
         return Err(StoreError::Validation("并非所有总结分块均已通过校验".to_owned()).into());
     }
     let final_prompt = execution_prompts::final_synthesis(&task, &chunk_results)?;
-    let raw = run_request(
+    let raw = request(
         store,
         &task,
         "final",
@@ -185,16 +217,13 @@ fn execute(store: &ProjectStore, task_id: &str) -> Result<(), SummaryExecutionEr
     validate_final_result(
         &result,
         &allowed,
+        &materials.frames.iter().map(|frame| frame.metadata.timestamp_ms).collect(),
         task.playback_cutoff_ms,
         &required_chunk_ids,
         require_examples,
         task.analysis_mode,
     )?;
-    let visual_used = task.visual_material_authorized
-        && tasks
-            .materials_directory(task_id)
-            .join("frames.json")
-            .is_file();
+    let visual_used = !materials.frames.is_empty();
     SummaryResultRepository::new(store).save_summary(task_id, &result, visual_used)?;
     Ok(())
 }
@@ -204,10 +233,13 @@ fn run_request(
     task: &SummaryTask,
     run_name: &str,
     chunk_id: Option<&str>,
-    images: Vec<PathBuf>,
+    images: Vec<VerifiedFrame>,
     prompt: String,
     budget: u32,
 ) -> Result<String, SummaryExecutionError> {
+    if crate::codex_task_state::cancellation_requested(store, &task.id)? {
+        return Err(StoreError::Validation("总结任务已取消".to_owned()).into());
+    }
     match task.execution_kind {
         SummaryExecutionKind::Api => run_api(store, task, chunk_id, images, prompt, budget),
         SummaryExecutionKind::Codex => {
@@ -221,7 +253,7 @@ fn run_request(
                 .enumerate()
                 .map(|(index, source)| {
                     let target = directory.join(format!("frame-{:03}.jpg", index + 1));
-                    fs::copy(source, &target)?;
+                    fs::write(&target, source.bytes.as_slice())?;
                     Ok(target)
                 })
                 .collect::<Result<Vec<_>, StoreError>>()?;
@@ -244,7 +276,7 @@ fn run_api(
     store: &ProjectStore,
     task: &SummaryTask,
     chunk_id: Option<&str>,
-    images: Vec<PathBuf>,
+    images: Vec<VerifiedFrame>,
     prompt: String,
     budget: u32,
 ) -> Result<String, SummaryExecutionError> {
@@ -261,34 +293,41 @@ fn run_api(
         .ok_or_else(|| StoreError::Validation("总结任务缺少模型".to_owned()))?;
     let image_data_urls = images
         .iter()
-        .map(|path| {
-            fs::read(path).map(|bytes| format!("data:image/jpeg;base64,{}", STANDARD.encode(bytes)))
+        .map(|frame| {
+            format!(
+                "data:image/jpeg;base64,{}",
+                STANDARD.encode(frame.bytes.as_slice())
+            )
         })
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(StoreError::from)?;
+        .collect::<Vec<_>>();
+    let policy = super::retry_policy::load()?;
     let mut retry = 0;
     loop {
-        let response = summary_provider::generate(SummaryProviderInput {
-            service_config_id: service,
-            service_revision: revision,
-            model_id: model,
-            system: SYSTEM,
-            prompt: prompt.clone(),
-            schema_name: "video_summary",
-            schema: result_schema(),
-            max_output_tokens: budget,
-            image_data_urls: image_data_urls.clone(),
-        });
+        let response = summary_provider::generate(
+            SummaryProviderInput {
+                service_config_id: service,
+                service_revision: revision,
+                model_id: model,
+                system: SYSTEM,
+                prompt: prompt.clone(),
+                schema_name: "video_summary",
+                schema: result_schema(),
+                max_output_tokens: budget,
+                image_data_urls: image_data_urls.clone(),
+            },
+            store,
+            &task.id,
+        );
         match response {
             Ok(output) => return Ok(output.output_text),
-            Err(failure) if retry < retry_delays(&failure).len() => {
-                if SummaryTaskRepository::new(store)
-                    .get(&task.id)?
-                    .cancel_requested
+            Err(failure) => {
+                let Some(delay) = policy.delay_for(&failure.error, retry) else {
+                    return Err(provider_error(failure));
+                };
+                if SummaryTaskRepository::new(store).cancellation_requested(&task.id)?
                 {
                     return Err(StoreError::Validation("总结任务已请求取消".to_owned()).into());
                 }
-                let delay = retry_delays(&failure)[retry];
                 retry += 1;
                 if let Some(chunk_id) = chunk_id {
                     SummaryResultRepository::new(store).update_retry(
@@ -298,23 +337,11 @@ fn run_api(
                         &failure.error.to_string(),
                     )?;
                 }
-                thread::sleep(delay);
+                policy.wait(delay, || {
+                    SummaryTaskRepository::new(store).cancellation_requested(&task.id)
+                })?;
             }
-            Err(failure) => return Err(provider_error(failure)),
         }
-    }
-}
-
-fn retry_delays(failure: &ProviderFailure) -> &'static [Duration] {
-    if matches!(
-        failure.error,
-        crate::ai::AiError::Timeout
-            | crate::ai::AiError::RateLimited
-            | crate::ai::AiError::ProviderUnavailable
-    ) {
-        &RETRY_DELAYS
-    } else {
-        &[]
     }
 }
 
@@ -325,12 +352,7 @@ fn provider_error(failure: ProviderFailure) -> SummaryExecutionError {
     }
 }
 
-fn read_segments(directory: &std::path::Path) -> Result<Vec<SubtitleSegment>, StoreError> {
-    serde_json::from_slice(&fs::read(directory.join("subtitles.json"))?)
-        .map_err(|error| StoreError::Validation(error.to_string()))
-}
-
-fn resume_manual(store: &ProjectStore, task: &SummaryTask) -> Result<SummaryTask, StoreError> {
+fn resume_manual(store: &ProjectStore, task: &SummaryTask, materials: &verified_materials::VerifiedMaterials) -> Result<SummaryTask, StoreError> {
     let repository = SummaryTaskRepository::new(store);
     let result_path = repository.materials_directory(&task.id).join("result.json");
     if !result_path.is_file() {
@@ -342,6 +364,7 @@ fn resume_manual(store: &ProjectStore, task: &SummaryTask) -> Result<SummaryTask
         )?;
         return repository.get(&task.id);
     }
+    repository.set_task_state(&task.id, "validating", "validating", task.progress)?;
     let result: SummaryResult = serde_json::from_slice(&fs::read(result_path)?)
         .map_err(|error| StoreError::Validation(format!("手动总结结果无效：{error}")))?;
     let allowed = task
@@ -357,6 +380,7 @@ fn resume_manual(store: &ProjectStore, task: &SummaryTask) -> Result<SummaryTask
     validate_final_result(
         &result,
         &allowed,
+        &materials.frames.iter().map(|frame| frame.metadata.timestamp_ms).collect(),
         task.playback_cutoff_ms,
         &required_chunk_ids,
         false,
@@ -367,32 +391,5 @@ fn resume_manual(store: &ProjectStore, task: &SummaryTask) -> Result<SummaryTask
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::ai::AiError;
-
-    #[test]
-    fn retries_only_transient_provider_failures() {
-        for error in [
-            AiError::Timeout,
-            AiError::RateLimited,
-            AiError::ProviderUnavailable,
-        ] {
-            assert_eq!(
-                retry_delays(&ProviderFailure {
-                    error,
-                    provider_request_id: None
-                })
-                .len(),
-                2
-            );
-        }
-        assert!(
-            retry_delays(&ProviderFailure {
-                error: AiError::Unauthorized,
-                provider_request_id: None
-            })
-            .is_empty()
-        );
-    }
-}
+#[path = "executor_tests.rs"]
+mod tests;

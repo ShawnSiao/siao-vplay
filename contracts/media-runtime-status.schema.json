@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "available": {
+      "type": "boolean"
+    },
+    "errorMessage": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "ffmpegPath": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "ffprobePath": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "version": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "required": [
+    "available",
+    "ffmpegPath",
+    "ffprobePath",
+    "version",
+    "errorMessage"
+  ],
+  "title": "MediaRuntimeStatus",
+  "type": "object"
+}

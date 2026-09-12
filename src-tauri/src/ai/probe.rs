@@ -5,7 +5,7 @@ use super::{
     error::{AiCommandError, AiError},
     providers::{self, GenerationInput, ProviderFailure},
     types::{
-        AiExecutionPreview, AiExecutionTarget, AiModelInfo, AiModelList, AiServiceCapabilities,
+        AiExecutionKind, AiExecutionPreview, AiExecutionTarget, AiModelInfo, AiModelList, AiServiceCapabilities,
         AiServiceProbeInput, AiServiceTestResult, ConnectionState, PreviewAiExecutionInput,
     },
 };
@@ -18,8 +18,8 @@ pub fn preview_execution(
         input.authorization.current_question,
     )?;
     match &input.execution {
-        AiExecutionTarget::Manual => Ok(local_preview("manual", "手动方式", input)),
-        AiExecutionTarget::Codex => Ok(local_preview("codex", "本机 Codex", input)),
+        AiExecutionTarget::Manual => Ok(local_preview(AiExecutionKind::Manual, "手动方式", input)),
+        AiExecutionTarget::Codex => Ok(local_preview(AiExecutionKind::Codex, "本机 Codex", input)),
         AiExecutionTarget::Api { model_id, .. } => {
             let service = connection::resolve_execution(
                 &input.execution,
@@ -30,7 +30,7 @@ pub fn preview_execution(
             let frames_effective =
                 input.authorization.frames && providers::model_supports_vision(&service, model_id);
             Ok(AiExecutionPreview {
-                execution_kind: "api".to_owned(),
+                execution_kind: AiExecutionKind::Api,
                 service_config_id: service.service_config_id,
                 provider_id: Some(service.provider_id),
                 display_name: configured.display_name,
@@ -46,12 +46,12 @@ pub fn preview_execution(
 }
 
 fn local_preview(
-    kind: &str,
+    kind: AiExecutionKind,
     display_name: &str,
     input: PreviewAiExecutionInput,
 ) -> AiExecutionPreview {
     AiExecutionPreview {
-        execution_kind: kind.to_owned(),
+        execution_kind: kind,
         service_config_id: None,
         provider_id: None,
         display_name: display_name.to_owned(),
@@ -95,7 +95,7 @@ pub fn test_service(input: AiServiceProbeInput) -> Result<AiServiceTestResult, A
         Err(failure) if may_fallback_to_generation(&failure) && selected_model_id.is_some() => {
             let output = providers::generate(
                 &service,
-                &connection_test_input(selected_model_id.as_deref().unwrap_or_default()),
+                &connection_test_input(selected_model_id.as_deref().unwrap_or_default())?,
             )
             .map_err(command_error)?;
             validate_connection_output(&output.output_text)?;
@@ -142,8 +142,9 @@ fn may_fallback_to_generation(failure: &ProviderFailure) -> bool {
     )
 }
 
-fn connection_test_input(model_id: &str) -> GenerationInput {
-    GenerationInput {
+fn connection_test_input(model_id: &str) -> Result<GenerationInput, AiError> {
+    let policy = super::transport_policy::load()?;
+    Ok(GenerationInput {
         model_id: model_id.to_owned(),
         system: "这是连接测试。不要使用任何外部材料。".to_owned(),
         prompt: "返回 JSON：{\"ok\":true}".to_owned(),
@@ -155,9 +156,10 @@ fn connection_test_input(model_id: &str) -> GenerationInput {
             "additionalProperties": false
         }),
         image_data_urls: Vec::new(),
-        max_output_tokens: 256,
-        timeout: std::time::Duration::from_secs(90),
-    }
+        max_output_tokens: policy.probe_max_output_tokens,
+        timeout: policy.probe_timeout(),
+        cancellation: None,
+    })
 }
 
 fn validate_connection_output(output: &str) -> Result<(), AiError> {

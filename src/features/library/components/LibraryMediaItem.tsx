@@ -1,7 +1,10 @@
 import { MenuPopover } from "../../../components/MenuPopover";
+import { useCallback, useRef, useState } from "react";
+import { CollectionPickerDialog } from "./CollectionPickerDialog";
+import type { CollectionOverviewReader } from "../useCollectionOverviewPages";
 import { playbackUrl } from "../../../lib/desktop";
 import { fileExtension, formatDuration, formatRecentTime } from "../../../lib/format";
-import type { CollectionSummary, LibraryMediaSummary } from "../../../types";
+import type { LibraryMediaSummary } from "../../../types";
 import {
   libraryMediaNeedsRelink,
   libraryMediaProgress,
@@ -14,7 +17,7 @@ export type LibraryMediaItemContext =
 
 type LibraryMediaItemProps = {
   media: LibraryMediaSummary;
-  collections: CollectionSummary[];
+  readCollections?: CollectionOverviewReader;
   context: LibraryMediaItemContext;
   mutationPending: boolean;
   onOpen: (media: LibraryMediaSummary) => void;
@@ -24,6 +27,7 @@ type LibraryMediaItemProps = {
   onAddToCollection: (collectionId: string, projectId: string) => Promise<unknown>;
   onRemoveFromCollection: (collectionId: string, projectId: string) => Promise<unknown>;
   onSetWatchLater: (projectId: string, enabled: boolean) => Promise<unknown>;
+  onSetWatched: (projectId: string, watched: boolean) => Promise<unknown>;
 };
 
 function episodeCode(media: LibraryMediaSummary): string | null {
@@ -54,7 +58,7 @@ function mediaStatus(media: LibraryMediaSummary): string {
 
 export function LibraryMediaItem({
   media,
-  collections,
+  readCollections,
   context,
   mutationPending,
   onOpen,
@@ -64,13 +68,22 @@ export function LibraryMediaItem({
   onAddToCollection,
   onRemoveFromCollection,
   onSetWatchLater,
+  onSetWatched,
 }: LibraryMediaItemProps) {
   const needsRelink = libraryMediaNeedsRelink(media);
   const progress = libraryMediaProgress(media);
-  const manualCollections = collections.filter(
-    (collection) =>
-      collection.systemKey === null && collection.id !== media.collectionId,
-  );
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const article = useRef<HTMLElement>(null);
+  const returnGroup = useRef<HTMLElement | null>(null);
+  const restorePickerFocus = useCallback(() => {
+    // Modal isolation is released after list layout effects; restore only lost focus.
+    requestAnimationFrame(() => {
+      if (document.activeElement !== document.body) return;
+      const target = article.current?.querySelector<HTMLButtonElement>('[aria-haspopup="menu"]')
+        ?? returnGroup.current?.querySelector<HTMLButtonElement>(".library-media-item button") ?? returnGroup.current;
+      if (target?.isConnected) target.focus();
+    });
+  }, []);
   const primaryLabel = needsRelink
     ? "重新定位"
     : media.positionMs > 0
@@ -79,7 +92,7 @@ export function LibraryMediaItem({
   const code = episodeCode(media);
 
   return (
-    <article className="library-media-item">
+    <article ref={article} data-project-id={media.projectId} className="library-media-item" data-has-poster={Boolean(media.posterPath)}>
       <button
         className="library-media-poster"
         type="button"
@@ -132,6 +145,10 @@ export function LibraryMediaItem({
           label={`${media.projectTitle} 的更多操作`}
           panelClassName="library-row-menu-panel"
         >
+            <button type="button" role="menuitem" disabled={mutationPending}
+              onClick={() => void onSetWatched(media.projectId, !media.completedAtMs)}>
+              {media.completedAtMs ? "标记为未看" : "标记为看完"}
+            </button>
             {context.kind === "watch_later" ? (
               <button
                 type="button"
@@ -155,19 +172,10 @@ export function LibraryMediaItem({
               </button>
             ) : null}
             {context.kind === "unclassified" || context.kind === "watch_later" ? (
-              manualCollections.map((collection) => (
-                <button
-                  type="button"
-                  role="menuitem"
-                  key={collection.id}
-                  disabled={mutationPending}
-                  onClick={() =>
-                    void onAddToCollection(collection.id, media.projectId)
-                  }
-                >
-                  加入「{collection.title}」
-                </button>
-              ))
+              <button type="button" role="menuitem" disabled={mutationPending} onClick={() => {
+                returnGroup.current = article.current?.closest<HTMLElement>('[role="group"]') ?? null;
+                setPickerOpen(true);
+              }}>加入合集…</button>
             ) : null}
             {context.kind !== "watch_later" ? (
               <button
@@ -199,6 +207,9 @@ export function LibraryMediaItem({
             ) : null}
         </MenuPopover>
       </div>
+      {pickerOpen ? <CollectionPickerDialog projectId={media.projectId} projectTitle={media.projectTitle}
+        excludedCollectionId={media.collectionId} onAdd={onAddToCollection} onClose={() => setPickerOpen(false)}
+        onAfterClose={restorePickerFocus} readCollections={readCollections} /> : null}
     </article>
   );
 }

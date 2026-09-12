@@ -1,7 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCodexDetection } from "../ai-tasks/useCodexDetection";
+import { CodexDetectionNotice } from "../ai-tasks/CodexDetectionNotice";
+import { useCallback, useState } from "react";
+import { useSummaryHistory } from "./useSummaryHistory";
 
 import { commandError, getCodexRuntimeStatus } from "../../lib/desktop";
-import type { CodexRuntimeStatus, SubtitleVersion } from "../../types";
+import type { SubtitleVersion } from "../../types";
 import { useAiExecutionChoice } from "../ai-tasks/useAiExecutionChoice";
 import type { PromptSelection } from "../analysis/types";
 import {
@@ -10,16 +13,19 @@ import {
   exportVideoSummary,
   getSummaryTask,
   getVideoSummary,
-  listSummaryTasks,
-  listVideoSummaries,
   openSummaryMaterials,
   prepareSummaryTask,
+  previewSummaryDispatch,
   resumeSummaryTask,
   startSummaryTask,
 } from "./gateway";
+import { useSummaryPolling } from "./useSummaryPolling";
+import { useSummaryCompletion } from "./useSummaryCompletion";
 import { SummaryProgress } from "./SummaryProgress";
 import { SummaryResultView } from "./SummaryResultView";
 import { SummarySetup } from "./SummarySetup";
+import { SummaryDispatchConfirm } from "./SummaryDispatchConfirm";
+import type { SummaryDispatchPreview } from "./dispatchGateway";
 import type {
   SummaryAnalysisMode,
   SummaryScope,
@@ -38,7 +44,6 @@ type VideoSummaryPanelProps = {
   onPausePlayback?: () => void;
 };
 
-const pollingStatuses = new Set(["queued", "running", "validating"]);
 const restorableStatuses = new Set([
   "prepared",
   "awaiting_external_result",
@@ -47,6 +52,7 @@ const restorableStatuses = new Set([
   "paused",
   "validating",
   "interrupted",
+  "failed",
 ]);
 
 export function VideoSummaryPanel({
@@ -59,9 +65,9 @@ export function VideoSummaryPanel({
   onJump,
   onPausePlayback,
 }: VideoSummaryPanelProps) {
-  const completionRef = useRef<string | null>(null);
   const execution = useAiExecutionChoice(true);
-  const [runtime, setRuntime] = useState<CodexRuntimeStatus | null>(null);
+  const codexDetection = useCodexDetection(getCodexRuntimeStatus);
+  const { runtime } = codexDetection;
   const [scope, setScope] = useState<SummaryScope>("current_progress");
   const [mode, setMode] = useState<SummaryAnalysisMode>("automatic");
   const [promptSelection, setPromptSelection] = useState<PromptSelection>({
@@ -72,63 +78,35 @@ export function VideoSummaryPanel({
   const [task, setTask] = useState<SummaryTask | null>(null);
   const [summary, setSummary] = useState<VideoSummary | null>(null);
   const [history, setHistory] = useState<VideoSummary[]>([]);
-  const [loading, setLoading] = useState(true);
   const [operation, setOperation] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [exportNotice, setExportNotice] = useState<string | null>(null);
+  const [confirmation, setConfirmation] = useState<{ preview: SummaryDispatchPreview; resume: boolean } | null>(null);
 
   const showError = useCallback((cause: unknown) => {
     setError(commandError(cause).message);
   }, []);
 
-  useEffect(() => {
-    let active = true;
-    void Promise.all([
-      getCodexRuntimeStatus(),
-      listSummaryTasks(projectId),
-      listVideoSummaries(projectId),
-    ])
-      .then(([nextRuntime, tasks, summaries]) => {
-        if (!active) return;
-        setRuntime(nextRuntime);
-        setHistory(summaries);
-        const activeTask = tasks.find((item) => restorableStatuses.has(item.status)) ?? null;
-        setTask(activeTask);
-        if (!activeTask) setSummary(summaries[0] ?? null);
-      })
-      .catch(showError)
-      .finally(() => {
-        if (active) setLoading(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, [projectId, showError]);
+  const restoreHistory = useCallback((tasks: SummaryTask[], summaries: VideoSummary[]) => {
+    setHistory(summaries);
+    const activeTask = tasks.find((item) => restorableStatuses.has(item.status)) ?? null;
+    setTask(activeTask);
+    setSummary(activeTask ? null : summaries[0] ?? null);
+  }, []);
+  const historyRead = useSummaryHistory(projectId, restoreHistory);
+  const loading = historyRead.loading;
 
-  useEffect(() => {
-    if (!task || !pollingStatuses.has(task.status)) return;
-    let active = true;
-    const timer = window.setInterval(() => {
-      void getSummaryTask(task.id).then((next) => {
-        if (active) setTask(next);
-      }).catch((cause) => {
-        if (active) showError(cause);
-      });
-    }, 900);
-    return () => {
-      active = false;
-      window.clearInterval(timer);
-    };
-  }, [showError, task]);
+  useSummaryPolling({ projectId, task, read: getSummaryTask, onTask: (next) => setTask((current) => {
+    if (!current || current.id !== next.id || current.projectId !== next.projectId ||
+      !["queued", "running", "validating"].includes(current.status)) return current;
+    if (current.cancelRequested && !next.cancelRequested && ["queued", "running", "validating"].includes(next.status)) return current;
+    return next;
+  }), onError: showError });
 
-  useEffect(() => {
-    if (!task?.outputSummaryId || task.status !== "completed" || completionRef.current === task.id) return;
-    completionRef.current = task.id;
-    void getVideoSummary(task.outputSummaryId).then((value) => {
-      setSummary(value);
-      setHistory((current) => [value, ...current.filter((item) => item.id !== value.id)]);
-    }).catch(showError);
-  }, [showError, task]);
+  const completion = useSummaryCompletion({ projectId, task, read: getVideoSummary, onResult: (value) => {
+    setSummary(value);
+    setHistory((current) => [value, ...current.filter((item) => item.id !== value.id)]);
+  } });
 
   const start = async () => {
     setOperation("start");
@@ -151,9 +129,9 @@ export function VideoSummaryPanel({
         providerId: choice.preview.providerId,
         modelId: choice.preview.modelId,
       });
-      completionRef.current = null;
       setSummary(null);
-      setTask(await startSummaryTask(prepared.id));
+      setTask(prepared);
+      setConfirmation({ preview: await previewSummaryDispatch(prepared.id), resume: false });
     } catch (cause) {
       showError(cause);
     } finally {
@@ -179,10 +157,25 @@ export function VideoSummaryPanel({
     setOperation("resume");
     setError(null);
     try {
-      setTask(await resumeSummaryTask(task.id));
+      setConfirmation({ preview: await previewSummaryDispatch(task.id), resume: true });
     } catch (cause) {
       showError(cause);
     } finally {
+      setOperation(null);
+    }
+  };
+
+  const confirmDispatch = async () => {
+    if (!confirmation) return;
+    setOperation("confirm");
+    setError(null);
+    try {
+      const run = confirmation.resume ? resumeSummaryTask : startSummaryTask;
+      setTask(await run(confirmation.preview.taskId, confirmation.preview.confirmationSha256));
+    } catch (cause) {
+      showError(cause);
+    } finally {
+      setConfirmation(null);
       setOperation(null);
     }
   };
@@ -205,7 +198,7 @@ export function VideoSummaryPanel({
   };
 
   const newSummary = () => {
-    completionRef.current = null;
+    setConfirmation(null);
     setTask(null);
     setSummary(null);
     setError(null);
@@ -215,10 +208,15 @@ export function VideoSummaryPanel({
   };
 
   if (loading) return <div className="understanding-loading" role="status"><span className="spinner" />正在读取视频总结</div>;
+  if (historyRead.error) return <div className="understanding-error" role="alert">
+    <p>{historyRead.error}</p>
+    <button className="button quiet small" type="button" onClick={historyRead.retry}>重新读取总结记录</button>
+  </div>;
   if (!sourceVersion) return <div className="understanding-empty"><strong>需要先准备原文字幕</strong><p>视频总结只分析真实字幕和授权画面。</p><button className="button primary small" type="button" onClick={onPrepareSubtitles}>生成或导入原文字幕</button></div>;
 
   return (
     <div className="video-summary-panel">
+      <CodexDetectionNotice {...codexDetection} />
       {history.length > 0 ? (
         <label className="summary-history-select">
           <span>历史结果</span>
@@ -236,8 +234,13 @@ export function VideoSummaryPanel({
           </select>
         </label>
       ) : null}
+      {completion.error ? <div className="understanding-error" role="alert">
+        {commandError(completion.error).message}
+        <button className="button small" type="button" onClick={completion.retry}>重新读取总结</button>
+      </div> : null}
       {error ? <div className="understanding-error" role="alert">{error}</div> : null}
-      {summary ? (
+      {confirmation ? <SummaryDispatchConfirm preview={confirmation.preview} busy={operation !== null}
+        onConfirm={() => void confirmDispatch()} onBack={() => setConfirmation(null)} /> : summary ? (
         <SummaryResultView summary={summary} exporting={operation === "export"} exportNotice={exportNotice} onExport={() => void exportReport()} onNewSummary={newSummary} onJump={onJump} onPausePlayback={onPausePlayback} />
       ) : task ? (
         <SummaryProgress task={task} busy={operation !== null} onCancel={() => void cancel()} onResume={() => void resume()} onOpenMaterials={() => void openSummaryMaterials(task.id).catch(showError)} />

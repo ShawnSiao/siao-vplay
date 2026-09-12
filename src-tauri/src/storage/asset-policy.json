@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "preserveUnknown": true,
+  "rules": [
+    {"id":"project-database","root":"app_data","path":"projects/siaovplay.db","class":"user_asset","transfer":"database_backup"},
+    {"id":"database-backups","root":"app_data","path":"projects/upgrade-backups","class":"user_asset","transfer":"copy"},
+    {"id":"agent-materials","root":"app_data","path":"agent-tasks","class":"user_asset","transfer":"copy"},
+    {"id":"summary-materials","root":"app_data","path":"summary-tasks","class":"user_asset","transfer":"copy"},
+    {"id":"learning-assets","root":"app_data","path":"learning-cards","class":"user_asset","transfer":"copy"},
+    {"id":"transcription-work","root":"app_data","path":"transcription-jobs","class":"recovery_working_data","transfer":"copy"},
+    {"id":"burn-work","root":"app_data","path":"subtitle-burn-jobs","class":"recovery_working_data","transfer":"copy"},
+    {"id":"subtitle-preview","root":"app_data","path":"subtitle-cache","class":"regenerable_cache","transfer":"copy"},
+    {"id":"ai-settings","root":"app_data","path":"ai-services.json","class":"preference","transfer":"copy"},
+    {"id":"network-settings","root":"app_data","path":"network-settings.json","class":"preference","transfer":"copy"},
+    {"id":"runtime-settings","root":"app_data","path":"runtime-settings.json","class":"preference","transfer":"copy"},
+    {"id":"resource-settings","root":"app_data","path":"local-resources.json","class":"preference","transfer":"copy"},
+    {"id":"webview-profile","root":"bootstrap","path":"EBWebView","class":"browser_profile","transfer":"retain_at_bootstrap"},
+    {"id":"remote-media","root":"remote_media","path":null,"class":"user_asset","transfer":"copy"},
+    {"id":"playback-cache","root":"media_cache","path":null,"class":"regenerable_cache","transfer":"managed_copy_or_rebuild"},
+    {"id":"runtime-components","root":"resource_root","path":null,"class":"runtime_component","transfer":"resource_maintenance"},
+    {"id":"external-originals","root":"external_media","path":null,"class":"user_asset","transfer":"external_reference"},
+    {"id":"exports","root":"export_directory","path":null,"class":"user_asset","transfer":"external_reference"},
+    {"id":"api-credentials","root":"credential_store","path":null,"class":"credential","transfer":"credential_reentry"}
+  ]
+}

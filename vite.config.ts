@@ -23,6 +23,8 @@ export default defineConfig(({ mode }) => ({
     },
   },
   test: {
+    // Bound simultaneous jsdom instances on developer machines and CI.
+    maxWorkers: 2,
     environment: "jsdom",
     setupFiles: "./src/test/setup.ts",
     include: ["src/**/*.{test,spec}.{ts,tsx}"],

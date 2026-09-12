@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "appName": {
+      "type": "string"
+    },
+    "dataDirectory": {
+      "type": "string"
+    },
+    "interruptedTranscriptionCount": {
+      "format": "uint",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "platform": {
+      "type": "string"
+    },
+    "startupMediaPath": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "version": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "appName",
+    "version",
+    "platform",
+    "dataDirectory",
+    "startupMediaPath",
+    "interruptedTranscriptionCount"
+  ],
+  "title": "AppStatus",
+  "type": "object"
+}

@@ -1,4 +1,20 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { setupLibraryQueryMocks, createMockOverviewReaders } from "./test/libraryQueryMocks";
+import { readMockSubtitlePage } from "./test/subtitleHistoryPageMock";
+import { confirmProjectDeletion } from "./test/confirmProjectDeletion";
+import { verifyRejectedStartupStatus } from "./appStartupStatusTest";
+import { verifySummaryWhileWatchingOtherVideo } from "./appSummaryActivityTest";
+import { verifyPreparationStorageSettings, verifySettingsEscapeLayers, verifyCodexRedetectClick } from "./appSettingsEscapeTest";
+import { locationResult } from "./test-fixtures/resourceLocation";
+import { createLearningTaskFixture } from "./test-fixtures/learning";
+import { verifyBackgroundTranscription } from "./appTranscriptionCompletionTest";
+import { verifyNewTranslationWhileWatching } from "./appTranslationWatchingTest";
+import { verifyDismissedResourceAction, verifySelectedResourceResume } from "./appResourcePreparationTest";
+import { verifyStaleTranscriptionPreparation, verifyLocalImportShortcut, verifyTranscriptionChoicesResume } from "./appTranscriptionPreparationTest";
+import { subtitleMetadata } from "./features/subtitle-revision/subtitleMetadata";
+import { createTranslationTask, translationDispatchFixture } from "./test-fixtures/translation";
+import { taskDispatchFixture } from "./test-fixtures/taskDispatch";
+import { youtubePreview, directVideoFixture } from "./test-fixtures/publicVideo";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type {
@@ -12,21 +28,18 @@ import type {
   LocalResourceStatus,
   MediaPreparation,
   Project,
-  RemoteMediaPreview,
   SubtitleBurnJob,
   SubtitleExport,
   SubtitleImportPreview,
   SubtitleVersion,
   TranscriptionJob,
   TranslationTask,
-  YouTubeMediaPreview,
 } from "./types";
 import { createUnderstandingFixtures } from "./test-fixtures/understanding";
 
 const desktopMocks = vi.hoisted(() => ({
   getAppStatus: vi.fn(),
   getMediaRuntimeStatus: vi.fn(),
-  getRuntimeCatalog: vi.fn(),
   getLocalResourceCatalog: vi.fn(),
   getLocalResourceStatus: vi.fn(),
   getLocalResourceNetworkStatus: vi.fn(),
@@ -50,7 +63,7 @@ const desktopMocks = vi.hoisted(() => ({
   chooseLocalFolder: vi.fn(),
   chooseLocalVideo: vi.fn(),
   chooseSubtitleFile: vi.fn(),
-  createLocalProject: vi.fn(),
+  openLocalProject: vi.fn(),
   inspectRemoteMediaUrl: vi.fn(),
   importRemoteMediaUrl: vi.fn(),
   cancelRemoteMediaImport: vi.fn(),
@@ -60,7 +73,7 @@ const desktopMocks = vi.hoisted(() => ({
   ensureProjectPoster: vi.fn(),
   markProjectOpened: vi.fn(),
   prepareProjectMedia: vi.fn(),
-  updatePlaybackState: vi.fn(),
+  updatePlaybackState: vi.fn(), beginPlaybackSession: vi.fn(),
   relinkProjectMedia: vi.fn(),
   deleteProject: vi.fn(),
   inspectSubtitleFile: vi.fn(),
@@ -68,6 +81,8 @@ const desktopMocks = vi.hoisted(() => ({
   inspectEmbeddedSubtitle: vi.fn(),
   importEmbeddedSubtitle: vi.fn(),
   listSubtitleVersions: vi.fn(),
+  getSubtitleVersion: vi.fn(),
+  listSubtitleVersionMetadata: vi.fn(),
   reviseSubtitleVersion: vi.fn(),
   restoreSubtitleVersion: vi.fn(),
   getTranscriptionRuntimeStatus: vi.fn(),
@@ -111,6 +126,7 @@ const desktopMocks = vi.hoisted(() => ({
   cancelLearningTask: vi.fn(),
   resumeCodexLearningTask: vi.fn(),
   reconcileExternalAgentResults: vi.fn(),
+  acknowledgeExternalAgentResults: vi.fn(),
   openExternalResultDirectory: vi.fn(),
   createLearningCard: vi.fn(),
   getLearningCard: vi.fn(),
@@ -135,6 +151,7 @@ const libraryGatewayMocks = vi.hoisted(() => ({
   deleteCollection: vi.fn(),
   getCollectionDetail: vi.fn(),
   listCollectionEpisodes: vi.fn(),
+  listCollectionEpisodePage: vi.fn(),
   addProjectToCollection: vi.fn(),
   removeProjectFromCollection: vi.fn(),
   getEpisodeNeighbors: vi.fn(),
@@ -151,6 +168,10 @@ const analysisGatewayMocks = vi.hoisted(() => ({
   deleteAnalysisPromptTemplate: vi.fn(),
 }));
 
+const cleanupMocks = vi.hoisted(() => ({ getPendingProjectCleanup: vi.fn() }));
+vi.mock("./lib/projectDeletionGateway", () => ({ getPendingProjectCleanup: cleanupMocks.getPendingProjectCleanup, deleteProject: desktopMocks.deleteProject }));
+vi.mock("./lib/libraryOverviewGateway", () => createMockOverviewReaders(libraryGatewayMocks.getLibraryHome));
+vi.mock("./lib/subtitleMetadataPageGateway", () => ({ readSubtitleMetadataPage: (id: string, offset: number) => readMockSubtitlePage(desktopMocks.listSubtitleVersionMetadata, id, offset) }));
 vi.mock("./lib/desktop", () => ({
   ...desktopMocks,
   isDesktopApp: true,
@@ -167,6 +188,10 @@ vi.mock("./features/library/libraryGateway", async (importOriginal) => ({
 }));
 
 vi.mock("./features/analysis/gateway", () => analysisGatewayMocks);
+vi.mock("./features/environment-settings/gateway", async (original) => ({ ...await original<object>(), getAiServiceSettings: async () => ({ services: [], defaultServiceId: null }) }));
+const dispatchMocks = vi.hoisted(() => ({ previewTaskDispatch: vi.fn(), previewTranslationDispatch: vi.fn() }));
+vi.mock("./features/ai-tasks/translationDispatch", () => ({ previewTranslationDispatch: dispatchMocks.previewTranslationDispatch }));
+vi.mock("./features/ai-tasks/taskDispatch", async (original) => ({ ...await original<object>(), ...dispatchMocks }));
 
 import App from "./App";
 
@@ -250,6 +275,7 @@ const localResourceCatalog: LocalResourceCatalog = {
   ],
   resources: [
     {
+      ...{ installedSize: null, expectedDownloadSize: null, artifact: null, entrypoints: {}, sourceCommit: null, patchSha256: null, requires: null, distribution: null },
       id: "ffmpeg-cpu",
       version: "8.1.2-34-g9b6c8969e0",
       platform: "windows-x86_64",
@@ -259,6 +285,7 @@ const localResourceCatalog: LocalResourceCatalog = {
       license: "LGPL-2.1-or-later",
       sourcePage: "https://example.com/ffmpeg",
       artifact: {
+        stripComponents: null,
         url: "https://example.com/ffmpeg.zip",
         size: 70_508_781,
         sha256: "a".repeat(64),
@@ -268,6 +295,7 @@ const localResourceCatalog: LocalResourceCatalog = {
       healthCheck: "ffmpeg-version",
     },
     {
+      ...{ installedSize: null, expectedDownloadSize: null, artifact: null, entrypoints: {}, sourceCommit: null, patchSha256: null, requires: null, distribution: null },
       id: "yt-dlp",
       version: "2026.08.19",
       platform: "windows-x86_64",
@@ -277,6 +305,7 @@ const localResourceCatalog: LocalResourceCatalog = {
       license: "GPL-3.0-or-later",
       sourcePage: "https://example.com/yt-dlp",
       artifact: {
+        stripComponents: null,
         url: "https://example.com/yt-dlp.exe",
         size: 17_840_399,
         sha256: "b".repeat(64),
@@ -286,6 +315,7 @@ const localResourceCatalog: LocalResourceCatalog = {
       healthCheck: "yt-dlp-version",
     },
     {
+      ...{ installedSize: null, expectedDownloadSize: null, artifact: null, entrypoints: {}, sourceCommit: null, patchSha256: null, requires: null, distribution: null },
       id: "whisper-cpu",
       version: "1.9.1",
       platform: "windows-x86_64",
@@ -295,6 +325,7 @@ const localResourceCatalog: LocalResourceCatalog = {
       license: "MIT",
       sourcePage: "https://example.com/whisper-cpu",
       artifact: {
+        stripComponents: null,
         url: "https://example.com/whisper-bin-x64.zip",
         size: 7_982_101,
         sha256: "e".repeat(64),
@@ -304,6 +335,7 @@ const localResourceCatalog: LocalResourceCatalog = {
       healthCheck: "whisper-cli-version",
     },
     {
+      ...{ installedSize: null, expectedDownloadSize: null, artifact: null, entrypoints: {}, sourceCommit: null, patchSha256: null, requires: null, distribution: null },
       id: "whisper-model-base",
       version: "ggml-base",
       platform: "any",
@@ -313,6 +345,7 @@ const localResourceCatalog: LocalResourceCatalog = {
       license: "MIT",
       sourcePage: "https://example.com/whisper-base",
       artifact: {
+        stripComponents: null,
         url: "https://example.com/ggml-base.bin",
         size: 147_951_465,
         sha256: "c".repeat(64),
@@ -322,6 +355,7 @@ const localResourceCatalog: LocalResourceCatalog = {
       healthCheck: "whisper-model-magic",
     },
     {
+      ...{ installedSize: null, expectedDownloadSize: null, artifact: null, entrypoints: {}, sourceCommit: null, patchSha256: null, requires: null, distribution: null },
       id: "whisper-model-small",
       version: "ggml-small",
       platform: "any",
@@ -331,6 +365,7 @@ const localResourceCatalog: LocalResourceCatalog = {
       license: "MIT",
       sourcePage: "https://example.com/whisper-small",
       artifact: {
+        stripComponents: null,
         url: "https://example.com/ggml-small.bin",
         size: 487_601_967,
         sha256: "d".repeat(64),
@@ -343,6 +378,7 @@ const localResourceCatalog: LocalResourceCatalog = {
 };
 
 const readyLocalResourceStatus: LocalResourceStatus = {
+  snapshotRevision: 1,
   configured: true,
   selectedParent: "W:\\SiaoVPlay",
   resourceRoot: "W:\\SiaoVPlay\\LocalResources",
@@ -379,6 +415,7 @@ const readyLocalResourceStatus: LocalResourceStatus = {
 };
 
 const setupRequiredLocalResourceStatus: LocalResourceStatus = {
+  snapshotRevision: 1,
   configured: false,
   selectedParent: null,
   resourceRoot: null,
@@ -421,7 +458,8 @@ function libraryHomeFor(value: Project = project): LibraryHome {
   const media = mediaSummaryFor(value);
   return {
     continueWatching: value.playbackState.positionMs > 0 ? [media] : [],
-    collections: [],
+    continueWatchingCount: value.playbackState.positionMs > 0 ? 1 : 0,
+    collectionCount: 0, folderCount: 0, watchLaterCount: 0, collections: [],
     folders: [],
     unclassified: [media],
     recentlyAdded: [media],
@@ -478,38 +516,7 @@ const preparation: MediaPreparation = {
   reusedProxy: false,
 };
 
-const remotePreview: RemoteMediaPreview = {
-  originalUrl: "https://media.example.com/rain-platform.mp4",
-  finalUrl: "https://cdn.example.com/rain-platform.mp4",
-  displayName: "rain-platform.mp4",
-  mediaKind: "direct_file",
-  contentType: "video/mp4",
-  contentLength: 12_500_000,
-  previewToken: "c".repeat(64),
-};
-
-const remoteProject: Project = {
-  ...project,
-  id: "171f95a8-938c-4d0c-887b-e4c626f27c70",
-  mediaSource: {
-    ...project.mediaSource,
-    id: "29645135-bcb4-4f56-b4c7-3ec1bf59cd28",
-    locator: "W:\\SiaoVPlay\\app-data\\remote-media\\import-1\\source.mp4",
-    originUrl: remotePreview.originalUrl,
-  },
-};
-
-const youtubePreview: YouTubeMediaPreview = {
-  originalUrl: "https://www.youtube.com/watch?v=jNQXAC9IVRw",
-  webpageUrl: "https://www.youtube.com/watch?v=jNQXAC9IVRw",
-  videoId: "jNQXAC9IVRw",
-  title: "Me at the zoo",
-  durationSeconds: 19,
-  fileSizeBytes: 533_067,
-  importerVersion: "2026.08.19",
-  importerSha256: "3".repeat(64),
-  previewToken: "d".repeat(64),
-};
+const { remotePreview, remoteProject } = directVideoFixture(project);
 
 const subtitlePreview: SubtitleImportPreview = {
   format: "srt",
@@ -599,38 +606,7 @@ const transcriptionJob: TranscriptionJob = {
   completedAtMs: null,
 };
 
-const translationTask: TranslationTask = {
-  id: "f92041a1-5d07-4db0-b63d-565c12ceab36",
-  projectId: project.id,
-  taskType: "subtitle_translation",
-  handoffKind: "codex",
-  protocolVersion: "siaovplay-agent-v1",
-  status: "queued",
-  stage: "queued",
-  progress: 0,
-  receiverLabel: "本机 Codex",
-  materialScope: [
-    "原文字幕文本",
-    "字幕时间码",
-    "任务与字幕版本标识",
-    "人物与术语上下文（当前为空）",
-  ],
-  sourceVersionId: subtitleVersion.id,
-  sourceLanguageCode: "ja",
-  targetLanguageCode: "zh-cn",
-  authorizedSegmentIds: [subtitleVersion.segments[0].id],
-  segmentCount: 1,
-  expectedProjectRevision: 2,
-  baseTranslationVersionId: null,
-  outputVersionId: null,
-  validation: null,
-  errorCode: null,
-  errorMessage: null,
-  createdAtMs: 1_785_354_300_000,
-  updatedAtMs: 1_785_354_300_000,
-  startedAtMs: null,
-  completedAtMs: null,
-};
+const translationTask = createTranslationTask(project.id, subtitleVersion);
 
 const translatedVersion: SubtitleVersion = {
   ...subtitleVersion,
@@ -680,6 +656,7 @@ const { explanationTask, explanation } = createUnderstandingFixtures({
 });
 
 const learningTask: LearningTask = {
+  ...createLearningTaskFixture(),
   id: "d34346c4-ec23-4f05-aee5-29ec8c8942aa",
   projectId: project.id,
   handoffKind: "codex",
@@ -790,6 +767,7 @@ const burnJob: SubtitleBurnJob = {
 };
 
 beforeEach(() => {
+  cleanupMocks.getPendingProjectCleanup.mockResolvedValue(null);
   analysisGatewayMocks.listAnalysisPromptTemplates.mockResolvedValue([
     {
       id: "builtin:understanding:balanced",
@@ -803,14 +781,12 @@ beforeEach(() => {
     },
   ]);
   vi.clearAllMocks();
+  dispatchMocks.previewTaskDispatch.mockImplementation(async (kind) => taskDispatchFixture(await (kind === "explanation" ? desktopMocks.prepareExplanationTask : desktopMocks.prepareLearningTask).mock.results.at(-1)!.value));
   window.localStorage.clear();
-  libraryGatewayMocks.listLibrarySection.mockResolvedValue({
-    items: [],
-    totalCount: 0,
-    nextOffset: null,
-  });
+  window.sessionStorage.clear();
+  setupLibraryQueryMocks(libraryGatewayMocks);
   desktopMocks.getAppStatus.mockResolvedValue({
-    appName: "SiaoVPlay",
+    appName: "SiaoVPlay", interruptedTranscriptionCount: 0,
     version: "0.3.0",
     platform: "windows-desktop",
     dataDirectory: "W:\\SiaoVPlay\\app-data",
@@ -823,38 +799,31 @@ beforeEach(() => {
     version: "ffmpeg 8.1.1",
     errorMessage: null,
   });
-  desktopMocks.getRuntimeCatalog.mockResolvedValue({
-    settings: {
-      storageRoot: "W:\\SiaoVPlay\\runtime-data",
-      preferredModel: "small",
-    },
-    components: [],
-  });
   desktopMocks.getLocalResourceCatalog.mockResolvedValue(localResourceCatalog);
   desktopMocks.getLocalResourceStatus.mockResolvedValue(readyLocalResourceStatus);
   desktopMocks.getLocalResourceNetworkStatus.mockResolvedValue({
-    mode: "proxy",
+    snapshotRevision: 1, mode: "proxy",
     proxySource: "windows_system",
     proxyAddress: "http://127.0.0.1:7897",
   });
   desktopMocks.setLocalResourceProxy.mockResolvedValue({
-    mode: "proxy",
+    snapshotRevision: 1, mode: "proxy",
     proxySource: "custom",
     proxyAddress: "http://127.0.0.1:7897",
   });
-  desktopMocks.listResourceDownloadTasks.mockResolvedValue([]);
+  desktopMocks.listResourceDownloadTasks.mockResolvedValue({ generation: 1, tasks: [] });
   desktopMocks.listenResourceDownloadTasks.mockResolvedValue(() => undefined);
   desktopMocks.chooseLocalResourceParent.mockResolvedValue(null);
   desktopMocks.planLocalResourceLocation.mockResolvedValue({
     selectedParent: "W:\\SiaoVPlay",
     resourceRoot: "W:\\SiaoVPlay\\SiaoVPlay",
     parentExists: true,
-    resourceRootExists: false,
+    resourceRootExists: false, planFingerprint: "a".repeat(64),
     freeSpaceBytes: 500_000_000_000,
     confirmationRequired: true,
   });
   desktopMocks.configureLocalResourceRoot.mockResolvedValue(
-    readyLocalResourceStatus,
+    locationResult(readyLocalResourceStatus),
   );
   desktopMocks.setLocalResourceProfile.mockResolvedValue(
     readyLocalResourceStatus,
@@ -893,7 +862,7 @@ beforeEach(() => {
   desktopMocks.chooseLocalFolder.mockResolvedValue(null);
   desktopMocks.chooseLocalVideo.mockResolvedValue(null);
   desktopMocks.chooseSubtitleFile.mockResolvedValue(null);
-  desktopMocks.createLocalProject.mockResolvedValue(project);
+  desktopMocks.openLocalProject.mockResolvedValue(project);
   desktopMocks.inspectRemoteMediaUrl.mockResolvedValue(remotePreview);
   desktopMocks.importRemoteMediaUrl.mockResolvedValue(remoteProject);
   desktopMocks.cancelRemoteMediaImport.mockResolvedValue(true);
@@ -926,12 +895,13 @@ beforeEach(() => {
         ? remoteProject.mediaSource.locator
         : preparation.playbackPath,
   }));
-  desktopMocks.updatePlaybackState.mockResolvedValue(project);
+  desktopMocks.updatePlaybackState.mockResolvedValue(project); desktopMocks.beginPlaybackSession.mockResolvedValue("00000000-0000-4000-8000-000000000001");
   desktopMocks.deleteProject.mockResolvedValue({
     projectId: project.id,
     deleted: true,
     sourceMediaDeleted: false,
     cachedMediaDeleted: false,
+    cleanupPending: 0,
   });
   desktopMocks.inspectSubtitleFile.mockResolvedValue(subtitlePreview);
   desktopMocks.importSubtitleFile.mockResolvedValue(subtitleVersion);
@@ -944,6 +914,13 @@ beforeEach(() => {
     sourceLabel: embeddedSubtitlePreview.sourceLabel,
   });
   desktopMocks.listSubtitleVersions.mockResolvedValue([]);
+  desktopMocks.getSubtitleVersion.mockImplementation(async (projectId: string, versionId: string) => {
+    const versions = await desktopMocks.listSubtitleVersions(projectId, false);
+    const version = versions.find((item: SubtitleVersion) => item.id === versionId);
+    if (!version) throw new Error("生成的字幕版本暂时无法读取");
+    return version;
+  });
+  desktopMocks.listSubtitleVersionMetadata.mockImplementation(async (projectId: string) => (await desktopMocks.listSubtitleVersions(projectId, true)).map(subtitleMetadata));
   desktopMocks.reviseSubtitleVersion.mockResolvedValue(subtitleVersion);
   desktopMocks.restoreSubtitleVersion.mockResolvedValue(subtitleVersion);
   desktopMocks.reconcileExternalAgentResults.mockResolvedValue([]);
@@ -994,6 +971,7 @@ beforeEach(() => {
   });
   desktopMocks.listTranslationTasks.mockResolvedValue([]);
   desktopMocks.prepareTranslationTask.mockResolvedValue(translationTask);
+  dispatchMocks.previewTranslationDispatch.mockImplementation(async () => translationDispatchFixture(await (desktopMocks.prepareTranslationTask.mock.results.at(-1)?.value ?? translationTask), subtitleVersion));
   desktopMocks.startCodexTranslationTask.mockResolvedValue({
     ...translationTask,
     status: "running",
@@ -1204,10 +1182,10 @@ describe("App", () => {
     expect(settingsButton).toBeEnabled();
     fireEvent.click(settingsButton);
     expect(
-      await screen.findByRole("dialog", { name: "环境配置" }),
+      await screen.findByRole("dialog", { name: "设置" }),
     ).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "关闭" }));
-    expect(screen.queryByRole("dialog", { name: "环境配置" })).toBeNull();
+    expect(screen.queryByRole("dialog", { name: "设置" })).toBeNull();
     fireEvent.click(
       screen.getByRole("button", { name: "折叠媒体库导航" }),
     );
@@ -1329,6 +1307,7 @@ describe("App", () => {
     expect(screen.getByText(/\d+ 项本地功能已准备/)).toBeInTheDocument();
     expect(await getAddMediaCommand(/打开本地视频/)).toBeEnabled();
     expect(screen.getByLabelText("观看进度 23%")).toBeInTheDocument();
+    expect(desktopMocks.listProjects).not.toHaveBeenCalled();
     await waitFor(() =>
       expect(desktopMocks.ensureProjectPoster).toHaveBeenCalledWith(project.id),
     );
@@ -1340,6 +1319,28 @@ describe("App", () => {
     );
   });
 
+  it("does not start preparation after the opening session has been left", async () => {
+    let release!: (value: Project) => void;
+    desktopMocks.markProjectOpened.mockReturnValueOnce(new Promise<Project>((resolve) => { release = resolve; }));
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "打开最近观看的 雨站台" }));
+    fireEvent.click((await screen.findAllByRole("button", { name: "返回媒体库" }))[0]);
+    await act(async () => { release(project); });
+    expect(desktopMocks.prepareProjectMedia).not.toHaveBeenCalled();
+  });
+
+  it("ignores an earlier project lookup after a later open request succeeds", async () => {
+    let release!: (value: Project) => void;
+    desktopMocks.getProject.mockReturnValueOnce(new Promise<Project>((resolve) => { release = resolve; }));
+    render(<App />);
+    const open = await screen.findByRole("button", { name: "打开最近观看的 雨站台" });
+    fireEvent.click(open);
+    fireEvent.click(open);
+    await waitFor(() => expect(desktopMocks.prepareProjectMedia).toHaveBeenCalledTimes(1));
+    await act(async () => { release(project); });
+    expect(desktopMocks.prepareProjectMedia).toHaveBeenCalledTimes(1);
+  });
+
   it("prepares a project before opening the player", async () => {
     render(<App />);
     fireEvent.click(
@@ -1348,9 +1349,11 @@ describe("App", () => {
 
     expect(await screen.findByText("正在确认视频画面")).toBeInTheDocument();
     expect(desktopMocks.markProjectOpened).toHaveBeenCalledWith(project.id);
+    expect(desktopMocks.listSubtitleVersions).toHaveBeenCalledWith(project.id, false);
+    expect(desktopMocks.listSubtitleVersionMetadata).not.toHaveBeenCalled();
     expect(desktopMocks.prepareProjectMedia).toHaveBeenCalledWith(
       project.id,
-      false,
+      false, expect.any(String),
     );
     expect(screen.queryByText(/H264\s*\/ AAC/)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "进入全屏" })).toBeInTheDocument();
@@ -1361,7 +1364,12 @@ describe("App", () => {
     );
   });
 
-  it("persists the current episode before preparing the next one", async () => {
+  it("opens storage settings from preparation failure without losing the selected project", () => verifyPreparationStorageSettings(desktopMocks.prepareProjectMedia));
+  it("isolates Escape between storage migration, settings and the current player", verifySettingsEscapeLayers);
+  it("redetects Codex from the settings button without remounting its detail", () => verifyCodexRedetectClick(desktopMocks.getCodexRuntimeStatus));
+  it.each(["completed", "failed"] as const)("keeps B watching while A summary becomes %s", outcome => verifySummaryWhileWatchingOtherVideo(outcome, project, preparation, desktopMocks, subtitleVersion));
+
+  it("persists the current episode and clears its subtitles before loading the next one", async () => {
     const collectionId = "60000000-0000-4000-8000-000000000001";
     const rootId = "60000000-0000-4000-8000-000000000002";
     const nextProject: Project = {
@@ -1449,6 +1457,11 @@ describe("App", () => {
     desktopMocks.getProject.mockImplementation(async (projectId: string) =>
       projectId === nextProject.id ? nextProject : project,
     );
+    let finishNextSubtitles!: (versions: SubtitleVersion[]) => void;
+    desktopMocks.listSubtitleVersions.mockImplementation((projectId: string) => projectId === nextProject.id
+        ? new Promise<SubtitleVersion[]>(resolve => { finishNextSubtitles = resolve; })
+        : Promise.resolve([subtitleVersion]),
+    );
     const order: string[] = [];
     desktopMocks.updatePlaybackState.mockImplementation(async (projectId: string) => {
       if (projectId === project.id) {
@@ -1483,14 +1496,17 @@ describe("App", () => {
     fireEvent.click(await screen.findByRole("button", { name: "继续" }));
     const nextButton = await screen.findByRole("button", { name: "下一集" });
     await waitFor(() => expect(nextButton).toBeEnabled());
+    expect(await screen.findByText("字幕已同步")).toBeInTheDocument();
     fireEvent.click(nextButton);
 
-    await waitFor(() => expect(order).toContain("prepare-next"));
+    await waitFor(() => expect(finishNextSubtitles).toBeDefined());
+    expect(screen.getByText("等待字幕")).toBeInTheDocument();
     expect(order).toEqual([
       "persist-current",
       "mark-next-opened",
       "prepare-next",
     ]);
+    await act(async () => finishNextSubtitles([]));
   });
 
   it("searches the real library gateway and opens a media result", async () => {
@@ -1517,7 +1533,7 @@ describe("App", () => {
       expect(libraryGatewayMocks.searchLibrary).toHaveBeenCalledWith("雨站台"),
     );
     await waitFor(() =>
-      expect(desktopMocks.prepareProjectMedia).toHaveBeenCalledWith(project.id, false),
+      expect(desktopMocks.prepareProjectMedia).toHaveBeenCalledWith(project.id, false, expect.any(String)),
     );
   });
 
@@ -1543,7 +1559,8 @@ describe("App", () => {
     fireEvent.click(await screen.findByRole("button", { name: /继续播放/ }));
 
     const video = await screen.findByLabelText("视频画面，单击播放或暂停");
-    expect(screen.queryByLabelText("当前内容抽屉")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("当前内容抽屉")).not.toBeVisible();
+    expect(screen.getByLabelText("当前内容抽屉")).toHaveAttribute("inert");
 
     fireEvent.click(await getOverflowCommand(/^剧集当前合集$/));
     expect(screen.getByLabelText("当前内容抽屉")).toBeInTheDocument();
@@ -1554,7 +1571,8 @@ describe("App", () => {
     expect(screen.getByLabelText("视频画面，单击播放或暂停")).toBe(video);
 
     fireEvent.keyDown(window, { key: "Escape" });
-    expect(screen.queryByLabelText("当前内容抽屉")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("当前内容抽屉")).not.toBeVisible();
+    expect(screen.getByLabelText("当前内容抽屉")).toHaveAttribute("inert");
     expect(screen.getByLabelText("视频画面，单击播放或暂停")).toBe(video);
   });
 
@@ -1703,7 +1721,7 @@ describe("App", () => {
     fireEvent.click(await getOverflowCommand(/导出字幕与视频/));
 
     expect(screen.getByRole("button", { name: "关闭" })).toHaveFocus();
-    fireEvent.click(screen.getByRole("button", { name: "双语" }));
+    fireEvent.click(await screen.findByRole("button", { name: "双语" }));
     fireEvent.change(screen.getByRole("combobox", { name: "字幕文件格式" }), {
       target: { value: "vtt" },
     });
@@ -1752,7 +1770,7 @@ describe("App", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: /继续播放/ }));
     fireEvent.click(await getOverflowCommand(/导出字幕与视频/));
-    fireEvent.click(screen.getByRole("button", { name: /烧录视频/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /烧录视频/ }));
     fireEvent.click(
       screen.getByRole("checkbox", {
         name: /确认使用以上字幕版本/,
@@ -1847,10 +1865,10 @@ describe("App", () => {
     expect(
       screen.getByText("不包含完整视频、音频、本机媒体路径、数据库或凭证。"),
     ).toBeInTheDocument();
-    expect(screen.getAllByText("本机 Codex")).toHaveLength(2);
-
+    expect(screen.getByText("OpenAI（经本机 Codex）")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("checkbox", { name: /允许发送.*关键帧/ }));
     fireEvent.click(
-      screen.getByRole("button", { name: "确认范围并理解当前场景" }),
+      screen.getByRole("button", { name: "准备理解材料" }),
     );
     await waitFor(() =>
       expect(desktopMocks.prepareExplanationTask).toHaveBeenCalledWith(
@@ -1864,9 +1882,11 @@ describe("App", () => {
         },
       ),
     );
+    expect(desktopMocks.startCodexExplanationTask).not.toHaveBeenCalled();
+    fireEvent.click(await screen.findByRole("button", { name: "确认发送并理解" }));
     await waitFor(() =>
       expect(desktopMocks.startCodexExplanationTask).toHaveBeenCalledWith(
-        explanationTask.id,
+        explanationTask.id, undefined, "b".repeat(64),
       ),
     );
     expect(
@@ -1929,10 +1949,12 @@ describe("App", () => {
     fireEvent.click(await screen.findByRole("button", { name: /继续播放/ }));
     fireEvent.click(await screen.findByRole("button", { name: "理解" }));
     fireEvent.click(await screen.findByRole("button", { name: /复制提示词/ }));
+    fireEvent.click(screen.getByRole("checkbox", { name: /允许发送.*关键帧/ }));
     fireEvent.click(
-      screen.getByRole("button", { name: "确认范围并理解当前场景" }),
+      screen.getByRole("button", { name: "准备理解材料" }),
     );
 
+    fireEvent.click(await screen.findByRole("button", { name: "确认准备交接" }));
     expect(
       await screen.findByText("复制文字并按提示附上关键帧"),
     ).toBeInTheDocument();
@@ -1954,7 +1976,7 @@ describe("App", () => {
       explanationTask.id,
     );
     fireEvent.click(screen.getByRole("button", { name: /手动选择 JSON/ }));
-    expect(await screen.findByText("explanation.json")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText("explanation.json")).toBeInTheDocument());
     fireEvent.click(screen.getByRole("button", { name: "检查并显示解释" }));
 
     await waitFor(() =>
@@ -1998,7 +2020,7 @@ describe("App", () => {
       screen.getByText("不包含完整视频、音频、本机媒体路径、数据库或凭证。"),
     ).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "确认范围并查询" }));
+    fireEvent.click(screen.getByRole("button", { name: "准备查询材料" }));
     await waitFor(() =>
       expect(desktopMocks.prepareLearningTask).toHaveBeenCalledWith(
         project.id,
@@ -2009,9 +2031,11 @@ describe("App", () => {
         500,
       ),
     );
+    expect(desktopMocks.startCodexLearningTask).not.toHaveBeenCalled();
+    fireEvent.click(await screen.findByRole("button", { name: "确认发送并查询" }));
     await waitFor(() =>
       expect(desktopMocks.startCodexLearningTask).toHaveBeenCalledWith(
-        learningTask.id,
+        learningTask.id, undefined, "b".repeat(64),
       ),
     );
     expect(
@@ -2033,13 +2057,18 @@ describe("App", () => {
       subtitleVersion,
       translatedVersion,
     ]);
-    desktopMocks.prepareLearningTask.mockResolvedValue({
+    const manualTask: LearningTask = {
       ...learningTask,
       handoffKind: "manual",
       status: "awaiting_external_result",
       stage: "awaiting_external_result",
       receiverLabel: "自行选择的工具",
-    });
+    };
+    desktopMocks.prepareLearningTask.mockResolvedValue(manualTask);
+    let finishPoll!: (value: LearningTask) => void;
+    desktopMocks.getLearningTask.mockReturnValue(new Promise<LearningTask>(resolve => { finishPoll = resolve; }));
+    let finishImport!: (value: unknown) => void;
+    desktopMocks.importLearningResult.mockReturnValue(new Promise(resolve => { finishImport = resolve; }));
     desktopMocks.chooseLearningResultFile.mockResolvedValue(
       "W:\\SiaoVPlay\\handoff\\learning.json",
     );
@@ -2049,8 +2078,9 @@ describe("App", () => {
     fireEvent.click(await screen.findByRole("button", { name: /继续播放/ }));
     fireEvent.click(await screen.findByRole("button", { name: "学习" }));
     fireEvent.click(await screen.findByRole("button", { name: /复制提示词/ }));
-    fireEvent.click(screen.getByRole("button", { name: "确认范围并查询" }));
+    fireEvent.click(screen.getByRole("button", { name: "准备查询材料" }));
 
+    fireEvent.click(await screen.findByRole("button", { name: "确认准备交接" }));
     expect(
       await screen.findByText("复制提示词后，可自动检测 result.json"),
     ).toBeInTheDocument();
@@ -2068,8 +2098,14 @@ describe("App", () => {
       ),
     );
     fireEvent.click(screen.getByRole("button", { name: /手动选择 JSON/ }));
-    expect(await screen.findByText("learning.json")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText("learning.json")).toBeInTheDocument());
+    await waitFor(() => expect(desktopMocks.getLearningTask).toHaveBeenCalled());
     fireEvent.click(screen.getByRole("button", { name: "检查并显示词义" }));
+    await act(async () => {
+      finishImport({ task: { ...manualTask, status: "completed", stage: "completed", progress: 1,
+        outputDictionaryEntryId: dictionaryEntry.id, completedAtMs: 1_785_354_350_000 }, dictionaryEntry });
+      finishPoll(manualTask);
+    });
 
     expect(
       await screen.findByText("结合当前台词，询问对方是否一直在等待。"),
@@ -2177,7 +2213,7 @@ describe("App", () => {
     fireEvent.click(await screen.findByRole("button", { name: /继续播放/ }));
     fireEvent.click(await screen.findByRole("button", { name: "学习" }));
 
-    expect(await screen.findByText("等待其他 Agent 返回")).toBeInTheDocument();
+    expect(await screen.findByText("等待其他 AI 工具返回")).toBeInTheDocument();
     expect(
       await screen.findByText("正在检查查询范围和结果", {}, { timeout: 3_000 }),
     ).toBeInTheDocument();
@@ -2220,16 +2256,32 @@ describe("App", () => {
     ).toBeInTheDocument();
   });
 
-  it("opens the local import dialog with Ctrl+O", async () => {
+  it("keeps learning input through automatic compatibility preparation", async () => {
+    const captionProject = { ...project, playbackState: { ...project.playbackState, positionMs: 500 } };
+    desktopMocks.markProjectOpened.mockResolvedValue(captionProject);
+    desktopMocks.listSubtitleVersions.mockResolvedValue([subtitleVersion, translatedVersion]);
     render(<App />);
-    await screen.findAllByText("雨站台");
-
-    fireEvent.keyDown(window, { key: "o", ctrlKey: true });
-
-    await waitFor(() =>
-      expect(desktopMocks.chooseLocalVideo).toHaveBeenCalled(),
-    );
+    fireEvent.click(await screen.findByRole("button", { name: /继续播放/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "学习" }));
+    const input = await screen.findByRole("textbox", { name: "要查询的原文" });
+    fireEvent.change(input, { target: { value: "未发送的修改" } });
+    const video = screen.getByLabelText("视频画面，单击播放或暂停");
+    desktopMocks.prepareProjectMedia.mockResolvedValue({ ...preparation, playbackPath: "W:/fixture-proxy.mp4", playbackSourceKind: "proxy" });
+    fireEvent.error(video);
+    await waitFor(() => expect(desktopMocks.prepareProjectMedia).toHaveBeenCalledWith(project.id, true, expect.any(String)));
+    await waitFor(() => expect(screen.getByLabelText("视频画面，单击播放或暂停")).not.toBe(video));
+    await waitFor(() => expect(screen.getByRole("textbox", { name: "要查询的原文" })).toHaveValue("未发送的修改"));
   });
+
+  it("opens the local import dialog with Ctrl+O", () => verifyLocalImportShortcut(desktopMocks.chooseLocalVideo));
+
+  it("does not reopen transcription preparation after leaving its playback session", () =>
+    verifyStaleTranscriptionPreparation(desktopMocks));
+
+  it("ignores successful transcription preparation from an abandoned session", () =>
+    verifyStaleTranscriptionPreparation(desktopMocks, readyLocalResourceStatus));
+  it("keeps dismissed transcription preparation closed in the same video", () => verifyStaleTranscriptionPreparation(desktopMocks, readyLocalResourceStatus, false));
+  it.each([false, true])("retains transcription choices after resource preparation (retry=%s)", failFirst => verifyTranscriptionChoicesResume(desktopMocks, readyLocalResourceStatus, failFirst));
 
   it("keeps Ctrl+O available in the player without bypassing a modal", async () => {
     render(<App />);
@@ -2252,7 +2304,7 @@ describe("App", () => {
 
   it("opens a local video passed by the desktop process", async () => {
     desktopMocks.getAppStatus.mockResolvedValue({
-      appName: "SiaoVPlay",
+      appName: "SiaoVPlay", interruptedTranscriptionCount: 0,
       version: "0.3.0",
       platform: "windows-desktop",
       dataDirectory: "W:\\SiaoVPlay\\app-data",
@@ -2263,42 +2315,24 @@ describe("App", () => {
     render(<App />);
 
     await waitFor(() =>
-      expect(desktopMocks.createLocalProject).toHaveBeenCalledWith(
+      expect(desktopMocks.openLocalProject).toHaveBeenCalledWith(
         project.mediaSource.locator,
       ),
     );
     expect(desktopMocks.prepareProjectMedia).toHaveBeenCalledWith(
       project.id,
-      false,
+      false, expect.any(String),
     );
   });
 
-  it("offers an optional save location without downloading on first setup", async () => {
-    desktopMocks.getLocalResourceStatus.mockResolvedValue(
-      setupRequiredLocalResourceStatus,
-    );
-
+  it("starts in the media library without requiring resource configuration", async () => {
+    desktopMocks.getLocalResourceStatus.mockResolvedValue(setupRequiredLocalResourceStatus);
     render(<App />);
-
-    const dialog = await screen.findByRole("dialog", {
-      name: "环境配置",
-    });
-    expect(within(dialog).getByRole("button", { name: "选择保存位置" })).toBeEnabled();
-    expect(within(dialog).getByText(/选择位置不会开始下载/)).toBeVisible();
+    await screen.findAllByText("雨站台");
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 30)); });
+    expect(screen.queryByRole("dialog", { name: "设置" })).not.toBeInTheDocument();
+    expect(await getAddMediaCommand(/打开本地视频/)).toBeEnabled();
     expect(desktopMocks.prepareLocalCapability).not.toHaveBeenCalled();
-    fireEvent.click(
-      within(dialog).getByRole("button", { name: /稍后配置/ }),
-    );
-
-    expect(
-      screen.queryByRole("dialog", { name: "环境配置" }),
-    ).toBeNull();
-    expect(
-      window.localStorage.getItem(
-        "siaovplay.local-resources.first-run-dismissed.v1",
-      ),
-    ).toBe("1");
-    expect(await screen.findAllByText("雨站台")).not.toHaveLength(0);
   });
 
   it("opens URL import directly even when optional import resources are not ready", async () => {
@@ -2327,65 +2361,18 @@ describe("App", () => {
     ).toBeInTheDocument();
     expect(screen.getByLabelText("视频 URL")).toBeVisible();
     expect(
-      screen.queryByRole("dialog", { name: "环境配置" }),
+      screen.queryByRole("dialog", { name: "设置" }),
     ).not.toBeInTheDocument();
     expect(desktopMocks.prepareLocalCapability).not.toHaveBeenCalled();
   });
 
-  it("resumes the selected local video after basic media support is ready", async () => {
-    const basicNotReady: LocalResourceStatus = {
-      ...readyLocalResourceStatus,
-      capabilities: readyLocalResourceStatus.capabilities.map((capability) => ({
-        ...capability,
-        state: "not_ready",
-        missingResourceIds: ["ffmpeg-cpu"],
-      })),
-    };
-    let currentResourceStatus = basicNotReady;
-    desktopMocks.getLocalResourceStatus.mockImplementation(
-      async () => currentResourceStatus,
-    );
-    desktopMocks.chooseLocalVideo.mockResolvedValue(project.mediaSource.locator);
-    desktopMocks.prepareLocalCapability.mockImplementation(
-      async (capabilityId, pendingActionId) => {
-        currentResourceStatus = readyLocalResourceStatus;
-        return {
-          capabilityId,
-          pendingActionId,
-          state: "preparing",
-          resourceIds: ["ffmpeg-cpu"],
-          readyResourceIds: [],
-          taskIds: ["00000000-0000-4000-8000-000000000021"],
-        };
-      },
-    );
+  it("resumes the selected local video after basic media support is ready", () =>
+    verifySelectedResourceResume({ desktopMocks, readyLocalResourceStatus, project, getAddMediaCommand }),
+  );
 
-    render(<App />);
-    await screen.findByText("本地功能按需准备");
-    fireEvent.click(await getAddMediaCommand(/打开本地视频/));
-
-    const resources = await screen.findByRole("dialog", {
-      name: "环境配置",
-    });
-    expect(resources).toHaveTextContent("继续打开本地视频");
-    expect(desktopMocks.createLocalProject).not.toHaveBeenCalled();
-    fireEvent.click(
-      within(resources).getByRole("button", { name: "开始准备所选功能" }),
-    );
-
-    await waitFor(() =>
-      expect(desktopMocks.prepareLocalCapability).toHaveBeenCalledWith(
-        "basic_media",
-        expect.any(String),
-      ),
-    );
-    await waitFor(() =>
-      expect(desktopMocks.prepareProjectMedia).toHaveBeenCalledWith(
-        project.id,
-        false,
-      ),
-    );
-  });
+  it("does not resume a dismissed media action when resources finish later", () =>
+    verifyDismissedResourceAction({ desktopMocks, readyLocalResourceStatus, project, getAddMediaCommand }),
+  );
 
   it("preflights and imports a public HTTPS media URL", async () => {
     render(<App />);
@@ -2416,7 +2403,7 @@ describe("App", () => {
     await waitFor(() =>
       expect(desktopMocks.prepareProjectMedia).toHaveBeenCalledWith(
         remoteProject.id,
-        false,
+        false, expect.any(String),
       ),
     );
   });
@@ -2457,6 +2444,7 @@ describe("App", () => {
     await waitFor(() =>
       expect(desktopMocks.inspectYouTubeUrl).toHaveBeenCalledWith(
         youtubePreview.originalUrl,
+        null,
       ),
     );
     expect(desktopMocks.importYouTubeUrl).not.toHaveBeenCalled();
@@ -2469,33 +2457,27 @@ describe("App", () => {
         youtubePreview.originalUrl,
         youtubePreview.previewToken,
         expect.any(String),
+        null,
       ),
     );
   });
 
-  it("states that deleting a project keeps the source video", async () => {
+  it.each([0, 1])("reports source preservation and pending cleanup (%s)", async (cleanupPending) => {
+    desktopMocks.deleteProject.mockImplementation(async () => {
+      cleanupMocks.getPendingProjectCleanup.mockResolvedValue(cleanupPending ? { projectId: project.id, pendingDirectories: cleanupPending } : null);
+      return { projectId: project.id, deleted: true, sourceMediaDeleted: false, cachedMediaDeleted: false, cleanupPending };
+    });
     libraryGatewayMocks.listLibrarySection.mockImplementation(async ({ section }) => ({
       items: section === "unclassified" ? [mediaSummaryFor()] : [],
       totalCount: section === "unclassified" ? 1 : 0,
       nextOffset: null,
     }));
     render(<App />);
-    fireEvent.click(await screen.findByRole("button", { name: "媒体库：未分类视频" }));
-    fireEvent.click(await screen.findByLabelText("雨站台 的更多操作"));
-    fireEvent.click(await screen.findByRole("menuitem", { name: "删除视频" }));
-
+    await confirmProjectDeletion(project.title, () => expect(desktopMocks.deleteProject).toHaveBeenCalledWith(project.id));
     expect(
-      await screen.findByRole("heading", { name: "删除这个本地项目？" }),
+      await screen.findByText(cleanupPending ? "项目已删除，部分文件尚未清理，可在媒体库重试。" : "项目已删除，源视频保持不变。"),
     ).toBeInTheDocument();
-    expect(screen.getByText("源视频不会被删除")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "删除项目" }));
-
-    await waitFor(() =>
-      expect(desktopMocks.deleteProject).toHaveBeenCalledWith(project.id),
-    );
-    expect(
-      await screen.findByText("项目已删除，源视频保持不变。"),
-    ).toBeInTheDocument();
+    if (cleanupPending) expect(await screen.findByRole("button", { name: "重试清理" })).toBeEnabled();
   });
 
   it("preflights and imports a local original subtitle", async () => {
@@ -2587,7 +2569,7 @@ describe("App", () => {
       target: { value: "de" },
     });
     fireEvent.click(
-      screen.getByRole("button", { name: "确认范围并开始翻译" }),
+      await screen.findByRole("button", { name: "准备翻译材料" }),
     );
 
     await waitFor(() =>
@@ -2600,44 +2582,8 @@ describe("App", () => {
     );
   });
 
-  it("refreshes player subtitles when generation finishes after the dialog closes", async () => {
-    const completedJob: TranscriptionJob = {
-      ...transcriptionJob,
-      status: "completed",
-      stage: "completed",
-      progress: 1,
-      subtitleVersionId: subtitleVersion.id,
-      completedAtMs: 1_785_354_220_000,
-    };
-    render(<App />);
-    fireEvent.click(await screen.findByRole("button", { name: /继续播放/ }));
-    fireEvent.click(await screen.findByRole("button", { name: "添加字幕" }));
-    fireEvent.click(screen.getByRole("tab", { name: "从视频生成" }));
-    fireEvent.change(await screen.findByLabelText(/视频原声语言/), {
-      target: { value: "ja" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "生成原文字幕" }));
-
-    await waitFor(() =>
-      expect(desktopMocks.startTranscription).toHaveBeenCalled(),
-    );
-    desktopMocks.getTranscriptionJob.mockResolvedValue(completedJob);
-    desktopMocks.listSubtitleVersions.mockResolvedValue([subtitleVersion]);
-
-    expect(screen.getAllByRole("button", { name: "关闭" })).toHaveLength(1);
-    fireEvent.click(screen.getByRole("button", { name: "关闭" }));
-
-    await waitFor(() =>
-      expect(desktopMocks.getTranscriptionJob).toHaveBeenCalledWith(
-        transcriptionJob.id,
-      ),
-    );
-    expect(
-      await screen.findByText("已生成 1 条原文字幕草稿，可以开始抽查。"),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "原文字幕 · 1" }),
-    ).toBeInTheDocument();
+  it.each(["completed", "failed", "interrupted", "wrong-task", "wrong-output"] as const)("handles background transcription outcome %s after closing its dialog", async outcome => {
+    await verifyBackgroundTranscription(outcome, { desktopMocks, project, subtitleVersion, transcriptionJob });
   });
 
   it("keeps tracking a transcription created after its dialog closes", async () => {
@@ -2778,14 +2724,14 @@ describe("App", () => {
     fireEvent.click(await screen.findByRole("button", { name: /继续播放/ }));
     fireEvent.click(await getOverflowCommand(/中文字幕/));
 
-    expect(await screen.findByText("将发送给本机 Codex")).toBeInTheDocument();
+    expect(await screen.findByText("准备发送给 OpenAI（通过 Codex）")).toBeInTheDocument();
     expect(
       screen.getByText(
         "不包含视频、音频、本机媒体路径、项目数据库、凭证或账号信息。",
       ),
     ).toBeInTheDocument();
-    expect(screen.getByText("本机已就绪")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "确认范围并开始翻译" }));
+    expect(screen.getByRole("button", { name: /本机 Codex.*通过 OpenAI/ })).toHaveClass("selected");
+    fireEvent.click(screen.getByRole("button", { name: "准备翻译材料" }));
 
     await waitFor(() =>
       expect(desktopMocks.prepareTranslationTask).toHaveBeenCalledWith(
@@ -2795,9 +2741,11 @@ describe("App", () => {
         "zh-cn",
       ),
     );
+    expect(desktopMocks.startCodexTranslationTask).not.toHaveBeenCalled();
+    fireEvent.click(await screen.findByRole("button", { name: "确认发送并翻译" }));
     await waitFor(() =>
       expect(desktopMocks.startCodexTranslationTask).toHaveBeenCalledWith(
-        translationTask.id,
+        translationTask.id, undefined, "c".repeat(64),
       ),
     );
     expect(await screen.findByText("正在启动本机 Codex")).toBeInTheDocument();
@@ -2825,9 +2773,10 @@ describe("App", () => {
     fireEvent.click(await screen.findByRole("button", { name: /继续播放/ }));
     fireEvent.click(await getOverflowCommand(/中文字幕/));
     fireEvent.click(
-      await screen.findByRole("button", { name: /复制任务提示词/ }),
+      await screen.findByRole("button", { name: /复制提示词.*自行选择其他工具/ }),
     );
     fireEvent.click(screen.getByRole("button", { name: "生成完整任务提示词" }));
+    fireEvent.click(await screen.findByRole("button", { name: "确认准备交接" }));
 
     expect(
       await screen.findByText("完整任务提示词已经生成"),
@@ -2849,10 +2798,10 @@ describe("App", () => {
       screen.getByRole("button", { name: /手动选择 JSON/ }),
     );
     expect(await screen.findByText("result.json")).toBeInTheDocument();
+    desktopMocks.listSubtitleVersions.mockResolvedValue([subtitleVersion, translatedVersion]);
     fireEvent.click(
       screen.getByRole("button", { name: "检查并生成简体中文字幕" }),
     );
-
     await waitFor(() =>
       expect(desktopMocks.importTranslationResult).toHaveBeenCalledWith(
         translationTask.id,
@@ -2863,6 +2812,7 @@ describe("App", () => {
     expect(
       screen.getByText("已生成 1 条草稿，当前视频可以切换为中文或双语字幕。"),
     ).toBeInTheDocument();
+    await verifyNewTranslationWhileWatching(subtitleVersion.segments[0].text, translatedVersion.segments[0].text);
   });
 
   it("shows a completed Chinese draft with source and translated samples", async () => {
@@ -2912,9 +2862,11 @@ describe("App", () => {
       ),
     ).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "重新开始本机翻译" }));
+    expect(desktopMocks.resumeCodexTranslationTask).not.toHaveBeenCalled();
+    fireEvent.click(await screen.findByRole("button", { name: "确认发送并翻译" }));
     await waitFor(() =>
       expect(desktopMocks.resumeCodexTranslationTask).toHaveBeenCalledWith(
-        translationTask.id,
+        translationTask.id, undefined, "c".repeat(64),
       ),
     );
   });
@@ -2980,7 +2932,7 @@ describe("App", () => {
     render(<App />);
     fireEvent.click(await screen.findByRole("button", { name: /继续播放/ }));
     fireEvent.click(await getOverflowCommand(/修正字幕/));
-    fireEvent.click(await screen.findByRole("button", { name: "全局替换" }));
+    fireEvent.click(await screen.findByRole("tab", { name: "全局替换" }));
     fireEvent.change(screen.getByRole("textbox", { name: "查找" }), {
       target: { value: "駅前" },
     });
@@ -3026,7 +2978,7 @@ describe("App", () => {
     render(<App />);
     fireEvent.click(await screen.findByRole("button", { name: /继续播放/ }));
     fireEvent.click(await getOverflowCommand(/修正字幕/));
-    fireEvent.click(await screen.findByRole("button", { name: "历史版本" }));
+    fireEvent.click(await screen.findByRole("tab", { name: "历史版本" }));
     fireEvent.click(
       await screen.findByRole("button", { name: "恢复为新版本" }),
     );
@@ -3097,7 +3049,7 @@ describe("App", () => {
       await screen.findByRole("heading", { name: "重新翻译选中字幕" }),
     ).toBeInTheDocument();
     expect(screen.getByText("只处理选中的 1 条原文字幕")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "确认范围并开始翻译" }));
+    fireEvent.click(screen.getByRole("button", { name: "准备翻译材料" }));
     await waitFor(() =>
       expect(desktopMocks.prepareTranslationTask).toHaveBeenCalledWith(
         project.id,
@@ -3109,3 +3061,63 @@ describe("App", () => {
     );
   });
 });
+
+it.each(["cancelled", "running"] as const)("retains explanation %s cancellation when an older poll resolves in the same batch", async (status) => {
+  const running = { ...explanationTask, status: "running" as const, stage: "running" };
+  desktopMocks.listSubtitleVersions.mockResolvedValue([subtitleVersion, translatedVersion]);
+  desktopMocks.listExplanationTasks.mockResolvedValue([running]);
+  let finishPoll!: (value: typeof running) => void;
+  let finishCancel!: (value: unknown) => void;
+  desktopMocks.getExplanationTask.mockImplementation(() => new Promise(resolve => { finishPoll = resolve; }));
+  desktopMocks.cancelExplanationTask.mockImplementation(() => new Promise(resolve => { finishCancel = resolve; }));
+  render(<App />);
+  fireEvent.click(await screen.findByRole("button", { name: /继续播放/ }));
+  fireEvent.click(await screen.findByRole("button", { name: "理解" }));
+  await waitFor(() => expect(finishPoll).toBeTypeOf("function"), { timeout: 2500 });
+  fireEvent.click(screen.getByRole("button", { name: /^取消$/ }));
+  await act(async () => {
+    finishCancel({ ...running, status, stage: status === "cancelled" ? "cancelled" : "cancelling" });
+    await Promise.resolve();
+    finishPoll(running);
+    await Promise.resolve();
+  });
+  expect(screen.getByText(status === "cancelled" ? "本次理解已取消" : "正在取消请求…")).toBeInTheDocument();
+});
+
+it.each(["cancelled", "running"] as const)("preserves burn %s cancellation and recent-job history against a batched stale poll", async (status) => {
+  desktopMocks.listSubtitleVersions.mockResolvedValue([subtitleVersion, translatedVersion]);
+  desktopMocks.listSubtitleBurnJobs.mockResolvedValue([burnJob]);
+  let finishPoll!: (value: SubtitleBurnJob) => void;
+  let finishCancel!: (value: SubtitleBurnJob) => void;
+  desktopMocks.getSubtitleBurnJob.mockImplementation(() => new Promise(resolve => { finishPoll = resolve; }));
+  desktopMocks.cancelSubtitleBurnJob.mockImplementation(() => new Promise(resolve => { finishCancel = resolve; }));
+  render(<App />);
+  fireEvent.click(await screen.findByRole("button", { name: /继续播放/ }));
+  const exportButton = screen.queryByRole("button", { name: /导出字幕与视频/ });
+  if (exportButton) fireEvent.click(exportButton);
+  else {
+    fireEvent.click(await screen.findByRole("button", { name: /^更多$/ }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /导出字幕与视频/ }));
+  }
+  await waitFor(() => expect(finishPoll).toBeTypeOf("function"), { timeout: 2000 });
+  fireEvent.click(screen.getByRole("button", { name: "取消烧录" }));
+  await act(async () => {
+    finishCancel({ ...burnJob, status, stage: status === "cancelled" ? "cancelled" : "cancelling" });
+    await Promise.resolve();
+    finishPoll(burnJob);
+    await Promise.resolve();
+  });
+  if (status === "running") {
+    expect(screen.getByRole("heading", { name: "正在取消烧录" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "正在取消…" })).toBeDisabled();
+    const previous = finishPoll;
+    await waitFor(() => expect(finishPoll).not.toBe(previous), { timeout: 2000 });
+    await act(async () => finishPoll({ ...burnJob, status: "cancelled", stage: "cancelled" }));
+  }
+  expect(screen.getByRole("heading", { name: "任务已取消" })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "继续导出" }));
+  fireEvent.click(screen.getByRole("button", { name: /最近一次烧录/ }));
+  expect(screen.getByRole("heading", { name: "任务已取消" })).toBeInTheDocument();
+});
+
+it("shows a rejected application startup status without opening a startup path", () => verifyRejectedStartupStatus(desktopMocks));

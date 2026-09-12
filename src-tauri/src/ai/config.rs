@@ -45,6 +45,7 @@ impl Default for AiSettingsFile {
 
 pub struct AiServiceStore {
     path: PathBuf,
+    storage: Option<crate::storage::StorageManager>,
     credentials: Arc<dyn CredentialStore>,
     mutation_lock: Mutex<()>,
 }
@@ -53,9 +54,15 @@ impl AiServiceStore {
     pub fn new(path: PathBuf, credentials: Arc<dyn CredentialStore>) -> Self {
         Self {
             path,
+            storage: None,
             credentials,
             mutation_lock: Mutex::new(()),
         }
+    }
+
+    pub(crate) fn with_storage(mut self, storage: crate::storage::StorageManager) -> Self {
+        self.storage = Some(storage);
+        self
     }
 
     fn load(&self) -> Result<AiSettingsFile, AiError> {
@@ -89,6 +96,8 @@ impl AiServiceStore {
     }
 
     pub fn save(&self, input: SaveAiServiceInput) -> Result<AiServiceSettings, AiError> {
+        let _usage = self.storage.as_ref().map(|storage| storage.acquire_usage()).transpose()
+            .map_err(|_| AiError::Validation("存储目录正在迁移或等待重启，暂时无法保存设置；迁移完成后请重启应用".into()))?;
         let _guard = self
             .mutation_lock
             .lock()
@@ -128,6 +137,8 @@ impl AiServiceStore {
     }
 
     pub fn delete(&self, input: DeleteAiServiceInput) -> Result<AiServiceSettings, AiError> {
+        let _usage = self.storage.as_ref().map(|storage| storage.acquire_usage()).transpose()
+            .map_err(|_| AiError::Validation("存储目录正在迁移或等待重启，暂时无法保存设置；迁移完成后请重启应用".into()))?;
         let _guard = self
             .mutation_lock
             .lock()
@@ -162,6 +173,8 @@ impl AiServiceStore {
         &self,
         input: SetDefaultAiServiceInput,
     ) -> Result<AiServiceSettings, AiError> {
+        let _usage = self.storage.as_ref().map(|storage| storage.acquire_usage()).transpose()
+            .map_err(|_| AiError::Validation("存储目录正在迁移或等待重启，暂时无法保存设置；迁移完成后请重启应用".into()))?;
         let _guard = self
             .mutation_lock
             .lock()
@@ -198,6 +211,8 @@ impl AiServiceStore {
         service_id: &str,
         model_id: Option<&str>,
     ) -> Result<(), AiError> {
+        let _usage = self.storage.as_ref().map(|storage| storage.acquire_usage()).transpose()
+            .map_err(|_| AiError::Validation("存储目录正在迁移或等待重启，暂时无法保存设置；迁移完成后请重启应用".into()))?;
         let _guard = self
             .mutation_lock
             .lock()
@@ -353,11 +368,11 @@ fn restore_secret(credentials: &dyn CredentialStore, id: &str, secret: Option<&s
     };
 }
 
-pub fn initialize(data_directory: &Path) -> Result<(), AiError> {
+pub fn initialize(data_directory: &Path, storage: crate::storage::StorageManager) -> Result<(), AiError> {
     let store = AiServiceStore::new(
         data_directory.join(SETTINGS_FILE_NAME),
         Arc::new(WindowsCredentialStore),
-    );
+    ).with_storage(storage);
     let _ = store.snapshot()?;
     STORE
         .set(store)
@@ -366,6 +381,13 @@ pub fn initialize(data_directory: &Path) -> Result<(), AiError> {
 
 pub fn store() -> Result<&'static AiServiceStore, AiError> {
     STORE.get().ok_or(AiError::NotInitialized)
+}
+
+#[cfg(test)]
+pub(crate) fn initialize_with_memory_credentials(data_directory: &Path) {
+    let store = AiServiceStore::new(data_directory.join(SETTINGS_FILE_NAME),
+        Arc::new(super::credentials::tests_support::MemoryCredentialStore::default()));
+    assert!(STORE.set(store).is_ok(), "test service store must be isolated");
 }
 
 #[cfg(test)]

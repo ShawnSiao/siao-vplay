@@ -1,0 +1,407 @@
+{
+  "$defs": {
+    "AiProtocol": {
+      "enum": [
+        "openai_responses",
+        "anthropic_messages",
+        "gemini_generate_content",
+        "openai_chat_completions"
+      ],
+      "type": "string"
+    },
+    "AiProviderCatalog": {
+      "properties": {
+        "providers": {
+          "items": {
+            "$ref": "#/$defs/AiProviderCatalogEntry"
+          },
+          "type": "array"
+        },
+        "schemaVersion": {
+          "format": "uint32",
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "providers"
+      ],
+      "type": "object"
+    },
+    "AiProviderCatalogEntry": {
+      "properties": {
+        "displayName": {
+          "type": "string"
+        },
+        "documentationUrl": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "id": {
+          "$ref": "#/$defs/AiProviderId"
+        },
+        "modelsPath": {
+          "type": "string"
+        },
+        "officialBaseUrl": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "protocol": {
+          "$ref": "#/$defs/AiProtocol"
+        },
+        "supportsModelDiscovery": {
+          "type": "boolean"
+        },
+        "visionModelPrefixes": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "displayName",
+        "protocol",
+        "officialBaseUrl",
+        "modelsPath",
+        "documentationUrl",
+        "supportsModelDiscovery",
+        "visionModelPrefixes"
+      ],
+      "type": "object"
+    },
+    "AiProviderId": {
+      "enum": [
+        "openai",
+        "anthropic",
+        "gemini",
+        "deepseek",
+        "kimi",
+        "glm",
+        "custom"
+      ],
+      "type": "string"
+    },
+    "AiServiceCapabilities": {
+      "properties": {
+        "learning": {
+          "type": "boolean"
+        },
+        "understanding": {
+          "type": "boolean"
+        },
+        "vision": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "understanding",
+        "learning",
+        "vision"
+      ],
+      "type": "object"
+    },
+    "AiServiceSummary": {
+      "properties": {
+        "baseUrl": {
+          "type": "string"
+        },
+        "capabilities": {
+          "$ref": "#/$defs/AiServiceCapabilities"
+        },
+        "connectionState": {
+          "$ref": "#/$defs/ConnectionState"
+        },
+        "credentialState": {
+          "$ref": "#/$defs/CredentialState"
+        },
+        "displayName": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "isDefault": {
+          "type": "boolean"
+        },
+        "modelId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "protocol": {
+          "$ref": "#/$defs/AiProtocol"
+        },
+        "providerId": {
+          "$ref": "#/$defs/AiProviderId"
+        },
+        "revision": {
+          "format": "uint64",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "providerId",
+        "displayName",
+        "protocol",
+        "baseUrl",
+        "modelId",
+        "credentialState",
+        "connectionState",
+        "capabilities",
+        "isDefault",
+        "revision"
+      ],
+      "type": "object"
+    },
+    "ConnectionState": {
+      "enum": [
+        "untested",
+        "ready",
+        "error"
+      ],
+      "type": "string"
+    },
+    "CredentialState": {
+      "enum": [
+        "missing",
+        "stored"
+      ],
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "examples": [
+    {
+      "defaultServiceId": null,
+      "providerCatalog": {
+        "providers": [
+          {
+            "displayName": "OpenAI",
+            "documentationUrl": "https://platform.openai.com/docs/quickstart",
+            "id": "openai",
+            "modelsPath": "/models",
+            "officialBaseUrl": "https://api.openai.com/v1",
+            "protocol": "openai_responses",
+            "supportsModelDiscovery": true,
+            "visionModelPrefixes": []
+          },
+          {
+            "displayName": "Anthropic",
+            "documentationUrl": "https://platform.claude.com/docs/en/api/messages/create",
+            "id": "anthropic",
+            "modelsPath": "/v1/models",
+            "officialBaseUrl": "https://api.anthropic.com",
+            "protocol": "anthropic_messages",
+            "supportsModelDiscovery": true,
+            "visionModelPrefixes": []
+          },
+          {
+            "displayName": "Gemini",
+            "documentationUrl": "https://ai.google.dev/api/generate-content",
+            "id": "gemini",
+            "modelsPath": "/models",
+            "officialBaseUrl": "https://generativelanguage.googleapis.com/v1beta",
+            "protocol": "gemini_generate_content",
+            "supportsModelDiscovery": true,
+            "visionModelPrefixes": []
+          },
+          {
+            "displayName": "DeepSeek",
+            "documentationUrl": "https://api-docs.deepseek.com/api/create-chat-completion",
+            "id": "deepseek",
+            "modelsPath": "/models",
+            "officialBaseUrl": "https://api.deepseek.com",
+            "protocol": "openai_chat_completions",
+            "supportsModelDiscovery": true,
+            "visionModelPrefixes": []
+          },
+          {
+            "displayName": "Kimi",
+            "documentationUrl": "https://platform.kimi.ai/docs/api/overview",
+            "id": "kimi",
+            "modelsPath": "/models",
+            "officialBaseUrl": "https://api.moonshot.ai/v1",
+            "protocol": "openai_chat_completions",
+            "supportsModelDiscovery": true,
+            "visionModelPrefixes": []
+          },
+          {
+            "displayName": "GLM",
+            "documentationUrl": "https://docs.bigmodel.cn/cn/guide/develop/openai/introduction",
+            "id": "glm",
+            "modelsPath": "/models",
+            "officialBaseUrl": "https://open.bigmodel.cn/api/paas/v4",
+            "protocol": "openai_chat_completions",
+            "supportsModelDiscovery": true,
+            "visionModelPrefixes": []
+          },
+          {
+            "displayName": "其他兼容服务",
+            "documentationUrl": null,
+            "id": "custom",
+            "modelsPath": "/models",
+            "officialBaseUrl": null,
+            "protocol": "openai_chat_completions",
+            "supportsModelDiscovery": true,
+            "visionModelPrefixes": []
+          }
+        ],
+        "schemaVersion": 1
+      },
+      "revision": 0,
+      "schemaVersion": 1,
+      "services": []
+    },
+    {
+      "defaultServiceId": "service",
+      "providerCatalog": {
+        "providers": [
+          {
+            "displayName": "OpenAI",
+            "documentationUrl": "https://platform.openai.com/docs/quickstart",
+            "id": "openai",
+            "modelsPath": "/models",
+            "officialBaseUrl": "https://api.openai.com/v1",
+            "protocol": "openai_responses",
+            "supportsModelDiscovery": true,
+            "visionModelPrefixes": []
+          },
+          {
+            "displayName": "Anthropic",
+            "documentationUrl": "https://platform.claude.com/docs/en/api/messages/create",
+            "id": "anthropic",
+            "modelsPath": "/v1/models",
+            "officialBaseUrl": "https://api.anthropic.com",
+            "protocol": "anthropic_messages",
+            "supportsModelDiscovery": true,
+            "visionModelPrefixes": []
+          },
+          {
+            "displayName": "Gemini",
+            "documentationUrl": "https://ai.google.dev/api/generate-content",
+            "id": "gemini",
+            "modelsPath": "/models",
+            "officialBaseUrl": "https://generativelanguage.googleapis.com/v1beta",
+            "protocol": "gemini_generate_content",
+            "supportsModelDiscovery": true,
+            "visionModelPrefixes": []
+          },
+          {
+            "displayName": "DeepSeek",
+            "documentationUrl": "https://api-docs.deepseek.com/api/create-chat-completion",
+            "id": "deepseek",
+            "modelsPath": "/models",
+            "officialBaseUrl": "https://api.deepseek.com",
+            "protocol": "openai_chat_completions",
+            "supportsModelDiscovery": true,
+            "visionModelPrefixes": []
+          },
+          {
+            "displayName": "Kimi",
+            "documentationUrl": "https://platform.kimi.ai/docs/api/overview",
+            "id": "kimi",
+            "modelsPath": "/models",
+            "officialBaseUrl": "https://api.moonshot.ai/v1",
+            "protocol": "openai_chat_completions",
+            "supportsModelDiscovery": true,
+            "visionModelPrefixes": []
+          },
+          {
+            "displayName": "GLM",
+            "documentationUrl": "https://docs.bigmodel.cn/cn/guide/develop/openai/introduction",
+            "id": "glm",
+            "modelsPath": "/models",
+            "officialBaseUrl": "https://open.bigmodel.cn/api/paas/v4",
+            "protocol": "openai_chat_completions",
+            "supportsModelDiscovery": true,
+            "visionModelPrefixes": []
+          },
+          {
+            "displayName": "其他兼容服务",
+            "documentationUrl": null,
+            "id": "custom",
+            "modelsPath": "/models",
+            "officialBaseUrl": null,
+            "protocol": "openai_chat_completions",
+            "supportsModelDiscovery": true,
+            "visionModelPrefixes": []
+          }
+        ],
+        "schemaVersion": 1
+      },
+      "revision": 7,
+      "schemaVersion": 1,
+      "services": [
+        {
+          "baseUrl": "https://example.invalid/v1",
+          "capabilities": {
+            "learning": true,
+            "understanding": true,
+            "vision": false
+          },
+          "connectionState": "ready",
+          "credentialState": "stored",
+          "displayName": "Test",
+          "id": "service",
+          "isDefault": true,
+          "modelId": "model",
+          "protocol": "openai_responses",
+          "providerId": "openai",
+          "revision": 7
+        }
+      ]
+    }
+  ],
+  "properties": {
+    "defaultServiceId": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "providerCatalog": {
+      "$ref": "#/$defs/AiProviderCatalog"
+    },
+    "revision": {
+      "format": "uint64",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "schemaVersion": {
+      "format": "uint32",
+      "maximum": 4294967295,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "services": {
+      "items": {
+        "$ref": "#/$defs/AiServiceSummary"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "revision",
+    "providerCatalog",
+    "services",
+    "defaultServiceId"
+  ],
+  "title": "AiServiceSettings",
+  "type": "object"
+}

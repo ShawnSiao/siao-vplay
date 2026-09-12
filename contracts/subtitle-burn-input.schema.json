@@ -1,0 +1,75 @@
+{
+  "$defs": {
+    "SubtitleBurnMode": {
+      "enum": [
+        "translation",
+        "bilingual"
+      ],
+      "type": "string"
+    },
+    "SubtitleBurnStyle": {
+      "properties": {
+        "positionY": {
+          "format": "double",
+          "maximum": 1,
+          "minimum": 0,
+          "type": "number"
+        },
+        "textSize": {
+          "$ref": "#/$defs/SubtitleBurnTextSize"
+        }
+      },
+      "required": [
+        "textSize",
+        "positionY"
+      ],
+      "type": "object"
+    },
+    "SubtitleBurnTextSize": {
+      "enum": [
+        "small",
+        "medium",
+        "large"
+      ],
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "confirmVersionSelection": {
+      "type": "boolean"
+    },
+    "destinationDirectory": {
+      "type": "string"
+    },
+    "mode": {
+      "$ref": "#/$defs/SubtitleBurnMode"
+    },
+    "projectId": {
+      "type": "string"
+    },
+    "sourceVersionId": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "style": {
+      "$ref": "#/$defs/SubtitleBurnStyle"
+    },
+    "translationVersionId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "projectId",
+    "mode",
+    "sourceVersionId",
+    "translationVersionId",
+    "destinationDirectory",
+    "style",
+    "confirmVersionSelection"
+  ],
+  "title": "StartSubtitleBurnInput",
+  "type": "object"
+}

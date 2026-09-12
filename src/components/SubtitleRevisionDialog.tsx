@@ -1,26 +1,8 @@
-import { useState } from "react";
-
-import {
-  commandError,
-  restoreSubtitleVersion,
-  reviseSubtitleVersion,
-} from "../lib/desktop";
-import type { Project, SubtitleSegment, SubtitleVersion } from "../types";
+import type { SubtitleSegment } from "../types";
 import { Dialog } from "./Dialog";
-
-type RevisionMode = "segments" | "replace" | "offset" | "history";
-type TrackRole = "original" | "translation";
-
-type SubtitleRevisionDialogProps = {
-  project: Project;
-  versions: SubtitleVersion[];
-  onClose: () => void;
-  onVersionCreated: (
-    version: SubtitleVersion,
-    message: string,
-  ) => Promise<void>;
-  onRetranslate: (segmentIds: string[]) => void;
-};
+import { SubtitleHistoryPager } from "../features/subtitle-revision/SubtitleHistoryPager";
+import { useTabNavigation } from "./useTabNavigation";
+import { useSubtitleRevisionController, type SubtitleRevisionDialogProps } from "../features/subtitle-revision/useSubtitleRevisionController";
 
 const issueOptions = [
   ["none", "没有问题"],
@@ -56,264 +38,32 @@ function issueLabel(issueKind: SubtitleSegment["issueKind"]): string | null {
   return null;
 }
 
-function segmentNearPlayback(
-  version: SubtitleVersion | null,
-  positionMs: number,
-): SubtitleSegment | null {
-  if (!version) {
-    return null;
-  }
-  return (
-    version.segments.find(
-      (segment) =>
-        segment.startMs <= positionMs && segment.endMs >= positionMs,
-    ) ??
-    version.segments[0] ??
-    null
-  );
-}
-
-export function SubtitleRevisionDialog({
-  project,
-  versions,
-  onClose,
-  onVersionCreated,
-  onRetranslate,
-}: SubtitleRevisionDialogProps) {
-  const currentOriginal =
-    versions.find((version) => version.role === "original" && version.isCurrent) ??
-    null;
-  const currentTranslation =
-    versions.find(
-      (version) => version.role === "translation" && version.isCurrent,
-    ) ?? null;
-  const initialRole: TrackRole = currentTranslation
-    ? "translation"
-    : "original";
-  const initialVersion =
-    initialRole === "translation" ? currentTranslation : currentOriginal;
-  const initialSegment = segmentNearPlayback(
-    initialVersion,
-    project.playbackState.positionMs,
-  );
-  const [role, setRole] = useState<TrackRole>(initialRole);
-  const [mode, setMode] = useState<RevisionMode>("segments");
-  const [activeSegmentId, setActiveSegmentId] = useState<string | null>(
-    initialSegment?.id ?? null,
-  );
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [search, setSearch] = useState("");
-  const [text, setText] = useState(initialSegment?.text ?? "");
-  const [issueKind, setIssueKind] = useState<
-    "none" | "missing" | "duplicate" | "incorrect"
-  >(initialSegment?.issueKind ?? "none");
-  const [findText, setFindText] = useState("");
-  const [replaceText, setReplaceText] = useState("");
-  const [offsetSeconds, setOffsetSeconds] = useState("0.0");
-  const [busy, setBusy] = useState(false);
-  const [notice, setNotice] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  const currentVersion =
-    role === "original" ? currentOriginal : currentTranslation;
-  const activeSegment =
-    currentVersion?.segments.find(
-      (segment) => segment.id === activeSegmentId,
-    ) ?? null;
-  const query = search.trim().toLocaleLowerCase();
-  const filteredSegments = currentVersion
-    ? query
-      ? currentVersion.segments.filter(
-          (segment) =>
-            segment.text.toLocaleLowerCase().includes(query) ||
-            String(segment.ordinal).includes(query),
-        )
-      : currentVersion.segments
-    : [];
-  const history = currentVersion
-    ? versions
-        .filter(
-          (version) =>
-            version.trackId === currentVersion.trackId &&
-            version.id !== currentVersion.id,
-        )
-        .sort((left, right) => right.versionNumber - left.versionNumber)
-    : [];
-
-  const changeRole = (nextRole: TrackRole) => {
-    if (nextRole === "translation" && !currentTranslation) {
-      return;
-    }
-    const nextVersion =
-      nextRole === "original" ? currentOriginal : currentTranslation;
-    const nextSegment = segmentNearPlayback(
-      nextVersion,
-      project.playbackState.positionMs,
-    );
-    setRole(nextRole);
-    setMode("segments");
-    setActiveSegmentId(nextSegment?.id ?? null);
-    setText(nextSegment?.text ?? "");
-    setIssueKind(nextSegment?.issueKind ?? "none");
-    setSelectedIds(new Set());
-    setSearch("");
+export function SubtitleRevisionDialog(props: SubtitleRevisionDialogProps) {
+  const { onRetranslate } = props;
+  const { requestClose, dirty, role, mode, activeSegmentId, selectedIds, search, text, issueKind, findText, replaceText, offsetSeconds, busy, notice, error, currentOriginal, currentTranslation, currentVersion, filteredSegments, history, activeSegment, changeRole, setMode, setSearch, setNotice, setError, toggleSelected, selectSegment, saveSegment, replaceAcrossTrack, shiftTrack, restoreHistory, setText, setIssueKind, setFindText, setReplaceText, setOffsetSeconds } = useSubtitleRevisionController(props);
+  const tabs = useTabNavigation(role, changeRole);
+  const modeTabs = useTabNavigation(mode, (value) => {
+    setMode(value);
     setNotice(null);
     setError(null);
-  };
-
-  const applyRevision = async (
-    segmentEdits: Parameters<typeof reviseSubtitleVersion>[3],
-    replacement: Parameters<typeof reviseSubtitleVersion>[4],
-    offsetMs: number,
-    message: string,
-  ) => {
-    if (!currentVersion) {
-      return;
-    }
-    setBusy(true);
-    setError(null);
-    setNotice(null);
-    try {
-      const version = await reviseSubtitleVersion(
-        project.id,
-        currentVersion.id,
-        project.revision,
-        segmentEdits,
-        replacement,
-        offsetMs,
-      );
-      await onVersionCreated(version, message);
-      onClose();
-    } catch (cause) {
-      setError(commandError(cause).message);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const saveSegment = async () => {
-    if (!activeSegment) {
-      return;
-    }
-    const nextText = text.trim();
-    if (!nextText) {
-      setError("字幕文本不能为空。");
-      return;
-    }
-    if (
-      nextText === activeSegment.text &&
-      issueKind === (activeSegment.issueKind ?? "none")
-    ) {
-      setError("当前字幕没有需要保存的变化。");
-      return;
-    }
-    await applyRevision(
-      [
-        {
-          segmentId: activeSegment.id,
-          text: nextText,
-          issueKind,
-        },
-      ],
-      null,
-      0,
-      `已保存${role === "original" ? "原文" : "中文"}字幕修正。`,
-    );
-  };
-
-  const replaceAcrossTrack = async () => {
-    if (!findText.trim()) {
-      setError("请输入要查找的人名、称谓或专有名词。");
-      return;
-    }
-    await applyRevision(
-      [],
-      { findText: findText.trim(), replaceText },
-      0,
-      `已完成${role === "original" ? "原文" : "中文"}字幕全局替换。`,
-    );
-  };
-
-  const shiftTrack = async () => {
-    const value = Number(offsetSeconds);
-    if (!Number.isFinite(value) || value === 0) {
-      setError("请输入不为 0 的有效秒数，例如 0.5 或 -0.8。");
-      return;
-    }
-    const offsetMs = Math.round(value * 1_000);
-    await applyRevision(
-      [],
-      null,
-      offsetMs,
-      `字幕轨已整体${offsetMs > 0 ? "延后" : "提前"} ${Math.abs(value)} 秒。`,
-    );
-  };
-
-  const restoreHistory = async (restoreVersion: SubtitleVersion) => {
-    if (!currentVersion) {
-      return;
-    }
-    setBusy(true);
-    setError(null);
-    setNotice(null);
-    try {
-      const version = await restoreSubtitleVersion(
-        project.id,
-        currentVersion.id,
-        restoreVersion.id,
-        project.revision,
-      );
-      await onVersionCreated(
-        version,
-        `已从版本 ${restoreVersion.versionNumber} 创建恢复版本。`,
-      );
-      onClose();
-    } catch (cause) {
-      setError(commandError(cause).message);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const toggleSelected = (segmentId: string) => {
-    setSelectedIds((current) => {
-      const next = new Set(current);
-      if (next.has(segmentId)) {
-        next.delete(segmentId);
-      } else {
-        next.add(segmentId);
-      }
-      return next;
-    });
-  };
-
-  const selectSegment = (segment: SubtitleSegment) => {
-    setActiveSegmentId(segment.id);
-    setText(segment.text);
-    setIssueKind(segment.issueKind ?? "none");
-    setNotice(null);
-    setError(null);
-  };
-
+  });
   return (
     <Dialog
       title="轻量字幕修正"
       eyebrow="每次保存都创建新版本 · 不进入剪辑时间轴"
-      onClose={busy ? () => undefined : onClose}
+      onClose={requestClose}
       actions={
-        <button className="button quiet" type="button" onClick={onClose}>
+        <button className="button quiet" type="button" disabled={busy} onClick={requestClose}>
           返回观看
         </button>
       }
     >
-      <div className="revision-workspace">
-        <div className="revision-track-switch" role="tablist" aria-label="字幕轨">
+      <fieldset className={`revision-workspace${mode === "history" && props.historyPagination ? " revision-workspace-paged-history" : ""}`} disabled={busy} style={{ border: 0, margin: 0, padding: 0, minWidth: 0 }}>
+        {dirty ? <p role="status">有未保存的修改；切句或切轨会保留草稿。</p> : null}
+        <div className="revision-track-switch" {...tabs.listProps} aria-label="字幕轨">
           <button
             className={role === "original" ? "active" : ""}
-            type="button"
-            role="tab"
-            aria-selected={role === "original"}
-            onClick={() => changeRole("original")}
+            {...tabs.tabProps("original")}
           >
             原文字幕
             <small>
@@ -324,11 +74,8 @@ export function SubtitleRevisionDialog({
           </button>
           <button
             className={role === "translation" ? "active" : ""}
-            type="button"
-            role="tab"
-            aria-selected={role === "translation"}
             disabled={!currentTranslation}
-            onClick={() => changeRole("translation")}
+            {...tabs.tabProps("translation")}
           >
             简体中文
             <small>
@@ -339,7 +86,8 @@ export function SubtitleRevisionDialog({
           </button>
         </div>
 
-        <nav className="revision-mode-tabs" aria-label="修正方式">
+        <div {...tabs.panelProps} className="revision-track-panel">
+        <div className="revision-mode-tabs" {...modeTabs.listProps} aria-label="修正方式">
           {(
             [
               ["segments", "逐句修正"],
@@ -350,19 +98,15 @@ export function SubtitleRevisionDialog({
           ).map(([value, label]) => (
             <button
               className={mode === value ? "active" : ""}
-              type="button"
               key={value}
-              onClick={() => {
-                setMode(value);
-                setNotice(null);
-                setError(null);
-              }}
+              {...modeTabs.tabProps(value)}
             >
               {label}
             </button>
           ))}
-        </nav>
+        </div>
 
+        <div {...modeTabs.panelProps} className="revision-mode-panel">
         {!currentVersion ? (
           <div className="translation-empty">
             <span className="translation-empty-mark">字</span>
@@ -427,7 +171,7 @@ export function SubtitleRevisionDialog({
                     disabled={
                       selectedIds.size === 0 || !currentTranslation || busy
                     }
-                    onClick={() => onRetranslate([...selectedIds])}
+                    onClick={() => { if (requestClose()) onRetranslate([...selectedIds]); }}
                   >
                     重新翻译选中字幕
                   </button>
@@ -576,7 +320,7 @@ export function SubtitleRevisionDialog({
                       <span>版本 {version.versionNumber}</span>
                       <strong>{version.sourceLabel}</strong>
                       <small>
-                        {version.segments.length} 条 ·{" "}
+                        {version.segmentCount} 条 ·{" "}
                         {new Date(version.createdAtMs).toLocaleString("zh-CN")}
                       </small>
                     </div>
@@ -592,11 +336,13 @@ export function SubtitleRevisionDialog({
                 ))}
               </div>
             ) : (
-              <p className="revision-empty-copy">当前字幕轨还没有历史版本。</p>
+              <p className="revision-empty-copy">{props.historyPagination ? "本页没有当前字幕轨的历史版本。" : "当前字幕轨还没有历史版本。"}</p>
             )}
+            <SubtitleHistoryPager page={props.historyPagination} />
           </section>
         )}
 
+        </div>
         {notice ? (
           <p className="translation-inline-notice" role="status">
             {notice}
@@ -604,11 +350,12 @@ export function SubtitleRevisionDialog({
         ) : null}
         {error ? (
           <div className="notice danger translation-error" role="alert">
-            <strong>字幕修正没有保存</strong>
+            <strong>字幕修正提示</strong>
             <p>{error}</p>
           </div>
         ) : null}
-      </div>
+        </div>
+      </fieldset>
     </Dialog>
   );
 }

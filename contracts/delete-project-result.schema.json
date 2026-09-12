@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "cachedMediaDeleted": {
+      "type": "boolean"
+    },
+    "cleanupPending": {
+      "format": "uint64",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "deleted": {
+      "type": "boolean"
+    },
+    "projectId": {
+      "type": "string"
+    },
+    "sourceMediaDeleted": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "projectId",
+    "deleted",
+    "sourceMediaDeleted",
+    "cachedMediaDeleted",
+    "cleanupPending"
+  ],
+  "title": "DeleteProjectResult",
+  "type": "object"
+}

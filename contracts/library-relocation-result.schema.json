@@ -1,0 +1,81 @@
+{
+  "$defs": {
+    "LibraryRootStatus": {
+      "enum": [
+        "linked",
+        "orphaned",
+        "ambiguous"
+      ],
+      "type": "string"
+    },
+    "LibraryRootSummary": {
+      "properties": {
+        "availability": {
+          "$ref": "#/$defs/RootAvailability"
+        },
+        "displayName": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "itemCount": {
+          "format": "int64",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "lastScannedAtMs": {
+          "format": "int64",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "path": {
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/LibraryRootStatus"
+        }
+      },
+      "required": [
+        "id",
+        "path",
+        "displayName",
+        "availability",
+        "status",
+        "lastScannedAtMs",
+        "itemCount"
+      ],
+      "type": "object"
+    },
+    "RootAvailability": {
+      "enum": [
+        "available",
+        "offline"
+      ],
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "root": {
+      "$ref": "#/$defs/LibraryRootSummary"
+    },
+    "updatedItemCount": {
+      "format": "uint64",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "root",
+    "updatedItemCount"
+  ],
+  "title": "LibraryRootRelocationResult",
+  "type": "object"
+}

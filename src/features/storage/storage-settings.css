@@ -62,3 +62,6 @@
   .storage-root-summary { padding-block: 10px; }
   .storage-settings-row { min-height: 60px; }
 }
+
+.storage-settings-recovery { place-content: center; gap: 12px; padding: 24px; }
+.storage-settings-recovery .storage-error { margin: 0; overflow-wrap: anywhere; }

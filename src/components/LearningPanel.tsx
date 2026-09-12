@@ -1,6 +1,14 @@
+import { useCodexDetection } from "../features/ai-tasks/useCodexDetection";
+import { CodexDetectionNotice } from "../features/ai-tasks/CodexDetectionNotice";
+import { useLearningPolling } from "../features/learning/useLearningPolling";
+import { findLearningHistory } from "../features/learning/learningHistory";
+import { requireLearningResult } from "../lib/learningResult";
+import { AiTaskDispatchConfirm } from "../features/ai-tasks/AiTaskDispatchConfirm";
+import { executeLearningDispatch, previewTaskDispatch, type TaskDispatchPreview } from "../features/ai-tasks/taskDispatch";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import "../features/learning/learning-speech.css";
+import "../features/learning/learning-context.css";
 
 import {
   cancelLearningTask,
@@ -20,11 +28,8 @@ import {
   openExternalResultDirectory,
   prepareLearningTask,
   readLearningPrompt,
-  resumeCodexLearningTask,
-  startCodexLearningTask,
 } from "../lib/desktop";
 import type {
-  CodexRuntimeStatus,
   DictionaryEntry,
   LearningCard,
   LearningTask,
@@ -32,10 +37,8 @@ import type {
   SubtitleVersion,
 } from "../types";
 import { AiTaskExecutionSetup } from "../features/ai-tasks/AiTaskExecutionSetup";
-import { resumeLearningTask, startLearningTask } from "../features/ai-tasks/gateway";
+import { prepareAiLearningTask } from "../features/ai-tasks/gateway";
 import {
-  authorizationForTask,
-  executionForTask,
   useAiExecutionChoice,
 } from "../features/ai-tasks/useAiExecutionChoice";
 import { LearningCardsSection } from "../features/learning/LearningCardsSection";
@@ -43,8 +46,13 @@ import { LearningResultSection } from "../features/learning/LearningResultSectio
 import { LearningSelectionSection } from "../features/learning/LearningSelectionSection";
 import { selectionKind, splitForSelection } from "../features/learning/learningSelection";
 import { useLocalSpeech } from "../features/learning/useLocalSpeech";
+import { loadLearningDraft, writeLearningDraft, discardLearningDraft } from "../features/learning/learningDraft";
+import { readLearningContextReference } from "../features/learning/learningTaskContext";
+import { useLearningTaskContext } from "../features/learning/useLearningTaskContext";
+import { useLearningContext } from "../features/learning/learningContext";
 
 type LearningPanelProps = {
+  visible?: boolean;
   projectId: string;
   playbackPositionMs: number;
   sourceVersion: SubtitleVersion | null;
@@ -66,8 +74,10 @@ const activeStatuses = new Set([
 ]);
 
 function statusCopy(task: LearningTask): string {
+  if (task.stage === "cancelling") return "正在取消请求…";
+  if (task.status === "completed") return "结果已生成，可以重新读取";
   if (task.status === "queued") {
-    return "已准备好，等待本机开始";
+    return "材料已准备好，请查看发送清单";
   }
   if (task.status === "running") {
     return "正在查询这句台词里的用法";
@@ -88,20 +98,36 @@ function fileName(path: string): string {
   return path.split(/[\\/]/).filter(Boolean).at(-1) ?? "result.json";
 }
 
-export function LearningPanel({
+export function LearningPanel(props: LearningPanelProps) {
+  return <LearningPanelSession key={props.projectId} {...props} />;
+}
+
+function LearningPanelSession({
+  visible = true,
   projectId,
-  playbackPositionMs,
-  sourceVersion,
-  translationVersion,
-  sourceSegment,
-  translationSegment,
+  playbackPositionMs: livePositionMs,
+  sourceVersion: liveSourceVersion,
+  translationVersion: liveTranslationVersion,
+  sourceSegment: liveSourceSegment,
+  translationSegment: liveTranslationSegment,
   onPrepareSubtitles,
   onClose,
   embedded = false,
   onJump,
   onPausePlayback,
 }: LearningPanelProps) {
+  const [savedDraft, setSavedDraft] = useState(() => loadLearningDraft(projectId));
+  const [bootstrapAttempt, setBootstrapAttempt] = useState(0);
+  const [bootstrapFailed, setBootstrapFailed] = useState(false);
+  const [draftSaveError, setDraftSaveError] = useState<string | null>(null);
+  const learningContext = useLearningContext({ projectId, playbackPositionMs: livePositionMs,
+    sourceVersion: liveSourceVersion, translationVersion: liveTranslationVersion,
+    sourceSegment: liveSourceSegment, translationSegment: liveTranslationSegment });
+  const { playbackPositionMs, sourceVersion, translationVersion, sourceSegment, translationSegment } = learningContext.context;
+  const [initialContext] = useState(learningContext.context);
+  const restoreLearningContext = learningContext.restoreContext;
   const handledCompletionRef = useRef<string | null>(null);
+  const [resultReadAttempt, setResultReadAttempt] = useState(0);
   const selectableParts = useMemo(
     () =>
       splitForSelection(
@@ -110,10 +136,16 @@ export function LearningPanel({
       ),
     [sourceSegment?.text, sourceVersion?.languageCode],
   );
-  const [selectedText, setSelectedText] = useState(sourceSegment?.text ?? "");
-  const executionChoice = useAiExecutionChoice(false);
-  const [runtime, setRuntime] = useState<CodexRuntimeStatus | null>(null);
+  const [selectedText, setSelectedText] = useState(savedDraft.draft?.selectedText ?? sourceSegment?.text ?? "");
+  const executionChoice = useAiExecutionChoice(false, savedDraft.draft?.execution);
+  const codexDetection = useCodexDetection(getCodexRuntimeStatus);
+  const { runtime } = codexDetection;
   const [task, setTask] = useState<LearningTask | null>(null);
+  const recovery = useLearningTaskContext(task, learningContext.context, (context, text) => {
+    learningContext.restoreContext(context);
+    setSelectedText(text);
+  });
+  const [dispatch, setDispatch] = useState<TaskDispatchPreview | null>(null);
   const [entry, setEntry] = useState<DictionaryEntry | null>(null);
   const [entries, setEntries] = useState<DictionaryEntry[]>([]);
   const [cards, setCards] = useState<LearningCard[]>([]);
@@ -128,6 +160,10 @@ export function LearningPanel({
     language: sourceVersion?.languageCode ?? "und",
     onBeforeSpeak: onPausePlayback,
   });
+  const stopSpeech = speech.stop;
+  useEffect(() => {
+    if (!visible) stopSpeech();
+  }, [visible, stopSpeech]);
 
   const kind = selectionKind(
     selectedText,
@@ -141,38 +177,35 @@ export function LearningPanel({
   useEffect(() => {
     let active = true;
     void Promise.all([
-      getCodexRuntimeStatus(),
       listLearningTasks(projectId),
       listDictionaryEntries(projectId),
       listLearningCards(projectId),
     ])
-      .then(([nextRuntime, tasks, nextEntries, nextCards]) => {
+      .then(async ([tasks, nextEntries, nextCards]) => {
         if (!active) {
           return;
         }
-        setRuntime(nextRuntime);
         setEntries(nextEntries);
         setCards(nextCards);
-        const activeTask = tasks.find((item) =>
-          activeStatuses.has(item.status),
-        );
-        if (activeTask) {
+        const activeTask = tasks.find((item) => activeStatuses.has(item.status))
+          ?? (tasks[0] && ["failed", "interrupted"].includes(tasks[0].status) ? tasks[0] : null);
+        if (savedDraft.error) throw new Error(savedDraft.error);
+        if (activeTask && (activeStatuses.has(activeTask.status) || !savedDraft.draft || savedDraft.draft.taskId === activeTask.id)) {
           setTask(activeTask);
-          setSelectedText(activeTask.selectedText);
+        } else if (savedDraft.draft) {
+          const restored = await readLearningContextReference(savedDraft.draft, initialContext);
+          if (!active) return;
+          restoreLearningContext(restored);
+          setSelectedText(savedDraft.draft.selectedText);
+          setEntry(findLearningHistory(nextEntries, restored, savedDraft.draft.selectedText));
         } else {
-          setEntry(
-            nextEntries.find(
-              (item) =>
-                sourceSegment !== null &&
-                item.sourceSegmentId === sourceSegment.id &&
-                item.selectedText === sourceSegment.text,
-            ) ?? null,
-          );
+          setEntry(findLearningHistory(nextEntries, initialContext, initialContext.sourceSegment?.text ?? ""));
         }
       })
       .catch((cause: unknown) => {
         if (active) {
           setError(commandError(cause).message);
+          setBootstrapFailed(true);
         }
       })
       .finally(() => {
@@ -183,7 +216,7 @@ export function LearningPanel({
     return () => {
       active = false;
     };
-  }, [projectId, sourceSegment]);
+  }, [projectId, initialContext, savedDraft, bootstrapAttempt, restoreLearningContext]);
 
   useEffect(() => {
     if (
@@ -211,34 +244,9 @@ export function LearningPanel({
     };
   }, [prompt, task]);
 
-  useEffect(() => {
-    if (
-      !task ||
-      !["awaiting_external_result", "running", "validating"].includes(
-        task.status,
-      )
-    ) {
-      return;
-    }
-    let active = true;
-    const timer = window.setInterval(() => {
-      void getLearningTask(task.id)
-        .then((nextTask) => {
-          if (active) {
-            setTask(nextTask);
-          }
-        })
-        .catch((cause: unknown) => {
-          if (active) {
-            setError(commandError(cause).message);
-          }
-        });
-    }, 800);
-    return () => {
-      active = false;
-      window.clearInterval(timer);
-    };
-  }, [task]);
+  useLearningPolling({ projectId, task, read: getLearningTask,
+    onTask: next => setTask(current => current?.id === next.id && current.projectId === next.projectId && activeStatuses.has(current.status) ? next : current),
+    onError: cause => setError(commandError(cause).message) });
 
   useEffect(() => {
     if (
@@ -249,9 +257,13 @@ export function LearningPanel({
     ) {
       return;
     }
-    handledCompletionRef.current = task.id;
+    let active = true;
     void getDictionaryEntry(task.outputDictionaryEntryId)
       .then((value) => {
+        if (!active) return;
+        requireLearningResult(value, task);
+        handledCompletionRef.current = task.id;
+        setError(null);
         setEntry(value);
         setEntries((current) => [
           value,
@@ -259,20 +271,31 @@ export function LearningPanel({
         ]);
       })
       .catch((cause: unknown) => {
+        if (!active) return;
         setError(commandError(cause).message);
       });
-  }, [task]);
+    return () => { active = false; };
+  }, [task, resultReadAttempt]);
+
+  useEffect(() => {
+    if (loading || bootstrapFailed || recovery.blocked || executionChoice.loading) return;
+    let active = true;
+    try {
+      writeLearningDraft(learningContext.context, selectedText, task?.id ?? null, {
+        kind: executionChoice.kind, serviceId: executionChoice.serviceId, modelId: executionChoice.modelId,
+      });
+      queueMicrotask(() => { if (active) setDraftSaveError(null); });
+    } catch (cause) { queueMicrotask(() => { if (active) setDraftSaveError(commandError(cause).message); }); }
+    return () => { active = false; };
+  }, [loading, bootstrapFailed, recovery.blocked, executionChoice.loading, executionChoice.kind,
+    executionChoice.serviceId, executionChoice.modelId, learningContext.context, selectedText, task?.id]);
 
   const selectText = (value: string) => {
+    if (operation || (task && activeStatuses.has(task.status))) return;
     setSelectedText(value);
     setTask(null);
-    setEntry(
-      entries.find(
-        (item) =>
-          item.sourceSegmentId === sourceSegment?.id &&
-          item.selectedText === value,
-      ) ?? null,
-    );
+    setDispatch(null);
+    setEntry(findLearningHistory(entries, learningContext.context, value));
     setPrompt(null);
     setPromptExpanded(false);
     setResultPath(null);
@@ -281,7 +304,7 @@ export function LearningPanel({
   };
 
   const prepare = async () => {
-    if (!sourceSegment || !selectionValid) {
+    if (recovery.blocked || !sourceSegment || !selectionValid) {
       return;
     }
     setOperation("prepare");
@@ -291,25 +314,19 @@ export function LearningPanel({
       const normalized = selectedText.trim();
       const choice = executionChoice.kind === "api" ? await executionChoice.preview() : null;
       const kind = selectionKind(normalized, sourceSegment.text, selectableParts);
-      const prepared = choice ? await startLearningTask({
+      const prepared = choice ? await prepareAiLearningTask({
         projectId, sourceSegmentId: sourceSegment.id, selectedText: normalized,
         selectionKind: kind, playbackPositionMs, execution: choice.execution, authorization: choice.authorization,
       }) : await prepareLearningTask(projectId, executionChoice.kind === "manual" ? "manual" : "codex", sourceSegment.id, normalized, kind, playbackPositionMs);
       setTask(prepared);
       setEntry(null);
-      if (executionChoice.kind === "codex") {
-        setTask(await startCodexLearningTask(prepared.id));
-      } else if (executionChoice.kind === "manual") {
-        setPrompt(await readLearningPrompt(prepared.id));
-        setPromptExpanded(true);
-      }
+      setDispatch(await previewTaskDispatch("learning", prepared.id));
     } catch (cause) {
       setError(commandError(cause).message);
       const tasks = await listLearningTasks(projectId).catch(() => []);
       const activeTask = tasks.find((item) => activeStatuses.has(item.status));
       if (activeTask) {
         setTask(activeTask);
-        setSelectedText(activeTask.selectedText);
       }
     } finally {
       setOperation(null);
@@ -324,6 +341,7 @@ export function LearningPanel({
     setError(null);
     try {
       setTask(await cancelLearningTask(task.id));
+      setDispatch(null);
     } catch (cause) {
       setError(commandError(cause).message);
     } finally {
@@ -338,9 +356,25 @@ export function LearningPanel({
     setOperation("resume");
     setError(null);
     try {
-      setTask(task.handoffKind === "api" ? await resumeLearningTask(
-        task.id, executionForTask(task.execution, task.handoffKind), authorizationForTask(task.execution, false),
-      ) : await resumeCodexLearningTask(task.id));
+      setDispatch(await previewTaskDispatch("learning", task.id));
+    } catch (cause) {
+      setError(commandError(cause).message);
+    } finally {
+      setOperation(null);
+    }
+  };
+
+  const confirmDispatch = async () => {
+    if (recovery.blocked || !task || !dispatch) return;
+    setOperation("dispatch");
+    setError(null);
+    try {
+      setTask(await executeLearningDispatch(task, dispatch));
+      if (dispatch.execution.kind === "manual") {
+        setPrompt(await readLearningPrompt(task.id));
+        setPromptExpanded(true);
+      }
+      setDispatch(null);
     } catch (cause) {
       setError(commandError(cause).message);
     } finally {
@@ -399,6 +433,8 @@ export function LearningPanel({
     setError(null);
     try {
       const application = await importLearningResult(task.id, resultPath);
+      requireLearningResult(application.dictionaryEntry, task);
+      if (application.task.id !== task.id) throw new Error("返回的学习任务不匹配。");
       handledCompletionRef.current = task.id;
       setTask(application.task);
       setEntry(application.dictionaryEntry);
@@ -474,6 +510,7 @@ export function LearningPanel({
   const resetQuery = () => {
     handledCompletionRef.current = null;
     setTask(null);
+    setDispatch(null);
     setEntry(null);
     setPrompt(null);
     setPromptExpanded(false);
@@ -484,10 +521,10 @@ export function LearningPanel({
 
   const busy = operation !== null;
   const running =
-    task && ["queued", "running", "validating"].includes(task.status);
+    task && ["running", "validating"].includes(task.status);
   const canResume = Boolean(
     task && task.handoffKind !== "manual" &&
-    ["failed", "cancelled", "interrupted"].includes(task.status),
+    ["queued", "failed", "cancelled", "interrupted"].includes(task.status),
   );
   const savedEntry = entry
     ? cards.some((card) => card.dictionaryEntryId === entry.id)
@@ -497,6 +534,9 @@ export function LearningPanel({
 
   return (
     <PanelElement
+      hidden={!visible}
+      inert={!visible}
+      style={!visible ? { display: "none" } : undefined}
       className={`learning-panel ${embedded ? "embedded" : ""}`}
       aria-label="语言学习"
     >
@@ -519,6 +559,21 @@ export function LearningPanel({
       </header> : null}
 
       <div className="learning-scroll">
+        <CodexDetectionNotice {...codexDetection} />
+        {learningContext.changed && liveSourceVersion && liveSourceSegment ? (
+          <div className="learning-context-notice">
+            <span>{sourceSegment ? "已保留正在学习的台词。" : "当前已有可学习的台词。"}</span>
+            <button className="button quiet small" type="button" disabled={loading || busy || Boolean(task && activeStatuses.has(task.status))}
+              onClick={() => {
+                if (selectedText !== (sourceSegment?.text ?? "") && !window.confirm("更换台词会放弃当前未发送的输入，是否继续？")) return;
+                speech.stop();
+                resetQuery();
+                setSelectedText(liveSourceSegment.text);
+                learningContext.selectCurrent();
+              }}>学习当前台词</button>
+          </div>
+        ) : null}
+        {draftSaveError ? <p role="alert">当前窗口无法暂存学习输入，关闭或重新准备播放前请复制保留。{draftSaveError}</p> : null}
         {error ? (
           <div className="learning-error" role="alert">
             {error}
@@ -529,6 +584,26 @@ export function LearningPanel({
           <div className="learning-loading" role="status">
             <span className="spinner"></span>
             <span>正在读取学习记录</span>
+          </div>
+        ) : bootstrapFailed ? (
+          <div className="learning-empty">
+            <button className="button quiet small" type="button" onClick={() => { setLoading(true); setBootstrapFailed(false); setError(null); setBootstrapAttempt((value) => value + 1); }}>重新读取学习记录</button>
+            {savedDraft.draft || savedDraft.error ? <button className="button quiet small" type="button" onClick={() => {
+              if (!window.confirm("放弃当前窗口保存的学习草稿，改为学习当前台词？")) return;
+              try { discardLearningDraft(projectId); setLoading(true); setBootstrapFailed(false); setError(null); setSavedDraft({ draft: null, error: null }); setSelectedText(liveSourceSegment?.text ?? ""); }
+              catch (cause) { setError(commandError(cause).message); }
+            }}>放弃无法恢复的草稿</button> : null}
+          </div>
+        ) : recovery.blocked ? (
+          <div className="learning-empty">
+            <p role={recovery.error ? "alert" : "status"}>{recovery.error ?? "正在恢复查询使用的字幕和播放范围"}</p>
+            {recovery.error ? <button className="button quiet small" type="button" onClick={recovery.retry}>重新读取学习上下文</button> : null}
+            {task && !activeStatuses.has(task.status) && liveSourceSegment ? <button className="button quiet small" type="button" disabled={busy} onClick={() => {
+              resetQuery();
+              setSelectedText(liveSourceSegment.text);
+              learningContext.selectCurrent();
+            }}>放下本次查询，学习当前台词</button> : null}
+            {task && activeStatuses.has(task.status) ? <button className="button quiet small" type="button" disabled={busy} onClick={() => void cancel()}>取消本次查询</button> : null}
           </div>
         ) : !sourceVersion ? (
           <div className="learning-empty">
@@ -550,6 +625,7 @@ export function LearningPanel({
         ) : (
           <>
             <LearningSelectionSection
+              disabled={busy || Boolean(task && activeStatuses.has(task.status))}
               playbackPositionMs={playbackPositionMs}
               sourceVersion={sourceVersion}
               sourceSegment={sourceSegment}
@@ -580,7 +656,7 @@ export function LearningPanel({
                   allowFrames={false}
                   translationAvailable={Boolean(translationVersion && translationSegment)}
                   taskLabel="学习辅助"
-                  actionLabel="确认范围并查询"
+                  actionLabel="准备查询材料"
                   operationLabel="正在准备…"
                   buttonClassName="learning-primary"
                   busy={operation === "prepare"}
@@ -588,10 +664,12 @@ export function LearningPanel({
                   onStart={() => void prepare()}
                 />
               </section>
+            ) : dispatch ? (
+              <AiTaskDispatchConfirm preview={dispatch} busy={busy} onConfirm={() => void confirmDispatch()} onBack={() => setDispatch(null)} />
             ) : task.status === "awaiting_external_result" ? (
               <section className="learning-manual">
                 <div className="learning-task-heading">
-                  <span>等待其他 Agent 返回</span>
+                  <span>等待其他 AI 工具返回</span>
                   <strong>复制提示词后，可自动检测 result.json</strong>
                   <p>SiaoVPlay 不会自动发送材料，只检查受控返回目录。</p>
                 </div>
@@ -712,6 +790,9 @@ export function LearningPanel({
               <section className="learning-recovery">
                 <strong>{statusCopy(task)}</strong>
                 {task.errorMessage ? <p>{task.errorMessage}</p> : null}
+            {task.status === "completed" ? <button className="button primary" type="button" onClick={() => setResultReadAttempt((value) => value + 1)}>
+              重新读取结果
+            </button> : null}
                 {canResume ? (
                   <button
                     className="button primary learning-primary"
@@ -719,13 +800,16 @@ export function LearningPanel({
                     disabled={busy}
                     onClick={() => void resume()}
                   >
-                    {operation === "resume" ? "正在重新开始…" : "重新开始"}
+                    {operation === "resume" ? "正在重新开始…" : task.status === "queued" ? "查看发送清单" : "重新开始"}
                   </button>
                 ) : null}
+                {task.status === "queued" ? <button className="button quiet" type="button" disabled={busy} onClick={() => void cancel()}>
+                  取消本次准备
+                </button> : null}
                 <button
                   className="button quiet learning-primary"
                   type="button"
-                  disabled={busy}
+                  disabled={busy || task.status === "queued"}
                   onClick={resetQuery}
                 >
                   新建查询

@@ -1,0 +1,2 @@
+tools/third-party-licenses/*.txt text eol=lf
+src-tauri/resources/third-party-notices/*.txt text eol=lf

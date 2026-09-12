@@ -1,0 +1,61 @@
+{
+  "$defs": {
+    "CleanupInterruption": {
+      "properties": {
+        "itemId": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "message": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "remainingItemIds": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array"
+        }
+      },
+      "required": [
+        "itemId",
+        "message",
+        "remainingItemIds"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "interruption": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/CleanupInterruption"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "reclaimedBytes": {
+      "format": "uint64",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "removedResourceIds": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "removedResourceIds",
+    "reclaimedBytes",
+    "interruption"
+  ],
+  "title": "UnusedResourceCleanupResult",
+  "type": "object"
+}

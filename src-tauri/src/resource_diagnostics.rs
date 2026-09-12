@@ -1,5 +1,10 @@
+mod summary;
+#[cfg(test)]
+mod isolation_tests;
+mod maintenance;
+pub use maintenance::{rollback_resource, cleanup_old_versions};
+
 use std::{
-    fs,
     path::{Path, PathBuf},
     sync::OnceLock,
 };
@@ -9,7 +14,6 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 use url::Url;
-use uuid::Uuid;
 
 use crate::{
     local_resources::{self, LocalResourceError, ResourceDefinition, ResourceReceipt},
@@ -60,7 +64,10 @@ impl ResourceDiagnosticsError {
 
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct LocalResourceDiagnostics {
+    pub maintenance: local_resources::ResourceMaintenanceDiagnostics,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub generated_at_ms: i64,
     pub catalog_source: String,
     pub remote_catalog_enabled: bool,
@@ -74,7 +81,11 @@ pub struct LocalResourceDiagnostics {
 
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct ResourceDiagnosticItem {
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
+    pub unverified_receipt_count: usize,
+    pub versions_readable: bool,
     pub id: String,
     pub catalog_version: String,
     pub active_version: Option<String>,
@@ -89,26 +100,33 @@ pub struct ResourceDiagnosticItem {
 
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct ResourceVersionDiagnostic {
     pub version: String,
     pub active: bool,
     pub install_path: String,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub file_count: usize,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub installed_bytes: u64,
     pub manifest_sha256: String,
     pub health_status: String,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub activated_at_ms: Option<i64>,
     pub entrypoints_available: bool,
 }
 
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct ResourceTaskDiagnostic {
     pub id: String,
     pub resource_id: String,
     pub version: String,
     pub state: String,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub downloaded_bytes: u64,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub total_bytes: u64,
     pub error_code: Option<String>,
     pub error_message: Option<String>,
@@ -124,6 +142,7 @@ pub struct RollbackLocalResourceInput {
 
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct ResourceRollbackResult {
     pub resource_id: String,
     pub previous_version: String,
@@ -133,31 +152,41 @@ pub struct ResourceRollbackResult {
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CleanupOldResourceVersionsInput {
+    pub plan_fingerprint: String,
     pub confirmed: bool,
 }
 
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct OldResourceVersionCandidate {
     pub resource_id: String,
     pub version: String,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub reclaimable_bytes: u64,
 }
 
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct OldResourceVersionCleanupPlan {
+    #[cfg_attr(test, schemars(regex(pattern = "^[a-f0-9]{64}$")))]
+    pub plan_fingerprint: String,
     pub candidates: Vec<OldResourceVersionCandidate>,
     pub protected_versions: Vec<String>,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub reclaimable_bytes: u64,
     pub confirmation_required: bool,
 }
 
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct OldResourceVersionCleanupResult {
     pub removed_versions: Vec<String>,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub reclaimed_bytes: u64,
+    pub interruption: Option<crate::cleanup_batch::CleanupInterruption>,
 }
 
 pub fn diagnostics() -> Result<LocalResourceDiagnostics, ResourceDiagnosticsError> {
@@ -172,12 +201,12 @@ pub fn diagnostics() -> Result<LocalResourceDiagnostics, ResourceDiagnosticsErro
             .as_ref()
             .and_then(|configuration| configuration.active_resources.get(&resource.id))
             .cloned();
-        let receipts = local_resources::installed_receipts(&resource.id)?;
-        let versions = receipts
-            .iter()
-            .map(|receipt| version_diagnostic(root.as_deref(), receipt, active_version.as_deref()))
-            .collect::<Result<Vec<_>, _>>()?;
-        let state = if active_version.is_none() {
+        let inspected = inspect_versions(&resource.id, root.as_deref(), active_version.as_deref());
+        let versions_readable = inspected.is_ok();
+        let (versions, unverified_receipt_count) = inspected.unwrap_or_default();
+        let state = if !versions_readable {
+            "repair_required"
+        } else if active_version.is_none() {
             "not_installed"
         } else if local_resources::resource_update_available(&resource.id)? {
             "update_available"
@@ -187,6 +216,8 @@ pub fn diagnostics() -> Result<LocalResourceDiagnostics, ResourceDiagnosticsErro
             "repair_required"
         };
         resources.push(ResourceDiagnosticItem {
+            unverified_receipt_count,
+            versions_readable,
             id: resource.id.clone(),
             catalog_version: resource.version.clone(),
             active_version,
@@ -222,6 +253,7 @@ pub fn diagnostics() -> Result<LocalResourceDiagnostics, ResourceDiagnosticsErro
         })
         .collect();
     Ok(LocalResourceDiagnostics {
+        maintenance: local_resources::maintenance_diagnostics()?,
         generated_at_ms: now_ms(),
         catalog_source: CATALOG_SOURCE.to_owned(),
         remote_catalog_enabled: REMOTE_CATALOG_ENABLED,
@@ -240,105 +272,31 @@ pub fn diagnostics() -> Result<LocalResourceDiagnostics, ResourceDiagnosticsErro
     })
 }
 
+fn inspect_versions(resource_id: &str, root: Option<&Path>, active: Option<&str>) -> Result<(Vec<ResourceVersionDiagnostic>, usize), ResourceDiagnosticsError> {
+    if root.is_some_and(|path| !path.is_dir()) {
+        return Err(LocalResourceError::RootUnavailable("资源目录不可访问".into()).into());
+    }
+    let inventory = local_resources::receipt_inventory(resource_id)?;
+    let versions = inventory.receipts.iter().map(|receipt| version_diagnostic(root, receipt, active))
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok((versions, inventory.unverified_count))
+}
+
 pub fn diagnostic_summary() -> Result<String, ResourceDiagnosticsError> {
-    let diagnostics = diagnostics()?;
-    let mut lines = vec![
-        "SiaoVPlay 本地资源诊断摘要".to_owned(),
-        format!("生成时间：{}", diagnostics.generated_at_ms),
-        format!(
-            "目录清单：{}；远程目录：{}；签名策略：{}",
-            diagnostics.catalog_source,
-            if diagnostics.remote_catalog_enabled {
-                "启用"
-            } else {
-                "未启用"
-            },
-            diagnostics.remote_signature_policy
-        ),
-        format!("资源位置状态：{}", diagnostics.root_state),
-        format!("字幕识别方式：{}", diagnostics.preferred_profile),
-    ];
-    for resource in diagnostics.resources {
-        lines.push(format!(
-            "资源 {}：状态 {}；当前版本 {}；目录版本 {}；已安装版本 {}",
-            resource.id,
-            resource.state,
-            resource.active_version.as_deref().unwrap_or("无"),
-            resource.catalog_version,
-            resource.versions.len()
-        ));
-    }
-    for task in diagnostics.tasks {
-        if let Some(message) = task.error_message {
-            lines.push(format!(
-                "任务 {} {}：{} {}",
-                task.resource_id,
-                task.state,
-                task.error_code.as_deref().unwrap_or("未分类"),
-                message
-            ));
-        }
-    }
-    Ok(lines.join("\n"))
+    summary::render(diagnostics()?)
 }
 
 pub fn third_party_notices() -> &'static str {
     THIRD_PARTY_NOTICES
 }
 
-pub fn rollback_resource(
-    input: RollbackLocalResourceInput,
-) -> Result<ResourceRollbackResult, ResourceDiagnosticsError> {
-    if !input.confirmed {
-        return Err(ResourceDiagnosticsError::ConfirmationRequired);
-    }
-    if resource_download::list_tasks()?.iter().any(|task| {
-        task.resource_id == input.resource_id
-            && matches!(
-                task.state,
-                crate::resource_download::ResourceDownloadTaskState::Queued
-                    | crate::resource_download::ResourceDownloadTaskState::Downloading
-                    | crate::resource_download::ResourceDownloadTaskState::Verifying
-                    | crate::resource_download::ResourceDownloadTaskState::Installing
-            )
-    }) {
-        return Err(ResourceDiagnosticsError::Busy(input.resource_id));
-    }
-    let configuration = local_resources::configuration_snapshot()
-        .ok_or(LocalResourceError::ConfirmationRequired)?;
-    let previous_version = configuration
-        .active_resources
-        .get(&input.resource_id)
-        .cloned()
-        .ok_or_else(|| {
-            ResourceDiagnosticsError::VersionNotFound(
-                input.resource_id.clone(),
-                input.version.clone(),
-            )
-        })?;
-    let receipt = local_resources::installed_receipts(&input.resource_id)?
-        .into_iter()
-        .find(|receipt| receipt.version == input.version)
-        .ok_or_else(|| {
-            ResourceDiagnosticsError::VersionNotFound(
-                input.resource_id.clone(),
-                input.version.clone(),
-            )
-        })?;
-    verify_historic_receipt(&configuration.resource_root, &receipt)?;
-    local_resources::activate_resource(receipt)?;
-    Ok(ResourceRollbackResult {
-        resource_id: input.resource_id,
-        previous_version,
-        active_version: input.version,
-    })
-}
 
 pub fn plan_old_version_cleanup() -> Result<OldResourceVersionCleanupPlan, ResourceDiagnosticsError>
 {
     let configuration = local_resources::configuration_snapshot()
         .ok_or(LocalResourceError::ConfirmationRequired)?;
     let mut candidates = Vec::new();
+    let mut reviewed_receipts = Vec::new();
     let mut protected_versions = Vec::new();
     for resource in &local_resources::catalog()?.resources {
         let active = configuration.active_resources.get(&resource.id);
@@ -346,6 +304,7 @@ pub fn plan_old_version_cleanup() -> Result<OldResourceVersionCleanupPlan, Resou
         let (cleanup, protected) = select_cleanup_versions(&resource.id, &receipts, active, 1);
         candidates.extend(cleanup);
         protected_versions.extend(protected);
+        reviewed_receipts.extend(receipts);
     }
     candidates.sort_by(|left, right| {
         left.resource_id
@@ -357,78 +316,20 @@ pub fn plan_old_version_cleanup() -> Result<OldResourceVersionCleanupPlan, Resou
     let reclaimable_bytes = candidates.iter().fold(0_u64, |total, candidate| {
         total.saturating_add(candidate.reclaimable_bytes)
     });
-    Ok(OldResourceVersionCleanupPlan {
+    let mut plan = OldResourceVersionCleanupPlan {
+        plan_fingerprint: String::new(),
         candidates,
         protected_versions,
         reclaimable_bytes,
         confirmation_required: true,
-    })
-}
-
-pub fn cleanup_old_versions(
-    input: CleanupOldResourceVersionsInput,
-) -> Result<OldResourceVersionCleanupResult, ResourceDiagnosticsError> {
-    if !input.confirmed {
-        return Err(ResourceDiagnosticsError::ConfirmationRequired);
-    }
-    if resource_download::has_active_tasks()? {
+    };
+    if local_resources::configuration_snapshot().as_ref() != Some(&configuration) {
         return Err(ResourceDiagnosticsError::Busy("all".to_owned()));
     }
-    let configuration = local_resources::configuration_snapshot()
-        .ok_or(LocalResourceError::ConfirmationRequired)?;
-    let root = PathBuf::from(&configuration.resource_root);
-    let plan = plan_old_version_cleanup()?;
-    let mut removed_versions = Vec::new();
-    let mut reclaimed_bytes = 0_u64;
-    for candidate in plan.candidates {
-        if configuration
-            .active_resources
-            .get(&candidate.resource_id)
-            .is_some_and(|active| active == &candidate.version)
-        {
-            return Err(ResourceDiagnosticsError::ActiveVersionProtected(
-                candidate.resource_id,
-                candidate.version,
-            ));
-        }
-        let receipt = local_resources::installed_receipts(&candidate.resource_id)?
-            .into_iter()
-            .find(|receipt| receipt.version == candidate.version)
-            .ok_or_else(|| {
-                ResourceDiagnosticsError::VersionNotFound(
-                    candidate.resource_id.clone(),
-                    candidate.version.clone(),
-                )
-            })?;
-        let install = resource_download::join_safe_relative(&root, &receipt.install_relative_path)?;
-        let staged = root
-            .join("staging")
-            .join(format!("version-cleanup-{}", Uuid::new_v4()));
-        if install.exists() {
-            if let Some(parent) = staged.parent() {
-                fs::create_dir_all(parent)?;
-            }
-            fs::rename(&install, &staged)?;
-        }
-        if let Err(error) =
-            local_resources::remove_inactive_receipt(&candidate.resource_id, &candidate.version)
-        {
-            if staged.exists() && !install.exists() {
-                let _ = fs::rename(&staged, &install);
-            }
-            return Err(error.into());
-        }
-        if staged.is_dir() {
-            fs::remove_dir_all(&staged)?;
-        }
-        reclaimed_bytes = reclaimed_bytes.saturating_add(candidate.reclaimable_bytes);
-        removed_versions.push(format!("{}@{}", candidate.resource_id, candidate.version));
-    }
-    Ok(OldResourceVersionCleanupResult {
-        removed_versions,
-        reclaimed_bytes,
-    })
+    plan.plan_fingerprint = crate::cleanup_confirmation::fingerprint("old-versions", &configuration, &plan, &reviewed_receipts)?;
+    Ok(plan)
 }
+
 
 fn select_cleanup_versions(
     resource_id: &str,

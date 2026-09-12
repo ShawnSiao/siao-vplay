@@ -1,0 +1,41 @@
+import { act, renderHook } from "@testing-library/react";
+import { beforeEach, expect, it, vi } from "vitest";
+import { useLibraryFolderImport } from "./useLibraryFolderImport";
+import { scanPreview } from "./libraryControllerTestFixtures";
+import { draftItems } from "./libraryImportDraft";
+const mocks = vi.hoisted(() => ({ confirmLibraryImport: vi.fn() }));
+vi.mock("./libraryGateway", () => mocks);
+beforeEach(() => { vi.resetAllMocks(); });
+const snapshot = () => ({ stage: "preview" as const, preview: scanPreview, collectionTitle: "Series", items: draftItems(scanPreview), confirmFingerprintDuplicates: false });
+it("submits only once when the same confirmation callback is triggered twice", async () => {
+  let complete!: () => void;
+  mocks.confirmLibraryImport.mockImplementation(() => new Promise(resolve => { complete = () => resolve({}); }));
+  const events = { started: vi.fn(), committed: vi.fn(), failed: vi.fn(), refreshFailed: vi.fn() };
+  const hook = renderHook(() => useLibraryFolderImport(snapshot(), events));
+  let first!: Promise<unknown>, second!: Promise<unknown>;
+  act(() => { first = hook.result.current(); second = hook.result.current(); });
+  expect(mocks.confirmLibraryImport).toHaveBeenCalledTimes(1);
+  await act(async () => { complete(); await Promise.all([first, second]); });
+  expect(events.committed).toHaveBeenCalledTimes(1);
+});
+it("does not report a committed import as failed when view refresh rejects", async () => {
+  mocks.confirmLibraryImport.mockResolvedValue({});
+  const events = { started: vi.fn(), committed: vi.fn().mockRejectedValue(new Error("refresh")), failed: vi.fn(), refreshFailed: vi.fn() };
+  const hook = renderHook(() => useLibraryFolderImport(snapshot(), events));
+  await act(async () => { await expect(hook.result.current()).resolves.toEqual({}); });
+  expect(events.failed).not.toHaveBeenCalled();
+  expect(events.refreshFailed).toHaveBeenCalledWith(expect.stringContaining("导入已完成"));
+});
+it("releases the submission lock after backend failure and keeps draft values for retry", async () => {
+  mocks.confirmLibraryImport.mockRejectedValueOnce(new Error("disk full")).mockResolvedValueOnce({});
+  const draft = snapshot();
+  const events = { started: vi.fn(), committed: vi.fn(), failed: vi.fn(), refreshFailed: vi.fn() };
+  const hook = renderHook(() => useLibraryFolderImport(draft, events));
+  await act(async () => { expect(await hook.result.current()).toBeNull(); });
+  expect(events.failed).toHaveBeenCalledWith("disk full");
+  expect(events.committed).not.toHaveBeenCalled();
+  await act(async () => { await hook.result.current(); });
+  expect(mocks.confirmLibraryImport).toHaveBeenCalledTimes(2);
+  expect(mocks.confirmLibraryImport.mock.calls[1][0]).toEqual(mocks.confirmLibraryImport.mock.calls[0][0]);
+  expect(draft).toEqual(snapshot());
+});

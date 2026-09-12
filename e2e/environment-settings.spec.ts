@@ -1,5 +1,26 @@
 import { expect, test } from "@playwright/test";
 
+test("provider drafts survive navigation and dismissal requires an explicit discard", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "设置" }).click();
+  const settings = page.getByRole("dialog", { name: "设置" });
+  await settings.getByRole("tab", { name: "AI 服务" }).click();
+  await settings.getByRole("button", { name: "OpenAI 未配置" }).click();
+  const key = settings.getByPlaceholder("粘贴服务商提供的 API Key");
+  await key.fill("synthetic-draft-only");
+  await expect(key).toBeFocused();
+  await settings.getByRole("button", { name: "DeepSeek 未配置" }).click();
+  await settings.getByRole("button", { name: "OpenAI 未配置" }).click();
+  await expect(key).toHaveValue("synthetic-draft-only");
+  page.once("dialog", (dialog) => dialog.dismiss());
+  await page.keyboard.press("Escape");
+  await expect(settings).toBeVisible();
+  await expect(key).toHaveValue("synthetic-draft-only");
+  page.once("dialog", (dialog) => dialog.accept());
+  await settings.getByRole("button", { name: "关闭设置" }).click();
+  await expect(settings).toHaveCount(0);
+});
+
 test("environment settings follows the approved compact provider layout", async ({ page }) => {
   await page.setViewportSize({ width: 1200, height: 850 });
   await page.goto("/");
@@ -19,9 +40,9 @@ test("environment settings follows the approved compact provider layout", async 
   expect(navigationBox!.y + navigationBox!.height - (groupBox!.y + groupBox!.height)).toBeLessThanOrEqual(10);
   await trigger.click();
 
-  const dialog = page.getByRole("dialog", { name: "环境配置" });
+  const dialog = page.getByRole("dialog", { name: "设置" });
   await expect(dialog).toBeVisible();
-  await dialog.getByRole("button", { name: "AI 服务" }).click();
+  await dialog.getByRole("tab", { name: "AI 服务" }).click();
   await expect(dialog.locator(".environment-provider-list .environment-provider-row")).toHaveCount(7);
   await expect(dialog.getByRole("button", { name: "＋ 添加其他服务" })).toHaveCount(1);
   const providerLogos = dialog.locator(".environment-provider-logo img");
@@ -47,8 +68,8 @@ test("environment settings keeps its header and footer fixed at 960 by 640", asy
   await page.setViewportSize({ width: 960, height: 640 });
   await page.goto("/");
   await page.getByRole("button", { name: "设置" }).click();
-  const dialog = page.getByRole("dialog", { name: "环境配置" });
-  await dialog.getByRole("button", { name: "AI 服务" }).click();
+  const dialog = page.getByRole("dialog", { name: "设置" });
+  await dialog.getByRole("tab", { name: "AI 服务" }).click();
   await dialog.getByRole("button", { name: "OpenAI 未配置" }).click();
 
   const header = dialog.locator(".environment-settings-header");
@@ -72,7 +93,7 @@ test("environment settings keeps the complete local-resource workflow", async ({
   await page.setViewportSize({ width: 1200, height: 850 });
   await page.goto("/e2e/runtime.html?environment=1");
 
-  const dialog = page.getByRole("dialog", { name: "环境配置" });
+  const dialog = page.getByRole("dialog", { name: "设置" });
   const capabilities = dialog.getByRole("region", { name: "需要的功能" });
   await expect(dialog).toContainText("共享内容只下载一次");
   await expect(capabilities.getByText("基础视频支持")).toBeVisible();
@@ -113,17 +134,21 @@ for (const viewport of [
     });
     await page.setViewportSize(viewport);
     await page.goto("/e2e/runtime.html?environment=1&storage=1");
-    const dialog = page.getByRole("dialog", { name: "环境配置" });
-    await dialog.getByRole("button", { name: "存储" }).click();
+    const dialog = page.getByRole("dialog", { name: "设置" });
+    await dialog.getByRole("tab", { name: "存储" }).click();
     await expect(dialog.getByRole("region", { name: "存储位置" })).toBeVisible();
     await expect(dialog.getByText("应用数据与数据库")).toBeVisible();
     await expect(dialog.getByText("URL 导入视频")).toBeVisible();
     await expect(dialog.getByText("播放缓存")).toBeVisible();
+    await dialog.getByRole("button", { name: "清理缓存", exact: true }).click();
+    await expect(dialog.getByText(/未登记文件会保留/)).toBeVisible();
+    await dialog.locator(".storage-inline-confirm").getByRole("button", { name: "取消", exact: true }).click();
     await expect(dialog.getByText("视频与分析报告")).toBeVisible();
     expect(await dialog.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
 
     await dialog.getByRole("button", { name: "迁移" }).click();
     const migration = page.getByRole("dialog", { name: "迁移应用数据与数据库" });
+    await expect(migration.getByText(/界面偏好保留在原系统位置/)).toBeVisible();
     await migration.getByRole("button", { name: "选择文件夹" }).click();
     await migration.getByRole("button", { name: "检查迁移条件" }).click();
     await expect(migration.getByRole("button", { name: "开始迁移" })).toBeVisible();

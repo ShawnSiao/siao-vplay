@@ -26,6 +26,8 @@ impl StorageManager {
         &self,
         input: PrepareStorageMigrationInput,
     ) -> Result<StorageMigrationTask, StorageError> {
+        self.recover_migration_commit()?;
+        if self.read_state()?.settings.pending_app_data_root.is_some() { return Err(StorageError::MigrationBusy); }
         if input.mode == StorageMigrationMode::Rebuild && input.area != StorageArea::MediaCache {
             return Err(StorageError::InvalidPath(
                 "只有播放缓存支持在新位置重新生成".to_owned(),
@@ -41,12 +43,12 @@ impl StorageManager {
         let database = (input.area == StorageArea::AppData)
             .then(|| source.join("projects").join("siaovplay.db"));
         let files = if input.mode == StorageMigrationMode::Copy {
-            migration_copy::scan_files(&source, database.as_deref())?
+            self.scan_migration_files(&source, database.as_deref(), &AtomicBool::new(false))?
         } else {
             Vec::new()
         };
         let bytes_to_copy = if input.mode == StorageMigrationMode::Copy {
-            super::paths::directory_size(&source)
+            super::migration_scope::estimated_bytes(&files, database.as_deref())?
         } else {
             0
         };
@@ -84,16 +86,16 @@ impl StorageManager {
             .migration
             .lock()
             .map_err(|_| StorageError::StatePoisoned)?;
-        if runtime
+        if runtime.users > 0 || runtime
             .task
             .as_ref()
             .is_some_and(|current| current.status == StorageMigrationStatus::Running)
         {
             return Err(StorageError::MigrationBusy);
         }
+        persist_task(&runtime.path, &task)?;
         runtime.cancelled.store(false, Ordering::Relaxed);
         runtime.task = Some(task.clone());
-        persist_task(&runtime.path, &task)?;
         Ok(task)
     }
 
@@ -105,16 +107,18 @@ impl StorageManager {
         if !input.confirmed {
             return Err(StorageError::ConfirmationRequired);
         }
+        self.recover_migration_commit()?;
         let task = {
             let mut runtime = self
                 .migration
                 .lock()
                 .map_err(|_| StorageError::StatePoisoned)?;
             let path = runtime.path.clone();
-            let task = runtime
+            let mut task = runtime
                 .task
-                .as_mut()
+                .as_ref()
                 .filter(|task| task.id == input.task_id)
+                .cloned()
                 .ok_or(StorageError::MigrationNotFound)?;
             if task.status == StorageMigrationStatus::Running {
                 return Err(StorageError::MigrationBusy);
@@ -125,14 +129,17 @@ impl StorageManager {
             ) {
                 return Ok(task.clone());
             }
+            if runtime.users > 0 { return Err(StorageError::MigrationBusy); }
+            let database_owner = super::database_access::exclusive(&database_path)?;
             task.status = StorageMigrationStatus::Running;
             task.error_code = None;
             task.error_message = None;
             task.updated_at_ms = now_ms()?;
-            let result = task.clone();
-            persist_task(&path, task)?;
+            persist_task(&path, &task)?;
+            runtime.task = Some(task.clone());
+            runtime.database_owner = Some(database_owner);
             runtime.cancelled.store(false, Ordering::Relaxed);
-            result
+            task
         };
         let manager = self.clone();
         thread::spawn(move || manager.run_migration(database_path, task));
@@ -177,7 +184,7 @@ impl StorageManager {
 
     fn run_migration(&self, current_database: PathBuf, task: StorageMigrationTask) {
         let result = self.execute_migration(&current_database, &task);
-        let _ = self.finish_task(result);
+        let _ = self.finish_task(&task.id, result);
     }
 
     fn execute_migration(
@@ -191,13 +198,13 @@ impl StorageManager {
         let source_database = source.join("projects").join("siaovplay.db");
         let skip_database =
             (task.area == StorageArea::AppData).then_some(source_database.as_path());
+        let cancelled = self.cancel_flag()?;
         let entries = if task.mode == StorageMigrationMode::Copy {
-            migration_copy::scan_files(&source, skip_database)?
+            self.scan_migration_files(&source, skip_database, &cancelled)?
         } else {
             Vec::new()
         };
-        let cancelled = self.cancel_flag()?;
-        migration_copy::copy_and_verify(&entries, &destination, &cancelled, |bytes, files| {
+        let mut verified = migration_copy::copy_and_verify(&entries, &destination, &cancelled, |bytes, files| {
             self.update_progress(bytes, files)
         })?;
         if cancelled.load(Ordering::Relaxed) {
@@ -205,43 +212,38 @@ impl StorageManager {
         }
         match task.area {
             StorageArea::AppData => {
+                super::migration_configuration::apply(&source, &destination, &mut verified, &cancelled)?;
                 let destination_database = destination.join("projects").join("siaovplay.db");
-                database::backup_database(&source_database, &destination_database)?;
-                database::rewrite_managed_paths(
+                database::backup_database(&source_database, &destination_database, || cancelled.load(Ordering::Relaxed))?;
+                database::relocate_copied_paths(
                     &destination_database,
-                    StorageArea::AppData,
                     &source,
                     &destination,
                 )?;
+                verified.push(super::migration_receipt::VerifiedFile::database(&destination, &cancelled)?);
+                let receipt = self.persist_migration_receipt(task, verified, &cancelled)?;
                 self.update_progress(task.bytes_to_copy, task.file_count)?;
-                self.apply_destination(task.area, &destination)?;
+                self.commit_app_data_destination(task, receipt)?;
                 Ok(StorageMigrationStatus::RestartRequired)
             }
-            StorageArea::RemoteMedia => {
-                database::rewrite_managed_paths(
-                    current_database,
-                    task.area,
-                    &source,
-                    &destination,
-                )?;
-                self.apply_destination(task.area, &destination)?;
-                Ok(StorageMigrationStatus::Completed)
-            }
-            StorageArea::MediaCache => {
-                if task.mode == StorageMigrationMode::Rebuild {
-                    database::clear_cache_references(current_database)?;
-                } else {
-                    database::rewrite_managed_paths(
-                        current_database,
-                        task.area,
-                        &source,
-                        &destination,
-                    )?;
-                }
-                self.apply_destination(task.area, &destination)?;
+            StorageArea::RemoteMedia | StorageArea::MediaCache => {
+                let receipt = self.persist_migration_receipt(task, verified, &cancelled)?;
+                self.commit_destination(current_database, task, receipt)?;
                 Ok(StorageMigrationStatus::Completed)
             }
         }
+    }
+
+    fn persist_migration_receipt(&self, task: &StorageMigrationTask, files: Vec<super::migration_receipt::VerifiedFile>, cancelled: &AtomicBool) -> Result<super::migration_receipt::ReceiptReference, StorageError> {
+        let bootstrap = self.read_state()?.settings_path.parent().map(Path::to_path_buf)
+            .ok_or_else(|| StorageError::InvalidPath("启动配置目录缺失".to_owned()))?;
+        super::migration_receipt::persist(&bootstrap, task, files, cancelled)
+    }
+
+    fn scan_migration_files(&self, source: &Path, database: Option<&Path>, cancelled: &AtomicBool) -> Result<Vec<migration_copy::CopyEntry>, StorageError> {
+        let bootstrap = self.read_state()?.settings_path.parent().map(Path::to_path_buf)
+            .ok_or_else(|| StorageError::InvalidPath("启动配置目录缺失".to_owned()))?;
+        super::migration_scope::scan(source, database, &bootstrap, cancelled)
     }
 
     fn source_root(&self, area: StorageArea) -> Result<PathBuf, StorageError> {
@@ -258,16 +260,23 @@ impl StorageManager {
         }
     }
 
-    fn apply_destination(&self, area: StorageArea, destination: &Path) -> Result<(), StorageError> {
-        let mut state = self.write_state()?;
-        let value = Some(path_string(destination));
-        match area {
-            StorageArea::AppData => state.settings.pending_app_data_root = value,
-            StorageArea::RemoteMedia => state.settings.remote_media_root = value,
-            StorageArea::MediaCache => state.settings.media_cache_root = value,
+    fn commit_app_data_destination(&self, task: &StorageMigrationTask, receipt: super::migration_receipt::ReceiptReference) -> Result<(), StorageError> {
+        let runtime = self.migration.lock().map_err(|_| StorageError::StatePoisoned)?;
+        if runtime.task.as_ref().is_none_or(|current| current.id != task.id
+            || current.area != StorageArea::AppData || current.status != StorageMigrationStatus::Running
+            || current.source_root != task.source_root || current.destination_root != task.destination_root) {
+            return Err(StorageError::MigrationNotFound);
         }
-        state.settings.revision = state.settings.revision.saturating_add(1);
-        persist_settings(&state.settings_path, &state.settings)
+        // Keep cancellation and final settings publication under the same task lock.
+        if runtime.cancelled.load(Ordering::Relaxed) { return Err(StorageError::MigrationCancelled); }
+        let mut state = self.write_state()?;
+        let mut next = state.settings.clone();
+        next.pending_app_data_root = Some(task.destination_root.clone());
+        next.pending_app_data_receipt = Some(receipt);
+        next.revision = next.revision.saturating_add(1);
+        persist_settings(&state.settings_path, &next)?;
+        state.settings = next;
+        Ok(())
     }
 
     fn update_progress(&self, bytes: u64, files: usize) -> Result<(), StorageError> {
@@ -296,6 +305,7 @@ impl StorageManager {
 
     fn finish_task(
         &self,
+        task_id: &str,
         result: Result<StorageMigrationStatus, StorageError>,
     ) -> Result<(), StorageError> {
         let mut runtime = self
@@ -306,6 +316,7 @@ impl StorageManager {
         let task = runtime
             .task
             .as_mut()
+            .filter(|task| task.id == task_id)
             .ok_or(StorageError::MigrationNotFound)?;
         match result {
             Ok(status) => task.status = status,
@@ -319,7 +330,11 @@ impl StorageManager {
             }
         }
         task.updated_at_ms = now_ms()?;
-        persist_task(&path, task)
+        let keep_owner = task.status == StorageMigrationStatus::RestartRequired
+            || self.state.read().map_err(|_| StorageError::StatePoisoned)?.settings.pending_migration_commit.is_some();
+        let persisted = persist_task(&path, task);
+        if !keep_owner { runtime.database_owner = None; }
+        persisted
     }
 }
 
@@ -348,3 +363,7 @@ fn ensure_empty_directory(path: &Path) -> Result<(), StorageError> {
 fn path_string(path: &Path) -> String {
     path.to_string_lossy().into_owned()
 }
+
+#[cfg(test)]
+#[path = "migration_cancel_tests.rs"]
+mod cancel_tests;

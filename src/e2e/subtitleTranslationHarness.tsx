@@ -1,3 +1,4 @@
+import { RecoveryPreview } from "./RecoveryPreview";
 import { StrictMode, useState } from "react";
 import { createRoot } from "react-dom/client";
 
@@ -27,7 +28,7 @@ export function SubtitleTranslationHarness() {
         workflow={workflow}
         disabled={false}
         onChange={setWorkflow}
-      />
+      >
       <div className="subtitle-current-note">
         <span>当前原文字幕</span>
         <strong>本地字幕识别 · 标准</strong>
@@ -51,6 +52,7 @@ export function SubtitleTranslationHarness() {
           </section>
         </div>
       ) : null}
+      </SubtitleWorkflowTabs>
     </Dialog>
   );
 }
@@ -59,6 +61,6 @@ const root = document.getElementById("root");
 if (!root) throw new Error("Subtitle translation test root is missing.");
 createRoot(root).render(
   <StrictMode>
-    <SubtitleTranslationHarness />
+    {new URLSearchParams(location.search).has("recovery") ? <RecoveryPreview remoteUrl={new URLSearchParams(location.search).get("recovery") === "url"} preparation={new URLSearchParams(location.search).get("recovery") === "preparation"} /> : <SubtitleTranslationHarness />}
   </StrictMode>,
 );

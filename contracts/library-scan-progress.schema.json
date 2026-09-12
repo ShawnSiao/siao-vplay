@@ -1,0 +1,71 @@
+{
+  "$defs": {
+    "LibraryScanPhase": {
+      "enum": [
+        "scanning",
+        "fingerprinting",
+        "completed",
+        "cancelled",
+        "failed"
+      ],
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "candidateFiles": {
+      "format": "uint64",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "currentRelativePath": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "ignoredEntries": {
+      "format": "uint64",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "message": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "phase": {
+      "$ref": "#/$defs/LibraryScanPhase"
+    },
+    "scanId": {
+      "type": "string"
+    },
+    "scannedDirectories": {
+      "format": "uint64",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "scannedFiles": {
+      "format": "uint64",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "scanId",
+    "phase",
+    "scannedDirectories",
+    "scannedFiles",
+    "candidateFiles",
+    "ignoredEntries",
+    "currentRelativePath",
+    "message"
+  ],
+  "title": "LibraryScanProgress",
+  "type": "object"
+}

@@ -1,0 +1,136 @@
+{
+  "$defs": {
+    "StorageArea": {
+      "enum": [
+        "app_data",
+        "remote_media",
+        "media_cache"
+      ],
+      "type": "string"
+    },
+    "StorageMigrationMode": {
+      "enum": [
+        "copy",
+        "rebuild"
+      ],
+      "type": "string"
+    },
+    "StorageMigrationStatus": {
+      "enum": [
+        "prepared",
+        "running",
+        "interrupted",
+        "cancelled",
+        "failed",
+        "completed",
+        "restart_required"
+      ],
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "area": {
+      "$ref": "#/$defs/StorageArea"
+    },
+    "bytesToCopy": {
+      "format": "uint64",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "copiedBytes": {
+      "format": "uint64",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "createdAtMs": {
+      "format": "int64",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "destinationRoot": {
+      "type": "string"
+    },
+    "errorCode": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "errorMessage": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "fileCount": {
+      "format": "uint",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "freeSpaceBytes": {
+      "format": "uint64",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "id": {
+      "type": "string"
+    },
+    "mode": {
+      "$ref": "#/$defs/StorageMigrationMode"
+    },
+    "previousRootRetained": {
+      "type": "boolean"
+    },
+    "restartRequired": {
+      "type": "boolean"
+    },
+    "sourceRoot": {
+      "type": "string"
+    },
+    "status": {
+      "$ref": "#/$defs/StorageMigrationStatus"
+    },
+    "updatedAtMs": {
+      "format": "int64",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "verifiedFileCount": {
+      "format": "uint",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "id",
+    "area",
+    "mode",
+    "status",
+    "sourceRoot",
+    "destinationRoot",
+    "bytesToCopy",
+    "copiedBytes",
+    "fileCount",
+    "verifiedFileCount",
+    "freeSpaceBytes",
+    "previousRootRetained",
+    "restartRequired",
+    "errorCode",
+    "errorMessage",
+    "createdAtMs",
+    "updatedAtMs"
+  ],
+  "title": "StorageMigrationTask",
+  "type": "object"
+}

@@ -1,8 +1,25 @@
+import { readLibrarySection } from "../../lib/libraryPageGateway";
+export { readCollectionEpisodePage as listCollectionEpisodePage } from "../../lib/collectionEpisodePageGateway";
+import { readLibraryHome } from "../../lib/libraryHomeGateway";
+import { readLibrarySearch } from "../../lib/librarySearchGateway";
+import { invokeCollectionDetail, invokeWatchLater } from "../../lib/collectionDetailGateway";
+import { invokeCollectionMutation, invokeCollectionDeletion } from "../../lib/collectionMutationGateway";
+import { readCollectionEpisodes } from "../../lib/collectionEpisodesGateway";
+import { readEpisodeNeighbors } from "../../lib/episodeNeighborsGateway";
+import { subscribeLibraryScanProgress } from "../../lib/libraryScanProgressGateway";
+import { readLibraryScanPreview } from "../../lib/libraryScanPreviewGateway";
+import { importLibraryPreview } from "../../lib/libraryImportGateway";
+import { revokeRoot } from "../../lib/libraryRootRevokeGateway";
+import { inspectRelocation, applyRelocation } from "../../lib/libraryRelocationGateway";
+import { inspectRescan, applyRescan } from "../../lib/libraryRescanGateway";
+import { inspectRebuild, applyRebuild } from "../../lib/libraryRebuildGateway";
+import { invokeProject } from "../../lib/projectGateway";
 import { invoke } from "@tauri-apps/api/core";
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import type { UnlistenFn } from "@tauri-apps/api/event";
 
 import { isDesktopApp } from "../../lib/desktop";
 import type {
+  Project,
   ApplyLibraryRescanInput,
   ApplyLibraryRootRebuildInput,
   CollectionDetail,
@@ -59,6 +76,7 @@ export type ScanLibraryFolderInput = {
 export const emptyLibraryHome: LibraryHome = {
   continueWatching: [],
   continueWatchingCount: 0,
+  collectionCount: 0, folderCount: 0, watchLaterCount: 0,
   collections: [],
   folders: [],
   unclassified: [],
@@ -72,98 +90,97 @@ export async function getLibraryHome(): Promise<LibraryHome> {
   if (!isDesktopApp) {
     return emptyLibraryHome;
   }
-  return invoke<LibraryHome>("get_library_home");
+  return readLibraryHome();
 }
 
 export async function listLibrarySection(
   section: LibraryMediaSection,
   offset: number,
+  expectedSnapshotToken?: string,
 ): Promise<LibrarySectionPage> {
   if (!isDesktopApp) {
-    return { items: [], totalCount: 0, nextOffset: null };
+    return { items: [], totalCount: 0, nextOffset: null, section, offset, snapshotToken: "0".repeat(64) };
   }
-  const input: ListLibrarySectionInput = { section, offset };
-  return invoke<LibrarySectionPage>("list_library_section", { input });
+  const input: ListLibrarySectionInput = { section, offset, expectedSnapshotToken };
+  return readLibrarySection(input);
 }
 
 export async function searchLibrary(query: string): Promise<LibrarySearchResult[]> {
   if (!isDesktopApp) {
     return [];
   }
-  return invoke<LibrarySearchResult[]>("search_library", { query });
+  return readLibrarySearch(query);
 }
 
 export async function createCollection(
   input: CreateCollectionInput,
 ): Promise<LibraryCollection> {
-  return invoke<LibraryCollection>("create_collection", { input });
+  return invokeCollectionMutation("create_collection", input);
 }
 
 export async function updateCollection(
   input: UpdateCollectionInput,
 ): Promise<LibraryCollection> {
-  return invoke<LibraryCollection>("update_collection", { input });
+  return invokeCollectionMutation("update_collection", input, input.collectionId);
 }
 
 export async function deleteCollection(
   collectionId: string,
 ): Promise<LibraryCollectionDeletionResult> {
-  return invoke<LibraryCollectionDeletionResult>("delete_collection", { collectionId });
+  return invokeCollectionDeletion(collectionId);
 }
 
 export async function getCollectionDetail(
   collectionId: string,
 ): Promise<CollectionDetail> {
-  return invoke<CollectionDetail>("get_collection_detail", { collectionId });
+  return invokeCollectionDetail("get_collection_detail", { collectionId }, collectionId);
 }
 
 export async function listCollectionEpisodes(
   collectionId: string,
   seasonNumber: number | null,
 ): Promise<LibraryMediaSummary[]> {
-  return invoke<LibraryMediaSummary[]>("list_collection_episodes", {
-    collectionId,
-    seasonNumber,
-  });
+  return readCollectionEpisodes(collectionId, seasonNumber);
 }
 
 export async function addProjectToCollection(
   input: AddProjectToCollectionInput,
 ): Promise<CollectionDetail> {
-  return invoke<CollectionDetail>("add_project_to_collection", { input });
+  return invokeCollectionDetail("add_project_to_collection", { input }, input.collectionId);
 }
 
 export async function removeProjectFromCollection(
   collectionId: string,
   projectId: string,
 ): Promise<CollectionDetail> {
-  return invoke<CollectionDetail>("remove_project_from_collection", {
+  return invokeCollectionDetail("remove_project_from_collection", {
     collectionId,
     projectId,
-  });
+  }, collectionId);
 }
 
 export async function getEpisodeNeighbors(
   collectionId: string,
   projectId: string,
 ): Promise<EpisodeNeighbors> {
-  return invoke<EpisodeNeighbors>("get_episode_neighbors", {
-    collectionId,
-    projectId,
-  });
+  return readEpisodeNeighbors(collectionId, projectId);
 }
 
 export async function setWatchLater(
   projectId: string,
   enabled: boolean,
 ): Promise<CollectionDetail | null> {
-  return invoke<CollectionDetail | null>("set_watch_later", { projectId, enabled });
+  return invokeWatchLater(projectId, enabled);
+}
+
+export async function setProjectWatched(projectId: string, watched: boolean): Promise<Project> {
+  return invokeProject("set_project_watched", { projectId, watched });
 }
 
 export async function scanLibraryFolder(
   input: ScanLibraryFolderInput,
 ): Promise<LibraryScanPreview> {
-  return invoke<LibraryScanPreview>("scan_library_folder", { input });
+  return readLibraryScanPreview(input);
 }
 
 export async function cancelLibraryScan(scanId: string): Promise<void> {
@@ -176,63 +193,58 @@ export async function listenLibraryScanProgress(
   if (!isDesktopApp) {
     return () => undefined;
   }
-  return listen<LibraryScanProgress>("library-scan-progress", (event) => {
-    onProgress(event.payload);
-  });
+  return subscribeLibraryScanProgress(onProgress);
 }
 
 export async function confirmLibraryImport(
   input: ConfirmLibraryImportInput,
 ): Promise<LibraryImportResult> {
-  return invoke<LibraryImportResult>("confirm_library_import", { input });
+  return importLibraryPreview(input);
 }
 
 export async function inspectLibraryRescan(
   rootId: string,
 ): Promise<LibraryRescanPreview> {
-  return invoke<LibraryRescanPreview>("inspect_library_rescan", { rootId });
+  return inspectRescan(rootId);
 }
 
 export async function applyLibraryRescan(
   input: ApplyLibraryRescanInput,
+  preview: LibraryRescanPreview,
 ): Promise<LibraryRescanResult> {
-  return invoke<LibraryRescanResult>("apply_library_rescan", { input });
+  return applyRescan(input, preview);
 }
 
 export async function inspectLibraryRootRebuild(
   input: InspectLibraryRootRebuildInput,
 ): Promise<LibraryRootRebuildPreview> {
-  return invoke<LibraryRootRebuildPreview>("inspect_library_root_rebuild", { input });
+  return inspectRebuild(input);
 }
 
 export async function applyLibraryRootRebuild(
   input: ApplyLibraryRootRebuildInput,
+  preview: LibraryRootRebuildPreview,
 ): Promise<LibraryRootRebuildResult> {
-  return invoke<LibraryRootRebuildResult>("apply_library_root_rebuild", { input });
+  return applyRebuild(input, preview);
 }
 
 export async function revokeLibraryRoot(
   rootId: string,
 ): Promise<LibraryRootRevokeResult> {
-  return invoke<LibraryRootRevokeResult>("revoke_library_root", { rootId });
+  return revokeRoot(rootId);
 }
 
 export async function inspectLibraryRootRelocation(
   rootId: string,
   newRootPath: string,
 ): Promise<LibraryRootRelocationPreview> {
-  return invoke<LibraryRootRelocationPreview>(
-    "inspect_library_root_relocation",
-    { input: { rootId, newRootPath } },
-  );
+  return inspectRelocation(rootId, newRootPath);
 }
 
 export async function applyLibraryRootRelocation(
-  previewToken: string,
+  preview: LibraryRootRelocationPreview,
 ): Promise<LibraryRootRelocationResult> {
-  return invoke<LibraryRootRelocationResult>("apply_library_root_relocation", {
-    input: { previewToken },
-  });
+  return applyRelocation(preview);
 }
 
 export async function openProjectMediaLocation(projectId: string): Promise<void> {

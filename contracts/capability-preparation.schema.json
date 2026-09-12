@@ -1,0 +1,54 @@
+{
+  "$defs": {
+    "PreparationState": {
+      "enum": [
+        "ready",
+        "preparing"
+      ],
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "capabilityId": {
+      "type": "string"
+    },
+    "pendingActionId": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "readyResourceIds": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "resourceIds": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "state": {
+      "$ref": "#/$defs/PreparationState"
+    },
+    "taskIds": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "capabilityId",
+    "pendingActionId",
+    "state",
+    "resourceIds",
+    "readyResourceIds",
+    "taskIds"
+  ],
+  "title": "CapabilityPreparation",
+  "type": "object"
+}

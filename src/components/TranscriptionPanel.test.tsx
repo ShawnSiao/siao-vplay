@@ -1,14 +1,15 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { createPlayerSubtitleFixtures } from "../e2e/playerSubtitleFixtures";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { LocalResourceCatalog, LocalResourceStatus } from "../types";
+import type { LocalResourceCatalog, LocalResourceStatus, TranscriptionJob } from "../types";
 import { TranscriptionPanel } from "./TranscriptionPanel";
 
 const desktopMocks = vi.hoisted(() => ({
   cancelTranscriptionJob: vi.fn(),
   getTranscriptionJob: vi.fn(),
   getTranscriptionRuntimeStatus: vi.fn(),
-  listSubtitleVersions: vi.fn(),
+  getSubtitleVersion: vi.fn(),
   listTranscriptionJobs: vi.fn(),
   resumeTranscriptionJob: vi.fn(),
   startTranscription: vi.fn(),
@@ -48,6 +49,7 @@ const catalog: LocalResourceCatalog = {
   ],
   resources: [
     {
+      ...{ installedSize: null, expectedDownloadSize: null, artifact: null, entrypoints: {}, sourceCommit: null, patchSha256: null, requires: null, distribution: null },
       id: "whisper-model-base",
       version: "ggml-base",
       platform: "any",
@@ -57,6 +59,7 @@ const catalog: LocalResourceCatalog = {
       license: "MIT",
       sourcePage: "https://example.com/base",
       artifact: {
+        stripComponents: null,
         url: "https://example.com/ggml-base.bin",
         size: 147_951_465,
         sha256: "a".repeat(64),
@@ -66,6 +69,7 @@ const catalog: LocalResourceCatalog = {
       healthCheck: "whisper-model-magic",
     },
     {
+      ...{ installedSize: null, expectedDownloadSize: null, artifact: null, entrypoints: {}, sourceCommit: null, patchSha256: null, requires: null, distribution: null },
       id: "whisper-model-small",
       version: "ggml-small",
       platform: "any",
@@ -75,6 +79,7 @@ const catalog: LocalResourceCatalog = {
       license: "MIT",
       sourcePage: "https://example.com/small",
       artifact: {
+        stripComponents: null,
         url: "https://example.com/ggml-small.bin",
         size: 487_601_967,
         sha256: "b".repeat(64),
@@ -87,6 +92,7 @@ const catalog: LocalResourceCatalog = {
 };
 
 const status: LocalResourceStatus = {
+  snapshotRevision: 1,
   configured: true,
   selectedParent: "W:\\SiaoVPlay",
   resourceRoot: "W:\\SiaoVPlay\\LocalResources",
@@ -164,7 +170,146 @@ describe("TranscriptionPanel", () => {
     fireEvent.click(
       screen.getByRole("button", { name: "准备本地字幕识别" }),
     );
-    await waitFor(() => expect(onPrepareResources).toHaveBeenCalledWith("fast"));
+    await waitFor(() => expect(onPrepareResources).toHaveBeenCalledWith("fast", "ja"));
     expect(desktopMocks.startTranscription).not.toHaveBeenCalled();
   });
+});
+
+const savedJob: TranscriptionJob = { id: "job", projectId: "project", status: "transcribing", stage: "transcribing", progress: 0.4, languageCode: "en", modelKind: "small", runtimeBackend: "cpu", runtimeVersion: "1", subtitleVersionId: null, errorCode: null, errorMessage: null, createdAtMs: 1, updatedAtMs: 1, startedAtMs: 1, completedAtMs: null };
+const props = { projectId: "project", currentVersion: null, onJobTracked: vi.fn(), onVersionReady: vi.fn() };
+it("keeps a saved task visible when runtime detection fails", async () => {
+  desktopMocks.getTranscriptionRuntimeStatus.mockRejectedValue(new Error("检测暂时失败"));
+  desktopMocks.listTranscriptionJobs.mockResolvedValue([savedJob]);
+  render(<TranscriptionPanel {...props} />);
+  expect(await screen.findByText("正在识别语音")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "取消生成" })).toBeEnabled();
+  expect(await screen.findByRole("button", { name: "重新检查" })).toBeEnabled();
+});
+it("blocks duplicate generation until task history can be read again", async () => {
+  desktopMocks.listTranscriptionJobs.mockRejectedValueOnce(new Error("任务记录暂时不可读")).mockResolvedValue([]);
+  render(<TranscriptionPanel {...props} />);
+  expect(await screen.findByText("任务记录暂时不可读")).toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText(/视频原声语言/), { target: { value: "ja" } });
+  expect(screen.getByRole("button", { name: "生成原文字幕" })).toBeDisabled();
+  fireEvent.click(screen.getByRole("button", { name: "重新检查" }));
+  await waitFor(() => expect(screen.getByRole("button", { name: "生成原文字幕" })).toBeEnabled());
+  expect(screen.getByLabelText(/视频原声语言/)).toHaveValue("ja");
+  expect(desktopMocks.startTranscription).not.toHaveBeenCalled();
+  expect(screen.queryByText("任务记录暂时不可读")).not.toBeInTheDocument();
+});
+it("shows a saved task while a runtime check is still pending", async () => {
+  desktopMocks.getTranscriptionRuntimeStatus.mockReturnValue(new Promise(() => {}));
+  desktopMocks.listTranscriptionJobs.mockResolvedValue([savedJob]);
+  render(<TranscriptionPanel {...props} />);
+  expect(await screen.findByText("正在识别语音")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "取消生成" })).toBeEnabled();
+});
+
+it("does not expose or restore another project's job after switching", async () => {
+  let finishOld!: (value: TranscriptionJob[]) => void;
+  desktopMocks.listTranscriptionJobs.mockImplementationOnce(() => new Promise(resolve => { finishOld = resolve; })).mockResolvedValue([]);
+  const { rerender } = render(<TranscriptionPanel {...props} />);
+  rerender(<TranscriptionPanel {...props} projectId="other" />);
+  await act(async () => finishOld([savedJob]));
+  expect(await screen.findByRole("button", { name: "生成原文字幕" })).toBeInTheDocument();
+  expect(screen.queryByText("正在识别语音")).not.toBeInTheDocument();
+});
+it("hides the previous project's existing task immediately on switching", async () => {
+  desktopMocks.listTranscriptionJobs.mockResolvedValueOnce([savedJob]).mockReturnValue(new Promise(() => {}));
+  const { rerender } = render(<TranscriptionPanel {...props} />);
+  expect(await screen.findByText("正在识别语音")).toBeInTheDocument();
+  rerender(<TranscriptionPanel {...props} projectId="other" />);
+  expect(screen.queryByRole("button", { name: "取消生成" })).not.toBeInTheDocument();
+});
+
+it("retries a failed task read and clears only its recovered polling error", async () => {
+  desktopMocks.listTranscriptionJobs.mockResolvedValue([savedJob]);
+  desktopMocks.getTranscriptionJob.mockRejectedValueOnce(new Error("状态读取暂时失败")).mockResolvedValue({ ...savedJob, progress: 0.6 });
+  render(<TranscriptionPanel {...props} />);
+  expect(await screen.findByText("状态读取暂时失败", {}, { timeout: 2500 })).toBeInTheDocument();
+  await waitFor(() => expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "60"), { timeout: 2500 });
+  expect(screen.queryByText("状态读取暂时失败")).not.toBeInTheDocument();
+});
+it.each(["cancelled", "transcribing"] as const)("preserves %s cancellation against a batched transcription poll", async (status) => {
+  desktopMocks.listTranscriptionJobs.mockResolvedValue([savedJob]);
+  let finishPoll!: (value: TranscriptionJob) => void;
+  let finishCancel!: (value: TranscriptionJob) => void;
+  desktopMocks.getTranscriptionJob.mockImplementation(() => new Promise(resolve => { finishPoll = resolve; }));
+  desktopMocks.cancelTranscriptionJob.mockImplementation(() => new Promise(resolve => { finishCancel = resolve; }));
+  render(<TranscriptionPanel {...props} />);
+  await waitFor(() => expect(finishPoll).toBeTypeOf("function"), { timeout: 2500 });
+  fireEvent.click(screen.getByRole("button", { name: "取消生成" }));
+  await act(async () => {
+    finishCancel({ ...savedJob, status, stage: status === "cancelled" ? "cancelled" : "cancelling" });
+    await Promise.resolve(); finishPoll(savedJob); await Promise.resolve();
+  });
+  expect(screen.queryByRole("button", { name: "取消生成" })).not.toBeInTheDocument();
+  if (status === "cancelled") expect(screen.getByRole("button", { name: "重新开始" })).toBeInTheDocument();
+  else expect(screen.getByRole("button", { name: "正在停止…" })).toBeDisabled();
+});
+
+it("does not hide a cancellation failure when polling succeeds", async () => {
+  desktopMocks.listTranscriptionJobs.mockResolvedValue([savedJob]);
+  desktopMocks.getTranscriptionJob.mockResolvedValue({ ...savedJob, progress: 0.6 });
+  desktopMocks.cancelTranscriptionJob.mockRejectedValue(new Error("取消请求失败"));
+  render(<TranscriptionPanel {...props} />);
+  fireEvent.click(await screen.findByRole("button", { name: "取消生成" }));
+  expect(await screen.findByText("取消请求失败")).toBeInTheDocument();
+  await waitFor(() => expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "60"), { timeout: 2500 });
+  expect(screen.getByText("取消请求失败")).toBeInTheDocument();
+});
+
+const output = createPlayerSubtitleFixtures("project").originalSubtitle;
+const completedJob: TranscriptionJob = { ...savedJob, status: "completed", stage: "completed", subtitleVersionId: output.id };
+it("retries only the completed subtitle read after failure", async () => {
+  desktopMocks.listTranscriptionJobs.mockResolvedValue([completedJob]);
+  desktopMocks.getSubtitleVersion.mockRejectedValueOnce(new Error("字幕读取失败")).mockResolvedValue(output);
+  render(<TranscriptionPanel {...props} />);
+  expect(await screen.findByText("字幕读取失败")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "重新读取字幕" }));
+  await waitFor(() => expect(props.onVersionReady).toHaveBeenCalledWith(output));
+  expect(desktopMocks.getSubtitleVersion).toHaveBeenCalledTimes(2);
+  expect(desktopMocks.startTranscription).not.toHaveBeenCalled();
+  expect(screen.queryByText("字幕读取失败")).not.toBeInTheDocument();
+});
+it("ignores a completed subtitle read after unmount", async () => {
+  desktopMocks.listTranscriptionJobs.mockResolvedValue([completedJob]);
+  let finish!: (value: typeof output) => void;
+  desktopMocks.getSubtitleVersion.mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+  const { unmount } = render(<TranscriptionPanel {...props} />);
+  await waitFor(() => expect(finish).toBeTypeOf("function"));
+  unmount();
+  await act(async () => finish(output));
+  expect(props.onVersionReady).not.toHaveBeenCalled();
+});
+it.each([{ id: "another" }, { projectId: "another" }, { role: "translation" }])("does not apply an unrelated transcription output %j", async patch => {
+  desktopMocks.listTranscriptionJobs.mockResolvedValue([completedJob]);
+  desktopMocks.getSubtitleVersion.mockResolvedValue({ ...output, ...patch });
+  render(<TranscriptionPanel {...props} />);
+  expect(await screen.findByText("生成的字幕与当前任务不匹配，未采用结果。")).toBeInTheDocument();
+  expect(props.onVersionReady).not.toHaveBeenCalled();
+});
+
+it("drops the old project's result after switching videos", async () => {
+  desktopMocks.listTranscriptionJobs.mockResolvedValueOnce([completedJob]).mockResolvedValue([]);
+  let finish!: (value: typeof output) => void;
+  desktopMocks.getSubtitleVersion.mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+  const { rerender } = render(<TranscriptionPanel {...props} />);
+  await waitFor(() => expect(finish).toBeTypeOf("function"));
+  rerender(<TranscriptionPanel {...props} projectId="other" />);
+  await act(async () => finish(output));
+  expect(props.onVersionReady).not.toHaveBeenCalled();
+});
+it("uses the latest completion callback without repeating a pending read", async () => {
+  desktopMocks.listTranscriptionJobs.mockResolvedValue([completedJob]);
+  let finish!: (value: typeof output) => void;
+  desktopMocks.getSubtitleVersion.mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+  const { rerender } = render(<TranscriptionPanel {...props} />);
+  await waitFor(() => expect(finish).toBeTypeOf("function"));
+  const onVersionReady = vi.fn();
+  rerender(<TranscriptionPanel {...props} onVersionReady={onVersionReady} />);
+  await act(async () => finish(output));
+  expect(onVersionReady).toHaveBeenCalledWith(output);
+  expect(props.onVersionReady).not.toHaveBeenCalled();
+  expect(desktopMocks.getSubtitleVersion).toHaveBeenCalledTimes(1);
 });

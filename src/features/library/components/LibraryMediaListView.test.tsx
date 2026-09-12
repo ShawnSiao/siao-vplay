@@ -60,7 +60,8 @@ function renderList(
       loadingMore: false,
       error: null,
     },
-    collections: [collection],
+    readCollections: vi.fn().mockResolvedValue({ scope: "collections", rootLinked: false, query: "", offset: 0,
+      snapshotToken: "a".repeat(64), totalCount: 1, nextOffset: null, items: [collection] }),
     mutationPending: false,
     onRetry: vi.fn(),
     onLoadMore: vi.fn(),
@@ -70,6 +71,7 @@ function renderList(
     onOpenLocation: vi.fn(),
     onAddToCollection: vi.fn().mockResolvedValue(undefined),
     onRemoveFromCollection: vi.fn().mockResolvedValue(undefined),
+    onSetWatched: vi.fn().mockResolvedValue(undefined),
     onSetWatchLater: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   };
@@ -78,6 +80,25 @@ function renderList(
 }
 
 describe("LibraryMediaListView", () => {
+  it("keeps classification menus bounded and reads only when the picker opens", async () => {
+    const readCollections = vi.fn().mockResolvedValue({ scope: "collections", rootLinked: false, query: "", offset: 0,
+      snapshotToken: "a".repeat(64), totalCount: 1000, nextOffset: 24,
+      items: Array.from({ length: 24 }, (_, i) => ({ ...collection, id: `c-${i}`, title: `合集 ${i}` })) });
+    renderList("unclassified", { readCollections });
+    fireEvent.click(screen.getByRole("button", { name: "雨站台 的更多操作" }));
+    expect(screen.queryAllByRole("menuitem").length).toBeLessThan(10);
+    expect(readCollections).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("menuitem", { name: "加入合集…" }));
+    await screen.findByRole("button", { name: "加入「合集 0」" });
+    expect(screen.getAllByRole("button", { name: /^加入「/ })).toHaveLength(24);
+  });
+  it("offers an explicit watched-state correction independent of playback position", () => {
+    const props = renderList("unclassified");
+    fireEvent.click(screen.getByRole("button", { name: "雨站台 的更多操作" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "标记为看完" }));
+    expect(props.onSetWatched).toHaveBeenCalledWith("project", true);
+    expect(props.onOpen).not.toHaveBeenCalled();
+  });
   it("shows total and loaded counts and keeps one watch-later removal action", () => {
     const props = renderList("watch_later");
 
@@ -91,7 +112,7 @@ describe("LibraryMediaListView", () => {
     expect(props.onSetWatchLater).toHaveBeenCalledWith("project", false);
   });
 
-  it("offers unclassified classification actions and preserves rows on append errors", () => {
+  it("offers unclassified classification actions and preserves rows on append errors", async () => {
     const onLoadMore = vi.fn();
     const props = renderList("unclassified", {
       onLoadMore,
@@ -108,10 +129,32 @@ describe("LibraryMediaListView", () => {
 
     expect(screen.getByText("雨站台")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "雨站台 的更多操作" }));
-    fireEvent.click(screen.getByRole("menuitem", { name: "加入「周末电影」" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "加入合集…" }));
+    fireEvent.click(await screen.findByRole("button", { name: "加入「周末电影」" }));
     expect(props.onAddToCollection).toHaveBeenCalledWith("collection", "project");
     expect(screen.getByRole("alert")).toHaveTextContent("网络暂时不可用");
     fireEvent.click(screen.getByRole("button", { name: "重试加载" }));
     expect(onLoadMore).toHaveBeenCalledOnce();
   });
+});
+
+it.each([120, 1000, 10000])("bounds %i loaded media rows with keyboard page controls", count => {
+  renderList("unclassified", { page: { items: Array.from({ length: count }, (_, index) => ({ ...media, projectId: `item-${index + 1}`, projectTitle: `视频 ${index + 1}` })),
+    totalCount: count, nextOffset: null, initialized: true, loading: false, loadingMore: false, error: null } });
+  expect(document.querySelectorAll(".library-media-item")).toHaveLength(24);
+  fireEvent.click(screen.getByRole("button", { name: "下一页视频" }));
+  expect(screen.getByText("视频 25")).toBeVisible();
+  expect(document.querySelector(".library-media-item button")).toHaveFocus();
+  fireEvent.click(screen.getByRole("button", { name: "上一页视频" }));
+  expect(screen.getByText("视频 1")).toBeVisible();
+});
+
+it("bounds a large watch-later list without losing its removal action", () => {
+  const props = renderList("watch_later", { page: { items: Array.from({ length: 1000 }, (_, index) => ({ ...media, projectId: `item-${index + 1}`, projectTitle: `视频 ${index + 1}` })),
+    totalCount: 1000, nextOffset: null, initialized: true, loading: false, loadingMore: false, error: null } });
+  expect(document.querySelectorAll(".library-media-item")).toHaveLength(24);
+  fireEvent.click(screen.getByRole("button", { name: "下一页视频" }));
+  fireEvent.click(screen.getByRole("button", { name: "视频 25 的更多操作" }));
+  fireEvent.click(screen.getByRole("menuitem", { name: "取消稍后观看" }));
+  expect(props.onSetWatchLater).toHaveBeenCalledWith("item-25", false);
 });

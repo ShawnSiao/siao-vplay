@@ -122,7 +122,7 @@ describe("LibraryFolderImportDialog", () => {
         onImport={async () => undefined}
       />,
     );
-    expect(screen.getByText("正在核对媒体指纹")).toBeInTheDocument();
+    expect(screen.getByText("正在检查重复视频")).toBeInTheDocument();
     expect(screen.getByText("12")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "取消扫描" }));
     expect(onCancelScan).toHaveBeenCalledOnce();

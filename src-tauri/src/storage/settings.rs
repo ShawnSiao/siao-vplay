@@ -4,7 +4,8 @@ use std::{
     sync::{Arc, Mutex, RwLock},
 };
 
-use uuid::Uuid;
+pub(crate) use super::settings_io::persist_settings;
+use super::settings_io::{load_settings, SETTINGS_FILE_NAME};
 
 use super::{
     StorageError,
@@ -13,7 +14,6 @@ use super::{
     paths::{canonical_existing_directory, configured_path, directory_available, directory_size},
 };
 
-const SETTINGS_FILE_NAME: &str = "storage-settings.json";
 
 #[derive(Clone, Debug)]
 pub struct StorageManager {
@@ -30,34 +30,108 @@ pub(crate) struct StorageState {
 }
 
 impl StorageManager {
+    #[cfg(test)]
     pub fn initialize(
         bootstrap_directory: &Path,
         default_app_data_root: PathBuf,
         environment_app_data_root: Option<PathBuf>,
     ) -> Result<Self, StorageError> {
+        Self::initialize_internal(
+            bootstrap_directory,
+            default_app_data_root,
+            environment_app_data_root,
+            false,
+        )
+        .map(|(manager, _)| manager)
+    }
+
+    pub(crate) fn initialize_owned(
+        bootstrap_directory: &Path,
+        default_app_data_root: PathBuf,
+        environment_app_data_root: Option<PathBuf>,
+    ) -> Result<(Self, Option<crate::instance_lock::InstanceLock>), StorageError> {
+        Self::initialize_internal(
+            bootstrap_directory,
+            default_app_data_root,
+            environment_app_data_root,
+            true,
+        )
+    }
+
+    fn initialize_internal(
+        bootstrap_directory: &Path,
+        default_app_data_root: PathBuf,
+        environment_app_data_root: Option<PathBuf>,
+        acquire_owner: bool,
+    ) -> Result<(Self, Option<crate::instance_lock::InstanceLock>), StorageError> {
         fs::create_dir_all(bootstrap_directory)?;
         let settings_path = bootstrap_directory.join(SETTINGS_FILE_NAME);
         let mut settings = load_settings(&settings_path)?;
+        let legacy_pending = matches!(settings.version, 1 | 2);
+        let upgrade_settings = legacy_pending;
+        if upgrade_settings {
+            if settings.version == 1 && settings.pending_migration_commit.is_some() { return Err(super::migration_commit::pending_error()); }
+            settings.version = settings_version();
+        }
         if settings.version != settings_version() {
             return Err(StorageError::UnsupportedVersion(settings.version));
         }
-        if environment_app_data_root.is_none() {
-            promote_pending_app_data_root(&settings_path, &mut settings)?;
+        if environment_app_data_root.is_some() && settings.pending_app_data_root.is_some() {
+            return Err(StorageError::RootUnavailable("存在待切换的应用数据，请移除数据目录环境变量覆盖并完成切换后启动；原数据仍保留".to_owned()));
+        }
+        let pending_root = if environment_app_data_root.is_none() {
+            settings.pending_app_data_root.as_deref().map(PathBuf::from)
+                .filter(|root| root.is_dir() && root.join("projects/siaovplay.db").is_file())
+        } else { None };
+        if environment_app_data_root.is_none() && settings.pending_app_data_root.is_some() && pending_root.is_none() {
+            return Err(StorageError::RootUnavailable("待切换的数据目录不可用，请重新连接目标磁盘后启动；原数据仍保留，未切换回旧库写入".to_owned()));
         }
         let active_root = environment_app_data_root
             .clone()
+            .or_else(|| pending_root.clone())
             .or_else(|| settings.active_app_data_root.as_deref().map(PathBuf::from))
             .unwrap_or_else(|| default_app_data_root.clone());
-        let migration = load_migration_runtime(bootstrap_directory, &active_root)?;
-        Ok(Self {
-            state: Arc::new(RwLock::new(StorageState {
-                settings_path,
-                default_app_data_root,
-                environment_app_data_root,
-                settings,
-            })),
-            migration: Arc::new(Mutex::new(migration)),
-        })
+        let owner = if acquire_owner {
+            fs::create_dir_all(&active_root)?;
+            if fs::canonicalize(&active_root)? != fs::canonicalize(bootstrap_directory)? {
+                Some(crate::instance_lock::InstanceLock::acquire(&active_root)?)
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+        // Do not publish the new root or upgrade its bootstrap config until ownership succeeds.
+        if let Some(root) = pending_root.as_deref() {
+            match settings.pending_app_data_receipt.as_ref() {
+                Some(receipt) => super::migration_receipt::verify_pending(bootstrap_directory, receipt, root)?,
+                None if legacy_pending => {},
+                None => return Err(StorageError::MigrationIntegrity("待切换的数据缺少校验记录，已保留原配置与数据".to_owned())),
+            }
+            promote_pending_app_data_root(&settings_path, &mut settings)?;
+            if settings.pending_app_data_root.is_some() {
+                return Err(StorageError::RootUnavailable("待切换的数据目录已不可用，未修改存储配置".to_owned()));
+            }
+        } else if upgrade_settings {
+            persist_settings(&settings_path, &settings)?;
+        }
+        let committed_app_root = if environment_app_data_root.is_none() {
+            settings.active_app_data_root.as_deref().map(Path::new)
+        } else { None };
+        let mut migration = load_migration_runtime(bootstrap_directory, committed_app_root)?;
+        super::migration_commit::recover(&settings_path, &mut settings, &active_root, &mut migration)?;
+        Ok((
+            Self {
+                state: Arc::new(RwLock::new(StorageState {
+                    settings_path,
+                    default_app_data_root,
+                    environment_app_data_root,
+                    settings,
+                })),
+                migration: Arc::new(Mutex::new(migration)),
+            },
+            owner,
+        ))
     }
 
     pub fn app_data_root(&self) -> Result<PathBuf, StorageError> {
@@ -104,6 +178,7 @@ impl StorageManager {
     }
 
     pub fn get_settings(&self) -> Result<StorageSettingsView, StorageError> {
+        self.recover_migration_commit()?;
         let state = self.read_state()?;
         settings_view(&state)
     }
@@ -130,7 +205,12 @@ impl StorageManager {
             ));
         }
 
+        let runtime = self.migration.lock().map_err(|_| StorageError::StatePoisoned)?;
+        if runtime.users > 0 || runtime.task.as_ref().is_some_and(|task| task.status == super::StorageMigrationStatus::Running) {
+            return Err(StorageError::MigrationBusy);
+        }
         let mut state = self.write_state()?;
+        if state.settings.pending_app_data_root.is_some() { return Err(StorageError::MigrationBusy); }
         if input.expected_revision != state.settings.revision {
             return Err(StorageError::RevisionConflict {
                 expected: input.expected_revision,
@@ -154,26 +234,31 @@ impl StorageManager {
         {
             return Err(StorageError::ManagedRootChangeRequiresMigration);
         }
-        state.settings.remote_media_root = remote_media_root;
-        state.settings.media_cache_root = media_cache_root;
-        state.settings.default_subtitle_export_directory = default_subtitle_export_directory;
-        state.settings.default_video_report_export_directory =
-            default_video_report_export_directory;
-        state.settings.revision = state.settings.revision.saturating_add(1);
-        persist_settings(&state.settings_path, &state.settings)?;
+        let mut next = state.settings.clone();
+        next.remote_media_root = remote_media_root;
+        next.media_cache_root = media_cache_root;
+        next.default_subtitle_export_directory = default_subtitle_export_directory;
+        next.default_video_report_export_directory = default_video_report_export_directory;
+        next.revision = next.revision.saturating_add(1);
+        persist_settings(&state.settings_path, &next)?;
+        state.settings = next;
         settings_view(&state)
     }
 
     pub(crate) fn read_state(
         &self,
     ) -> Result<std::sync::RwLockReadGuard<'_, StorageState>, StorageError> {
-        self.state.read().map_err(|_| StorageError::StatePoisoned)
+        let state = self.state.read().map_err(|_| StorageError::StatePoisoned)?;
+        if state.settings.pending_migration_commit.is_some() { return Err(super::migration_commit::pending_error()); }
+        Ok(state)
     }
 
     pub(crate) fn write_state(
         &self,
     ) -> Result<std::sync::RwLockWriteGuard<'_, StorageState>, StorageError> {
-        self.state.write().map_err(|_| StorageError::StatePoisoned)
+        let state = self.state.write().map_err(|_| StorageError::StatePoisoned)?;
+        if state.settings.pending_migration_commit.is_some() { return Err(super::migration_commit::pending_error()); }
+        Ok(state)
     }
 }
 
@@ -239,37 +324,6 @@ fn settings_view(state: &StorageState) -> Result<StorageSettingsView, StorageErr
     })
 }
 
-fn load_settings(path: &Path) -> Result<StorageSettingsFile, StorageError> {
-    if !path.exists() {
-        return Ok(StorageSettingsFile::default());
-    }
-    Ok(serde_json::from_slice(&fs::read(path)?)?)
-}
-
-pub(crate) fn persist_settings(
-    path: &Path,
-    settings: &StorageSettingsFile,
-) -> Result<(), StorageError> {
-    let suffix = Uuid::new_v4().simple().to_string();
-    let temporary = path.with_file_name(format!(".{SETTINGS_FILE_NAME}.{suffix}.part"));
-    let previous = path.with_file_name(format!(".{SETTINGS_FILE_NAME}.{suffix}.previous"));
-    fs::write(&temporary, serde_json::to_vec_pretty(settings)?)?;
-    if path.exists() {
-        fs::rename(path, &previous)?;
-    }
-    if let Err(error) = fs::rename(&temporary, path) {
-        if previous.exists() {
-            let _ = fs::rename(&previous, path);
-        }
-        let _ = fs::remove_file(&temporary);
-        return Err(error.into());
-    }
-    if previous.exists() {
-        fs::remove_file(previous)?;
-    }
-    Ok(())
-}
-
 fn path_string(path: &Path) -> String {
     path.to_string_lossy().into_owned()
 }
@@ -289,6 +343,7 @@ fn promote_pending_app_data_root(
     super::database::verify_database(&database)?;
     settings.active_app_data_root = Some(pending.to_owned());
     settings.pending_app_data_root = None;
+    settings.pending_app_data_receipt = None;
     settings.revision = settings.revision.saturating_add(1);
     persist_settings(settings_path, settings)
 }

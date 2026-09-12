@@ -1,3 +1,22 @@
+#[cfg(test)]
+mod adoption_confirmation_tests;
+#[cfg(test)]
+mod move_confirmation_tests;
+mod contracts;
+pub use contracts::{
+    LocalResourceMovePlan, LocalResourceMoveResult, ResourceAdoptionResult,
+    ResourceMigrationCandidate, ResourceMigrationPreview, ResourceMigrationSource,
+};
+mod maintenance;
+pub(crate) mod move_control;
+mod move_io;
+mod move_commit;
+mod move_staging;
+mod move_confirmation;
+mod adoption_confirmation;
+mod adoption_batch;
+pub use maintenance::{adopt_local_resources, move_resource_root, reconnect_resource_root, cleanup_unused_resources};
+
 use std::{
     collections::{BTreeMap, BTreeSet, VecDeque},
     fs::{self, File},
@@ -37,12 +56,18 @@ pub enum ResourceMigrationError {
     Serialization(#[from] serde_json::Error),
     #[error("执行此资源操作前需要明确确认")]
     ConfirmationRequired,
+    #[error("资源移动计划已变化，请重新检查保存位置并确认")]
+    PlanChanged,
+    #[error("资源接管计划已变化，请重新检查现有资源并确认")]
+    AdoptionPlanChanged,
     #[error("候选资源目录无效：{0}")]
     InvalidSource(String),
     #[error("目标资源目录已存在，请选择空的新位置或使用重新连接：{0}")]
     DestinationExists(String),
     #[error("资源正在准备，当前不能移动或清理")]
     Busy,
+    #[error("资源复制已取消，原保存位置保持不变")]
+    Cancelled,
     #[error("资源移动空间不足：需要 {required_bytes} 字节，可用 {available_bytes} 字节")]
     InsufficientSpace {
         required_bytes: u64,
@@ -61,10 +86,13 @@ impl ResourceMigrationError {
             Self::Runtime(_) => "runtime_storage_root_invalid",
             Self::FileSystem(_) => "local_resource_filesystem_error",
             Self::Serialization(_) => "local_resource_serialization_error",
+            Self::AdoptionPlanChanged => "local_resource_adoption_plan_changed",
+            Self::PlanChanged => "local_resource_move_plan_changed",
             Self::ConfirmationRequired => "local_resource_confirmation_required",
             Self::InvalidSource(_) => "local_resource_candidate_invalid",
             Self::DestinationExists(_) => "local_resource_destination_exists",
             Self::Busy => "local_resource_busy",
+            Self::Cancelled => "local_resource_move_cancelled",
             Self::InsufficientSpace { .. } => "local_resource_space_insufficient",
             Self::Integrity(_) => "local_resource_integrity_failed",
         }
@@ -83,6 +111,8 @@ pub struct InspectResourceMigrationInput {
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AdoptLocalResourcesInput {
+    pub resource_root: String,
+    pub plan_fingerprint: String,
     #[serde(default)]
     pub source_path: Option<String>,
     #[serde(default)]
@@ -90,74 +120,12 @@ pub struct AdoptLocalResourcesInput {
     pub confirmed: bool,
 }
 
-#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub struct ResourceMigrationSource {
-    pub kind: String,
-    pub path: String,
-}
-
-#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub struct ResourceMigrationCandidate {
-    pub source_kind: String,
-    pub source_root: String,
-    pub resource_id: String,
-    pub resource_path: String,
-    pub state: String,
-    pub reusable_bytes: u64,
-    pub message: Option<String>,
-}
-
-#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub struct ResourceMigrationPreview {
-    pub sources: Vec<ResourceMigrationSource>,
-    pub candidates: Vec<ResourceMigrationCandidate>,
-    pub verified_resource_ids: Vec<String>,
-    pub reusable_bytes: u64,
-    pub rejected_count: usize,
-}
-
-#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub struct ResourceAdoptionResult {
-    pub adopted_resource_ids: Vec<String>,
-    pub already_active_resource_ids: Vec<String>,
-    pub rejected_resource_ids: Vec<String>,
-    pub reusable_bytes: u64,
-}
-
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MoveLocalResourceRootInput {
     pub parent_path: String,
+    pub plan_fingerprint: String,
     pub confirmed: bool,
-}
-
-#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub struct LocalResourceMovePlan {
-    pub previous_root: String,
-    pub selected_parent: String,
-    pub resource_root: String,
-    pub bytes_to_copy: u64,
-    pub file_count: usize,
-    pub free_space_bytes: Option<u64>,
-    pub cross_volume: bool,
-    pub destination_exists: bool,
-    pub confirmation_required: bool,
-}
-
-#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub struct LocalResourceMoveResult {
-    pub previous_root: String,
-    pub current_root: String,
-    pub copied_bytes: u64,
-    pub verified_file_count: usize,
-    pub cross_volume: bool,
-    pub previous_root_retained: bool,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -170,6 +138,7 @@ pub struct ReconnectLocalResourceRootInput {
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CleanupUnusedResourcesInput {
+    pub plan_fingerprint: String,
     pub confirmed: bool,
 }
 
@@ -181,17 +150,24 @@ pub struct ConfirmLocalResourceOperationInput {
 
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct UnusedResourceCleanupPlan {
+    #[cfg_attr(test, schemars(regex(pattern = "^[a-f0-9]{64}$")))]
+    pub plan_fingerprint: String,
     pub resource_ids: Vec<String>,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub reclaimable_bytes: u64,
     pub confirmation_required: bool,
 }
 
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct UnusedResourceCleanupResult {
     pub removed_resource_ids: Vec<String>,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub reclaimed_bytes: u64,
+    pub interruption: Option<crate::cleanup_batch::CleanupInterruption>,
 }
 
 #[derive(Clone, Debug)]
@@ -206,6 +182,8 @@ enum CandidatePayload {
 
 #[derive(Clone, Debug)]
 struct VerifiedCandidate {
+    definition: crate::local_resources::ResourceDefinition,
+    files: Vec<ReceiptFile>,
     public: ResourceMigrationCandidate,
     payload: CandidatePayload,
 }
@@ -221,96 +199,8 @@ struct ScannedSource {
     files: Vec<PathBuf>,
 }
 
-pub fn inspect_resource_migration(
-    input: InspectResourceMigrationInput,
-) -> Result<ResourceMigrationPreview, ResourceMigrationError> {
-    let sources = candidate_sources(input.source_path.as_deref(), input.source_kind.as_deref())?;
-    let (verified, rejected) = inspect_sources(&sources)?;
-    let mut verified_resource_ids = verified
-        .iter()
-        .map(|candidate| candidate.public.resource_id.clone())
-        .collect::<Vec<_>>();
-    verified_resource_ids.sort();
-    verified_resource_ids.dedup();
-    let reusable_bytes = verified
-        .iter()
-        .map(|candidate| candidate.public.reusable_bytes)
-        .sum();
-    let mut candidates = verified
-        .iter()
-        .map(|candidate| candidate.public.clone())
-        .chain(rejected.iter().cloned())
-        .collect::<Vec<_>>();
-    candidates.sort_by(|left, right| {
-        left.resource_id
-            .cmp(&right.resource_id)
-            .then(left.state.cmp(&right.state))
-            .then(left.resource_path.cmp(&right.resource_path))
-    });
-    Ok(ResourceMigrationPreview {
-        sources: sources
-            .into_iter()
-            .map(|source| ResourceMigrationSource {
-                kind: source.kind,
-                path: path_string(&source.root),
-            })
-            .collect(),
-        candidates,
-        verified_resource_ids,
-        reusable_bytes,
-        rejected_count: rejected.len(),
-    })
-}
-
-pub fn adopt_local_resources(
-    input: AdoptLocalResourcesInput,
-) -> Result<ResourceAdoptionResult, ResourceMigrationError> {
-    if !input.confirmed {
-        return Err(ResourceMigrationError::ConfirmationRequired);
-    }
-    if resource_download::has_active_tasks()? {
-        return Err(ResourceMigrationError::Busy);
-    }
-    local_resources::repair_configured_root(true)?;
-    let root =
-        local_resources::configured_root().ok_or(LocalResourceError::ConfirmationRequired)?;
-    let sources = candidate_sources(input.source_path.as_deref(), input.source_kind.as_deref())?;
-    let (verified, rejected) = inspect_sources(&sources)?;
-    let mut adopted = Vec::new();
-    let mut already_active = Vec::new();
-    let mut rejected_ids = rejected
-        .into_iter()
-        .map(|candidate| candidate.resource_id)
-        .collect::<Vec<_>>();
-    let mut reusable_bytes = 0_u64;
-    let mut handled = BTreeSet::new();
-    for candidate in verified {
-        let resource_id = candidate.public.resource_id.clone();
-        if !handled.insert(resource_id.clone()) {
-            continue;
-        }
-        if local_resources::resource_is_ready(&resource_id)? {
-            already_active.push(resource_id);
-            continue;
-        }
-        match adopt_candidate(&root, &candidate) {
-            Ok(()) => {
-                reusable_bytes = reusable_bytes.saturating_add(candidate.public.reusable_bytes);
-                adopted.push(resource_id);
-            }
-            Err(_) => rejected_ids.push(resource_id),
-        }
-    }
-    adopted.sort();
-    already_active.sort();
-    rejected_ids.sort();
-    rejected_ids.dedup();
-    Ok(ResourceAdoptionResult {
-        adopted_resource_ids: adopted,
-        already_active_resource_ids: already_active,
-        rejected_resource_ids: rejected_ids,
-        reusable_bytes,
-    })
+pub fn inspect_resource_migration(input: InspectResourceMigrationInput) -> Result<ResourceMigrationPreview, ResourceMigrationError> {
+    adoption_confirmation::inspect(input).map(|(preview, _)| preview)
 }
 
 pub fn plan_resource_root_move(
@@ -323,16 +213,19 @@ pub fn plan_resource_root_move(
         return Err(LocalResourceError::RootUnavailable(path_string(&previous_root)).into());
     }
     let (selected_parent, resource_root) = local_resources::selected_location_paths(parent_path)?;
+    move_io::validate_destination(&previous_root, &selected_parent)?;
     if paths_equal(&previous_root, &resource_root) {
         return Err(ResourceMigrationError::InvalidSource(
             "新位置与当前资源目录相同".to_owned(),
         ));
     }
-    let manifest = resource_download::collect_file_manifest(&previous_root)?;
+    let previous_root = dunce::canonicalize(previous_root)?;
+    let manifest = move_io::manifest(&previous_root)?;
     let bytes_to_copy = manifest
         .iter()
         .fold(0_u64, |total, file| total.saturating_add(file.size));
-    Ok(LocalResourceMovePlan {
+    let mut plan = LocalResourceMovePlan {
+        plan_fingerprint: String::new(),
         previous_root: path_string(&previous_root),
         selected_parent: path_string(&selected_parent),
         resource_root: path_string(&resource_root),
@@ -342,126 +235,12 @@ pub fn plan_resource_root_move(
         cross_volume: volume_key(&previous_root) != volume_key(&resource_root),
         destination_exists: resource_root.exists(),
         confirmation_required: true,
-    })
+    };
+    plan.plan_fingerprint = move_confirmation::fingerprint(&configuration, &plan, &manifest)?;
+    Ok(plan)
 }
 
-pub fn move_resource_root(
-    input: MoveLocalResourceRootInput,
-) -> Result<LocalResourceMoveResult, ResourceMigrationError> {
-    if !input.confirmed {
-        return Err(ResourceMigrationError::ConfirmationRequired);
-    }
-    if resource_download::has_active_tasks()? {
-        return Err(ResourceMigrationError::Busy);
-    }
-    let plan = plan_resource_root_move(&input.parent_path)?;
-    if plan.destination_exists {
-        return Err(ResourceMigrationError::DestinationExists(
-            plan.resource_root,
-        ));
-    }
-    let required = plan.bytes_to_copy.saturating_add(MOVE_MARGIN_BYTES);
-    if let Some(available) = plan.free_space_bytes
-        && available < required
-    {
-        return Err(ResourceMigrationError::InsufficientSpace {
-            required_bytes: required,
-            available_bytes: available,
-        });
-    }
-    let previous_root = PathBuf::from(&plan.previous_root);
-    let selected_parent = PathBuf::from(&plan.selected_parent);
-    let target_root = PathBuf::from(&plan.resource_root);
-    let staging = selected_parent.join(format!(".SiaoVPlay-moving-{}", Uuid::new_v4()));
-    let verified = copy_root_verified(
-        &previous_root,
-        &staging,
-        MoveCopyOptions {
-            available_bytes: plan.free_space_bytes,
-            cross_volume: plan.cross_volume,
-            fault: MoveFault::None,
-        },
-    )?;
-    if let Err(error) = fs::rename(&staging, &target_root) {
-        let _ = fs::remove_dir_all(&staging);
-        return Err(error.into());
-    }
-    let mut configuration = local_resources::configuration_snapshot()
-        .ok_or(LocalResourceError::ConfirmationRequired)?;
-    configuration.selected_parent = path_string(&selected_parent);
-    configuration.resource_root = path_string(&target_root);
-    push_unique_string(&mut configuration.legacy_candidate_roots, &previous_root);
-    if let Err(error) = local_resources::replace_configuration(configuration) {
-        return Err(error.into());
-    }
-    resource_download::bind_configured_root()?;
-    crate::runtime::sync_managed_root()?;
-    Ok(LocalResourceMoveResult {
-        previous_root: path_string(&previous_root),
-        current_root: path_string(&target_root),
-        copied_bytes: verified.bytes,
-        verified_file_count: verified.files,
-        cross_volume: verified.cross_volume,
-        previous_root_retained: true,
-    })
-}
 
-pub fn reconnect_resource_root(
-    input: ReconnectLocalResourceRootInput,
-) -> Result<crate::local_resources::LocalResourceStatus, ResourceMigrationError> {
-    if !input.confirmed {
-        return Err(ResourceMigrationError::ConfirmationRequired);
-    }
-    if resource_download::has_active_tasks()? {
-        return Err(ResourceMigrationError::Busy);
-    }
-    let (selected_parent, root) = local_resources::selected_location_paths(&input.parent_path)?;
-    if !root.is_dir()
-        || local_resources::resource_subdirectories()
-            .iter()
-            .any(|relative| !root.join(relative).is_dir())
-    {
-        return Err(ResourceMigrationError::InvalidSource(format!(
-            "所选目录不是完整的 SiaoVPlay 资源目录：{}",
-            root.display()
-        )));
-    }
-    let mut active_resources = BTreeMap::new();
-    for resource in &local_resources::catalog()?.resources {
-        if verified_receipt_candidate(&root, resource)?.is_some() {
-            active_resources.insert(resource.id.clone(), resource.version.clone());
-        }
-    }
-    let previous = local_resources::configuration_snapshot();
-    let mut legacy_candidate_roots = previous
-        .as_ref()
-        .map(|configuration| configuration.legacy_candidate_roots.clone())
-        .unwrap_or_default();
-    if let Some(previous_root) = previous
-        .as_ref()
-        .map(|value| PathBuf::from(&value.resource_root))
-        && !paths_equal(&previous_root, &root)
-    {
-        push_unique_string(&mut legacy_candidate_roots, &previous_root);
-    }
-    let status = local_resources::replace_configuration(LocalResourceConfiguration {
-        schema_version: 1,
-        selected_parent: path_string(&selected_parent),
-        resource_root: path_string(&root),
-        preferred_profile: previous
-            .as_ref()
-            .map(|configuration| configuration.preferred_profile.clone())
-            .unwrap_or_else(|| "standard".to_owned()),
-        active_resources,
-        legacy_candidate_roots,
-        proxy_url: previous
-            .as_ref()
-            .and_then(|configuration| configuration.proxy_url.clone()),
-    })?;
-    resource_download::bind_configured_root()?;
-    crate::runtime::sync_managed_root()?;
-    Ok(status)
-}
 
 pub fn plan_unused_resource_cleanup() -> Result<UnusedResourceCleanupPlan, ResourceMigrationError> {
     let configuration = local_resources::configuration_snapshot()
@@ -472,6 +251,7 @@ pub fn plan_unused_resource_cleanup() -> Result<UnusedResourceCleanupPlan, Resou
         required.extend(local_resources::required_resource_ids(&capability.id)?);
     }
     let mut resource_ids = Vec::new();
+    let mut receipts = Vec::new();
     let mut reclaimable_bytes = 0_u64;
     for resource_id in configuration.active_resources.keys() {
         if required.contains(resource_id) {
@@ -480,45 +260,27 @@ pub fn plan_unused_resource_cleanup() -> Result<UnusedResourceCleanupPlan, Resou
         let Some(receipt) = local_resources::active_receipt(resource_id)? else {
             continue;
         };
-        reclaimable_bytes = reclaimable_bytes.saturating_add(
-            receipt
-                .files
-                .iter()
-                .fold(0_u64, |total, file| total.saturating_add(file.size)),
-        );
-        if root.join(&receipt.install_relative_path).is_dir() {
+        let install = resource_download::join_safe_relative(&root, &receipt.install_relative_path)?;
+        if let Some(bytes) = crate::cleanup_confirmation::candidate_bytes(&install, receipt.files.iter().map(|file| file.size)) {
+            reclaimable_bytes = reclaimable_bytes.saturating_add(bytes);
             resource_ids.push(resource_id.clone());
+            receipts.push(receipt);
         }
     }
     resource_ids.sort();
-    Ok(UnusedResourceCleanupPlan {
+    let mut plan = UnusedResourceCleanupPlan {
+        plan_fingerprint: String::new(),
         resource_ids,
         reclaimable_bytes,
         confirmation_required: true,
-    })
-}
-
-pub fn cleanup_unused_resources(
-    input: CleanupUnusedResourcesInput,
-) -> Result<UnusedResourceCleanupResult, ResourceMigrationError> {
-    if !input.confirmed {
-        return Err(ResourceMigrationError::ConfirmationRequired);
-    }
-    if resource_download::has_active_tasks()? {
+    };
+    if local_resources::configuration_snapshot().as_ref() != Some(&configuration) {
         return Err(ResourceMigrationError::Busy);
     }
-    let plan = plan_unused_resource_cleanup()?;
-    let mut removed = Vec::new();
-    for resource_id in &plan.resource_ids {
-        if resource_download::remove_resource(resource_id, true)?.removed {
-            removed.push(resource_id.clone());
-        }
-    }
-    Ok(UnusedResourceCleanupResult {
-        removed_resource_ids: removed,
-        reclaimed_bytes: plan.reclaimable_bytes,
-    })
+    plan.plan_fingerprint = crate::cleanup_confirmation::fingerprint("unused", &configuration, &plan, &receipts)?;
+    Ok(plan)
 }
+
 
 fn candidate_sources(
     selected_path: Option<&str>,
@@ -582,8 +344,8 @@ fn inspect_resource_candidate(
     let mut verified = Vec::new();
     let mut rejected = Vec::new();
     match verified_receipt_candidate(&source.root, resource) {
-        Ok(Some(candidate)) => {
-            verified.push(public_candidate(source, resource, candidate));
+        Ok(Some((candidate, files))) => {
+            verified.push(public_candidate(source, resource, candidate, files));
             return Ok((verified, rejected));
         }
         Ok(None) => {}
@@ -632,7 +394,8 @@ fn inspect_resource_candidate(
     }
     for payload in payloads {
         match verify_candidate_payload(resource, &payload) {
-            Ok(bytes) => {
+            Ok(files) => {
+                let bytes = files.iter().map(|file| file.size).sum();
                 let public = ResourceMigrationCandidate {
                     source_kind: source.kind.clone(),
                     source_root: path_string(&source.root),
@@ -642,7 +405,7 @@ fn inspect_resource_candidate(
                     reusable_bytes: bytes,
                     message: None,
                 };
-                verified.push(VerifiedCandidate { public, payload });
+                verified.push(VerifiedCandidate { public, payload, files, definition: resource.clone() });
                 rejected.clear();
                 break;
             }
@@ -660,36 +423,18 @@ fn inspect_resource_candidate(
     Ok((verified, rejected))
 }
 
-fn public_candidate(
-    source: &CandidateSource,
-    resource: &crate::local_resources::ResourceDefinition,
-    candidate: CandidatePayload,
-) -> VerifiedCandidate {
-    let reusable_bytes = match &candidate {
-        CandidatePayload::Directory {
-            expected_manifest: Some(files),
-            ..
-        } => files.iter().map(|file| file.size).sum(),
-        _ => resource.installed_size.unwrap_or(0),
-    };
+fn public_candidate(source: &CandidateSource, resource: &crate::local_resources::ResourceDefinition, candidate: CandidatePayload, mut files: Vec<ReceiptFile>) -> VerifiedCandidate {
+    files.sort_by(|a, b| a.relative_path.cmp(&b.relative_path));
     VerifiedCandidate {
-        public: ResourceMigrationCandidate {
-            source_kind: source.kind.clone(),
-            source_root: path_string(&source.root),
-            resource_id: resource.id.clone(),
-            resource_path: path_string(candidate.path()),
-            state: "verified".to_owned(),
-            reusable_bytes,
-            message: None,
-        },
-        payload: candidate,
+        public: ResourceMigrationCandidate { source_kind: source.kind.clone(), source_root: path_string(&source.root), resource_id: resource.id.clone(), resource_path: path_string(candidate.path()), state: "verified".into(), reusable_bytes: files.iter().map(|file| file.size).sum(), message: None },
+        payload: candidate, files, definition: resource.clone(),
     }
 }
 
 fn verified_receipt_candidate(
     source_root: &Path,
     resource: &crate::local_resources::ResourceDefinition,
-) -> Result<Option<CandidatePayload>, ResourceMigrationError> {
+) -> Result<Option<(CandidatePayload, Vec<ReceiptFile>)>, ResourceMigrationError> {
     let receipt_path = source_root
         .join("receipts")
         .join(&resource.id)
@@ -703,12 +448,12 @@ fn verified_receipt_candidate(
     local_resources::validate_external_receipt(&receipt, resource)?;
     let payload =
         resource_download::join_safe_relative(source_root, &receipt.install_relative_path)?;
-    resource_download::verify_installed_payload(resource, &payload, Some(&receipt.files))?;
-    Ok(Some(CandidatePayload::Directory {
+    let files = resource_download::verify_installed_payload(resource, &payload, Some(&receipt.files))?;
+    Ok(Some((CandidatePayload::Directory {
         path: payload,
         expected_manifest: Some(receipt.files),
         included_files: None,
-    }))
+    }, files)))
 }
 
 impl CandidatePayload {
@@ -722,7 +467,7 @@ impl CandidatePayload {
 fn verify_candidate_payload(
     resource: &crate::local_resources::ResourceDefinition,
     payload: &CandidatePayload,
-) -> Result<u64, ResourceMigrationError> {
+) -> Result<Vec<ReceiptFile>, ResourceMigrationError> {
     match payload {
         CandidatePayload::File(path) => {
             let artifact = resource.artifact.as_ref().ok_or_else(|| {
@@ -735,7 +480,9 @@ fn verify_candidate_payload(
                     resource.id
                 )));
             }
-            Ok(size)
+            let entrypoints = resource_download::effective_entrypoints(resource)?;
+            let relative_path = entrypoints.values().next().ok_or_else(|| ResourceMigrationError::Integrity("候选资源没有文件入口".into()))?.clone();
+            Ok(vec![ReceiptFile { relative_path, size, sha256 }])
         }
         CandidatePayload::Directory {
             path,
@@ -744,25 +491,28 @@ fn verify_candidate_payload(
         } => {
             if let Some(included_files) = included_files {
                 resource_download::run_health_check(resource, path)?;
-                let mut bytes = 0_u64;
+                let mut files = Vec::new();
                 for relative in included_files {
                     let file = resource_download::join_safe_relative(path, relative)?;
-                    bytes = bytes.saturating_add(resource_download::file_digest(&file)?.0);
+                    let (size, sha256) = resource_download::file_digest(&file)?;
+                    files.push(ReceiptFile { relative_path: relative.clone(), size, sha256 });
                 }
+                let bytes: u64 = files.iter().map(|file| file.size).sum();
                 if bytes != resource.installed_size.unwrap_or(0) {
                     return Err(ResourceMigrationError::Integrity(format!(
                         "{} 的固定运行时文件大小不匹配",
                         resource.id
                     )));
                 }
-                return Ok(bytes);
+                files.sort_by(|a, b| a.relative_path.cmp(&b.relative_path));
+                return Ok(files);
             }
             let files = resource_download::verify_installed_payload(
                 resource,
                 path,
                 expected_manifest.as_deref(),
             )?;
-            Ok(files.iter().map(|file| file.size).sum())
+            Ok(files)
         }
     }
 }
@@ -771,7 +521,7 @@ fn adopt_candidate(
     root: &Path,
     candidate: &VerifiedCandidate,
 ) -> Result<(), ResourceMigrationError> {
-    let resource = local_resources::resource_definition(&candidate.public.resource_id)?;
+    let resource = &candidate.definition;
     let staging_root = root
         .join("staging")
         .join(format!("adopt-{}", Uuid::new_v4()));
@@ -801,14 +551,9 @@ fn adopt_candidate(
         let _ = fs::remove_dir_all(&staging_root);
         return Err(error.into());
     }
-    let expected_manifest = match &candidate.payload {
-        CandidatePayload::Directory {
-            expected_manifest, ..
-        } => expected_manifest.as_deref(),
-        CandidatePayload::File(_) => None,
-    };
-    let files = match resource_download::verify_installed_payload(
-        &resource,
+    let expected_manifest = Some(candidate.files.as_slice());
+    let mut files = match resource_download::verify_installed_payload(
+        resource,
         &staged_payload,
         expected_manifest,
     ) {
@@ -818,10 +563,17 @@ fn adopt_candidate(
             return Err(error.into());
         }
     };
+    files.sort_by(|a, b| a.relative_path.cmp(&b.relative_path));
+    if let Err(error) = adoption_confirmation::verify_files(&candidate.files, &files) {
+        let _ = fs::remove_dir_all(&staging_root);
+        return Err(error);
+    }
     if let Err(error) =
         resource_download::activate_staged_resource(root, &resource, &staged_payload, files)
     {
-        let _ = fs::remove_dir_all(&staging_root);
+        if !local_resources::resource_change_pending().unwrap_or(true) {
+            let _ = fs::remove_dir_all(&staging_root);
+        }
         return Err(error.into());
     }
     let _ = fs::remove_dir_all(&staging_root);
@@ -956,26 +708,38 @@ struct MoveCopyOptions {
 }
 
 struct VerifiedCopy {
+    manifest: Vec<ReceiptFile>,
     bytes: u64,
     files: usize,
     cross_volume: bool,
 }
 
+#[cfg(test)]
 fn copy_root_verified(
     source: &Path,
     staging: &Path,
     options: MoveCopyOptions,
 ) -> Result<VerifiedCopy, ResourceMigrationError> {
-    if staging.exists() {
+    copy_root_verified_inner(source, staging, options, false)
+}
+
+fn copy_root_verified_inner(
+    source: &Path,
+    staging: &Path,
+    options: MoveCopyOptions,
+    resume_owned_staging: bool,
+) -> Result<VerifiedCopy, ResourceMigrationError> {
+    if staging.exists() && !resume_owned_staging {
         return Err(ResourceMigrationError::DestinationExists(path_string(
             staging,
         )));
     }
-    let source_manifest = resource_download::collect_file_manifest(source)?;
+    let source_manifest = move_io::manifest(source)?;
     let bytes = source_manifest
         .iter()
         .fold(0_u64, |total, file| total.saturating_add(file.size));
-    let required = bytes.saturating_add(MOVE_MARGIN_BYTES);
+    let remaining = if resume_owned_staging { move_io::remaining_bytes(source, staging, &source_manifest)? } else { bytes };
+    let required = remaining.saturating_add(MOVE_MARGIN_BYTES);
     if let Some(available) = options.available_bytes
         && available < required
     {
@@ -984,9 +748,9 @@ fn copy_root_verified(
             available_bytes: available,
         });
     }
-    if let Err(error) = copy_tree(source, staging) {
+    if let Err(error) = move_io::copy_tree(source, staging) {
         let _ = fs::remove_dir_all(staging);
-        return Err(error.into());
+        return Err(error);
     }
     #[cfg(test)]
     match options.fault {
@@ -1007,7 +771,10 @@ fn copy_root_verified(
     }
     #[cfg(not(test))]
     let _ = options.fault;
-    let target_manifest = resource_download::collect_file_manifest(staging)?;
+    let target_manifest = match move_io::manifest(staging) {
+        Ok(manifest) => manifest,
+        Err(error) => { let _ = fs::remove_dir_all(staging); return Err(error); }
+    };
     if source_manifest != target_manifest {
         let _ = fs::remove_dir_all(staging);
         return Err(ResourceMigrationError::Integrity(
@@ -1017,6 +784,7 @@ fn copy_root_verified(
     Ok(VerifiedCopy {
         bytes,
         files: source_manifest.len(),
+        manifest: target_manifest,
         cross_volume: options.cross_volume,
     })
 }
@@ -1101,7 +869,7 @@ mod tests {
     use sha2::{Digest, Sha256};
     use tempfile::tempdir;
 
-    fn fixture_resource(
+    pub(super) fn fixture_resource(
         id: &str,
         file_name: &str,
         contents: &[u8],
@@ -1147,7 +915,7 @@ mod tests {
         let resource = fixture_resource("fixture-model", "fixture.bin", b"verified-model");
         assert_eq!(
             verify_candidate_payload(&resource, &CandidatePayload::File(candidate))
-                .expect("candidate should verify"),
+                .expect("candidate should verify").iter().map(|file| file.size).sum::<u64>(),
             14
         );
     }

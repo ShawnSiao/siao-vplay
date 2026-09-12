@@ -1,0 +1,98 @@
+{
+  "$defs": {
+    "FrameEvidence": {
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "timestampMs": {
+          "format": "int64",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "timestampMs"
+      ],
+      "type": "object"
+    },
+    "SubtitleEvidence": {
+      "properties": {
+        "endMs": {
+          "format": "int64",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "segmentId": {
+          "type": "string"
+        },
+        "startMs": {
+          "format": "int64",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "text": {
+          "maxLength": 20000,
+          "type": "string"
+        }
+      },
+      "required": [
+        "segmentId",
+        "startMs",
+        "endMs",
+        "text"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "explanationId": {
+      "type": "string"
+    },
+    "frames": {
+      "items": {
+        "$ref": "#/$defs/FrameEvidence"
+      },
+      "maxItems": 6,
+      "type": "array"
+    },
+    "playbackCutoffMs": {
+      "format": "int64",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "projectId": {
+      "type": "string"
+    },
+    "sourceVersionId": {
+      "type": "string"
+    },
+    "subtitles": {
+      "items": {
+        "$ref": "#/$defs/SubtitleEvidence"
+      },
+      "maxItems": 40,
+      "type": "array"
+    },
+    "taskId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "explanationId",
+    "projectId",
+    "taskId",
+    "sourceVersionId",
+    "playbackCutoffMs",
+    "subtitles",
+    "frames"
+  ],
+  "title": "ExplanationEvidence",
+  "type": "object"
+}

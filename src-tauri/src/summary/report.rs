@@ -40,13 +40,13 @@ pub(crate) fn export(
         ));
     }
     let summary = SummaryResultRepository::new(store).get_summary(&input.summary_id)?;
+    let _project_operation = crate::project_operations::Operation::acquire(store, &summary.project_id)?;
     let task = SummaryTaskRepository::new(store).get(&summary.task_id)?;
     let project = store.get_project(&summary.project_id)?;
     let final_directory = unique_directory(&destination, &project.title, now_ms()?);
-    let temporary = destination.join(format!(".siaovplay-summary-{}.tmp", summary.id));
-    if temporary.exists() {
-        return Err(StoreError::Validation("总结报告临时目录已存在".to_owned()));
-    }
+    // A crashed export may leave staging files. Own a fresh directory for this attempt;
+    // never reuse or delete another attempt's partial report.
+    let temporary = destination.join(format!(".siaovplay-summary-{}.tmp", uuid::Uuid::new_v4()));
     fs::create_dir(&temporary)?;
     let result = (|| {
         let assets_directory = temporary.join("assets");
@@ -79,6 +79,7 @@ pub(crate) fn export(
         verify_export(&temporary, &manifest)?;
         fs::rename(&temporary, &final_directory)?;
         Ok(SummaryExport {
+            summary_id: summary.id.clone(),
             directory: final_directory.to_string_lossy().into_owned(),
             report_path: final_directory
                 .join("report.md")
@@ -138,6 +139,7 @@ fn extract_frames(
     if timestamps.is_empty() {
         return Ok(BTreeMap::new());
     }
+    let _lease = super::keyframes::frame_resource_lease()?;
     let ffmpeg = media::ffmpeg_path().map_err(|error| StoreError::Validation(error.to_string()))?;
     let mut assets = BTreeMap::new();
     for (index, timestamp) in timestamps.iter().enumerate() {

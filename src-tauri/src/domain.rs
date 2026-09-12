@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub enum ProjectStatus {
     Ready,
     NeedsRelink,
@@ -9,6 +10,7 @@ pub enum ProjectStatus {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub enum MediaSourceKind {
     LocalFile,
 }
@@ -30,6 +32,7 @@ impl MediaSourceKind {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct MediaSource {
     pub id: String,
     pub kind: MediaSourceKind,
@@ -38,26 +41,37 @@ pub struct MediaSource {
     pub display_name: String,
     pub is_available: bool,
     pub source_sha256: Option<String>,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub probed_at_ms: Option<i64>,
     pub poster_path: Option<String>,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub created_at_ms: i64,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub updated_at_ms: i64,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct PlaybackState {
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub position_ms: i64,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub duration_ms: Option<i64>,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub completed_at_ms: Option<i64>,
+    #[cfg_attr(test, schemars(range(min = 0, max = 1.0)))]
     pub volume: f64,
+    #[cfg_attr(test, schemars(range(min = 0.25, max = 4.0)))]
     pub playback_rate: f64,
     pub subtitle_mode: SubtitleDisplayMode,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub updated_at_ms: i64,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub enum SubtitleDisplayMode {
     Original,
     Translation,
@@ -85,13 +99,18 @@ impl SubtitleDisplayMode {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct Project {
     pub id: String,
     pub title: String,
     pub status: ProjectStatus,
+    #[cfg_attr(test, schemars(range(min = 1, max = 9007199254740991_u64)))]
     pub revision: i64,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub created_at_ms: i64,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub updated_at_ms: i64,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub last_opened_at_ms: i64,
     pub media_source: MediaSource,
     pub playback_state: PlaybackState,
@@ -114,6 +133,8 @@ pub struct RelinkProjectMediaInput {
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdatePlaybackStateInput {
+    #[serde(default)]
+    pub completed: Option<bool>,
     pub project_id: String,
     pub position_ms: i64,
     pub duration_ms: Option<i64>,
@@ -124,15 +145,19 @@ pub struct UpdatePlaybackStateInput {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct DeleteProjectResult {
     pub project_id: String,
     pub deleted: bool,
     pub source_media_deleted: bool,
     pub cached_media_deleted: bool,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
+    pub cleanup_pending: u64,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub enum MediaArtifactStatus {
     Queued,
     Running,
@@ -166,6 +191,7 @@ impl MediaArtifactStatus {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct MediaArtifact {
     pub id: String,
     pub project_id: String,
@@ -176,7 +202,9 @@ pub struct MediaArtifact {
     pub profile: String,
     pub error_code: Option<String>,
     pub error_message: Option<String>,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub created_at_ms: i64,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub updated_at_ms: i64,
 }
 

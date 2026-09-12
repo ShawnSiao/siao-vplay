@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { SubtitleVersion } from "../../types";
 import { SubtitleTranscriptPanel } from "./SubtitleTranscriptPanel";
+import { PlayerAuxiliaryDrawer } from "./PlayerAuxiliaryDrawer";
 
 function version(role: SubtitleVersion["role"]): SubtitleVersion {
   return {
@@ -42,6 +43,31 @@ describe("SubtitleTranscriptPanel", () => {
   beforeEach(() => vi.useFakeTimers());
   afterEach(() => vi.useRealTimers());
 
+  it("resets full transcript permission when the actual drawer changes video or subtitle revision", () => {
+    const source = version("original");
+    const props = {
+      activeTab: "transcript" as const, projectId: "project", mediaTitle: "Video A",
+      contextLabel: "", contextStatus: "", episodeSummary: "", originalVersion: source,
+      translatedVersion: null, activeOriginal: null, activeTranslation: null,
+      episodeNavigation: { detail: null, episodes: [], neighbors: { previous: null, next: null }, loading: false, error: null },
+      switchingEpisode: false, positionMs: 0, durationMs: 6000,
+      onSelectTab: vi.fn(), onClose: vi.fn(), onSwitchEpisode: vi.fn(), onManageSubtitles: vi.fn(),
+      onSeekTo: vi.fn(), onPausePlayback: vi.fn(),
+    };
+    const { rerender } = render(<PlayerAuxiliaryDrawer {...props} />);
+    expect(screen.queryByRole("button", { name: /original 2/ })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "全部字幕（含后续剧情）" }));
+    expect(screen.getByRole("button", { name: /original 2/ })).toBeInTheDocument();
+    const next = { ...source, id: "video-b-version", projectId: "video-b" };
+    rerender(<PlayerAuxiliaryDrawer {...props} projectId="video-b" mediaTitle="Video B" originalVersion={next} />);
+    expect(screen.getByRole("button", { name: "当前及之前" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.queryByRole("button", { name: /original 2/ })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "全部字幕（含后续剧情）" }));
+    rerender(<PlayerAuxiliaryDrawer {...props} projectId="video-b" originalVersion={{ ...next, versionNumber: 2 }} />);
+    expect(screen.queryByRole("button", { name: /original 2/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "当前及之前" })).toHaveAttribute("aria-pressed", "true");
+  });
+
   it("highlights the current cue and pauses before seeking", () => {
     const calls: string[] = [];
     render(
@@ -57,6 +83,8 @@ describe("SubtitleTranscriptPanel", () => {
       "aria-current",
       "true",
     );
+    expect(screen.queryByRole("button", { name: /original 2/ })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "全部字幕（含后续剧情）" }));
     fireEvent.click(screen.getByRole("button", { name: /original 2/ }));
     expect(calls).toEqual(["pause", "seek:4000"]);
   });
@@ -72,7 +100,8 @@ describe("SubtitleTranscriptPanel", () => {
       />,
     );
     const search = screen.getByRole("searchbox", { name: "搜索逐字稿" });
-    expect(screen.getAllByText("暂无译文")).toHaveLength(3);
+    expect(screen.getAllByText("暂无译文")).toHaveLength(2);
+    fireEvent.click(screen.getByRole("button", { name: "全部字幕（含后续剧情）" }));
     fireEvent.change(search, { target: { value: "original 2" } });
     act(() => vi.advanceTimersByTime(200));
     expect(screen.getAllByRole("button", { name: /original/ })).toHaveLength(1);
@@ -101,7 +130,7 @@ describe("SubtitleTranscriptPanel", () => {
         onSeekTo={() => undefined}
       />,
     );
-    fireEvent.click(screen.getByRole("button", { name: "全部字幕" }));
+    fireEvent.click(screen.getByRole("button", { name: "全部字幕（含后续剧情）" }));
     expect(container.querySelector(".transcript-list-inner.virtualized")).not.toBeNull();
     expect(container.querySelectorAll(".transcript-cue").length).toBeLessThan(501);
   });

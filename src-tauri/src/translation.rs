@@ -1,3 +1,5 @@
+#[cfg(test)]
+mod wire_schema;
 use std::{
     collections::{BTreeMap, BTreeSet},
     fs,
@@ -121,14 +123,19 @@ pub struct ImportTranslationResultInput {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct TranslationTask {
     pub id: String,
     pub project_id: String,
+    #[cfg_attr(test, schemars(with = "wire_schema::TaskType"))]
     pub task_type: String,
+    #[cfg_attr(test, schemars(with = "wire_schema::Handoff"))]
     pub handoff_kind: String,
     pub protocol_version: String,
+    #[cfg_attr(test, schemars(with = "wire_schema::TaskStatus"))]
     pub status: String,
     pub stage: String,
+    #[cfg_attr(test, schemars(range(min = 0, max = 1)))]
     pub progress: f64,
     pub receiver_label: String,
     pub material_scope: Vec<String>,
@@ -136,30 +143,41 @@ pub struct TranslationTask {
     pub source_language_code: String,
     pub target_language_code: String,
     pub authorized_segment_ids: Vec<String>,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub segment_count: usize,
+    #[cfg_attr(test, schemars(range(min = -9007199254740991_i64, max = 9007199254740991_i64)))]
     pub expected_project_revision: i64,
     pub base_translation_version_id: Option<String>,
     pub output_version_id: Option<String>,
     pub validation: Option<TranslationValidation>,
     pub error_code: Option<String>,
     pub error_message: Option<String>,
+    #[cfg_attr(test, schemars(range(min = -9007199254740991_i64, max = 9007199254740991_i64)))]
     pub created_at_ms: i64,
+    #[cfg_attr(test, schemars(range(min = -9007199254740991_i64, max = 9007199254740991_i64)))]
     pub updated_at_ms: i64,
+    #[cfg_attr(test, schemars(range(min = -9007199254740991_i64, max = 9007199254740991_i64)))]
     pub started_at_ms: Option<i64>,
+    #[cfg_attr(test, schemars(range(min = -9007199254740991_i64, max = 9007199254740991_i64)))]
     pub completed_at_ms: Option<i64>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct TranslationValidation {
+    #[cfg_attr(test, schemars(with = "wire_schema::ValidationStatus"))]
     pub status: String,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub translation_count: usize,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub warning_count: usize,
     pub warnings: Vec<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct TranslationApplication {
     pub task: TranslationTask,
     pub subtitle_version: SubtitleVersion,
@@ -239,6 +257,7 @@ pub fn prepare_translation_task(
     store: &ProjectStore,
     input: PrepareTranslationTaskInput,
 ) -> Result<TranslationTask, TranslationError> {
+    let _project_operation = crate::project_operations::Operation::acquire(store, &input.project_id)?;
     let PrepareTranslationTaskInput {
         project_id,
         handoff_kind,
@@ -260,6 +279,7 @@ pub fn prepare_translation_task(
             "手动选择的外部 Agent",
         ),
         "codex" => ("queued", "queued", "本机 Codex"),
+        "api" => ("queued", "awaiting_confirmation", "已选择的 AI 服务"),
         value => return Err(TranslationError::InvalidHandoff(value.to_owned())),
     };
     let project = store.get_project(&project_id)?;
@@ -349,7 +369,7 @@ pub fn prepare_translation_task(
             .cloned()
             .collect(),
     };
-    let current_translation = subtitles::list_subtitle_versions(store, &project.id)?
+    let current_translation = subtitles::list_current_subtitle_versions(store, &project.id)?
         .into_iter()
         .find(|version| {
             version.role == "translation"
@@ -474,7 +494,7 @@ pub fn prepare_translation_task(
                 material_manifest_sha256, base_translation_version_id,
                 created_at_ms, updated_at_ms
              ) VALUES (
-                ?1, ?2, 'subtitle_translation', ?3, ?3, ?4,
+                ?1, ?2, 'subtitle_translation', CASE WHEN ?3 = 'api' THEN 'manual' ELSE ?3 END, ?3, ?4,
                 ?5, ?6, 0.0, ?7, ?8,
                 ?9, ?10, ?11, ?12, ?13,
                 ?14, ?15, ?16, ?17, ?18, ?18
@@ -538,7 +558,7 @@ pub fn get_translation_task(
     connection
         .query_row(
             "SELECT
-                id, project_id, task_type, handoff_kind, protocol_version,
+                id, project_id, task_type, execution_kind, protocol_version,
                 status, stage, progress, receiver_label, material_scope_json,
                 source_version_id, source_language_code, target_language_code,
                 segment_count, output_version_id, error_code, error_message,
@@ -647,12 +667,7 @@ pub fn read_translation_prompt(
     get_translation_task(store, task_id)?;
     let directory = task_directory(store, task_id)?;
     verify_task_package(store, task_id, &directory)?;
-    let path = directory.join("prompt.md");
-    let metadata = fs::metadata(&path)?;
-    if metadata.len() > MAX_RESULT_BYTES {
-        return Err(TranslationError::ResultTooLarge);
-    }
-    let bytes = fs::read(path)?;
+    let bytes = crate::translation_dispatch::read(store, task_id, "prompt.md")?;
     String::from_utf8(bytes).map_err(|_| TranslationError::UnsupportedEncoding)
 }
 
@@ -661,6 +676,7 @@ pub fn import_translation_result(
     input: ImportTranslationResultInput,
 ) -> Result<TranslationApplication, TranslationError> {
     let task = get_translation_task(store, &input.task_id)?;
+    let _project_operation = crate::project_operations::Operation::acquire(store, &task.project_id)?;
     if task.handoff_kind != "manual" || task.status != "awaiting_external_result" {
         return Err(TranslationError::InvalidTaskState(task.status));
     }
@@ -738,6 +754,14 @@ pub(crate) fn apply_codex_result(
 ) -> Result<TranslationApplication, TranslationError> {
     set_task_validating(store, task_id, "running")?;
     validate_and_apply_result(store, task_id, raw, "codex")
+}
+
+pub(crate) fn apply_api_result(store: &ProjectStore, task_id: &str, raw: &str) -> Result<TranslationApplication, TranslationError> {
+    if get_translation_task(store, task_id)?.handoff_kind != "api" {
+        return Err(TranslationError::InvalidHandoff("api".into()));
+    }
+    set_task_validating(store, task_id, "running")?;
+    validate_and_apply_result(store, task_id, raw, "api")
 }
 
 fn validate_result(
@@ -905,10 +929,11 @@ fn persist_translation_result(
     let result_sha256 = hash_bytes(raw.as_bytes());
     let base_translation = if let Some(version_id) = &task.base_translation_version_id {
         Some(
-            subtitles::list_subtitle_versions(store, &task.project_id)?
-                .into_iter()
-                .find(|version| version.id == *version_id)
-                .ok_or(TranslationError::ProjectChanged)?,
+            subtitles::get_subtitle_version(store, &task.project_id, version_id)
+                .map_err(|error| match error {
+                    SubtitleError::VersionNotFound(_) => TranslationError::ProjectChanged,
+                    other => other.into(),
+                })?,
         )
     } else {
         None
@@ -1077,6 +1102,8 @@ fn persist_translation_result(
             |row| row.get::<_, i64>(0),
         )?;
         let source_label = match (delivery_kind, partial_selection) {
+            ("api", true) => "AI 服务选段重译",
+            ("api", false) => "AI 服务翻译",
             ("codex", true) => "Codex 选段重译",
             ("codex", false) => "Codex 翻译",
             (_, true) => "手动 Agent 选段重译",
@@ -1156,7 +1183,7 @@ fn persist_translation_result(
                  result_sha256 = ?2, result_validation_json = ?3,
                  output_version_id = ?4, error_code = NULL, error_message = NULL,
                  completed_at_ms = ?5, updated_at_ms = ?5
-             WHERE id = ?1 AND status = 'validating'",
+             WHERE id = ?1 AND status = 'validating' AND cancel_requested_at_ms IS NULL",
             params![
                 task.id,
                 result_sha256,
@@ -1182,6 +1209,7 @@ fn persist_translation_result(
         if project_updated != 1 {
             return Err(TranslationError::ProjectChanged);
         }
+        crate::external_result_delivery::record_completion(&transaction, "translation", &task.id)?;
         transaction.commit()?;
         Ok(())
     })();
@@ -1190,12 +1218,7 @@ fn persist_translation_result(
         return Err(error);
     }
 
-    let subtitle_version = subtitles::list_subtitle_versions(store, &task.project_id)?
-        .into_iter()
-        .find(|version| version.id == version_id)
-        .ok_or_else(|| {
-            StoreError::Validation("目标语言字幕版本已写入，但无法重新读取".to_owned())
-        })?;
+    let subtitle_version = subtitles::get_subtitle_version(store, &task.project_id, &version_id)?;
     Ok(TranslationApplication {
         task: get_translation_task(store, &task.id)?,
         subtitle_version,
@@ -1229,7 +1252,7 @@ pub(crate) fn set_task_validating(
         "UPDATE agent_tasks
          SET status = 'validating', stage = 'validating', progress = 0.9,
              error_code = NULL, error_message = NULL, updated_at_ms = ?3
-         WHERE id = ?1 AND status = ?2",
+         WHERE id = ?1 AND status = ?2 AND cancel_requested_at_ms IS NULL",
         params![task_id, expected_status, timestamp],
     )?;
     if changed != 1 {
@@ -1801,207 +1824,10 @@ mod tests {
     use std::fs;
 
     use serde_json::json;
-    use tempfile::TempDir;
 
     use super::*;
-    use crate::domain::CreateLocalProjectInput;
 
-    struct TranslationFixture {
-        _temporary: TempDir,
-        store: ProjectStore,
-        project_id: String,
-        source_version_id: String,
-        segment_ids: Vec<String>,
-        media_path: PathBuf,
-    }
-
-    impl TranslationFixture {
-        fn new() -> Self {
-            let temporary = tempfile::tempdir().expect("temporary directory should be created");
-            let media_path = temporary.path().join("source-video.mp4");
-            fs::write(&media_path, b"authorized-media-fixture")
-                .expect("media fixture should be written");
-            let store = ProjectStore::open(
-                temporary
-                    .path()
-                    .join("data")
-                    .join("projects")
-                    .join("siaovplay.db"),
-            )
-            .expect("store should open");
-            let project = store
-                .create_local_project(CreateLocalProjectInput {
-                    media_path: media_path.to_string_lossy().into_owned(),
-                    title: Some("translation fixture".to_owned()),
-                })
-                .expect("project should be created");
-            let track_id = Uuid::new_v4().to_string();
-            let source_version_id = Uuid::new_v4().to_string();
-            let segment_ids = vec![Uuid::new_v4().to_string(), Uuid::new_v4().to_string()];
-            let media_sha256 = "a".repeat(64);
-            let source_sha256 = "b".repeat(64);
-            let cues = vec![
-                SubtitleCue {
-                    ordinal: 1,
-                    start_ms: 0,
-                    end_ms: 1_200,
-                    text: "また明日、駅前で。".to_owned(),
-                    confidence: None,
-                },
-                SubtitleCue {
-                    ordinal: 2,
-                    start_ms: 1_400,
-                    end_ms: 2_600,
-                    text: "約束だからな。".to_owned(),
-                    confidence: None,
-                },
-            ];
-            let preflight = subtitles::inspect_cues(&cues, Some(3_000));
-            let timestamp = now_ms().expect("timestamp should work");
-            let mut connection = store.connect().expect("database should open");
-            let transaction = connection.transaction().expect("transaction should start");
-            transaction
-                .execute(
-                    "UPDATE media_sources
-                     SET source_sha256 = ?2, probed_at_ms = ?3
-                     WHERE id = ?1",
-                    params![project.media_source.id, media_sha256, timestamp],
-                )
-                .expect("media fingerprint should be set");
-            transaction
-                .execute(
-                    "UPDATE projects
-                     SET revision = 2, updated_at_ms = ?2
-                     WHERE id = ?1",
-                    params![project.id, timestamp],
-                )
-                .expect("project revision should update");
-            transaction
-                .execute(
-                    "INSERT INTO subtitle_tracks (
-                        id, project_id, role, language_code, current_version_id,
-                        created_at_ms, updated_at_ms
-                     ) VALUES (?1, ?2, 'original', 'ja', NULL, ?3, ?3)",
-                    params![track_id, project.id, timestamp],
-                )
-                .expect("original track should be inserted");
-            transaction
-                .execute(
-                    "INSERT INTO subtitle_versions (
-                        id, track_id, project_id, version_number, status,
-                        source_kind, source_label, source_sha256, media_sha256,
-                        language_code, project_revision, preflight_json,
-                        created_at_ms
-                     ) VALUES (
-                        ?1, ?2, ?3, 1, 'ready',
-                        'imported_file', 'fixture.vtt', ?4, ?5,
-                        'ja', 2, ?6, ?7
-                     )",
-                    params![
-                        source_version_id,
-                        track_id,
-                        project.id,
-                        source_sha256,
-                        media_sha256,
-                        serde_json::to_string(&preflight).expect("preflight should serialize"),
-                        timestamp,
-                    ],
-                )
-                .expect("source version should be inserted");
-            for (index, cue) in cues.iter().enumerate() {
-                transaction
-                    .execute(
-                        "INSERT INTO subtitle_segments (
-                            id, version_id, ordinal, start_ms, end_ms, text, confidence
-                         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, NULL)",
-                        params![
-                            segment_ids[index],
-                            source_version_id,
-                            i64::try_from(cue.ordinal).expect("ordinal should fit"),
-                            cue.start_ms,
-                            cue.end_ms,
-                            cue.text,
-                        ],
-                    )
-                    .expect("source segment should be inserted");
-            }
-            transaction
-                .execute(
-                    "UPDATE subtitle_tracks
-                     SET current_version_id = ?2
-                     WHERE id = ?1",
-                    params![track_id, source_version_id],
-                )
-                .expect("source version should become current");
-            transaction.commit().expect("fixture should commit");
-            Self {
-                _temporary: temporary,
-                store,
-                project_id: project.id,
-                source_version_id,
-                segment_ids,
-                media_path,
-            }
-        }
-
-        fn prepare_manual(&self) -> TranslationTask {
-            self.prepare_manual_for("en", "zh-cn")
-        }
-
-        fn prepare_manual_for(
-            &self,
-            source_language_code: &str,
-            target_language_code: &str,
-        ) -> TranslationTask {
-            prepare_translation_task(
-                &self.store,
-                PrepareTranslationTaskInput {
-                    target_language_code: target_language_code.to_owned(),
-                    ..crate::translation_test_support::translation_input(
-                        self.project_id.clone(),
-                        "manual",
-                        source_language_code,
-                    )
-                },
-            )
-            .expect("manual task should be prepared")
-        }
-
-        fn result_value(&self, task: &TranslationTask) -> Value {
-            json!({
-                "$schema": "https://json-schema.org/draft/2020-12/schema",
-                "protocolVersion": PROTOCOL_VERSION,
-                "taskId": task.id,
-                "sourceVersionId": self.source_version_id,
-                "targetLanguageCode": task.target_language_code,
-                "translations": [
-                    {
-                        "segmentId": self.segment_ids[0],
-                        "translatedText": "明天还在车站前见。"
-                    },
-                    {
-                        "segmentId": self.segment_ids[1],
-                        "translatedText": "说好了啊。"
-                    }
-                ]
-            })
-        }
-
-        fn write_result(&self, name: &str, value: &Value) -> PathBuf {
-            let path = self
-                .store
-                .data_directory()
-                .parent()
-                .expect("data directory should have a parent")
-                .join(name);
-            fs::write(
-                &path,
-                serde_json::to_vec_pretty(value).expect("result should serialize"),
-            )
-            .expect("result fixture should be written");
-            path
-        }
-    }
+    use super::fixture::TranslationFixture;
 
     #[test]
     fn prepares_a_versioned_manual_task_without_media_paths() {
@@ -2418,3 +2244,7 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+#[path = "translation_fixture.rs"]
+pub(crate) mod fixture;

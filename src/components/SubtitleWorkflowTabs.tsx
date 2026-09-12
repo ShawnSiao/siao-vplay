@@ -1,9 +1,14 @@
+import type { ReactNode } from "react";
+import type { SubtitleVersion } from "../types";
+import { useTabNavigation } from "./useTabNavigation";
+
 export type SubtitleWorkflow = "import" | "transcribe" | "translate";
 
 type SubtitleWorkflowTabsProps = {
   workflow: SubtitleWorkflow;
   disabled: boolean;
   onChange: (workflow: SubtitleWorkflow) => void;
+  children: ReactNode;
 };
 
 const workflows: Array<{ value: SubtitleWorkflow; label: string }> = [
@@ -16,26 +21,35 @@ export function SubtitleWorkflowTabs({
   workflow,
   disabled,
   onChange,
+  children,
 }: SubtitleWorkflowTabsProps) {
+  const tabs = useTabNavigation(workflow, onChange);
   return (
+    <>
     <div
       className="subtitle-workflow-switch"
-      role="tablist"
+      {...tabs.listProps}
       aria-label="字幕准备方式"
     >
       {workflows.map((item) => (
         <button
           className={workflow === item.value ? "active" : ""}
-          type="button"
-          role="tab"
-          aria-selected={workflow === item.value}
           disabled={disabled}
           key={item.value}
-          onClick={() => onChange(item.value)}
+          {...tabs.tabProps(item.value)}
         >
           {item.label}
         </button>
       ))}
     </div>
+    <div {...tabs.panelProps}>{children}</div>
+    </>
   );
+}
+export function SubtitleCurrentNote({ version }: { version: SubtitleVersion }) {
+  return <div className="subtitle-current-note">
+    <span>当前原文字幕</span>
+    <strong>{version.sourceLabel}</strong>
+    <small>{version.languageCode.toUpperCase()} · {version.segments.length} 条 · 版本 {version.versionNumber} · {version.status === "draft" ? "草稿" : "已检查"}</small>
+  </div>;
 }

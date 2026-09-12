@@ -1,0 +1,101 @@
+{
+  "$defs": {
+    "TranscriptionModelStatus": {
+      "properties": {
+        "available": {
+          "type": "boolean"
+        },
+        "errorMessage": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "modelKind": {
+          "type": "string"
+        },
+        "path": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "modelKind",
+        "available",
+        "path",
+        "errorMessage"
+      ],
+      "type": "object"
+    },
+    "TranscriptionRuntimeOption": {
+      "properties": {
+        "available": {
+          "type": "boolean"
+        },
+        "backend": {
+          "type": "string"
+        },
+        "errorMessage": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "path": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "version": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "backend",
+        "available",
+        "path",
+        "version",
+        "errorMessage"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "available": {
+      "type": "boolean"
+    },
+    "models": {
+      "items": {
+        "$ref": "#/$defs/TranscriptionModelStatus"
+      },
+      "type": "array"
+    },
+    "preferredBackend": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "runtimes": {
+      "items": {
+        "$ref": "#/$defs/TranscriptionRuntimeOption"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "available",
+    "preferredBackend",
+    "runtimes",
+    "models"
+  ],
+  "title": "TranscriptionRuntimeStatus",
+  "type": "object"
+}

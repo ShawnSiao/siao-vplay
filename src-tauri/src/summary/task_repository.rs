@@ -205,14 +205,40 @@ impl<'a> SummaryTaskRepository<'a> {
         stage: &str,
         progress: f64,
     ) -> Result<(), StoreError> {
-        self.store.connect()?.execute(
+        let changed = self.store.connect()?.execute(
             "UPDATE summary_tasks SET status = ?2, stage = ?3, progress = ?4,
                     updated_at_ms = ?5, started_at_ms = COALESCE(started_at_ms, ?5),
                     completed_at_ms = NULL, error_code = NULL, error_message = NULL
-             WHERE id = ?1",
+             WHERE id = ?1 AND status NOT IN ('completed', 'cancelled') AND cancel_requested_at_ms IS NULL",
             params![task_id, status, stage, progress, now_ms()?],
         )?;
+        if changed != 1 {
+            return Err(StoreError::Validation("任务已结束或正在取消".to_owned()));
+        }
         Ok(())
+    }
+
+    pub(crate) fn claim_for_execution(&self, task_id: &str) -> Result<(), StoreError> {
+        let changed = self.store.connect()?.execute(
+            "UPDATE summary_tasks SET status = 'queued', stage = 'queued', updated_at_ms = ?2,
+                    error_code = NULL, error_message = NULL, completed_at_ms = NULL
+             WHERE id = ?1 AND status IN ('prepared', 'awaiting_external_result', 'interrupted', 'failed', 'paused')
+               AND cancel_requested_at_ms IS NULL",
+            params![task_id, now_ms()?],
+        )?;
+        if changed != 1 {
+            return Err(StoreError::Validation(
+                "任务已启动、结束或正在取消".to_owned(),
+            ));
+        }
+        Ok(())
+    }
+
+    pub(crate) fn cancellation_requested(&self, task_id: &str) -> Result<bool, StoreError> {
+        Ok(self.store.connect()?.query_row(
+            "SELECT cancel_requested_at_ms IS NOT NULL FROM summary_tasks WHERE id = ?1",
+            [task_id], |row| row.get(0),
+        )?)
     }
 
     pub(crate) fn request_cancel(&self, task_id: &str) -> Result<(), StoreError> {
@@ -228,11 +254,14 @@ impl<'a> SummaryTaskRepository<'a> {
         let timestamp = now_ms()?;
         let mut connection = self.store.connect()?;
         let transaction = connection.transaction()?;
-        transaction.execute(
+        let changed = transaction.execute(
             "UPDATE summary_tasks SET status = 'cancelled', stage = 'cancelled',
-                    completed_at_ms = ?2, updated_at_ms = ?2 WHERE id = ?1",
+                    completed_at_ms = ?2, updated_at_ms = ?2 WHERE id = ?1 AND status NOT IN ('completed', 'cancelled')",
             params![task_id, timestamp],
         )?;
+        if changed == 0 {
+            return Ok(());
+        }
         transaction.execute(
             "UPDATE summary_chunks SET status = 'cancelled', completed_at_ms = ?2,
                     updated_at_ms = ?2 WHERE task_id = ?1 AND status != 'completed'",
@@ -243,11 +272,25 @@ impl<'a> SummaryTaskRepository<'a> {
     }
 
     pub(crate) fn fail(&self, task_id: &str, code: &str, message: &str) -> Result<(), StoreError> {
-        self.store.connect()?.execute(
-            "UPDATE summary_tasks SET status = 'failed', stage = 'failed', error_code = ?2,
-                    error_message = ?3, completed_at_ms = ?4, updated_at_ms = ?4 WHERE id = ?1",
+        let mut connection = self.store.connect()?;
+        let transaction = connection.transaction()?;
+        transaction.execute(
+            "UPDATE summary_tasks SET
+                    status = CASE WHEN cancel_requested_at_ms IS NULL THEN 'failed' ELSE 'cancelled' END,
+                    stage = CASE WHEN cancel_requested_at_ms IS NULL THEN 'failed' ELSE 'cancelled' END,
+                    error_code = CASE WHEN cancel_requested_at_ms IS NULL THEN ?2 ELSE NULL END,
+                    error_message = CASE WHEN cancel_requested_at_ms IS NULL THEN ?3 ELSE NULL END,
+                    completed_at_ms = ?4, updated_at_ms = ?4
+             WHERE id = ?1 AND status NOT IN ('completed', 'cancelled')",
             params![task_id, code, message, now_ms()?],
         )?;
+        transaction.execute(
+            "UPDATE summary_chunks SET status = 'cancelled', completed_at_ms = ?2, updated_at_ms = ?2
+             WHERE task_id = ?1 AND status != 'completed'
+               AND EXISTS(SELECT 1 FROM summary_tasks WHERE id = ?1 AND status = 'cancelled')",
+            params![task_id, now_ms()?],
+        )?;
+        transaction.commit()?;
         Ok(())
     }
 
@@ -262,18 +305,31 @@ impl<'a> SummaryTaskRepository<'a> {
 
     pub(crate) fn recover_interrupted(&self) -> Result<usize, StoreError> {
         let timestamp = now_ms()?;
-        let connection = self.store.connect()?;
-        let count = connection.execute(
+        let mut connection = self.store.connect()?;
+        let transaction = connection.transaction()?;
+        let cancelled = transaction.execute(
+            "UPDATE summary_tasks SET status = 'cancelled', stage = 'cancelled', completed_at_ms = ?1,
+                    updated_at_ms = ?1 WHERE cancel_requested_at_ms IS NOT NULL
+                    AND status IN ('queued', 'running', 'validating', 'interrupted', 'paused')",
+            params![timestamp],
+        )?;
+        transaction.execute(
+            "UPDATE summary_chunks SET status = 'cancelled', completed_at_ms = ?1, updated_at_ms = ?1
+             WHERE status != 'completed' AND task_id IN (SELECT id FROM summary_tasks WHERE status = 'cancelled')",
+            params![timestamp],
+        )?;
+        let count = transaction.execute(
             "UPDATE summary_tasks SET status = 'interrupted', stage = 'interrupted',
                     updated_at_ms = ?1 WHERE status IN ('queued', 'running', 'validating')",
             params![timestamp],
         )?;
-        connection.execute(
+        transaction.execute(
             "UPDATE summary_chunks SET status = 'prepared', updated_at_ms = ?1
              WHERE status IN ('queued', 'running')",
             params![timestamp],
         )?;
-        Ok(count)
+        transaction.commit()?;
+        Ok(count + cancelled)
     }
 
     pub(crate) fn materials_directory(&self, task_id: &str) -> std::path::PathBuf {
@@ -335,3 +391,7 @@ pub(crate) fn now_ms() -> Result<i64, StoreError> {
 
 #[allow(dead_code)]
 fn _assert_video_summary_is_domain_type(_: VideoSummary) {}
+
+#[cfg(test)]
+#[path = "task_lifecycle_tests.rs"]
+mod lifecycle_tests;

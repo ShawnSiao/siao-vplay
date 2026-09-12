@@ -1,0 +1,207 @@
+{
+  "$defs": {
+    "EpisodeRecognition": {
+      "enum": [
+        "sxx_exx",
+        "season_x_episode",
+        "chinese_episode",
+        "numeric_prefix",
+        "season_directory",
+        "unresolved",
+        "conflict"
+      ],
+      "type": "string"
+    },
+    "ItemAvailability": {
+      "enum": [
+        "available",
+        "missing",
+        "root_offline",
+        "changed"
+      ],
+      "type": "string"
+    },
+    "LibraryRecoveryItem": {
+      "properties": {
+        "collectionId": {
+          "type": "string"
+        },
+        "displayTitle": {
+          "type": "string"
+        },
+        "previousAvailability": {
+          "$ref": "#/$defs/ItemAvailability"
+        },
+        "projectId": {
+          "type": "string"
+        },
+        "relativePath": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "collectionId",
+        "projectId",
+        "relativePath",
+        "displayTitle",
+        "previousAvailability"
+      ],
+      "type": "object"
+    },
+    "LibraryScanCandidate": {
+      "properties": {
+        "absoluteOrder": {
+          "format": "int64",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "candidateId": {
+          "type": "string"
+        },
+        "confirmationReason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "displayTitle": {
+          "type": "string"
+        },
+        "episodeNumber": {
+          "format": "int64",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "needsConfirmation": {
+          "type": "boolean"
+        },
+        "quickFingerprint": {
+          "type": "string"
+        },
+        "recognition": {
+          "$ref": "#/$defs/EpisodeRecognition"
+        },
+        "relativePath": {
+          "type": "string"
+        },
+        "seasonNumber": {
+          "format": "int64",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "sourceModifiedAtMs": {
+          "format": "int64",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "sourceSizeBytes": {
+          "format": "uint64",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "candidateId",
+        "relativePath",
+        "displayTitle",
+        "seasonNumber",
+        "episodeNumber",
+        "absoluteOrder",
+        "recognition",
+        "needsConfirmation",
+        "confirmationReason",
+        "sourceSizeBytes",
+        "sourceModifiedAtMs",
+        "quickFingerprint"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "availableItemCount": {
+      "format": "uint64",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "changedItems": {
+      "items": {
+        "$ref": "#/$defs/LibraryRecoveryItem"
+      },
+      "type": "array"
+    },
+    "collectionId": {
+      "type": "string"
+    },
+    "expiresAtMs": {
+      "format": "int64",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "ignoredCount": {
+      "format": "uint64",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "missingItems": {
+      "items": {
+        "$ref": "#/$defs/LibraryRecoveryItem"
+      },
+      "type": "array"
+    },
+    "newCandidates": {
+      "items": {
+        "$ref": "#/$defs/LibraryScanCandidate"
+      },
+      "type": "array"
+    },
+    "previewToken": {
+      "type": "string"
+    },
+    "rootDisplayName": {
+      "type": "string"
+    },
+    "rootId": {
+      "type": "string"
+    },
+    "rootOffline": {
+      "type": "boolean"
+    },
+    "rootPath": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "previewToken",
+    "rootId",
+    "rootPath",
+    "rootDisplayName",
+    "collectionId",
+    "rootOffline",
+    "newCandidates",
+    "missingItems",
+    "changedItems",
+    "availableItemCount",
+    "ignoredCount",
+    "expiresAtMs"
+  ],
+  "title": "LibraryRescanPreview",
+  "type": "object"
+}

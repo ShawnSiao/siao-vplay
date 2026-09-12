@@ -1,3 +1,6 @@
+import type { LibraryCollectionPagination } from "../features/library/useLibraryCollectionPaging";
+import type { CollectionOverviewReader } from "../features/library/useCollectionOverviewPages";
+import type { RootOverviewReader } from "../features/library/useRootOverviewPages";
 import { useState } from "react";
 
 import { LibraryFoldersView } from "../features/library/components/LibraryFoldersView";
@@ -13,12 +16,15 @@ import type {
   LibraryCollectionDeletionResult,
   LibraryHome,
   LibraryMediaSummary,
+  LibraryMediaSection,
 } from "../types";
 import { Dialog } from "./Dialog";
 import { LibraryImportDialog } from "./LibraryImportDialog";
 import "../features/library/library.css";
 
 type LibraryScreenProps = {
+  readCollections?: CollectionOverviewReader;
+  readRoots?: RootOverviewReader;
   home: LibraryHome;
   section: LibrarySection;
   sectionPages: LibrarySectionPages;
@@ -27,6 +33,7 @@ type LibraryScreenProps = {
   selectedSeason: number | null;
   loading: boolean;
   collectionLoading: boolean;
+  collectionPagination?: LibraryCollectionPagination;
   mutationPending: boolean;
   error: string | null;
   previewMode: boolean;
@@ -44,10 +51,12 @@ type LibraryScreenProps = {
   onSelectSection: (section: LibrarySection) => void;
   onLoadMoreSection: (
     section: "continue_watching" | "watch_later" | "unclassified",
-  ) => void;
+  ) => Promise<boolean>;
   onReloadSection: (
     section: "continue_watching" | "watch_later" | "unclassified",
   ) => void;
+  onPreviousSection?: (section: LibraryMediaSection) => Promise<boolean>;
+  onRetrySectionPage?: (section: LibraryMediaSection) => Promise<boolean>;
   onOpenCollection: (collectionId: string) => void;
   onCloseCollection: () => void;
   onSelectSeason: (season: number | null) => void;
@@ -62,6 +71,7 @@ type LibraryScreenProps = {
   onAddToCollection: (collectionId: string, projectId: string) => Promise<unknown>;
   onRemoveFromCollection: (collectionId: string, projectId: string) => Promise<unknown>;
   onSetWatchLater: (projectId: string, enabled: boolean) => Promise<unknown>;
+  onSetWatched: (projectId: string, watched: boolean) => Promise<unknown>;
 };
 
 export function LibraryScreen(props: LibraryScreenProps) {
@@ -73,8 +83,17 @@ export function LibraryScreen(props: LibraryScreenProps) {
   const [revokeRootId, setRevokeRootId] = useState<string | null>(null);
   const [deleteNotice, setDeleteNotice] = useState<string | null>(null);
   const [importOpen, setImportOpen] = useState(false);
+  const paginationFor = (section: LibraryMediaSection): LibraryCollectionPagination | undefined => {
+    if (!props.onPreviousSection) return undefined;
+    const page = props.sectionPages[section];
+    return { offset: page.offset ?? 0, totalCount: page.totalCount, nextOffset: page.nextOffset,
+      loadingMore: page.loading || page.loadingMore, error: page.error,
+      loadMore: () => props.onLoadMoreSection(section), loadPrevious: () => props.onPreviousSection!(section),
+      retry: props.onRetrySectionPage ? () => props.onRetrySectionPage!(section) : undefined,
+      reload: () => props.onReloadSection(section) };
+  };
   const commonMediaProps = {
-    collections: props.home.collections,
+    readCollections: props.readCollections,
     mutationPending: props.mutationPending,
     onOpen: props.onOpen,
     onRelink: props.onRelink,
@@ -83,6 +102,7 @@ export function LibraryScreen(props: LibraryScreenProps) {
     onAddToCollection: props.onAddToCollection,
     onRemoveFromCollection: props.onRemoveFromCollection,
     onSetWatchLater: props.onSetWatchLater,
+    onSetWatched: props.onSetWatched,
   };
 
   return (
@@ -104,6 +124,7 @@ export function LibraryScreen(props: LibraryScreenProps) {
           <LibraryHomeView
             home={props.home}
             continuePage={props.sectionPages.continue_watching}
+            pagination={paginationFor("continue_watching")}
             previewMode={props.previewMode}
             onOpen={props.onOpen}
             onOpenCollection={props.onOpenCollection}
@@ -115,11 +136,12 @@ export function LibraryScreen(props: LibraryScreenProps) {
 
         {props.section === "series" || props.currentCollection ? (
           <LibrarySeriesView
-            home={props.home}
+            refreshKey={props.home}
             currentCollection={props.currentCollection}
             currentEpisodes={props.currentEpisodes}
             selectedSeason={props.selectedSeason}
             collectionLoading={props.collectionLoading}
+            collectionPagination={props.collectionPagination}
             onOpenCollection={props.onOpenCollection}
             onCloseCollection={props.onCloseCollection}
             onSelectSeason={props.onSelectSeason}
@@ -144,7 +166,8 @@ export function LibraryScreen(props: LibraryScreenProps) {
 
         {props.section === "folders" && !props.currentCollection ? (
           <LibraryFoldersView
-            folders={props.home.folders}
+            readRoots={props.readRoots}
+            refreshKey={props.home}
             onImportFolder={props.onImportFolder}
             onRescanRoot={props.onRescanRoot}
             onRelocateRoot={props.onRelocateRoot}
@@ -156,6 +179,7 @@ export function LibraryScreen(props: LibraryScreenProps) {
         {props.section === "watch_later" && !props.currentCollection ? (
           <LibraryMediaListView
             kind="watch_later"
+            pagination={paginationFor("watch_later")}
             page={props.sectionPages.watch_later}
             onRetry={() => props.onReloadSection("watch_later")}
             onLoadMore={() => props.onLoadMoreSection("watch_later")}
@@ -166,6 +190,7 @@ export function LibraryScreen(props: LibraryScreenProps) {
         {props.section === "unclassified" && !props.currentCollection ? (
           <LibraryMediaListView
             kind="unclassified"
+            pagination={paginationFor("unclassified")}
             page={props.sectionPages.unclassified}
             onRetry={() => props.onReloadSection("unclassified")}
             onLoadMore={() => props.onLoadMoreSection("unclassified")}
@@ -207,7 +232,7 @@ export function LibraryScreen(props: LibraryScreenProps) {
       ) : null}
 
       {revokeRootId ? (
-        <Dialog eyebrow="文件夹" title="撤销文件夹授权？" onClose={() => setRevokeRootId(null)} actions={<><button className="button quiet" type="button" onClick={() => setRevokeRootId(null)}>取消</button><button className="button danger" type="button" onClick={() => { props.onRevokeRoot(revokeRootId); setRevokeRootId(null); }}>撤销授权</button></>}>
+        <Dialog eyebrow="文件夹" title="撤销文件夹授权？" onClose={() => setRevokeRootId(null)} actions={<><button className="button quiet" type="button" onClick={() => setRevokeRootId(null)}>取消</button><button className="button danger" type="button" disabled={props.mutationPending} onClick={() => { props.onRevokeRoot(revokeRootId); setRevokeRootId(null); }}>撤销授权</button></>}>
           <p>只移除文件夹授权和扫描关系，不删除源视频、播放进度、字幕或学习资料。</p>
         </Dialog>
       ) : null}

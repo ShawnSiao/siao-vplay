@@ -2,6 +2,36 @@ use std::{fs, path::Path};
 
 use super::*;
 
+#[test]
+fn owned_startup_locks_shared_data_before_reading_migration_state() {
+    let directory = tempfile::tempdir().unwrap();
+    let bootstrap = directory.path().join("bootstrap");
+    let data = directory.path().join("shared-data");
+    fs::create_dir_all(&bootstrap).unwrap();
+    fs::write(
+        bootstrap.join("storage-migration.json"),
+        b"unread migration sentinel",
+    )
+    .unwrap();
+    let _owner = crate::instance_lock::InstanceLock::acquire(&data).unwrap();
+    let result = StorageManager::initialize_owned(&bootstrap, data.clone(), Some(data));
+    assert!(matches!(result, Err(StorageError::FileSystem(_))));
+    assert_eq!(
+        fs::read(bootstrap.join("storage-migration.json")).unwrap(),
+        b"unread migration sentinel"
+    );
+}
+
+#[test]
+fn migration_does_not_copy_instance_ownership() {
+    let directory = tempfile::tempdir().unwrap();
+    let _owner = crate::instance_lock::InstanceLock::acquire(directory.path()).unwrap();
+    fs::write(directory.path().join("asset.txt"), b"preserve me").unwrap();
+    let files = super::migration_copy::scan_files(directory.path(), None).unwrap();
+    assert_eq!(files.len(), 1);
+    assert_eq!(files[0].relative, Path::new("asset.txt"));
+}
+
 fn manager(directory: &Path) -> StorageManager {
     let default_root = directory.join("default-data");
     fs::create_dir_all(&default_root).unwrap();
@@ -123,4 +153,47 @@ fn managed_roots_with_files_require_migration() {
         manager.save_settings(input).unwrap_err(),
         StorageError::ManagedRootChangeRequiresMigration
     ));
+}
+
+
+#[test]
+fn failed_settings_write_keeps_live_revision_and_paths_unchanged() {
+    let directory = tempfile::tempdir().unwrap();
+    let manager = manager(directory.path());
+    let exports = directory.path().join("exports");
+    fs::create_dir(&exports).unwrap();
+    let before = serde_json::to_value(manager.get_settings().unwrap()).unwrap();
+    let actual_path = manager.read_state().unwrap().settings_path.clone();
+    // A regular file in place of the parent makes the first write fail without touching user files.
+    let blocked = directory.path().join("blocked-parent");
+    fs::write(&blocked, b"retain this sentinel").unwrap();
+    manager.write_state().unwrap().settings_path = blocked.join("storage-settings.json");
+    let mut input = save_input(1);
+    input.default_subtitle_export_directory = Some(path_string(&exports));
+    assert!(manager.save_settings(input).is_err());
+    let after = manager.get_settings().unwrap();
+    assert_eq!(after.revision, before["revision"].as_u64().unwrap());
+    assert_eq!(after.default_subtitle_export_directory, None);
+    assert_eq!(fs::read(&blocked).unwrap(), b"retain this sentinel");
+    manager.write_state().unwrap().settings_path = actual_path;
+    let mut retry = save_input(1);
+    retry.default_subtitle_export_directory = Some(path_string(&exports));
+    assert_eq!(manager.save_settings(retry).unwrap().revision, 2);
+    let reloaded = StorageManager::initialize(directory.path(), directory.path().join("default-data"), None).unwrap();
+    assert_eq!(reloaded.get_settings().unwrap().default_subtitle_export_directory,
+        manager.get_settings().unwrap().default_subtitle_export_directory);
+}
+
+
+#[test]
+fn settings_save_refuses_an_existing_directory_without_moving_it() {
+    let directory = tempfile::tempdir().unwrap();
+    let manager = manager(directory.path());
+    let target = manager.read_state().unwrap().settings_path.clone();
+    fs::create_dir(&target).unwrap();
+    fs::write(target.join("sentinel"), b"retain unrelated content").unwrap();
+    assert!(manager.save_settings(save_input(1)).is_err());
+    assert!(target.is_dir());
+    assert_eq!(fs::read(target.join("sentinel")).unwrap(), b"retain unrelated content");
+    assert_eq!(manager.get_settings().unwrap().revision, 1);
 }

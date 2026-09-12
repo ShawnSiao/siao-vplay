@@ -1,12 +1,19 @@
+import { useResourceLocationActions } from "./useResourceLocationActions";
+import { commandError } from "../../lib/commandError";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useResourceNetworkState } from "./useResourceNetworkState";
+import { useResourceFeedback } from "./useResourceFeedback";
+import { useResourceStatusState } from "./useResourceStatusState";
+import { useResourceMove } from "./useResourceMove";
+import { useResourceTaskState, type ResourceTaskMetric } from "./useResourceTaskState";
+export type { ResourceTaskMetric } from "./useResourceTaskState";
+import { useResourcePolling } from "./useResourcePolling";
 
 import {
   adoptLocalResources,
   cancelResourceDownload,
   chooseLocalResourceParent,
   cleanupUnusedResources,
-  commandError,
-  configureLocalResourceRoot,
   getLocalResourceCatalog,
   getLocalResourceDiagnostics,
   getLocalResourceDiagnosticSummary,
@@ -23,19 +30,17 @@ import {
   planOldResourceVersionCleanup,
   prepareLocalCapability,
   removeLocalResource,
-  reconnectLocalResourceRoot,
   repairLocalResource,
-  repairLocalResourceRoot,
   rollbackLocalResource,
   resumeResourceDownload,
   retryResourceDownload,
   setLocalResourceProfile,
   setLocalResourceProxy,
-  moveLocalResourceRoot,
   updateLocalResource,
   cleanupOldResourceVersions,
 } from "../../lib/desktop";
 import type {
+  ResourceLocationResult,
   CapabilityPreparation,
   LocalResourceCatalog,
   LocalResourceLocationPlan,
@@ -62,12 +67,9 @@ const activeTaskStates = new Set<ResourceDownloadTask["state"]>([
   "installing",
 ]);
 
-export type ResourceTaskMetric = {
-  bytesPerSecond: number;
-  remainingSeconds: number | null;
-};
-
 export type LocalResourcesController = {
+  bindingRecovery: ResourceLocationResult | null;
+  retryBinding: () => Promise<ResourceLocationResult>;
   catalog: LocalResourceCatalog | null;
   status: LocalResourceStatus | null;
   tasks: ResourceDownloadTask[];
@@ -75,21 +77,25 @@ export type LocalResourcesController = {
   networkStatus: ResourceNetworkStatus | null;
   loading: boolean;
   error: string | null;
+  canRetryRead?: boolean;
   refresh: () => Promise<LocalResourceStatus>;
   clearError: () => void;
   chooseLocation: () => Promise<LocalResourceLocationPlan | null>;
-  confirmLocation: (parentPath: string) => Promise<LocalResourceStatus>;
+  confirmLocation: (plan: LocalResourceLocationPlan) => Promise<ResourceLocationResult>;
   chooseExistingResources: () => Promise<{
     sourcePath: string;
     preview: ResourceMigrationPreview;
   } | null>;
-  adoptResources: (sourcePath?: string) => Promise<ResourceAdoptionResult>;
+  adoptResources: (preview: ResourceMigrationPreview) => Promise<ResourceAdoptionResult>;
   chooseMoveLocation: () => Promise<LocalResourceMovePlan | null>;
-  moveLocation: (parentPath: string) => Promise<LocalResourceMoveResult>;
-  repairRoot: () => Promise<LocalResourceStatus>;
-  reconnectRoot: () => Promise<LocalResourceStatus | null>;
+  moveLocation: (plan: LocalResourceMovePlan) => Promise<LocalResourceMoveResult>;
+  moving?: boolean;
+  cancellingMove?: boolean;
+  cancelMove?: () => Promise<boolean>;
+  repairRoot: () => Promise<ResourceLocationResult>;
+  reconnectRoot: () => Promise<ResourceLocationResult | null>;
   planCleanup: () => Promise<UnusedResourceCleanupPlan>;
-  cleanupUnused: () => Promise<UnusedResourceCleanupResult>;
+  cleanupUnused: (planFingerprint: string) => Promise<UnusedResourceCleanupResult>;
   loadDiagnostics: () => Promise<{
     diagnostics: LocalResourceDiagnostics;
     thirdPartyNotices: string;
@@ -101,7 +107,7 @@ export type LocalResourcesController = {
     version: string,
   ) => Promise<ResourceRollbackResult>;
   planOldVersionCleanup: () => Promise<OldResourceVersionCleanupPlan>;
-  cleanupOldVersions: () => Promise<OldResourceVersionCleanupResult>;
+  cleanupOldVersions: (planFingerprint: string) => Promise<OldResourceVersionCleanupResult>;
   selectProfile: (profileId: string) => Promise<LocalResourceStatus>;
   setProxy: (proxyUrl: string | null) => Promise<ResourceNetworkStatus>;
   prepareCapability: (
@@ -119,91 +125,36 @@ export type LocalResourcesController = {
   ) => Promise<ResourceRemovalResult>;
 };
 
-type TaskObservation = {
-  bytes: number;
-  sampledAtMs: number;
-  bytesPerSecond: number;
-};
-
 export function useLocalResources(): LocalResourcesController {
   const [catalog, setCatalog] = useState<LocalResourceCatalog | null>(null);
-  const [status, setStatus] = useState<LocalResourceStatus | null>(null);
-  const [tasks, setTasks] = useState<ResourceDownloadTask[]>([]);
-  const [taskMetrics, setTaskMetrics] = useState<
-    Record<string, ResourceTaskMetric>
-  >({});
-  const [networkStatus, setNetworkStatus] = useState<ResourceNetworkStatus | null>(null);
+  const { status, setStatus } = useResourceStatusState();
+  const { tasks, taskMetrics, mergeTask, adoptSnapshot } = useResourceTaskState();
+  const { networkStatus, setNetworkStatus, networkRevision, invalidateNetwork } = useResourceNetworkState();
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { error, canRetryRead, setError, captureError, beginRead } = useResourceFeedback();
+  const locationActions = useResourceLocationActions({ setStatus, adoptSnapshot, setError, captureError });
+  const { inspectBinding } = locationActions;
   const initializedRef = useRef(false);
-  const observationsRef = useRef(new Map<string, TaskObservation>());
+  const refreshAttempt = useRef(0);
+  const proxyAttempt = useRef(0);
+  useEffect(() => () => { refreshAttempt.current++; }, []);
 
-  const captureError = useCallback((cause: unknown) => {
-    const message = commandError(cause).message;
-    setError(message);
-    return message;
-  }, []);
-
-  const mergeTask = useCallback((nextTask: ResourceDownloadTask) => {
-    const sampledAtMs = Date.now();
-    const previous = observationsRef.current.get(nextTask.id);
-    let bytesPerSecond = previous?.bytesPerSecond ?? 0;
-    if (
-      previous &&
-      nextTask.state === "downloading" &&
-      nextTask.downloadedBytes >= previous.bytes
-    ) {
-      const elapsedMs = sampledAtMs - previous.sampledAtMs;
-      const byteDelta = nextTask.downloadedBytes - previous.bytes;
-      if (elapsedMs > 0 && byteDelta > 0) {
-        const currentSpeed = (byteDelta * 1_000) / elapsedMs;
-        bytesPerSecond =
-          bytesPerSecond > 0
-            ? bytesPerSecond * 0.65 + currentSpeed * 0.35
-            : currentSpeed;
-      }
+  const resourceMove = useResourceMove(async () => {
+    setError(null);
+    const finishRead = beginRead("refresh");
+    try {
+      setStatus(await getLocalResourceStatus());
+      adoptSnapshot(await listResourceDownloadTasks());
+      finishRead();
+    } catch (cause) {
+      finishRead(new Error(`移动已完成，资源状态刷新失败：${commandError(cause).message}。请重新读取资源状态。`));
     }
-    if (nextTask.state !== "downloading") {
-      bytesPerSecond = 0;
-    }
-    observationsRef.current.set(nextTask.id, {
-      bytes: nextTask.downloadedBytes,
-      sampledAtMs,
-      bytesPerSecond,
-    });
-    const remainingBytes = Math.max(
-      0,
-      nextTask.totalBytes - nextTask.downloadedBytes,
-    );
-    setTaskMetrics((current) => ({
-      ...current,
-      [nextTask.id]: {
-        bytesPerSecond,
-        remainingSeconds:
-          bytesPerSecond > 0 ? remainingBytes / bytesPerSecond : null,
-      },
-    }));
-    setTasks((current) => {
-      const next = current.some((task) => task.id === nextTask.id)
-        ? current.map((task) =>
-            task.id === nextTask.id ? nextTask : task,
-          )
-        : [...current, nextTask];
-      return next.sort((left, right) => right.createdAtMs - left.createdAtMs);
-    });
-  }, []);
-
-  const replaceTasks = useCallback(
-    (nextTasks: ResourceDownloadTask[]) => {
-      setTasks([]);
-      for (const task of nextTasks) {
-        mergeTask(task);
-      }
-    },
-    [mergeTask],
-  );
+  }, captureError);
 
   const refresh = useCallback(async () => {
+    const attempt = ++refreshAttempt.current;
+    const finishRead = beginRead("refresh");
+    const observedNetworkRevision = networkRevision();
     if (!initializedRef.current) {
       setLoading(true);
     }
@@ -211,27 +162,30 @@ export function useLocalResources(): LocalResourcesController {
       const [nextCatalog, nextStatus, nextTasks, nextNetworkStatus] = await Promise.all([
         getLocalResourceCatalog(),
         getLocalResourceStatus(),
-        listResourceDownloadTasks(),
-        getLocalResourceNetworkStatus().catch(() => ({
-          mode: "direct" as const,
-          proxySource: "direct" as const,
-          proxyAddress: null,
-        })),
+        listResourceDownloadTasks().then(value => ({ ok: true as const, value }), cause => ({ ok: false as const, cause })),
+        getLocalResourceNetworkStatus().then(
+          value => ({ ok: true as const, value }),
+          cause => ({ ok: false as const, cause }),
+        ),
       ]);
-      setCatalog(nextCatalog);
+      if (attempt === refreshAttempt.current) setCatalog(nextCatalog);
       setStatus(nextStatus);
-      replaceTasks(nextTasks);
-      setNetworkStatus(nextNetworkStatus);
-      setError(null);
+      if (nextTasks.ok) adoptSnapshot(nextTasks.value);
+      if (nextNetworkStatus.ok) setNetworkStatus(nextNetworkStatus.value);
+      else invalidateNetwork(observedNetworkRevision);
+      if (!nextTasks.ok) throw nextTasks.cause;
+      finishRead(nextNetworkStatus.ok ? undefined : nextNetworkStatus.cause);
       initializedRef.current = true;
-      return nextStatus;
+      return setStatus(nextStatus);
     } catch (cause) {
-      captureError(cause);
+      let shownInRecovery = false;
+      if (commandError(cause).code === "local_resource_binding_unavailable") await inspectBinding().then(result => { shownInRecovery = Boolean(result.bindingError); }).catch(() => undefined);
+      finishRead(shownInRecovery ? undefined : cause);
       throw cause;
     } finally {
-      setLoading(false);
+      if (attempt === refreshAttempt.current) setLoading(false);
     }
-  }, [captureError, replaceTasks]);
+  }, [beginRead, adoptSnapshot, setStatus, networkRevision, setNetworkStatus, invalidateNetwork, inspectBinding]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -247,17 +201,19 @@ export function useLocalResources(): LocalResourcesController {
       if (!active) {
         return;
       }
-      mergeTask(task);
+      if (!mergeTask(task)) return;
       if (["completed", "failed", "cancelled"].includes(task.state)) {
+        const finishRead = beginRead("terminal");
         void getLocalResourceStatus()
           .then((nextStatus) => {
             if (active) {
               setStatus(nextStatus);
+              finishRead();
             }
           })
-          .catch(captureError);
+          .catch(cause => { if (active) finishRead(cause); });
       }
-    })
+    }, cause => { if (active) captureError(cause); })
       .then((stop) => {
         if (active) {
           unlisten = stop;
@@ -265,30 +221,22 @@ export function useLocalResources(): LocalResourcesController {
           stop();
         }
       })
-      .catch(captureError);
+      .catch(cause => { if (active) captureError(cause); });
     return () => {
       active = false;
       unlisten?.();
     };
-  }, [captureError, mergeTask]);
+  }, [beginRead, captureError, mergeTask, setStatus]);
 
-  useEffect(() => {
-    if (!tasks.some((task) => activeTaskStates.has(task.state))) {
-      return undefined;
-    }
-    const timer = window.setInterval(() => {
-      void Promise.all([
-        listResourceDownloadTasks(),
-        getLocalResourceStatus(),
-      ])
-        .then(([nextTasks, nextStatus]) => {
-          replaceTasks(nextTasks);
-          setStatus(nextStatus);
-        })
-        .catch(captureError);
-    }, 1_000);
-    return () => window.clearInterval(timer);
-  }, [captureError, replaceTasks, tasks]);
+  useResourcePolling({
+    enabled: !locationActions.bindingRecovery && tasks.some((task) => activeTaskStates.has(task.state)),
+    onSnapshot: (nextTasks, nextStatus) => {
+      adoptSnapshot(nextTasks);
+      setStatus(nextStatus);
+    },
+    onError: captureError,
+    beginRead: () => beginRead("poll"),
+  });
 
   const updateTask = useCallback(
     async (
@@ -304,14 +252,35 @@ export function useLocalResources(): LocalResourcesController {
         throw cause;
       }
     },
-    [captureError, mergeTask],
+    [captureError, mergeTask, setError],
   );
 
+  async function cleanupResources<T>(operation: () => Promise<T>): Promise<T> {
+    let result: T;
+    try {
+      result = await operation();
+    } catch (cause) {
+      captureError(cause);
+      throw cause;
+    }
+    setError(null);
+    const finishRead = beginRead("refresh");
+    try {
+      setStatus(await getLocalResourceStatus());
+      finishRead();
+    } catch (cause) {
+      finishRead(new Error(`清理结果已保留，资源状态刷新失败：${commandError(cause).message}`));
+    }
+    return result;
+  }
+
   return {
+    ...locationActions,
     catalog,
+    canRetryRead,
     status,
-    tasks,
-    taskMetrics,
+    tasks: locationActions.bindingRecovery ? [] : tasks,
+    taskMetrics: locationActions.bindingRecovery ? {} : taskMetrics,
     networkStatus,
     loading,
     error,
@@ -331,17 +300,6 @@ export function useLocalResources(): LocalResourcesController {
         throw cause;
       }
     },
-    confirmLocation: async (parentPath) => {
-      try {
-        const nextStatus = await configureLocalResourceRoot(parentPath, true);
-        setStatus(nextStatus);
-        setError(null);
-        return nextStatus;
-      } catch (cause) {
-        captureError(cause);
-        throw cause;
-      }
-    },
     chooseExistingResources: async () => {
       try {
         const sourcePath = await chooseLocalResourceParent();
@@ -356,16 +314,15 @@ export function useLocalResources(): LocalResourcesController {
         throw cause;
       }
     },
-    adoptResources: async (sourcePath) => {
-      try {
-        const result = await adoptLocalResources(sourcePath);
-        setStatus(await getLocalResourceStatus());
-        setError(null);
-        return result;
-      } catch (cause) {
-        captureError(cause);
-        throw cause;
-      }
+    adoptResources: async (preview) => {
+      let result: ResourceAdoptionResult;
+      try { result = await adoptLocalResources(preview, crypto.randomUUID()); }
+      catch (cause) { captureError(cause); throw cause; }
+      setError(null);
+      const finishRead = beginRead("refresh");
+      try { setStatus(await getLocalResourceStatus()); finishRead(); }
+      catch (cause) { finishRead(new Error(`接管结果已保留，资源状态刷新失败：${commandError(cause).message}`)); }
+      return result;
     },
     chooseMoveLocation: async () => {
       try {
@@ -381,46 +338,10 @@ export function useLocalResources(): LocalResourcesController {
         throw cause;
       }
     },
-    moveLocation: async (parentPath) => {
-      try {
-        const result = await moveLocalResourceRoot(parentPath);
-        setStatus(await getLocalResourceStatus());
-        replaceTasks(await listResourceDownloadTasks());
-        setError(null);
-        return result;
-      } catch (cause) {
-        captureError(cause);
-        throw cause;
-      }
-    },
-    repairRoot: async () => {
-      try {
-        const nextStatus = await repairLocalResourceRoot();
-        setStatus(nextStatus);
-        replaceTasks(await listResourceDownloadTasks());
-        setError(null);
-        return nextStatus;
-      } catch (cause) {
-        captureError(cause);
-        throw cause;
-      }
-    },
-    reconnectRoot: async () => {
-      try {
-        const parentPath = await chooseLocalResourceParent();
-        if (!parentPath) {
-          return null;
-        }
-        const nextStatus = await reconnectLocalResourceRoot(parentPath);
-        setStatus(nextStatus);
-        replaceTasks(await listResourceDownloadTasks());
-        setError(null);
-        return nextStatus;
-      } catch (cause) {
-        captureError(cause);
-        throw cause;
-      }
-    },
+    moving: resourceMove.moving,
+    cancellingMove: resourceMove.cancelling,
+    cancelMove: resourceMove.cancel,
+    moveLocation: resourceMove.move,
     planCleanup: async () => {
       try {
         const plan = await planUnusedResourceCleanup();
@@ -431,27 +352,18 @@ export function useLocalResources(): LocalResourcesController {
         throw cause;
       }
     },
-    cleanupUnused: async () => {
-      try {
-        const result = await cleanupUnusedResources();
-        setStatus(await getLocalResourceStatus());
-        setError(null);
-        return result;
-      } catch (cause) {
-        captureError(cause);
-        throw cause;
-      }
-    },
+    cleanupUnused: (planFingerprint) => cleanupResources(() => cleanupUnusedResources(planFingerprint)),
     loadDiagnostics: async () => {
+      const finishRead = beginRead("diagnostics");
       try {
         const [diagnostics, thirdPartyNotices] = await Promise.all([
           getLocalResourceDiagnostics(),
           getLocalResourceThirdPartyNotices(),
         ]);
-        setError(null);
+        finishRead();
         return { diagnostics, thirdPartyNotices };
       } catch (cause) {
-        captureError(cause);
+        finishRead(cause);
         throw cause;
       }
     },
@@ -488,36 +400,27 @@ export function useLocalResources(): LocalResourcesController {
         throw cause;
       }
     },
-    cleanupOldVersions: async () => {
-      try {
-        const result = await cleanupOldResourceVersions();
-        setStatus(await getLocalResourceStatus());
-        setError(null);
-        return result;
-      } catch (cause) {
-        captureError(cause);
-        throw cause;
-      }
-    },
+    cleanupOldVersions: (planFingerprint) => cleanupResources(() => cleanupOldResourceVersions(planFingerprint)),
     selectProfile: async (profileId) => {
       try {
         const nextStatus = await setLocalResourceProfile(profileId);
         setStatus(nextStatus);
         setError(null);
-        return nextStatus;
+        return setStatus(nextStatus);
       } catch (cause) {
         captureError(cause);
         throw cause;
       }
     },
     setProxy: async (proxyUrl) => {
+      const attempt = ++proxyAttempt.current;
       try {
         const nextStatus = await setLocalResourceProxy(proxyUrl);
-        setNetworkStatus(nextStatus);
-        setError(null);
-        return nextStatus;
+        const accepted = setNetworkStatus(nextStatus);
+        if (attempt === proxyAttempt.current) setError(null);
+        return accepted;
       } catch (cause) {
-        captureError(cause);
+        if (attempt === proxyAttempt.current) captureError(cause);
         throw cause;
       }
     },
@@ -531,7 +434,7 @@ export function useLocalResources(): LocalResourcesController {
           listResourceDownloadTasks(),
           getLocalResourceStatus(),
         ]);
-        replaceTasks(nextTasks);
+        adoptSnapshot(nextTasks);
         setStatus(nextStatus);
         setError(null);
         return preparation;

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useReducer, useRef } from "react";
 
+import { useCollectionEpisodePages } from "./useCollectionEpisodePages";
 import { commandError } from "../../lib/desktop";
 import type {
   CollectionDetail,
@@ -9,7 +10,6 @@ import type {
 import {
   getCollectionDetail,
   getEpisodeNeighbors,
-  listCollectionEpisodes,
 } from "./libraryGateway";
 
 export type EpisodePlaybackContext = {
@@ -20,15 +20,17 @@ export type EpisodePlaybackContext = {
 export type EpisodeNavigationState = {
   detail: CollectionDetail | null;
   episodes: LibraryMediaSummary[];
+  currentEpisode?: LibraryMediaSummary | null;
   neighbors: EpisodeNeighbors;
   loading: boolean;
   error: string | null;
 };
 
 const emptyNeighbors: EpisodeNeighbors = { previous: null, next: null };
-const initialState: EpisodeNavigationState = {
+type OwnedState = Omit<EpisodeNavigationState, "episodes"> & { scope: string | null };
+const initialState: OwnedState = {
+  scope: null,
   detail: null,
-  episodes: [],
   neighbors: emptyNeighbors,
   loading: false,
   error: null,
@@ -36,25 +38,24 @@ const initialState: EpisodeNavigationState = {
 
 type Action =
   | { type: "reset" }
-  | { type: "started" }
+  | { type: "started"; scope: string }
   | {
       type: "loaded";
       detail: CollectionDetail;
-      episodes: LibraryMediaSummary[];
       neighbors: EpisodeNeighbors;
     }
   | { type: "failed"; message: string };
 
-function reducer(state: EpisodeNavigationState, action: Action): EpisodeNavigationState {
+function reducer(state: OwnedState, action: Action): OwnedState {
   switch (action.type) {
     case "reset":
       return initialState;
     case "started":
-      return { ...state, loading: true, error: null };
+      return { ...initialState, scope: action.scope, loading: true };
     case "loaded":
       return {
+        scope: state.scope,
         detail: action.detail,
-        episodes: action.episodes,
         neighbors: action.neighbors,
         loading: false,
         error: null,
@@ -67,33 +68,35 @@ function reducer(state: EpisodeNavigationState, action: Action): EpisodeNavigati
 export function useEpisodeNavigation(
   context: EpisodePlaybackContext | null,
   projectId: string | null,
+  includeEpisodes = false,
 ) {
+  const pages = useCollectionEpisodePages(context?.collectionId ?? null, context?.seasonNumber ?? null, includeEpisodes, projectId);
   const [state, dispatch] = useReducer(reducer, initialState);
   const requestSequence = useRef(0);
+  const scope = context && projectId ? JSON.stringify([context.collectionId, context.seasonNumber, projectId]) : null;
 
   const refresh = useCallback(async () => {
     const sequence = requestSequence.current + 1;
     requestSequence.current = sequence;
-    if (!context || !projectId) {
+    if (!context || !projectId || !scope) {
       dispatch({ type: "reset" });
       return;
     }
-    dispatch({ type: "started" });
+    dispatch({ type: "started", scope });
     try {
-      const [detail, episodes, neighbors] = await Promise.all([
+      const [detail, neighbors] = await Promise.all([
         getCollectionDetail(context.collectionId),
-        listCollectionEpisodes(context.collectionId, context.seasonNumber),
         getEpisodeNeighbors(context.collectionId, projectId),
       ]);
       if (requestSequence.current === sequence) {
-        dispatch({ type: "loaded", detail, episodes, neighbors });
+        dispatch({ type: "loaded", detail, neighbors });
       }
     } catch (error) {
       if (requestSequence.current === sequence) {
         dispatch({ type: "failed", message: commandError(error).message });
       }
     }
-  }, [context, projectId]);
+  }, [context, projectId, scope]);
 
   useEffect(() => {
     void refresh();
@@ -102,5 +105,7 @@ export function useEpisodeNavigation(
     };
   }, [refresh]);
 
-  return { state, refresh };
+  const visibleState = state.scope === scope ? state : { ...initialState, loading: scope !== null };
+  return { state: { ...visibleState, episodes: pages.items, currentEpisode: pages.currentEpisode, loading: visibleState.loading || pages.loading }, refresh,
+    pagination: { ...pages, reload: () => { pages.reload(); void refresh(); } } };
 }

@@ -66,19 +66,6 @@ pub(crate) fn available_space(path: &Path) -> Option<u64> {
     available_space_impl(path)
 }
 
-pub(crate) fn remove_remote_project_directory(root: &Path, locator: &str) -> bool {
-    let Ok(root) = dunce::canonicalize(root) else {
-        return false;
-    };
-    let Some(parent) = Path::new(locator).parent() else {
-        return false;
-    };
-    let Ok(parent) = dunce::canonicalize(parent) else {
-        return false;
-    };
-    parent != root && parent.starts_with(&root) && fs::remove_dir_all(parent).is_ok()
-}
-
 fn verify_writable(path: &Path, label: &str) -> Result<(), StorageError> {
     let probe = path.join(format!(".siaovplay-write-probe-{}", Uuid::new_v4()));
     let result = fs::OpenOptions::new()

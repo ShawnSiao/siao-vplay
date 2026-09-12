@@ -1,8 +1,14 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { readPreference, type PreferenceRecord } from "../../lib/preferenceRecord";
+import { savePreference } from "../../lib/preferenceNotice";
+import { useState, type ReactNode } from "react";
+import "./PlayerDrawerContent.css";
+import "./PlayerDrawer.css";
 
 import type { ShellDrawerTab } from "../shell/useShellController";
+import { useTabNavigation } from "../../components/useTabNavigation";
 
 type PlayerDrawerProps = {
+  hidden?: boolean;
   activeTab: ShellDrawerTab;
   mediaTitle: string;
   contextLabel?: string;
@@ -28,17 +34,17 @@ const drawerTabs: ReadonlyArray<{
   { id: "transcript", label: "逐字稿", description: "完整字幕" },
 ];
 
-function readDensity(): DrawerDensity {
-  try {
-    return window.localStorage.getItem(densityStorageKey) === "compact"
-      ? "compact"
-      : "comfortable";
-  } catch {
-    return "comfortable";
-  }
-}
+const densityPreference: PreferenceRecord<DrawerDensity> = {
+  key: "siaovplay-preferences.drawer-density",
+  fallback: "comfortable",
+  decode: (value) => value === "compact" || value === "comfortable" ? value : undefined,
+  legacy: (storage) => storage.getItem(densityStorageKey),
+};
+
+function readDensity(): DrawerDensity { return readPreference(densityPreference); }
 
 export function PlayerDrawer({
+  hidden = false,
   activeTab,
   mediaTitle,
   contextLabel = "当前视频",
@@ -49,97 +55,67 @@ export function PlayerDrawer({
   onClose,
 }: PlayerDrawerProps) {
   const [density, setDensity] = useState<DrawerDensity>(readDensity);
+  const tabs = useTabNavigation(activeTab, onSelectTab);
 
-  useEffect(() => {
-    try {
-      window.localStorage.setItem(densityStorageKey, density);
-    } catch {
-      // The drawer remains usable when local storage is unavailable.
-    }
-  }, [density]);
 
   return (
     <aside
+      hidden={hidden}
+      inert={hidden}
+      style={hidden ? { display: "none" } : undefined}
       className="player-drawer"
       data-active-tab={activeTab}
       data-density={density}
       aria-label="当前内容抽屉"
     >
-      <header className="player-drawer-header">
-        <div>
-          <span>当前内容</span>
-          <strong title={activeTab === "transcript" ? "逐字稿" : mediaTitle}>
-            {activeTab === "transcript" ? "逐字稿" : mediaTitle}
-          </strong>
-        </div>
-        <button aria-label="关闭右侧抽屉" type="button" onClick={onClose}>
-          ×
-        </button>
+      <header className="player-drawer-header" aria-label="当前观看上下文">
+        <strong title={`${mediaTitle} · ${contextLabel}`}>{mediaTitle}</strong>
+        <span className="player-drawer-context-status" title={contextStatus}>{contextStatus}</span>
+        <button aria-label="关闭右侧抽屉" type="button" onClick={onClose}>×</button>
       </header>
-
-      <div className="player-drawer-meta" aria-label="当前观看上下文">
-        <div>
-          <span className="player-drawer-status-dot" aria-hidden="true" />
-          <span>正在观看</span>
-          <strong>{contextLabel}</strong>
-        </div>
-        <span>{contextStatus}</span>
-      </div>
 
       <div
         className="player-drawer-tabs"
-        role="tablist"
+        {...tabs.listProps}
         aria-label="播放器辅助面板"
       >
         {drawerTabs.map((tab) => (
           <button
+            {...tabs.tabProps(tab.id)}
             aria-controls={`player-drawer-panel-${tab.id}`}
             aria-label={tab.label}
-            aria-selected={activeTab === tab.id}
+            title={tab.id === "episodes" ? episodeSummary : tab.description}
             className={`${tab.id} ${activeTab === tab.id ? "active" : ""}`}
             id={`player-drawer-tab-${tab.id}`}
             key={tab.id}
-            role="tab"
-            type="button"
-            onClick={() => onSelectTab(tab.id)}
           >
             <span>{tab.label}</span>
-            <small>{tab.id === "episodes" ? episodeSummary : tab.description}</small>
+
           </button>
         ))}
       </div>
-
-      {activeTab !== "transcript" ? <div className="player-drawer-toolbar">
-        <div>
-          <span>阅读密度</span>
-          <strong>{density === "compact" ? "紧凑" : "舒适"}</strong>
-        </div>
-        <div className="player-drawer-density" role="group" aria-label="切换阅读密度">
-          <button
-            aria-pressed={density === "comfortable"}
-            type="button"
-            onClick={() => setDensity("comfortable")}
-          >
-            舒适
-          </button>
-          <button
-            aria-pressed={density === "compact"}
-            type="button"
-            onClick={() => setDensity("compact")}
-          >
-            紧凑
-          </button>
-        </div>
-      </div> : null}
 
       <div
         className="player-drawer-content"
         id={`player-drawer-panel-${activeTab}`}
         role="tabpanel"
+        tabIndex={0}
         aria-labelledby={`player-drawer-tab-${activeTab}`}
       >
         {children}
       </div>
+      {activeTab !== "transcript" ? (
+        <details className="player-drawer-reading">
+          <summary>阅读设置</summary>
+          <div className="player-drawer-density" role="group" aria-label="切换阅读密度">
+            {(["comfortable", "compact"] as const).map((value) => (
+              <button key={value} aria-pressed={density === value} type="button" onClick={() => { setDensity(value); savePreference(densityPreference, value); }}>
+                {value === "comfortable" ? "舒适" : "紧凑"}
+              </button>
+            ))}
+          </div>
+        </details>
+      ) : null}
     </aside>
   );
 }

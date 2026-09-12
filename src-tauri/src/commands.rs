@@ -1,3 +1,8 @@
+pub(crate) mod playback;
+mod project_io;
+mod project_deletion;
+#[cfg(test)]
+mod resource_location_tests;
 use serde::Serialize;
 use tauri::{AppHandle, Manager, State};
 
@@ -8,8 +13,8 @@ use crate::{
     codex_runner::{self, CodexRunnerError, CodexRuntimeStatus, StartCodexTranslationInput},
     delivery::{self, DeliveryError, ExportSubtitlesInput, SubtitleExport},
     domain::{
-        CreateLocalProjectInput, DeleteProjectResult, PrepareProjectMediaInput, Project,
-        RelinkProjectMediaInput, UpdatePlaybackStateInput,
+        CreateLocalProjectInput, DeleteProjectResult, Project,
+        RelinkProjectMediaInput,
     },
     external_handoff::{self, ExternalAgentResultUpdate, ExternalHandoffError},
     learning::{
@@ -23,7 +28,7 @@ use crate::{
         LocalResourceLocationPlan, LocalResourceStatus, PlanLocalResourceLocationInput,
         SetLocalResourceProfileInput,
     },
-    media::{self, MediaError, MediaInspection, MediaPreparation, MediaRuntimeStatus},
+    media::{self, MediaError, MediaInspection, MediaRuntimeStatus},
     remote_media::{
         self, CancelRemoteMediaImportInput, ImportRemoteMediaUrlInput, InspectRemoteMediaUrlInput,
         RemoteMediaError, RemoteMediaPreview,
@@ -35,20 +40,11 @@ use crate::{
     },
     resource_download::{
         self, CapabilityPreparation, PrepareLocalCapabilityInput, RemoveLocalResourceInput,
-        RepairLocalResourceInput, ResourceDownloadError, ResourceDownloadTask,
+        RepairLocalResourceInput, ResourceDownloadError, ResourceDownloadTask, ResourceDownloadSnapshot,
         ResourceDownloadTaskInput, ResourceRemovalResult,
     },
-    resource_migration::{
-        self, AdoptLocalResourcesInput, CleanupUnusedResourcesInput,
-        ConfirmLocalResourceOperationInput, InspectResourceMigrationInput, LocalResourceMovePlan,
-        LocalResourceMoveResult, MoveLocalResourceRootInput, ReconnectLocalResourceRootInput,
-        ResourceAdoptionResult, ResourceMigrationError, ResourceMigrationPreview,
-        UnusedResourceCleanupPlan, UnusedResourceCleanupResult,
-    },
-    runtime::{
-        self, DownloadRuntimeComponentInput, RuntimeCatalog, RuntimeError, SetPreferredModelInput,
-        SetRuntimeStorageRootInput,
-    },
+    resource_migration::{ConfirmLocalResourceOperationInput, ResourceMigrationError},
+    runtime::{self, RuntimeCatalog, RuntimeError},
     storage::{StorageError, StorageManager},
     store::{ProjectStore, StoreError},
     subtitles::{
@@ -77,13 +73,14 @@ use crate::{
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CommandError {
-    code: &'static str,
-    message: String,
+    pub(crate) code: &'static str,
+    pub(crate) message: String,
 }
 
 impl From<StoreError> for CommandError {
     fn from(error: StoreError) -> Self {
         let code = match &error {
+            _ if crate::storage_failure::store_is_full(&error) => "insufficient_storage",
             StoreError::ProjectNotFound(_) => "project_not_found",
             StoreError::Validation(_) => "validation_error",
             StoreError::UnsupportedSchema { .. } => "unsupported_schema",
@@ -143,6 +140,7 @@ impl From<LibraryError> for CommandError {
 impl From<MediaError> for CommandError {
     fn from(error: MediaError) -> Self {
         let code = match &error {
+            _ if crate::storage_failure::media_is_full(&error) => "insufficient_storage",
             MediaError::Store(StoreError::ProjectNotFound(_)) => "project_not_found",
             MediaError::Store(StoreError::Validation(_)) => "validation_error",
             MediaError::Store(StoreError::UnsupportedSchema { .. }) => "unsupported_schema",
@@ -325,12 +323,6 @@ impl From<RuntimeError> for CommandError {
         let code = match &error {
             RuntimeError::FileSystem(_) => "runtime_filesystem_error",
             RuntimeError::Serialization(_) => "runtime_serialization_error",
-            RuntimeError::UnknownComponent(_) => "runtime_component_invalid",
-            RuntimeError::InvalidStorageRoot(_) => "runtime_storage_root_invalid",
-            RuntimeError::InvalidModel(_) => "transcription_model_invalid",
-            RuntimeError::Download(_) => "runtime_download_failed",
-            RuntimeError::Integrity(_) => "runtime_integrity_failed",
-            RuntimeError::Archive(_) => "runtime_archive_invalid",
         };
         Self {
             code,
@@ -343,6 +335,7 @@ impl From<LocalResourceError> for CommandError {
     fn from(error: LocalResourceError) -> Self {
         let code = match &error {
             LocalResourceError::NotInitialized => "local_resource_not_initialized",
+            LocalResourceError::LocationPlanChanged => "local_resource_location_plan_changed",
             LocalResourceError::ConfirmationRequired => "local_resource_confirmation_required",
             LocalResourceError::InvalidParent(_) => "local_resource_parent_invalid",
             LocalResourceError::RootUnavailable(_) => "root_unavailable",
@@ -435,6 +428,17 @@ impl From<ExternalHandoffError> for CommandError {
     }
 }
 
+impl From<crate::ai::dispatch::CodexDispatchError> for CommandError {
+    fn from(error: crate::ai::dispatch::CodexDispatchError) -> Self {
+        use crate::ai::dispatch::CodexDispatchError;
+        let code = match &error {
+            CodexDispatchError::Confirmation(_) => "dispatch_confirmation_required",
+            CodexDispatchError::ReceiverChanged => "dispatch_receiver_changed",
+        };
+        Self { code, message: error.to_string() }
+    }
+}
+
 impl CommandError {
     pub(crate) fn asset_scope_failed(message: impl ToString) -> Self {
         Self {
@@ -443,7 +447,7 @@ impl CommandError {
         }
     }
 
-    fn background_task_failed(message: impl ToString) -> Self {
+    pub(crate) fn background_task_failed(message: impl ToString) -> Self {
         Self {
             code: "background_task_failed",
             message: message.to_string(),
@@ -452,11 +456,24 @@ impl CommandError {
 }
 
 #[tauri::command]
-pub fn create_local_project(
+pub async fn create_local_project(
     store: State<'_, ProjectStore>,
     input: CreateLocalProjectInput,
 ) -> Result<Project, CommandError> {
-    store.create_local_project(input).map_err(Into::into)
+    project_io::run(store.inner().clone(), move |store| store.create_local_project(input).map_err(Into::into)).await
+}
+
+#[tauri::command]
+pub async fn open_local_project(
+    app: AppHandle,
+    store: State<'_, ProjectStore>,
+    input: CreateLocalProjectInput,
+) -> Result<Project, CommandError> {
+    let store = store.inner().clone();
+    let project = tauri::async_runtime::spawn_blocking(move || store.open_local_project(input).map_err(CommandError::from))
+        .await.map_err(CommandError::background_task_failed)??;
+    allow_project_poster(&app, &project)?;
+    Ok(project)
 }
 
 #[tauri::command]
@@ -477,8 +494,10 @@ pub async fn import_remote_media_url(
     input: ImportRemoteMediaUrlInput,
 ) -> Result<Project, CommandError> {
     let store = store.inner().clone();
+    let usage = storage.acquire_usage()?;
     let remote_media_root = storage.remote_media_root_for_write()?;
     tauri::async_runtime::spawn_blocking(move || {
+        let _usage = usage;
         remote_media::import_remote_media_url(&store, &remote_media_root, input)
             .map_err(CommandError::from)
     })
@@ -496,9 +515,10 @@ pub fn cancel_remote_media_import(
 #[tauri::command]
 pub async fn inspect_youtube_url(
     input: InspectYouTubeUrlInput,
+    authorized_resolver_base: Option<String>,
 ) -> Result<YouTubeMediaPreview, CommandError> {
     tauri::async_runtime::spawn_blocking(move || {
-        youtube_media::inspect_youtube_url(input).map_err(CommandError::from)
+        youtube_media::inspect_youtube_url_authorized(input, authorized_resolver_base).map_err(CommandError::from)
     })
     .await
     .map_err(CommandError::background_task_failed)?
@@ -509,11 +529,14 @@ pub async fn import_youtube_url(
     store: State<'_, ProjectStore>,
     storage: State<'_, StorageManager>,
     input: ImportYouTubeUrlInput,
+    authorized_resolver_base: Option<String>,
 ) -> Result<Project, CommandError> {
     let store = store.inner().clone();
+    let usage = storage.acquire_usage()?;
     let remote_media_root = storage.remote_media_root_for_write()?;
     tauri::async_runtime::spawn_blocking(move || {
-        youtube_media::import_youtube_url(&store, &remote_media_root, input)
+        let _usage = usage;
+        youtube_media::import_youtube_url_authorized(&store, &remote_media_root, input, authorized_resolver_base)
             .map_err(CommandError::from)
     })
     .await
@@ -526,69 +549,73 @@ pub fn cancel_youtube_import(input: CancelYouTubeImportInput) -> Result<bool, Co
 }
 
 #[tauri::command]
-pub fn list_projects(
+pub async fn list_projects(
     app: AppHandle,
     store: State<'_, ProjectStore>,
 ) -> Result<Vec<Project>, CommandError> {
-    let projects = store.list_projects().map_err(CommandError::from)?;
-    for project in &projects {
-        allow_project_poster(&app, project)?;
-    }
-    Ok(projects)
+    project_io::run(store.inner().clone(), move |store| {
+        let projects = store.list_projects().map_err(CommandError::from)?;
+        for project in &projects {
+            allow_project_poster(&app, project)?;
+        }
+        Ok(projects)
+    }).await
 }
 
 #[tauri::command]
-pub fn get_project(
+pub async fn get_project(
     store: State<'_, ProjectStore>,
     project_id: String,
 ) -> Result<Project, CommandError> {
-    store.get_project(&project_id).map_err(Into::into)
+    project_io::run(store.inner().clone(), move |store| store.get_project(&project_id).map_err(Into::into)).await
 }
 
 #[tauri::command]
-pub fn mark_project_opened(
+pub async fn mark_project_opened(
     store: State<'_, ProjectStore>,
     project_id: String,
 ) -> Result<Project, CommandError> {
-    store.mark_project_opened(&project_id).map_err(Into::into)
+    project_io::run(store.inner().clone(), move |store| store.mark_project_opened(&project_id).map_err(Into::into)).await
 }
 
 #[tauri::command]
-pub fn update_playback_state(
+pub async fn update_playback_state(
     store: State<'_, ProjectStore>,
-    input: UpdatePlaybackStateInput,
+    input: crate::store::playback_sessions::SaveInput,
 ) -> Result<Project, CommandError> {
-    store.update_playback_state(input).map_err(Into::into)
+    project_io::run(store.inner().clone(), move |store| store.save_playback_session(input).map_err(Into::into)).await
 }
 
 #[tauri::command]
-pub fn relink_project_media(
+pub async fn relink_project_media(
     store: State<'_, ProjectStore>,
     input: RelinkProjectMediaInput,
 ) -> Result<Project, CommandError> {
-    store.relink_project_media(input).map_err(Into::into)
+    project_io::run(store.inner().clone(), move |store| store.relink_project_media(input).map_err(Into::into)).await
 }
 
 #[tauri::command]
-pub fn delete_project(
+pub async fn delete_project(
     store: State<'_, ProjectStore>,
     storage: State<'_, StorageManager>,
     project_id: String,
 ) -> Result<DeleteProjectResult, CommandError> {
-    transcription::cancel_project_transcriptions(store.inner(), &project_id)?;
-    codex_runner::cancel_project_translation_tasks(store.inner(), &project_id)?;
-    codex_runner::cancel_project_explanation_tasks(store.inner(), &project_id)?;
-    codex_runner::cancel_project_learning_tasks(store.inner(), &project_id)?;
-    burn::cancel_project_subtitle_burn_jobs(store.inner(), &project_id)?;
-    let remote_media_root = storage.remote_media_root()?;
-    store
-        .delete_project_with_remote_media_root(&project_id, &remote_media_root)
-        .map_err(Into::into)
+    let store = store.inner().clone();
+    let storage = storage.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || project_deletion::run(&store, &storage, &project_id))
+        .await.map_err(CommandError::background_task_failed)?
 }
 
 #[tauri::command]
-pub fn get_media_runtime_status() -> MediaRuntimeStatus {
-    media::media_runtime_status()
+pub async fn get_pending_project_cleanup(store: State<'_, ProjectStore>) -> Result<Option<crate::store::PendingProjectCleanup>, CommandError> {
+    let store = store.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || store.next_pending_project_cleanup().map_err(CommandError::from))
+        .await.map_err(CommandError::background_task_failed)?
+}
+
+#[tauri::command]
+pub async fn get_media_runtime_status() -> Result<MediaRuntimeStatus, CommandError> {
+    crate::resource_commands::run(move || Ok(media::media_runtime_status())).await
 }
 
 #[tauri::command]
@@ -597,170 +624,134 @@ pub fn get_local_resource_catalog() -> Result<LocalResourceCatalog, CommandError
 }
 
 #[tauri::command]
-pub fn get_local_resource_status() -> Result<LocalResourceStatus, CommandError> {
-    local_resources::status().map_err(Into::into)
+pub async fn get_local_resource_status() -> Result<LocalResourceStatus, CommandError> {
+    crate::resource_commands::run(move || local_resources::status().map_err(Into::into)).await
 }
 
 #[tauri::command]
-pub fn plan_local_resource_location(
+pub async fn plan_local_resource_location(
     input: PlanLocalResourceLocationInput,
 ) -> Result<LocalResourceLocationPlan, CommandError> {
-    local_resources::plan_location(&input.parent_path).map_err(Into::into)
+    crate::resource_commands::run(move || local_resources::plan_location(&input.parent_path).map_err(Into::into)).await
 }
 
 #[tauri::command]
-pub fn configure_local_resource_root(
+pub async fn configure_local_resource_root(
     input: ConfigureLocalResourceRootInput,
-) -> Result<LocalResourceStatus, CommandError> {
-    let status = local_resources::configure_location(&input.parent_path, input.confirmed)?;
-    resource_download::bind_configured_root()?;
-    runtime::sync_managed_root()?;
-    Ok(status)
+) -> Result<crate::resource_location::ResourceLocationResult, CommandError> {
+    crate::resource_commands::run(move || {
+        let _maintenance = crate::resource_leases::maintain_all().map_err(LocalResourceError::from)?;
+        let status = local_resources::configure_confirmed_location(&input)?;
+        crate::resource_location::finish(status).map_err(Into::into)
+    }).await
 }
 
 #[tauri::command]
-pub fn repair_local_resource_root(
+pub async fn repair_local_resource_root(
     input: ConfirmLocalResourceOperationInput,
-) -> Result<LocalResourceStatus, CommandError> {
-    let status = local_resources::repair_configured_root(input.confirmed)?;
-    resource_download::bind_configured_root()?;
-    runtime::sync_managed_root()?;
-    Ok(status)
+) -> Result<crate::resource_location::ResourceLocationResult, CommandError> {
+    crate::resource_commands::run(move || {
+        let _maintenance = crate::resource_leases::maintain_all().map_err(LocalResourceError::from)?;
+        let status = local_resources::repair_configured_root(input.confirmed)?;
+        crate::resource_location::finish(status).map_err(Into::into)
+    }).await
 }
 
-#[tauri::command]
-pub fn inspect_local_resource_migration(
-    input: InspectResourceMigrationInput,
-) -> Result<ResourceMigrationPreview, CommandError> {
-    resource_migration::inspect_resource_migration(input).map_err(Into::into)
-}
+
+
+
+
+
+
 
 #[tauri::command]
-pub fn adopt_local_resources(
-    input: AdoptLocalResourcesInput,
-) -> Result<ResourceAdoptionResult, CommandError> {
-    resource_migration::adopt_local_resources(input).map_err(Into::into)
-}
-
-#[tauri::command]
-pub fn plan_local_resource_move(
-    input: PlanLocalResourceLocationInput,
-) -> Result<LocalResourceMovePlan, CommandError> {
-    resource_migration::plan_resource_root_move(&input.parent_path).map_err(Into::into)
-}
-
-#[tauri::command]
-pub fn move_local_resource_root(
-    input: MoveLocalResourceRootInput,
-) -> Result<LocalResourceMoveResult, CommandError> {
-    resource_migration::move_resource_root(input).map_err(Into::into)
-}
-
-#[tauri::command]
-pub fn reconnect_local_resource_root(
-    input: ReconnectLocalResourceRootInput,
-) -> Result<LocalResourceStatus, CommandError> {
-    resource_migration::reconnect_resource_root(input).map_err(Into::into)
-}
-
-#[tauri::command]
-pub fn plan_unused_resource_cleanup() -> Result<UnusedResourceCleanupPlan, CommandError> {
-    resource_migration::plan_unused_resource_cleanup().map_err(Into::into)
-}
-
-#[tauri::command]
-pub fn cleanup_unused_resources(
-    input: CleanupUnusedResourcesInput,
-) -> Result<UnusedResourceCleanupResult, CommandError> {
-    resource_migration::cleanup_unused_resources(input).map_err(Into::into)
-}
-
-#[tauri::command]
-pub fn set_local_resource_profile(
+pub async fn set_local_resource_profile(
     input: SetLocalResourceProfileInput,
 ) -> Result<LocalResourceStatus, CommandError> {
-    local_resources::set_preferred_profile(&input.profile_id).map_err(Into::into)
+    crate::resource_commands::run(move || local_resources::set_preferred_profile(&input.profile_id).map_err(Into::into)).await
 }
 
 #[tauri::command]
-pub fn list_resource_download_tasks() -> Result<Vec<ResourceDownloadTask>, CommandError> {
-    resource_download::list_tasks().map_err(Into::into)
+pub async fn list_resource_download_tasks() -> Result<ResourceDownloadSnapshot, CommandError> {
+    crate::resource_commands::run(move || resource_download::task_snapshot_list().map_err(Into::into)).await
 }
 
 #[tauri::command]
-pub fn prepare_local_capability(
+pub async fn prepare_local_capability(
     app: AppHandle,
     input: PrepareLocalCapabilityInput,
 ) -> Result<CapabilityPreparation, CommandError> {
-    resource_download::prepare_capability(
-        &input.capability_id,
-        input.pending_action_id.as_deref(),
-        Some(app),
-    )
-    .map_err(Into::into)
+    crate::resource_commands::run(move || {
+        resource_download::prepare_capability(
+            &input.capability_id,
+            input.pending_action_id.as_deref(),
+            Some(app),
+        )
+        .map_err(Into::into)
+    }).await
 }
 
 #[tauri::command]
-pub fn pause_resource_download(
+pub async fn pause_resource_download(
     input: ResourceDownloadTaskInput,
 ) -> Result<ResourceDownloadTask, CommandError> {
-    resource_download::pause_task(&input.task_id).map_err(Into::into)
+    crate::resource_commands::run(move || resource_download::pause_task(&input.task_id).map_err(Into::into)).await
 }
 
 #[tauri::command]
-pub fn resume_resource_download(
+pub async fn resume_resource_download(
     app: AppHandle,
     input: ResourceDownloadTaskInput,
 ) -> Result<ResourceDownloadTask, CommandError> {
-    resource_download::resume_task(&input.task_id, Some(app)).map_err(Into::into)
+    crate::resource_commands::run(move || resource_download::resume_task(&input.task_id, Some(app)).map_err(Into::into)).await
 }
 
 #[tauri::command]
-pub fn cancel_resource_download(
+pub async fn cancel_resource_download(
     input: ResourceDownloadTaskInput,
 ) -> Result<ResourceDownloadTask, CommandError> {
-    resource_download::cancel_task(&input.task_id).map_err(Into::into)
+    crate::resource_commands::run(move || resource_download::cancel_task(&input.task_id).map_err(Into::into)).await
 }
 
 #[tauri::command]
-pub fn retry_resource_download(
+pub async fn retry_resource_download(
     app: AppHandle,
     input: ResourceDownloadTaskInput,
 ) -> Result<ResourceDownloadTask, CommandError> {
-    resource_download::retry_task(&input.task_id, Some(app)).map_err(Into::into)
+    crate::resource_commands::run(move || resource_download::retry_task(&input.task_id, Some(app)).map_err(Into::into)).await
 }
 
 #[tauri::command]
-pub fn repair_local_resource(
-    app: AppHandle,
-    input: RepairLocalResourceInput,
-) -> Result<ResourceDownloadTask, CommandError> {
-    resource_download::repair_resource(&input.resource_id, Some(app)).map_err(Into::into)
-}
-
-#[tauri::command]
-pub fn update_local_resource(
+pub async fn repair_local_resource(
     app: AppHandle,
     input: RepairLocalResourceInput,
 ) -> Result<ResourceDownloadTask, CommandError> {
-    resource_download::update_resource(&input.resource_id, Some(app)).map_err(Into::into)
+    crate::resource_commands::run(move || resource_download::repair_resource(&input.resource_id, Some(app)).map_err(Into::into)).await
 }
 
 #[tauri::command]
-pub fn remove_local_resource(
+pub async fn update_local_resource(
+    app: AppHandle,
+    input: RepairLocalResourceInput,
+) -> Result<ResourceDownloadTask, CommandError> {
+    crate::resource_commands::run(move || resource_download::update_resource(&input.resource_id, Some(app)).map_err(Into::into)).await
+}
+
+#[tauri::command]
+pub async fn remove_local_resource(
     input: RemoveLocalResourceInput,
 ) -> Result<ResourceRemovalResult, CommandError> {
-    resource_download::remove_resource(&input.resource_id, input.confirmed).map_err(Into::into)
+    crate::resource_commands::run(move || resource_download::remove_resource(&input.resource_id, input.confirmed).map_err(Into::into)).await
 }
 
 #[tauri::command]
-pub fn get_local_resource_diagnostics() -> Result<LocalResourceDiagnostics, CommandError> {
-    resource_diagnostics::diagnostics().map_err(Into::into)
+pub async fn get_local_resource_diagnostics() -> Result<LocalResourceDiagnostics, CommandError> {
+    crate::resource_commands::run(move || resource_diagnostics::diagnostics().map_err(Into::into)).await
 }
 
 #[tauri::command]
-pub fn get_local_resource_diagnostic_summary() -> Result<String, CommandError> {
-    resource_diagnostics::diagnostic_summary().map_err(Into::into)
+pub async fn get_local_resource_diagnostic_summary() -> Result<String, CommandError> {
+    crate::resource_commands::run(move || resource_diagnostics::diagnostic_summary().map_err(Into::into)).await
 }
 
 #[tauri::command]
@@ -769,50 +760,27 @@ pub fn get_local_resource_third_party_notices() -> String {
 }
 
 #[tauri::command]
-pub fn rollback_local_resource(
+pub async fn rollback_local_resource(
     input: RollbackLocalResourceInput,
 ) -> Result<ResourceRollbackResult, CommandError> {
-    resource_diagnostics::rollback_resource(input).map_err(Into::into)
+    crate::resource_commands::run(move || resource_diagnostics::rollback_resource(input).map_err(Into::into)).await
 }
 
 #[tauri::command]
-pub fn plan_old_resource_version_cleanup() -> Result<OldResourceVersionCleanupPlan, CommandError> {
-    resource_diagnostics::plan_old_version_cleanup().map_err(Into::into)
+pub async fn plan_old_resource_version_cleanup() -> Result<OldResourceVersionCleanupPlan, CommandError> {
+    crate::resource_commands::run(move || resource_diagnostics::plan_old_version_cleanup().map_err(Into::into)).await
 }
 
 #[tauri::command]
-pub fn cleanup_old_resource_versions(
+pub async fn cleanup_old_resource_versions(
     input: CleanupOldResourceVersionsInput,
 ) -> Result<OldResourceVersionCleanupResult, CommandError> {
-    resource_diagnostics::cleanup_old_versions(input).map_err(Into::into)
+    crate::resource_commands::run(move || resource_diagnostics::cleanup_old_versions(input).map_err(Into::into)).await
 }
 
 #[tauri::command]
-pub fn get_runtime_catalog() -> Result<RuntimeCatalog, CommandError> {
-    runtime::catalog().map_err(Into::into)
-}
-
-#[tauri::command]
-pub fn set_runtime_storage_root(
-    input: SetRuntimeStorageRootInput,
-) -> Result<RuntimeCatalog, CommandError> {
-    runtime::set_storage_root(&input.path).map_err(Into::into)
-}
-
-#[tauri::command]
-pub fn set_preferred_model(input: SetPreferredModelInput) -> Result<RuntimeCatalog, CommandError> {
-    runtime::set_preferred_model(&input.model_kind).map_err(Into::into)
-}
-
-#[tauri::command]
-pub async fn download_runtime_component(
-    input: DownloadRuntimeComponentInput,
-) -> Result<RuntimeCatalog, CommandError> {
-    tauri::async_runtime::spawn_blocking(move || {
-        runtime::download_component(&input.component_id).map_err(CommandError::from)
-    })
-    .await
-    .map_err(CommandError::background_task_failed)?
+pub async fn get_runtime_catalog() -> Result<RuntimeCatalog, CommandError> {
+    crate::resource_commands::run(move || runtime::catalog().map_err(Into::into)).await
 }
 
 #[tauri::command]
@@ -829,29 +797,6 @@ pub async fn inspect_project_media(
 }
 
 #[tauri::command]
-pub async fn prepare_project_media(
-    app: AppHandle,
-    store: State<'_, ProjectStore>,
-    storage: State<'_, StorageManager>,
-    input: PrepareProjectMediaInput,
-) -> Result<MediaPreparation, CommandError> {
-    let store = store.inner().clone();
-    let media_cache_root = storage.media_cache_root_for_write()?;
-    let preparation = tauri::async_runtime::spawn_blocking(move || {
-        media::prepare_project_media(&store, &media_cache_root, input).map_err(CommandError::from)
-    })
-    .await
-    .map_err(CommandError::background_task_failed)??;
-    app.asset_protocol_scope()
-        .allow_file(&preparation.playback_path)
-        .map_err(|error| CommandError {
-            code: "asset_scope_error",
-            message: format!("无法授权播放器读取已准备的媒体：{error}"),
-        })?;
-    Ok(preparation)
-}
-
-#[tauri::command]
 pub async fn ensure_project_poster(
     app: AppHandle,
     store: State<'_, ProjectStore>,
@@ -859,8 +804,12 @@ pub async fn ensure_project_poster(
     project_id: String,
 ) -> Result<Project, CommandError> {
     let store = store.inner().clone();
+    let project_operation = crate::project_operations::Operation::acquire(&store, &project_id)?;
+    let usage = storage.acquire_usage()?;
     let media_cache_root = storage.media_cache_root_for_write()?;
     let project = tauri::async_runtime::spawn_blocking(move || {
+        let _usage = usage;
+        let _project_operation = project_operation;
         media::ensure_project_poster(&store, &media_cache_root, &project_id)
             .map_err(CommandError::from)
     })
@@ -897,11 +846,36 @@ pub async fn import_subtitle_file(
 }
 
 #[tauri::command]
-pub fn list_subtitle_versions(
+pub async fn get_subtitle_version(
     store: State<'_, ProjectStore>,
     project_id: String,
+    version_id: String,
+) -> Result<SubtitleVersion, CommandError> {
+    let store = store.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        subtitles::get_subtitle_version(&store, &project_id, &version_id).map_err(CommandError::from)
+    })
+    .await
+    .map_err(CommandError::background_task_failed)?
+}
+
+#[tauri::command]
+pub async fn list_subtitle_versions(
+    store: State<'_, ProjectStore>,
+    project_id: String,
+    include_history: Option<bool>,
 ) -> Result<Vec<SubtitleVersion>, CommandError> {
-    subtitles::list_subtitle_versions(store.inner(), &project_id).map_err(Into::into)
+    let store = store.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        if include_history.unwrap_or(true) {
+            subtitles::list_subtitle_versions(&store, &project_id)
+        } else {
+            subtitles::list_current_subtitle_versions(&store, &project_id)
+        }
+        .map_err(CommandError::from)
+    })
+    .await
+    .map_err(CommandError::background_task_failed)?
 }
 
 #[tauri::command]
@@ -1079,9 +1053,11 @@ pub async fn get_codex_runtime_status() -> Result<CodexRuntimeStatus, CommandErr
 pub async fn start_codex_translation_task(
     store: State<'_, ProjectStore>,
     input: StartCodexTranslationInput,
+    confirmation_sha256: String,
 ) -> Result<TranslationTask, CommandError> {
     let store = store.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
+        crate::translation_dispatch::verify(&store, &input.task_id, &confirmation_sha256)?;
         codex_runner::start_codex_translation_task(&store, input).map_err(CommandError::from)
     })
     .await
@@ -1100,9 +1076,11 @@ pub fn cancel_translation_task(
 pub async fn resume_codex_translation_task(
     store: State<'_, ProjectStore>,
     input: StartCodexTranslationInput,
+    confirmation_sha256: String,
 ) -> Result<TranslationTask, CommandError> {
     let store = store.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
+        crate::translation_dispatch::verify(&store, &input.task_id, &confirmation_sha256)?;
         codex_runner::resume_codex_translation_task(&store, input).map_err(CommandError::from)
     })
     .await
@@ -1187,9 +1165,11 @@ pub async fn import_explanation_result(
 pub async fn start_codex_explanation_task(
     store: State<'_, ProjectStore>,
     input: StartCodexTranslationInput,
+    confirmation_sha256: String,
 ) -> Result<ExplanationTask, CommandError> {
     let store = store.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
+        crate::ai::dispatch::verify_codex(&store, crate::verified_task_files::TaskDomain::Explanation, &input.task_id, &confirmation_sha256)?;
         codex_runner::start_codex_explanation_task(&store, input).map_err(CommandError::from)
     })
     .await
@@ -1208,9 +1188,11 @@ pub fn cancel_explanation_task(
 pub async fn resume_codex_explanation_task(
     store: State<'_, ProjectStore>,
     input: StartCodexTranslationInput,
+    confirmation_sha256: String,
 ) -> Result<ExplanationTask, CommandError> {
     let store = store.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
+        crate::ai::dispatch::verify_codex(&store, crate::verified_task_files::TaskDomain::Explanation, &input.task_id, &confirmation_sha256)?;
         codex_runner::resume_codex_explanation_task(&store, input).map_err(CommandError::from)
     })
     .await
@@ -1287,9 +1269,11 @@ pub async fn import_learning_result(
 pub async fn start_codex_learning_task(
     store: State<'_, ProjectStore>,
     input: StartCodexTranslationInput,
+    confirmation_sha256: String,
 ) -> Result<LearningTask, CommandError> {
     let store = store.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
+        crate::ai::dispatch::verify_codex(&store, crate::verified_task_files::TaskDomain::Learning, &input.task_id, &confirmation_sha256)?;
         codex_runner::start_codex_learning_task(&store, input).map_err(CommandError::from)
     })
     .await
@@ -1308,9 +1292,11 @@ pub fn cancel_learning_task(
 pub async fn resume_codex_learning_task(
     store: State<'_, ProjectStore>,
     input: StartCodexTranslationInput,
+    confirmation_sha256: String,
 ) -> Result<LearningTask, CommandError> {
     let store = store.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
+        crate::ai::dispatch::verify_codex(&store, crate::verified_task_files::TaskDomain::Learning, &input.task_id, &confirmation_sha256)?;
         codex_runner::resume_codex_learning_task(&store, input).map_err(CommandError::from)
     })
     .await
@@ -1382,13 +1368,25 @@ pub async fn export_learning_cards(
 #[tauri::command]
 pub async fn reconcile_external_agent_results(
     store: State<'_, ProjectStore>,
+    delivery: State<'_, crate::external_result_delivery::DeliveryQueue>,
 ) -> Result<Vec<ExternalAgentResultUpdate>, CommandError> {
     let store = store.inner().clone();
+    let delivery = delivery.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
-        external_handoff::reconcile_external_agent_results(&store).map_err(CommandError::from)
+        external_handoff::reconcile_external_agent_results(&store, &delivery).map_err(CommandError::from)
     })
     .await
     .map_err(CommandError::background_task_failed)?
+}
+
+#[tauri::command]
+pub async fn acknowledge_external_agent_results(
+    store: State<'_, ProjectStore>, updates: Vec<ExternalAgentResultUpdate>,
+) -> Result<(), CommandError> {
+    let store = store.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::external_result_delivery::acknowledge(&store, &updates).map_err(CommandError::from)
+    }).await.map_err(CommandError::background_task_failed)?
 }
 
 #[tauri::command]
@@ -1498,4 +1496,18 @@ fn allow_learning_screenshot(app: &AppHandle, card: &LearningCard) -> Result<(),
             code: "learning_screenshot_scope_failed",
             message: format!("场景截图未能加入本地显示范围：{error}"),
         })
+}
+
+#[tauri::command]
+pub fn get_public_resolver_disclosure() -> Result<crate::x_resolver_policy::ResolverDisclosure, CommandError> {
+    crate::x_resolver_policy::disclosure().map_err(Into::into)
+}
+
+#[tauri::command]
+pub async fn retry_local_resource_binding(input: crate::resource_location::RetryResourceBindingInput) -> Result<crate::resource_location::ResourceLocationResult, CommandError> {
+    crate::resource_commands::run(move || crate::resource_location::retry(input).map_err(Into::into)).await
+}
+#[tauri::command]
+pub async fn inspect_local_resource_binding() -> Result<crate::resource_location::ResourceLocationResult, CommandError> {
+    crate::resource_commands::run(move || crate::resource_location::inspect().map_err(Into::into)).await
 }

@@ -119,6 +119,7 @@ pub struct StartCodexTranslationInput {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct CodexRuntimeStatus {
     pub available: bool,
     pub authenticated: bool,
@@ -352,11 +353,10 @@ pub fn cancel_learning_task(
     let timestamp = now_ms()?;
     let mut connection = store.connect()?;
     let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
-    let immediate = task.handoff_kind == "api"
-        || matches!(
-            task.status.as_str(),
-            "awaiting_external_result" | "queued" | "validating"
-        );
+    let immediate = matches!(
+        task.status.as_str(),
+        "awaiting_external_result" | "queued" | "validating"
+    );
     let changed = if immediate {
         transaction.execute(
             "UPDATE learning_tasks
@@ -401,11 +401,10 @@ pub fn cancel_explanation_task(
     let timestamp = now_ms()?;
     let mut connection = store.connect()?;
     let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
-    let immediate = task.handoff_kind == "api"
-        || matches!(
-            task.status.as_str(),
-            "awaiting_external_result" | "queued" | "validating"
-        );
+    let immediate = matches!(
+        task.status.as_str(),
+        "awaiting_external_result" | "queued" | "validating"
+    );
     let changed = if immediate {
         transaction.execute(
             "UPDATE explanation_tasks
@@ -497,125 +496,8 @@ pub fn cancel_translation_task(
     translation::get_translation_task(store, task_id).map_err(Into::into)
 }
 
-pub fn cancel_project_translation_tasks(
-    store: &ProjectStore,
-    project_id: &str,
-) -> Result<usize, CodexRunnerError> {
-    let ids = {
-        let connection = store.connect()?;
-        let mut statement = connection.prepare(
-            "SELECT id FROM agent_tasks
-             WHERE project_id = ?1
-               AND status IN (
-                   'awaiting_external_result', 'queued', 'running', 'validating'
-               )",
-        )?;
-        statement
-            .query_map(params![project_id], |row| row.get::<_, String>(0))?
-            .collect::<Result<Vec<_>, _>>()?
-    };
-    for id in &ids {
-        let _ = cancel_translation_task(store, id);
-    }
-    for _ in 0..100 {
-        let active = store.connect()?.query_row(
-            "SELECT COUNT(*) FROM agent_tasks
-             WHERE project_id = ?1
-               AND status IN (
-                   'awaiting_external_result', 'queued', 'running', 'validating'
-               )",
-            params![project_id],
-            |row| row.get::<_, i64>(0),
-        )?;
-        if active == 0 {
-            return Ok(ids.len());
-        }
-        thread::sleep(POLL_INTERVAL);
-    }
-    Err(CodexRunnerError::InvalidTaskState(
-        "取消翻译任务超时，项目尚未删除".to_owned(),
-    ))
-}
 
-pub fn cancel_project_explanation_tasks(
-    store: &ProjectStore,
-    project_id: &str,
-) -> Result<usize, CodexRunnerError> {
-    let ids = {
-        let connection = store.connect()?;
-        let mut statement = connection.prepare(
-            "SELECT id FROM explanation_tasks
-             WHERE project_id = ?1
-               AND status IN (
-                   'awaiting_external_result', 'queued', 'running', 'validating'
-               )",
-        )?;
-        statement
-            .query_map(params![project_id], |row| row.get::<_, String>(0))?
-            .collect::<Result<Vec<_>, _>>()?
-    };
-    for id in &ids {
-        let _ = cancel_explanation_task(store, id);
-    }
-    for _ in 0..100 {
-        let active = store.connect()?.query_row(
-            "SELECT COUNT(*) FROM explanation_tasks
-             WHERE project_id = ?1
-               AND status IN (
-                   'awaiting_external_result', 'queued', 'running', 'validating'
-               )",
-            params![project_id],
-            |row| row.get::<_, i64>(0),
-        )?;
-        if active == 0 {
-            return Ok(ids.len());
-        }
-        thread::sleep(POLL_INTERVAL);
-    }
-    Err(CodexRunnerError::InvalidTaskState(
-        "取消解释任务超时，项目尚未删除".to_owned(),
-    ))
-}
 
-pub fn cancel_project_learning_tasks(
-    store: &ProjectStore,
-    project_id: &str,
-) -> Result<usize, CodexRunnerError> {
-    let ids = {
-        let connection = store.connect()?;
-        let mut statement = connection.prepare(
-            "SELECT id FROM learning_tasks
-             WHERE project_id = ?1
-               AND status IN (
-                   'awaiting_external_result', 'queued', 'running', 'validating'
-               )",
-        )?;
-        statement
-            .query_map(params![project_id], |row| row.get::<_, String>(0))?
-            .collect::<Result<Vec<_>, _>>()?
-    };
-    for id in &ids {
-        let _ = cancel_learning_task(store, id);
-    }
-    for _ in 0..100 {
-        let active = store.connect()?.query_row(
-            "SELECT COUNT(*) FROM learning_tasks
-             WHERE project_id = ?1
-               AND status IN (
-                   'awaiting_external_result', 'queued', 'running', 'validating'
-               )",
-            params![project_id],
-            |row| row.get::<_, i64>(0),
-        )?;
-        if active == 0 {
-            return Ok(ids.len());
-        }
-        thread::sleep(POLL_INTERVAL);
-    }
-    Err(CodexRunnerError::InvalidTaskState(
-        "取消词义查询超时，项目尚未删除".to_owned(),
-    ))
-}
 
 pub fn recover_translation_tasks(store: &ProjectStore) -> Result<usize, CodexRunnerError> {
     let timestamp = now_ms()?;
@@ -651,7 +533,7 @@ pub fn recover_translation_tasks(store: &ProjectStore) -> Result<usize, CodexRun
              error_code = 'app_interrupted',
              error_message = '结果导入被应用退出中断，请重新选择结果文件',
              completed_at_ms = NULL, updated_at_ms = ?1
-         WHERE handoff_kind = 'manual' AND status = 'validating'",
+         WHERE execution_kind = 'manual' AND status = 'validating'",
         params![timestamp],
     )?;
     transaction.commit()?;
@@ -671,6 +553,8 @@ fn spawn_worker(
     runtime: RuntimeIdentity,
     timeout: Duration,
 ) -> Result<(), CodexRunnerError> {
+    let project_id = translation::get_translation_task(&store, &task_id)?.project_id;
+    let project_operation = crate::project_operations::Operation::acquire(&store, &project_id)?;
     let cancellation = Arc::new(AtomicBool::new(false));
     {
         let mut tasks = active_tasks()
@@ -686,6 +570,7 @@ fn spawn_worker(
     let spawn_result = thread::Builder::new()
         .name(format!("codex-translation-{task_id}"))
         .spawn(move || {
+            let _project_operation = project_operation;
             let result = run_task(&store, &worker_task_id, &runtime, timeout, &cancellation);
             if let Err(error) = result {
                 let _ = finish_with_error(&store, &worker_task_id, &error);
@@ -713,6 +598,8 @@ fn spawn_explanation_worker(
     runtime: RuntimeIdentity,
     timeout: Duration,
 ) -> Result<(), CodexRunnerError> {
+    let project_id = understanding::get_explanation_task(&store, &task_id)?.project_id;
+    let project_operation = crate::project_operations::Operation::acquire(&store, &project_id)?;
     let cancellation = Arc::new(AtomicBool::new(false));
     {
         let mut tasks = active_tasks()
@@ -728,6 +615,7 @@ fn spawn_explanation_worker(
     let spawn_result = thread::Builder::new()
         .name(format!("codex-explanation-{task_id}"))
         .spawn(move || {
+            let _project_operation = project_operation;
             let result =
                 run_explanation_task(&store, &worker_task_id, &runtime, timeout, &cancellation);
             if let Err(error) = result {
@@ -756,6 +644,8 @@ fn spawn_learning_worker(
     runtime: RuntimeIdentity,
     timeout: Duration,
 ) -> Result<(), CodexRunnerError> {
+    let project_id = learning::get_learning_task(&store, &task_id)?.project_id;
+    let project_operation = crate::project_operations::Operation::acquire(&store, &project_id)?;
     let cancellation = Arc::new(AtomicBool::new(false));
     {
         let mut tasks = active_tasks()
@@ -771,6 +661,7 @@ fn spawn_learning_worker(
     let spawn_result = thread::Builder::new()
         .name(format!("codex-learning-{task_id}"))
         .spawn(move || {
+            let _project_operation = project_operation;
             let result =
                 run_learning_task(&store, &worker_task_id, &runtime, timeout, &cancellation);
             if let Err(error) = result {
@@ -820,13 +711,13 @@ fn run_explanation_task(
         .frames
         .iter()
         .map(|frame| {
-            let source = dunce::canonicalize(&frame.path)?;
+            let bytes = crate::verified_task_files::explanation_frame(store, task_id, frame)?;
             let destination = image_directory.join(format!("frame-{:04}.jpg", frame.ordinal + 1));
-            fs::copy(source, &destination)?;
+            fs::write(&destination, bytes)?;
             dunce::canonicalize(destination).map_err(CodexRunnerError::from)
         })
         .collect::<Result<Vec<_>, CodexRunnerError>>()?;
-    let _request_permit = crate::ai::request_coordinator::acquire_interactive("codex");
+    let _request_permit = crate::ai::request_coordinator::acquire_interactive("codex", || ensure_not_cancelled(store, task_id, cancellation))?;
     let (raw, thread_id) = invoke_codex_raw_with_images(
         store,
         task_id,
@@ -877,7 +768,7 @@ fn run_learning_task(
             .join("runtime")
             .join(format!("run-{}-{}", now_ms()?, Uuid::new_v4().simple()));
     fs::create_dir_all(&attempt_directory)?;
-    let _request_permit = crate::ai::request_coordinator::acquire_interactive("codex");
+    let _request_permit = crate::ai::request_coordinator::acquire_interactive("codex", || ensure_not_cancelled(store, task_id, cancellation))?;
     let (raw, thread_id) = invoke_codex_raw(
         store,
         task_id,
@@ -1229,9 +1120,9 @@ fn load_runner_materials(
     let directory = translation::task_directory(store, task_id)?;
     translation::verify_task_package(store, task_id, &directory)?;
     let segments =
-        read_package_json::<Vec<RunnerSegment>>(&directory.join("input").join("segments.json"))?;
-    let context = read_package_json::<Value>(&directory.join("input").join("context.json"))?;
-    let glossary = read_package_json::<Value>(&directory.join("input").join("glossary.json"))?;
+        crate::translation_dispatch::read_json::<Vec<RunnerSegment>>(store, task_id, "input/segments.json")?;
+    let context = crate::translation_dispatch::read_json::<Value>(store, task_id, "input/context.json")?;
+    let glossary = crate::translation_dispatch::read_json::<Value>(store, task_id, "input/glossary.json")?;
     if segments.len() != task.segment_count {
         return Err(CodexRunnerError::InvalidOutput(
             "任务包字幕段数量与任务记录不一致".to_owned(),
@@ -1306,16 +1197,6 @@ fn load_runner_materials(
         glossary,
         batches,
     })
-}
-
-fn read_package_json<T: for<'de> Deserialize<'de>>(path: &Path) -> Result<T, CodexRunnerError> {
-    let metadata = fs::metadata(path)?;
-    if metadata.len() > MAX_RESULT_BYTES {
-        return Err(CodexRunnerError::InvalidOutput(
-            "任务材料超过大小上限".to_owned(),
-        ));
-    }
-    Ok(serde_json::from_slice(&fs::read(path)?)?)
 }
 
 fn segments_for_batch(
@@ -1910,6 +1791,8 @@ fn invocation_spec_with_images(
         format!("permissions.{PERMISSION_PROFILE}.network.enabled=false"),
         "-c".to_owned(),
         "approval_policy=\"never\"".to_owned(),
+        "-c".to_owned(),
+        "model_provider=\"openai\"".to_owned(),
         "-c".to_owned(),
         "web_search=\"disabled\"".to_owned(),
         "-c".to_owned(),
@@ -2819,6 +2702,7 @@ process.stdin.on("end", () => {{
 
         for required in [
             "approval_policy=\"never\"",
+            "model_provider=\"openai\"",
             "web_search=\"disabled\"",
             "features.shell_tool=false",
             "features.unified_exec=false",

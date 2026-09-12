@@ -1,0 +1,78 @@
+{
+  "$defs": {
+    "SubtitleExportFormat": {
+      "enum": [
+        "srt",
+        "vtt"
+      ],
+      "type": "string"
+    },
+    "SubtitleExportMode": {
+      "enum": [
+        "original",
+        "translation",
+        "bilingual"
+      ],
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "cueCount": {
+      "format": "uint",
+      "maximum": 9007199254740991,
+      "minimum": 1,
+      "type": "integer"
+    },
+    "exportedAtMs": {
+      "format": "int64",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "filePath": {
+      "type": "string"
+    },
+    "fileSha256": {
+      "type": "string"
+    },
+    "format": {
+      "$ref": "#/$defs/SubtitleExportFormat"
+    },
+    "manifestPath": {
+      "type": "string"
+    },
+    "mediaSha256": {
+      "type": "string"
+    },
+    "mode": {
+      "$ref": "#/$defs/SubtitleExportMode"
+    },
+    "sourceVersionId": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "translationVersionId": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "required": [
+    "filePath",
+    "manifestPath",
+    "fileSha256",
+    "mode",
+    "format",
+    "cueCount",
+    "sourceVersionId",
+    "translationVersionId",
+    "mediaSha256",
+    "exportedAtMs"
+  ],
+  "title": "SubtitleExport",
+  "type": "object"
+}

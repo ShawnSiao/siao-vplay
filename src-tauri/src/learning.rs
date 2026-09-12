@@ -1,3 +1,9 @@
+mod task_contract;
+pub use task_contract::{LearningTask, LearningApplication};
+mod dictionary;
+pub use dictionary::DictionaryEntry;
+#[cfg(test)]
+mod wire_schema;
 use std::{
     fs,
     path::{Component, Path, PathBuf},
@@ -134,63 +140,11 @@ pub struct ImportLearningResultInput {
     pub result_path: String,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct LearningTask {
-    pub id: String,
-    pub project_id: String,
-    pub handoff_kind: String,
-    pub execution: AiTaskExecutionInfo,
-    pub protocol_version: String,
-    pub status: String,
-    pub stage: String,
-    pub progress: f64,
-    pub receiver_label: String,
-    pub material_scope: Vec<String>,
-    pub source_version_id: String,
-    pub translation_version_id: Option<String>,
-    pub source_segment_id: String,
-    pub selected_text: String,
-    pub selection_kind: String,
-    pub playback_position_ms: i64,
-    pub expected_project_revision: i64,
-    pub output_dictionary_entry_id: Option<String>,
-    pub error_code: Option<String>,
-    pub error_message: Option<String>,
-    pub created_at_ms: i64,
-    pub updated_at_ms: i64,
-    pub started_at_ms: Option<i64>,
-    pub completed_at_ms: Option<i64>,
-}
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct DictionaryEntry {
-    pub id: String,
-    pub project_id: String,
-    pub task_id: String,
-    pub source_version_id: String,
-    pub translation_version_id: Option<String>,
-    pub source_segment_id: String,
-    pub selected_text: String,
-    pub selection_kind: String,
-    pub pronunciation: String,
-    pub part_of_speech: String,
-    pub contextual_meaning: String,
-    pub usage_note: Option<String>,
-    pub source_sentence: String,
-    pub translated_sentence: Option<String>,
-    pub language_code: String,
-    pub playback_position_ms: i64,
-    pub created_at_ms: i64,
-}
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct LearningApplication {
-    pub task: LearningTask,
-    pub dictionary_entry: DictionaryEntry,
-}
+
+
+
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -208,6 +162,7 @@ pub struct ExportLearningCardsInput {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct LearningCard {
     pub id: String,
     pub project_id: String,
@@ -216,6 +171,7 @@ pub struct LearningCard {
     pub translation_version_id: Option<String>,
     pub source_segment_id: String,
     pub selected_text: String,
+    #[cfg_attr(test, schemars(with = "wire_schema::SelectionKind"))]
     pub selection_kind: String,
     pub pronunciation: String,
     pub part_of_speech: String,
@@ -224,20 +180,25 @@ pub struct LearningCard {
     pub source_sentence: String,
     pub translated_sentence: Option<String>,
     pub language_code: String,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_i64)))]
     pub playback_position_ms: i64,
     pub screenshot_path: String,
     pub screenshot_sha256: String,
     pub screenshot_available: bool,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_i64)))]
     pub created_at_ms: i64,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_i64)))]
     pub updated_at_ms: i64,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct LearningCardsExport {
     pub directory: String,
     pub json_path: String,
     pub markdown_path: String,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub card_count: usize,
 }
 
@@ -312,6 +273,8 @@ pub fn prepare_learning_task(
     store: &ProjectStore,
     input: PrepareLearningTaskInput,
 ) -> Result<LearningTask, LearningError> {
+    let _project_operation = crate::project_operations::Operation::acquire(store, &input.project_id)?;
+    let _data_access = crate::storage::database_access::shared(store.database_path())?;
     let (status, stage, receiver_label) = match input.handoff_kind.trim() {
         "manual" => (
             "awaiting_external_result",
@@ -616,7 +579,7 @@ pub fn read_learning_prompt(store: &ProjectStore, task_id: &str) -> Result<Strin
     let task = get_learning_task(store, task_id)?;
     let directory = task_directory(store, task_id)?;
     verify_task_package(store, &task, &directory)?;
-    read_small_utf8(&directory.join("prompt.md"))
+    Ok(crate::verified_task_files::read_text(store, crate::verified_task_files::TaskDomain::Learning, task_id, "prompt.md")?)
 }
 
 pub(crate) fn read_learning_schema(
@@ -626,9 +589,7 @@ pub(crate) fn read_learning_schema(
     let task = get_learning_task(store, task_id)?;
     let directory = task_directory(store, task_id)?;
     verify_task_package(store, &task, &directory)?;
-    Ok(serde_json::from_str(&read_small_utf8(
-        &directory.join("result.schema.json"),
-    )?)?)
+    Ok(serde_json::from_str(&crate::verified_task_files::read_text(store, crate::verified_task_files::TaskDomain::Learning, task_id, "result.schema.json")?)?)
 }
 
 pub fn get_dictionary_entry(
@@ -711,6 +672,8 @@ pub(crate) fn create_learning_card_with<F>(
 where
     F: Fn(&Path, i64, &Path) -> Result<(), LearningError>,
 {
+    let _project_operation = crate::project_operations::Operation::acquire(store, &input.project_id)?;
+    let _data_access = crate::storage::database_access::shared(store.database_path())?;
     let project = store.get_project(&input.project_id)?;
     let entry = get_dictionary_entry(store, &input.dictionary_entry_id)?;
     if entry.project_id != project.id {
@@ -745,7 +708,7 @@ where
     if !media_path.is_file() {
         return Err(LearningError::MediaChanged);
     }
-    let current_versions = subtitles::list_subtitle_versions(store, &project.id)?;
+    let current_versions = subtitles::list_current_subtitle_versions(store, &project.id)?;
     let source_is_current = current_versions.iter().any(|version| {
         version.role == "original" && version.is_current && version.id == entry.source_version_id
     });
@@ -953,6 +916,8 @@ pub fn delete_learning_card(
     project_id: &str,
     card_id: &str,
 ) -> Result<bool, LearningError> {
+    let _project_operation = crate::project_operations::Operation::acquire(store, project_id)?;
+    let _data_access = crate::storage::database_access::shared(store.database_path())?;
     store.get_project(project_id)?;
     let card = get_learning_card(store, card_id)?;
     if card.project_id != project_id {
@@ -972,6 +937,7 @@ pub fn export_learning_cards(
     store: &ProjectStore,
     input: ExportLearningCardsInput,
 ) -> Result<LearningCardsExport, LearningError> {
+    let _project_operation = crate::project_operations::Operation::acquire(store, &input.project_id)?;
     let project = store.get_project(&input.project_id)?;
     let cards = list_learning_cards(store, &project.id)?;
     if cards.is_empty() {
@@ -1074,6 +1040,7 @@ pub fn import_learning_result(
     input: ImportLearningResultInput,
 ) -> Result<LearningApplication, LearningError> {
     let task = get_learning_task(store, &input.task_id)?;
+    let _project_operation = crate::project_operations::Operation::acquire(store, &task.project_id)?;
     if task.handoff_kind != "manual" || task.status != "awaiting_external_result" {
         return Err(LearningError::InvalidTaskState(task.status));
     }
@@ -1286,6 +1253,7 @@ fn persist_learning_result(
         if changed != 1 {
             return Err(LearningError::InvalidTaskState(task.status.clone()));
         }
+        crate::external_result_delivery::record_completion(&transaction, "learning", &task.id)?;
         transaction.commit()?;
         Ok(())
     })();
@@ -1311,7 +1279,7 @@ pub(crate) fn set_task_validating(
         "UPDATE learning_tasks
          SET status = 'validating', stage = 'validating', progress = 0.9,
              error_code = NULL, error_message = NULL, updated_at_ms = ?3
-         WHERE id = ?1 AND status = ?2",
+         WHERE id = ?1 AND status = ?2 AND cancel_requested_at_ms IS NULL",
         params![task_id, expected_status, timestamp],
     )?;
     if changed != 1 {
@@ -1628,7 +1596,7 @@ fn load_task_baseline(
         .source_sha256
         .clone()
         .ok_or(LearningError::MediaChanged)?;
-    let versions = subtitles::list_subtitle_versions(store, project_id)?;
+    let versions = subtitles::list_current_subtitle_versions(store, project_id)?;
     let source = versions
         .iter()
         .find(|version| version.role == "original" && version.is_current)
@@ -2181,6 +2149,10 @@ mod tests {
         )
         .expect("manual result should apply");
 
+        let pending = crate::external_result_delivery::pending(&fixture.store).unwrap();
+        assert_eq!(pending.len(), 1);
+        assert_eq!(pending[0].task_id, task.id);
+        assert_eq!(pending[0].output_id, application.task.output_dictionary_entry_id);
         assert_eq!(application.task.status, "completed");
         assert_eq!(
             application.task.output_dictionary_entry_id.as_deref(),
@@ -2410,12 +2382,17 @@ mod tests {
             &fixture.store,
             input.clone(),
             |_media_path, timestamp_ms, output_path| {
+                assert!(crate::storage::database_access::exclusive(fixture.store.database_path()).is_err(),
+                    "migration must not split screenshot creation from card persistence");
+                assert!(crate::project_operations::Deletion::acquire(&fixture.store, &fixture.project_id).is_err(),
+                    "project deletion must not start during card screenshot creation");
                 assert_eq!(timestamp_ms, 1_000);
                 fs::write(output_path, [0xff, 0xd8, 0xff, 0xe0, 4, 5, 6])?;
                 Ok(())
             },
         )
         .expect("card should persist");
+        assert!(crate::storage::database_access::exclusive(fixture.store.database_path()).is_ok());
         let reused = create_learning_card_with(
             &fixture.store,
             input,

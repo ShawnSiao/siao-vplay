@@ -1,0 +1,268 @@
+{
+  "$defs": {
+    "EpisodeRecognition": {
+      "enum": [
+        "sxx_exx",
+        "season_x_episode",
+        "chinese_episode",
+        "numeric_prefix",
+        "season_directory",
+        "unresolved",
+        "conflict"
+      ],
+      "type": "string"
+    },
+    "ItemAvailability": {
+      "enum": [
+        "available",
+        "missing",
+        "root_offline",
+        "changed"
+      ],
+      "type": "string"
+    },
+    "LibraryRootRebuildItem": {
+      "properties": {
+        "absoluteOrder": {
+          "format": "int64",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "candidateId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "displayTitle": {
+          "type": "string"
+        },
+        "episodeNumber": {
+          "format": "int64",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "matchKind": {
+          "$ref": "#/$defs/LibraryRootRebuildMatchKind"
+        },
+        "previousAvailability": {
+          "$ref": "#/$defs/ItemAvailability"
+        },
+        "projectId": {
+          "type": "string"
+        },
+        "reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "relativePath": {
+          "type": "string"
+        },
+        "seasonNumber": {
+          "format": "int64",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "projectId",
+        "candidateId",
+        "relativePath",
+        "displayTitle",
+        "seasonNumber",
+        "episodeNumber",
+        "absoluteOrder",
+        "previousAvailability",
+        "matchKind",
+        "reason"
+      ],
+      "type": "object"
+    },
+    "LibraryRootRebuildMatchKind": {
+      "enum": [
+        "matched",
+        "missing",
+        "changed",
+        "needs_confirmation"
+      ],
+      "type": "string"
+    },
+    "LibraryScanCandidate": {
+      "properties": {
+        "absoluteOrder": {
+          "format": "int64",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "candidateId": {
+          "type": "string"
+        },
+        "confirmationReason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "displayTitle": {
+          "type": "string"
+        },
+        "episodeNumber": {
+          "format": "int64",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "needsConfirmation": {
+          "type": "boolean"
+        },
+        "quickFingerprint": {
+          "type": "string"
+        },
+        "recognition": {
+          "$ref": "#/$defs/EpisodeRecognition"
+        },
+        "relativePath": {
+          "type": "string"
+        },
+        "seasonNumber": {
+          "format": "int64",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "sourceModifiedAtMs": {
+          "format": "int64",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "sourceSizeBytes": {
+          "format": "uint64",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "candidateId",
+        "relativePath",
+        "displayTitle",
+        "seasonNumber",
+        "episodeNumber",
+        "absoluteOrder",
+        "recognition",
+        "needsConfirmation",
+        "confirmationReason",
+        "sourceSizeBytes",
+        "sourceModifiedAtMs",
+        "quickFingerprint"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "changedItems": {
+      "items": {
+        "$ref": "#/$defs/LibraryRootRebuildItem"
+      },
+      "type": "array"
+    },
+    "currentRootPath": {
+      "type": "string"
+    },
+    "expiresAtMs": {
+      "format": "int64",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "ignoredCount": {
+      "format": "uint64",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "matchedItems": {
+      "items": {
+        "$ref": "#/$defs/LibraryRootRebuildItem"
+      },
+      "type": "array"
+    },
+    "missingItems": {
+      "items": {
+        "$ref": "#/$defs/LibraryRootRebuildItem"
+      },
+      "type": "array"
+    },
+    "newCandidates": {
+      "items": {
+        "$ref": "#/$defs/LibraryScanCandidate"
+      },
+      "type": "array"
+    },
+    "previewToken": {
+      "type": "string"
+    },
+    "rootDisplayName": {
+      "type": "string"
+    },
+    "rootId": {
+      "type": "string"
+    },
+    "rootOffline": {
+      "type": "boolean"
+    },
+    "rootPath": {
+      "type": "string"
+    },
+    "suggestedCollectionTitle": {
+      "type": "string"
+    },
+    "uncertainItems": {
+      "items": {
+        "$ref": "#/$defs/LibraryRootRebuildItem"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "previewToken",
+    "rootId",
+    "currentRootPath",
+    "rootPath",
+    "rootDisplayName",
+    "suggestedCollectionTitle",
+    "rootOffline",
+    "newCandidates",
+    "matchedItems",
+    "missingItems",
+    "changedItems",
+    "uncertainItems",
+    "ignoredCount",
+    "expiresAtMs"
+  ],
+  "title": "LibraryRootRebuildPreview",
+  "type": "object"
+}

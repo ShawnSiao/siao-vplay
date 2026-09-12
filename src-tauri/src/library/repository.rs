@@ -4,7 +4,7 @@ use rusqlite::{Connection, OptionalExtension, Row, params};
 
 use super::{
     Collection, CollectionDetail, CollectionKind, CollectionSortMode, CollectionSummary,
-    EpisodeReference, ItemAvailability, LibraryError, LibraryRootStatus, LibraryRootSummary,
+    ItemAvailability, LibraryError, LibraryRootStatus, LibraryRootSummary,
     MediaSummary, SearchResult, SearchResultKind, SeasonSummary,
 };
 
@@ -387,36 +387,20 @@ impl<'connection> LibraryRepository<'connection> {
             .map_err(Into::into)
     }
 
+    #[cfg(test)]
     pub(crate) fn list_collection_summaries(&self) -> Result<Vec<CollectionSummary>, LibraryError> {
-        let mut statement = self.connection.prepare(
-            "SELECT
-                c.id, c.kind, c.title, c.root_id, c.system_key, c.poster_path,
-                c.sort_mode, c.auto_play_next, c.last_opened_at_ms,
-                c.created_at_ms, c.updated_at_ms,
-                COUNT(ci.project_id) AS item_count,
-                COUNT(DISTINCT ci.season_number) AS season_count,
-                COALESCE(SUM(CASE WHEN ps.completed_at_ms IS NOT NULL THEN 1 ELSE 0 END), 0)
-                    AS watched_count,
-                SUM(ps.duration_ms) AS total_duration_ms
-             FROM collections c
-             LEFT JOIN collection_items ci ON ci.collection_id = c.id
-             LEFT JOIN playback_states ps ON ps.project_id = ci.project_id
-             GROUP BY c.id
-             ORDER BY
-                CASE WHEN c.system_key = 'watch_later' THEN 1 ELSE 0 END,
-                COALESCE(c.last_opened_at_ms, 0) DESC,
-                c.updated_at_ms DESC,
-                c.title COLLATE NOCASE,
-                c.id",
-        )?;
-        statement
-            .query_and_then([], map_collection_summary)?
-            .collect()
+        self.list_collection_summary_window(-1, 0, None)
     }
 
     pub(crate) fn get_collection_detail(
         &self,
         collection_id: &str,
+    ) -> Result<CollectionDetail, LibraryError> {
+        self.get_collection_detail_with_checkpoint(collection_id, || {})
+    }
+
+    pub(super) fn get_collection_detail_with_checkpoint(
+        &self, collection_id: &str, after_summary: impl FnOnce(),
     ) -> Result<CollectionDetail, LibraryError> {
         let summary = self
             .connection
@@ -441,6 +425,7 @@ impl<'connection> LibraryRepository<'connection> {
             .optional()?
             .ok_or_else(|| LibraryError::CollectionNotFound(collection_id.to_owned()))?;
 
+        after_summary();
         let mut statement = self.connection.prepare(
             "SELECT
                 ci.season_number,
@@ -467,40 +452,9 @@ impl<'connection> LibraryRepository<'connection> {
         Ok(CollectionDetail { summary, seasons })
     }
 
+    #[cfg(test)]
     pub(crate) fn list_roots(&self) -> Result<Vec<LibraryRootSummary>, LibraryError> {
-        let mut statement = self.connection.prepare(
-            "SELECT
-                lr.id, lr.path, lr.display_name, lr.availability,
-                lr.last_scanned_at_ms,
-                (SELECT COUNT(DISTINCT root_item.project_id)
-                 FROM library_root_items root_item
-                 WHERE root_item.root_id = lr.id),
-                COUNT(DISTINCT CASE WHEN c.system_key IS NULL THEN c.id END)
-             FROM library_roots lr
-             LEFT JOIN collections c ON c.root_id = lr.id
-             LEFT JOIN collection_items ci ON ci.collection_id = c.id
-             GROUP BY lr.id
-             ORDER BY lr.display_name COLLATE NOCASE, lr.id",
-        )?;
-        statement
-            .query_map([], |row| {
-                let path: String = row.get(1)?;
-                Ok(LibraryRootSummary {
-                    id: row.get(0)?,
-                    path: path.clone(),
-                    display_name: row.get(2)?,
-                    availability: if Path::new(&path).is_dir() {
-                        "available".to_owned()
-                    } else {
-                        "offline".to_owned()
-                    },
-                    last_scanned_at_ms: row.get(4)?,
-                    item_count: row.get(5)?,
-                    status: LibraryRootStatus::from_collection_count(row.get(6)?),
-                })
-            })?
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(Into::into)
+        self.list_root_window(-1, 0)
     }
 
     pub(crate) fn get_root(&self, root_id: &str) -> Result<LibraryRootRecord, LibraryError> {
@@ -965,111 +919,11 @@ impl<'connection> LibraryRepository<'connection> {
         limit: i64,
     ) -> Result<Vec<MediaSummary>, LibraryError> {
         let mut statement = self.connection.prepare(
-            "SELECT
-                p.id, p.title, m.display_name, m.locator, m.poster_path,
-                ps.position_ms, ps.duration_ms, ps.completed_at_ms,
-                p.last_opened_at_ms, p.created_at_ms,
-                EXISTS(
-                    SELECT 1 FROM subtitle_tracks st
-                    WHERE st.project_id = p.id AND st.role = 'original'
-                      AND st.current_version_id IS NOT NULL
-                ),
-                EXISTS(
-                    SELECT 1 FROM subtitle_tracks st
-                    WHERE st.project_id = p.id AND st.role = 'translation'
-                      AND st.language_code = 'zh-cn' AND st.current_version_id IS NOT NULL
-                ),
-                MIN(ci.collection_id), MIN(c.title), MIN(ci.season_number),
-                MIN(ci.episode_number), MIN(ci.absolute_order), MIN(ci.display_title),
-                MIN(ci.availability)
-             FROM projects p
-             JOIN media_sources m ON m.project_id = p.id AND m.is_primary = 1
-             JOIN playback_states ps ON ps.project_id = p.id
-             LEFT JOIN collection_items ci ON ci.project_id = p.id
-             LEFT JOIN collections c ON c.id = ci.collection_id
-             GROUP BY p.id
-             ORDER BY p.created_at_ms DESC, p.id
-             LIMIT ?1",
+            include_str!("recently_added_window.sql"),
         )?;
         statement
             .query_and_then(params![limit], map_media_summary)?
             .collect()
-    }
-
-    pub(crate) fn list_collection_episodes(
-        &self,
-        collection_id: &str,
-        season_number: Option<i64>,
-    ) -> Result<Vec<MediaSummary>, LibraryError> {
-        self.get_collection(collection_id)?;
-        let mut statement = self.connection.prepare(
-            "SELECT
-                p.id, p.title, m.display_name, m.locator, m.poster_path,
-                ps.position_ms, ps.duration_ms, ps.completed_at_ms,
-                p.last_opened_at_ms, p.created_at_ms,
-                EXISTS(
-                    SELECT 1 FROM subtitle_tracks st
-                    WHERE st.project_id = p.id AND st.role = 'original'
-                      AND st.current_version_id IS NOT NULL
-                ),
-                EXISTS(
-                    SELECT 1 FROM subtitle_tracks st
-                    WHERE st.project_id = p.id AND st.role = 'translation'
-                      AND st.language_code = 'zh-cn' AND st.current_version_id IS NOT NULL
-                ),
-                c.id, c.title, ci.season_number, ci.episode_number,
-                ci.absolute_order, ci.display_title, ci.availability
-             FROM collection_items ci
-             JOIN collections c ON c.id = ci.collection_id
-             JOIN projects p ON p.id = ci.project_id
-             JOIN media_sources m ON m.project_id = p.id AND m.is_primary = 1
-             JOIN playback_states ps ON ps.project_id = p.id
-             WHERE ci.collection_id = ?1
-               AND (?2 IS NULL OR ci.season_number = ?2)
-             ORDER BY
-                CASE WHEN c.sort_mode = 'manual' THEN ci.absolute_order END,
-                CASE WHEN c.sort_mode != 'manual' THEN ci.season_number END,
-                CASE WHEN c.sort_mode != 'manual' THEN ci.episode_number END,
-                ci.absolute_order,
-                ci.display_title COLLATE NOCASE,
-                ci.project_id",
-        )?;
-        statement
-            .query_and_then(params![collection_id, season_number], map_media_summary)?
-            .collect()
-    }
-
-    pub(crate) fn list_episode_references(
-        &self,
-        collection_id: &str,
-    ) -> Result<Vec<EpisodeReference>, LibraryError> {
-        let mut statement = self.connection.prepare(
-            "SELECT
-                ci.project_id, ci.display_title, ci.season_number,
-                ci.episode_number, ci.absolute_order
-             FROM collection_items ci
-             JOIN collections c ON c.id = ci.collection_id
-             WHERE ci.collection_id = ?1
-             ORDER BY
-                CASE WHEN c.sort_mode = 'manual' THEN ci.absolute_order END,
-                CASE WHEN c.sort_mode != 'manual' THEN ci.season_number END,
-                CASE WHEN c.sort_mode != 'manual' THEN ci.episode_number END,
-                ci.absolute_order,
-                ci.display_title COLLATE NOCASE,
-                ci.project_id",
-        )?;
-        statement
-            .query_map(params![collection_id], |row| {
-                Ok(EpisodeReference {
-                    project_id: row.get(0)?,
-                    display_title: row.get(1)?,
-                    season_number: row.get(2)?,
-                    episode_number: row.get(3)?,
-                    absolute_order: row.get(4)?,
-                })
-            })?
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(Into::into)
     }
 
     pub(crate) fn search(
@@ -1077,46 +931,7 @@ impl<'connection> LibraryRepository<'connection> {
         pattern: &str,
         limit: i64,
     ) -> Result<Vec<SearchResult>, LibraryError> {
-        let mut statement = self.connection.prepare(
-            "SELECT
-                'collection' AS result_kind,
-                c.title,
-                CASE c.kind
-                    WHEN 'series' THEN '剧集'
-                    WHEN 'folder' THEN '文件夹'
-                    ELSE '合集'
-                END AS subtitle,
-                c.id AS collection_id,
-                NULL AS project_id,
-                NULL AS season_number,
-                NULL AS episode_number
-             FROM collections c
-             WHERE c.title LIKE ?1 ESCAPE '\\' COLLATE NOCASE
-
-             UNION ALL
-
-             SELECT
-                CASE WHEN MIN(ci.collection_id) IS NULL
-                    THEN 'unclassified' ELSE 'episode' END AS result_kind,
-                p.title,
-                CASE WHEN MIN(c.title) IS NULL
-                    THEN m.display_name ELSE MIN(c.title) END AS subtitle,
-                MIN(ci.collection_id) AS collection_id,
-                p.id AS project_id,
-                MIN(ci.season_number) AS season_number,
-                MIN(ci.episode_number) AS episode_number
-             FROM projects p
-             JOIN media_sources m ON m.project_id = p.id AND m.is_primary = 1
-             LEFT JOIN collection_items ci ON ci.project_id = p.id
-             LEFT JOIN collections c ON c.id = ci.collection_id
-             WHERE p.title LIKE ?1 ESCAPE '\\' COLLATE NOCASE
-                OR m.display_name LIKE ?1 ESCAPE '\\' COLLATE NOCASE
-                OR ci.display_title LIKE ?1 ESCAPE '\\' COLLATE NOCASE
-             GROUP BY p.id
-
-             ORDER BY title COLLATE NOCASE, result_kind, project_id
-             LIMIT ?2",
-        )?;
+        let mut statement = self.connection.prepare(include_str!("search.sql"))?;
         statement
             .query_and_then(params![pattern, limit], |row| {
                 let kind = row.get::<_, String>(0)?;
@@ -1406,7 +1221,7 @@ fn map_collection(row: &Row<'_>) -> rusqlite::Result<Collection> {
     })
 }
 
-fn map_collection_summary(row: &Row<'_>) -> Result<CollectionSummary, LibraryError> {
+pub(super) fn map_collection_summary(row: &Row<'_>) -> Result<CollectionSummary, LibraryError> {
     Ok(CollectionSummary {
         collection: map_collection(row)?,
         item_count: row.get(11)?,

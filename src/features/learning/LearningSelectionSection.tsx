@@ -9,6 +9,7 @@ import type { SelectablePart } from "./learningSelection";
 import type { LocalSpeechController } from "./useLocalSpeech";
 
 type LearningSelectionSectionProps = {
+  disabled?: boolean;
   playbackPositionMs: number;
   sourceVersion: SubtitleVersion;
   sourceSegment: SubtitleSegment;
@@ -26,6 +27,7 @@ function kindLabel(kind: LearningSelectionKind): string {
 }
 
 export function LearningSelectionSection({
+  disabled = false,
   playbackPositionMs,
   sourceVersion,
   sourceSegment,
@@ -49,7 +51,7 @@ export function LearningSelectionSection({
             sourceId={`sentence:${sourceSegment.id}`}
             label="朗读当前整句"
           />
-          <button type="button" onClick={() => onSelectText(sourceSegment.text)}>
+          <button type="button" disabled={disabled} onClick={() => onSelectText(sourceSegment.text)}>
             选整句
           </button>
         </div>
@@ -64,6 +66,7 @@ export function LearningSelectionSection({
             className={selectedText === part.text ? "selected" : undefined}
             key={`${index}-${part.text}`}
             type="button"
+            disabled={disabled}
             onClick={() => {
               onSelectText(part.text);
               void speech.speak(
@@ -86,6 +89,7 @@ export function LearningSelectionSection({
           <input
             aria-invalid={!selectionValid}
             aria-label="要查询的原文"
+            disabled={disabled}
             value={selectedText}
             onChange={(event) => onSelectText(event.target.value)}
           />

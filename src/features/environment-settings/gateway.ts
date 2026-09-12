@@ -1,4 +1,11 @@
+import { aiExecutionRequest } from "../../lib/aiExecutionRequest";
+import { parseExecutionPreview } from "./executionPreviewContract";
+import validateServiceSettings from "../../generated/ai-service-settings.validator.mjs";
+import validateServiceTest from "../../generated/ai-service-test-result.validator.mjs";
+import validateNetworkSettings from "../../generated/network-settings.validator.mjs";
+import validateModelList from "../../generated/ai-model-list.validator.mjs";
 import { invoke } from "@tauri-apps/api/core";
+import { publishAiServiceSettings } from "./events";
 
 import type {
   AiExecutionPreview,
@@ -12,15 +19,26 @@ import type {
   NetworkSettings,
 } from "./types";
 
-export function getAiServiceSettings(): Promise<AiServiceSettings> {
-  return invoke("get_ai_service_settings");
+function parseServiceSettings(value: unknown): AiServiceSettings {
+  if (!validateServiceSettings(value)) throw new Error("AI 服务设置格式无效");
+  return value;
 }
 
-export function saveAiService(
+function changedServiceSettings(value: unknown): AiServiceSettings {
+  const settings = parseServiceSettings(value);
+  publishAiServiceSettings(settings);
+  return settings;
+}
+
+export async function getAiServiceSettings(): Promise<AiServiceSettings> {
+  return parseServiceSettings(await invoke<unknown>("get_ai_service_settings"));
+}
+
+export async function saveAiService(
   expectedRevision: number,
   draft: AiServiceDraft,
 ): Promise<AiServiceSettings> {
-  return invoke("save_ai_service", {
+  return changedServiceSettings(await invoke<unknown>("save_ai_service", {
     input: {
       expectedRevision,
       id: draft.id,
@@ -31,57 +49,68 @@ export function saveAiService(
       modelId: draft.modelId || null,
       apiKey: draft.apiKey || null,
     },
-  });
+  }));
 }
 
-export function deleteAiService(
+export async function deleteAiService(
   expectedRevision: number,
   id: string,
 ): Promise<AiServiceSettings> {
-  return invoke("delete_ai_service", { input: { expectedRevision, id } });
+  return changedServiceSettings(await invoke<unknown>("delete_ai_service", { input: { expectedRevision, id } }));
 }
 
-export function setDefaultAiService(
+export async function setDefaultAiService(
   expectedRevision: number,
   id: string | null,
 ): Promise<AiServiceSettings> {
-  return invoke("set_default_ai_service", {
+  return changedServiceSettings(await invoke<unknown>("set_default_ai_service", {
     input: { expectedRevision, id },
-  });
+  }));
 }
 
-export function listAiServiceModels(
+export async function listAiServiceModels(
   input: AiServiceProbeInput,
 ): Promise<AiModelList> {
-  return invoke("list_ai_service_models", { input });
+  const result = await invoke<unknown>("list_ai_service_models", { input });
+  if (!validateModelList(result)) throw new Error("模型列表格式无效");
+  return result;
 }
 
-export function testAiService(
+export async function testAiService(
   input: AiServiceProbeInput,
 ): Promise<AiServiceTestResult> {
-  return invoke("test_ai_service", { input });
+  const result = await invoke<unknown>("test_ai_service", { input });
+  if (!validateServiceTest(result)) throw new Error("连接测试结果格式无效");
+  return result;
 }
 
-export function getNetworkSettings(): Promise<NetworkSettings> {
-  return invoke("get_network_settings");
+function parseNetworkSettings(value: unknown): NetworkSettings {
+  if (!validateNetworkSettings(value)) throw new Error("网络设置格式无效");
+  return value;
 }
 
-export function setNetworkSettings(
+export async function getNetworkSettings(): Promise<NetworkSettings> {
+  return parseNetworkSettings(await invoke<unknown>("get_network_settings"));
+}
+
+export async function setNetworkSettings(
   expectedRevision: number,
   customProxyUrl: string | null,
 ): Promise<NetworkSettings> {
-  return invoke("set_network_settings", {
+  return parseNetworkSettings(await invoke<unknown>("set_network_settings", {
     input: { expectedRevision, customProxyUrl },
-  });
+  }));
 }
 
-export function previewAiExecution(
+export async function previewAiExecution(
   execution: AiExecutionTarget,
   authorization: AiMaterialAuthorization,
 ): Promise<AiExecutionPreview> {
-  return invoke("preview_ai_execution", {
-    input: { execution, authorization },
+  const { execution: target, authorization: materials } = aiExecutionRequest(execution, authorization);
+  const result = await invoke<unknown>("preview_ai_execution", {
+    input: { execution: target, authorization: materials },
   });
+  return parseExecutionPreview(result, target, materials);
 }
 
 export function commandMessage(cause: unknown): string {

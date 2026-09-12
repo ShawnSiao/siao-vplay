@@ -1,0 +1,49 @@
+{
+  "$defs": {
+    "NetworkMode": {
+      "enum": [
+        "direct",
+        "proxy"
+      ],
+      "type": "string"
+    },
+    "ProxySource": {
+      "enum": [
+        "custom",
+        "environment",
+        "windows_system",
+        "direct"
+      ],
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "mode": {
+      "$ref": "#/$defs/NetworkMode"
+    },
+    "proxyAddress": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "proxySource": {
+      "$ref": "#/$defs/ProxySource"
+    },
+    "snapshotRevision": {
+      "format": "uint64",
+      "maximum": 9007199254740991,
+      "minimum": 1,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "snapshotRevision",
+    "mode",
+    "proxySource",
+    "proxyAddress"
+  ],
+  "title": "ResourceNetworkStatus",
+  "type": "object"
+}

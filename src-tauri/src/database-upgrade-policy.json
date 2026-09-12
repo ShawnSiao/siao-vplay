@@ -1,0 +1,5 @@
+{
+  "backupTimeoutSeconds": 120,
+  "pagesPerStep": 128,
+  "busyRetryDelayMs": 10
+}

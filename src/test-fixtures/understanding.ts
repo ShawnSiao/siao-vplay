@@ -15,6 +15,7 @@ export function createUnderstandingFixtures(input: UnderstandingFixtureInput): {
     id: "3f4ed2ea-f522-4914-a846-c4187e39caa9",
     projectId: input.projectId,
     handoffKind: "codex",
+    execution: { kind: "codex", serviceConfigId: null, serviceRevision: null, providerId: null, modelId: null, providerRequestId: null, usage: null },
     protocolVersion: "siaovplay-understanding-v2",
     status: "queued",
     stage: "queued",

@@ -1,0 +1,128 @@
+{
+  "$defs": {
+    "LibraryRootStatus": {
+      "enum": [
+        "linked",
+        "orphaned",
+        "ambiguous"
+      ],
+      "type": "string"
+    },
+    "LibraryRootSummary": {
+      "properties": {
+        "availability": {
+          "$ref": "#/$defs/RootAvailability"
+        },
+        "displayName": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "itemCount": {
+          "format": "int64",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "lastScannedAtMs": {
+          "format": "int64",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "path": {
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/LibraryRootStatus"
+        }
+      },
+      "required": [
+        "id",
+        "path",
+        "displayName",
+        "availability",
+        "status",
+        "lastScannedAtMs",
+        "itemCount"
+      ],
+      "type": "object"
+    },
+    "OverviewScope": {
+      "enum": [
+        "collections",
+        "roots"
+      ],
+      "type": "string"
+    },
+    "RootAvailability": {
+      "enum": [
+        "available",
+        "offline"
+      ],
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "examples": [
+    {
+      "items": [],
+      "nextOffset": null,
+      "offset": 0,
+      "scope": "roots",
+      "snapshotToken": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "totalCount": 0
+    }
+  ],
+  "properties": {
+    "items": {
+      "items": {
+        "$ref": "#/$defs/LibraryRootSummary"
+      },
+      "maxItems": 24,
+      "type": "array"
+    },
+    "nextOffset": {
+      "format": "int64",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "offset": {
+      "format": "int64",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "scope": {
+      "$ref": "#/$defs/OverviewScope"
+    },
+    "snapshotToken": {
+      "pattern": "^[a-f0-9]{64}$",
+      "type": "string"
+    },
+    "totalCount": {
+      "format": "int64",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "scope",
+    "offset",
+    "snapshotToken",
+    "totalCount",
+    "nextOffset",
+    "items"
+  ],
+  "title": "RootOverviewPage",
+  "type": "object"
+}

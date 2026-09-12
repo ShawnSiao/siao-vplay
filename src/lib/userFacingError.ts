@@ -1,5 +1,5 @@
 import type { DesktopCommandError } from "../types";
-import { commandError } from "./desktop";
+import { commandError } from "./commandError";
 
 export type ErrorContext =
   | "library"
@@ -9,6 +9,7 @@ export type ErrorContext =
   | "background";
 
 const errorMessages: Record<string, string> = {
+  insufficient_storage: "存储空间不足。打开「存储设置」检查播放缓存和应用数据所在磁盘，释放空间或迁移位置后重新尝试。原视频保持不变。",
   project_not_found: "没有找到对应项目。返回媒体库后重新选择视频。",
   collection_not_found: "没有找到对应合集。刷新媒体库后重试。",
   membership_not_found: "这个视频已不在当前合集中。刷新媒体库后继续。",
@@ -20,9 +21,9 @@ const errorMessages: Record<string, string> = {
   unsupported_schema: "本机数据来自不兼容的版本。更新 SiaoVPlay 后重试。",
   validation_error: "输入内容没有通过检查。请核对后重试。",
   filesystem_error: "无法访问所需文件。请检查文件是否仍存在，以及所在磁盘是否可用。",
-  runtime_filesystem_error: "无法访问本地功能文件。请在「环境配置」中检查保存位置。",
+  runtime_filesystem_error: "无法访问本地功能文件。请在「设置」中检查保存位置。",
   database_error: "本机项目数据暂时无法读取。重新启动 SiaoVPlay 后重试。",
-  media_runtime_unavailable: "基础视频功能尚未准备。请在「环境配置」中完成准备后重试。",
+  media_runtime_unavailable: "基础视频功能尚未准备。请在「设置」中完成准备后重试。",
   media_probe_failed: "无法读取这个视频的媒体信息。原文件没有改变，可以重新检查或选择其他文件。",
   media_inspection_failed: "无法检查这个视频。原文件没有改变，可以重新尝试。",
   media_source_changed: "视频文件在处理期间发生变化。请重新打开项目后重试。",
@@ -57,18 +58,19 @@ const errorMessages: Record<string, string> = {
   youtube_playlist_not_allowed: "暂不支持播放列表。请使用单个公开视频页面。",
   youtube_restricted: "这个视频需要登录、付费或其他访问条件，无法导入。",
   youtube_preflight_failed: "无法连接到公开视频页面。请检查网络或代理设置后重试。",
-  youtube_runtime_unavailable: "公开视频功能尚未准备。请在「环境配置」中完成准备后重试。",
-  youtube_runtime_invalid: "公开视频组件需要更新。请在「环境配置」中更新后重新检查。",
+  youtube_runtime_unavailable: "公开视频功能尚未准备。请在「设置」中完成准备后重试。",
+  youtube_runtime_invalid: "公开视频组件需要更新。请在「设置」中更新后重新检查。",
   youtube_inspection_timeout: "公开视频检查超时。请检查网络后重试。",
   youtube_inspection_failed: "无法读取这个公开页面。请确认页面仍然公开，或稍后重试。",
   youtube_metadata_invalid: "公开视频页面返回的信息不完整。请更新公开视频组件或稍后重试。",
   youtube_selected_media_unsafe: "视频返回的媒体地址未通过公开网络检查，已停止导入。",
+  public_resolver_consent_changed: "第三方解析服务已改变。请重新检查地址并确认接收方。",
   youtube_preview_changed: "视频在检查后发生变化。请重新检查后再导入。",
   youtube_download_timeout: "公开视频导入超时。现有媒体库内容没有改变，可以稍后重试。",
   youtube_download_failed: "公开视频暂时无法下载。请更新公开视频组件并重新检查；如果已经是最新版本，可以稍后或更换网络重试。",
   missing_audio_stream: "文件中没有找到可用于字幕识别的音轨。",
-  transcription_runtime_unavailable: "本地字幕识别功能尚未准备。请在「环境配置」中完成准备。",
-  transcription_model_unavailable: "所选字幕识别模型尚未准备。请在「环境配置」中完成准备。",
+  transcription_runtime_unavailable: "本地字幕识别功能尚未准备。请在「设置」中完成准备。",
+  transcription_model_unavailable: "所选字幕识别模型尚未准备。请在「设置」中完成准备。",
   transcription_already_running: "当前项目已有字幕识别任务正在进行。",
   transcription_cancelled: "字幕识别已取消。现有字幕版本没有改变。",
   timeout: "处理超时。可以检查网络后重试。",
@@ -79,7 +81,7 @@ const contextFallbacks: Record<ErrorContext, string> = {
   library: "媒体库操作没有完成。现有视频、字幕和观看记录没有改变，可以重试。",
   playback: "播放器没有完成这项操作。原文件、字幕和观看记录没有改变。",
   subtitle: "字幕处理没有完成。现有字幕版本和原视频没有改变。",
-  settings: "环境配置没有完成保存。现有配置和本地资源没有改变。",
+  settings: "设置没有完成保存。现有配置和本地资源没有改变。",
   background: "后台处理没有完成。当前项目内容没有改变，可以重新尝试。",
 };
 

@@ -1,13 +1,14 @@
 use std::{fs, path::Path, time::Duration};
 
-use rusqlite::{Connection, OpenFlags, backup::Backup, params};
+use rusqlite::{Connection, OpenFlags, backup::{Backup, StepResult}, params};
 
-use super::{StorageArea, StorageError};
+use super::StorageError;
 
-const APP_PATH_COLUMNS: &[(&str, &str, bool)] = &[
+const COPIED_PATH_COLUMNS: &[(&str, &str, bool)] = &[
     ("media_sources", "locator", false),
     ("media_sources", "poster_path", false),
     ("media_artifacts", "path", false),
+    ("collections", "poster_path", false),
     ("transcription_jobs", "model_path", false),
     ("transcription_jobs", "runtime_path", false),
     ("explanation_frames", "path", false),
@@ -21,17 +22,26 @@ const APP_PATH_COLUMNS: &[(&str, &str, bool)] = &[
     ("summary_chunks", "frame_manifest_json", true),
 ];
 
-pub(crate) fn backup_database(source: &Path, destination: &Path) -> Result<(), StorageError> {
+pub(crate) fn backup_database(source: &Path, destination: &Path, cancelled: impl Fn() -> bool) -> Result<(), StorageError> {
+    if cancelled() { return Err(StorageError::MigrationCancelled); }
     if let Some(parent) = destination.parent() {
         fs::create_dir_all(parent)?;
     }
     remove_database_files(destination)?;
     let source = Connection::open_with_flags(source, OpenFlags::SQLITE_OPEN_READ_ONLY)?;
     let mut destination_connection = Connection::open(destination)?;
+    // Surface contention as a step result so cancellation can be observed between retries.
+    source.busy_timeout(Duration::ZERO)?;
+    destination_connection.busy_timeout(Duration::ZERO)?;
     {
         let backup = Backup::new(&source, &mut destination_connection)?;
-        backup.run_to_completion(128, Duration::from_millis(10), None)?;
+        loop {
+            if cancelled() { return Err(StorageError::MigrationCancelled); }
+            if matches!(backup.step(128)?, StepResult::Done) { break; }
+            std::thread::sleep(Duration::from_millis(10));
+        }
     }
+    if cancelled() { return Err(StorageError::MigrationCancelled); }
     destination_connection
         .execute_batch("PRAGMA wal_checkpoint(TRUNCATE); PRAGMA journal_mode=DELETE;")?;
     drop(destination_connection);
@@ -59,38 +69,32 @@ pub(crate) fn verify_database(path: &Path) -> Result<(), StorageError> {
     Ok(())
 }
 
-pub(crate) fn rewrite_managed_paths(
+pub(crate) fn relocate_copied_paths(
     database: &Path,
-    area: StorageArea,
     source: &Path,
     destination: &Path,
 ) -> Result<(), StorageError> {
     let mut connection = Connection::open(database)?;
     let transaction = connection.transaction()?;
-    let columns: &[(&str, &str, bool)] = match area {
-        StorageArea::AppData => APP_PATH_COLUMNS,
-        StorageArea::RemoteMedia => &[("media_sources", "locator", false)],
-        StorageArea::MediaCache => &[
-            ("media_sources", "poster_path", false),
-            ("media_artifacts", "path", false),
-        ],
-    };
-    for (table, column, json) in columns {
-        rewrite_column(&transaction, table, column, *json, source, destination)?;
-    }
+    relocate_copied_paths_in_transaction(&transaction, source, destination)?;
     transaction.commit()?;
     verify_database(database)
 }
 
-pub(crate) fn clear_cache_references(database: &Path) -> Result<(), StorageError> {
-    let connection = Connection::open(database)?;
-    connection.execute_batch(
-        "BEGIN IMMEDIATE;
-         UPDATE media_sources SET poster_path = NULL;
-         DELETE FROM media_artifacts;
-         COMMIT;",
-    )?;
-    verify_database(database)
+pub(super) fn relocate_copied_paths_in_transaction(connection: &Connection, source: &Path, destination: &Path) -> Result<(), StorageError> {
+    // Keep known references under the copied root together across storage areas.
+    // Rebuild bypasses this function so original-file references remain intact.
+    for (table, column, json) in COPIED_PATH_COLUMNS {
+        rewrite_column(connection, table, column, *json, source, destination)?;
+    }
+    crate::library::relocate_roots_in_transaction(connection, source, destination)?;
+    Ok(())
+}
+
+pub(crate) fn clear_cache_references(transaction: &rusqlite::Transaction<'_>, path: &str) -> Result<(), StorageError> {
+    transaction.execute("UPDATE media_sources SET poster_path = NULL WHERE poster_path = ?1", [path])?;
+    transaction.execute("DELETE FROM media_artifacts WHERE kind = 'playback_proxy' AND path = ?1", [path])?;
+    Ok(())
 }
 
 pub(crate) fn ensure_idle(database: &Path) -> Result<(), StorageError> {
@@ -258,9 +262,8 @@ mod tests {
             )
             .unwrap();
         drop(connection);
-        rewrite_managed_paths(
+        relocate_copied_paths(
             &database,
-            StorageArea::RemoteMedia,
             Path::new("C:\\old\\remote"),
             Path::new("W:\\media"),
         )
@@ -272,3 +275,11 @@ mod tests {
         assert_eq!(locator, "W:\\media\\a.mp4");
     }
 }
+
+#[cfg(test)]
+#[path = "database_backup_tests.rs"]
+mod backup_tests;
+
+#[cfg(test)]
+#[path = "database_library_path_tests.rs"]
+mod library_path_tests;

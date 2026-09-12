@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { AiServiceSettings } from "../environment-settings/types";
 import { useAiExecutionChoice } from "./useAiExecutionChoice";
+import { publishAiServiceSettings } from "../environment-settings/events";
 
 const gatewayMocks = vi.hoisted(() => ({
   getAiServiceSettings: vi.fn(),
@@ -43,6 +44,40 @@ describe("useAiExecutionChoice", () => {
     expect(result.current.execution).toEqual({ kind: "api", serviceConfigId: "default", modelId: "model-a" });
   });
 
+  it("uses a newly saved service without reopening the current task", async () => {
+    gatewayMocks.previewAiExecution.mockClear();
+    gatewayMocks.getAiServiceSettings.mockResolvedValueOnce({ ...settings, services: [], defaultServiceId: null });
+    const { result } = renderHook(() => useAiExecutionChoice(false));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.services).toHaveLength(0);
+    act(() => publishAiServiceSettings(settings));
+    expect(result.current.services).toHaveLength(2);
+    act(() => result.current.setKind("api"));
+    expect(result.current.execution).toEqual({ kind: "api", serviceConfigId: "default", modelId: "model-a" });
+    expect(gatewayMocks.previewAiExecution).not.toHaveBeenCalled();
+  });
+
+  it("preserves the explicit service and model but clears frame authorization after a save", async () => {
+    const { result } = renderHook(() => useAiExecutionChoice(true));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    act(() => { result.current.selectService("second"); result.current.setModelId("custom-model"); result.current.setFrames(true); });
+    act(() => publishAiServiceSettings({ ...settings, revision: 6 }));
+    expect(result.current.execution).toEqual({ kind: "api", serviceConfigId: "second", modelId: "custom-model" });
+    expect(result.current.frames).toBe(false);
+    act(() => publishAiServiceSettings({ ...settings, revision: 7, services: [services[0]] }));
+    expect(result.current.execution).toBeNull();
+  });
+
+  it("does not let an older initial read overwrite newly saved services", async () => {
+    let resolve!: (value: AiServiceSettings) => void;
+    gatewayMocks.getAiServiceSettings.mockReturnValueOnce(new Promise<AiServiceSettings>(done => { resolve = done; }));
+    const { result } = renderHook(() => useAiExecutionChoice(false));
+    act(() => publishAiServiceSettings(settings));
+    await act(async () => resolve({ ...settings, services: [], defaultServiceId: null }));
+    expect(result.current.services).toHaveLength(2);
+    expect(result.current.loading).toBe(false);
+  });
+
   it("allows a one-task service and model switch", async () => {
     const { result } = renderHook(() => useAiExecutionChoice(true));
     await waitFor(() => expect(result.current.loading).toBe(false));
@@ -67,4 +102,22 @@ describe("useAiExecutionChoice", () => {
     expect(result.current.serviceId).toBe("default");
     expect(result.current.error).toBe("请求超时");
   });
+});
+
+
+it("restores a manual draft without replacing it with the default API", async () => {
+  gatewayMocks.getAiServiceSettings.mockResolvedValue(settings);
+  const { result } = renderHook(() => useAiExecutionChoice(false, { kind: "manual", serviceId: null, modelId: "" }));
+  await waitFor(() => expect(result.current.loading).toBe(false));
+  expect(result.current.kind).toBe("manual");
+  expect(result.current.frames).toBe(false);
+});
+it("requires a new choice when a draft's saved service is no longer available", async () => {
+  gatewayMocks.getAiServiceSettings.mockResolvedValue(settings);
+  const { result } = renderHook(() => useAiExecutionChoice(false, { kind: "api", serviceId: "removed", modelId: "saved-model" }));
+  await waitFor(() => expect(result.current.loading).toBe(false));
+  expect(result.current.service).toBeNull();
+  expect(result.current.serviceId).toBe("removed");
+  expect(result.current.execution).toBeNull();
+  await expect(result.current.preview()).rejects.toThrow("选择");
 });

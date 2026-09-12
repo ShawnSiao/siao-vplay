@@ -1,3 +1,26 @@
+mod data_relocation;
+pub(crate) use data_relocation::{ensure_ready_for_data_move, relocate_data_config};
+mod location_confirmation;
+pub use location_confirmation::configure as configure_confirmed_location;
+mod catalog_contract;
+pub use catalog_contract::{LocalResourceCatalog, ResourceDefinition, ResourceArtifact};
+#[cfg(test)]
+mod receipt_tests;
+mod receipts;
+pub(crate) use receipts::ReceiptInventory;
+mod maintenance_diagnostics;
+pub use maintenance_diagnostics::ResourceMaintenanceDiagnostics;
+mod activation;
+mod transaction_paths;
+mod removal;
+#[cfg(test)]
+mod recovery_tests;
+mod persistence;
+use persistence::persist_json;
+#[cfg(test)]
+mod persistence_tests;
+mod status_contract;
+pub use status_contract::{LocalResourceRootState, LocalResourceCapabilityState, LocalResourceCapabilityStatus, LocalResourceStatus};
 use std::{
     collections::{BTreeMap, BTreeSet},
     fs::{self, File},
@@ -30,6 +53,8 @@ pub enum LocalResourceError {
     NotInitialized,
     #[error("需要先确认资源存储目录")]
     ConfirmationRequired,
+    #[error("保存位置计划已变化，请重新选择并核对保存位置")]
+    LocationPlanChanged,
     #[error("资源存储父目录无效：{0}")]
     InvalidParent(String),
     #[error("资源目录当前不可用：{0}")]
@@ -52,95 +77,6 @@ pub enum LocalResourceError {
     FileSystem(#[from] io::Error),
     #[error("本地资源配置序列化失败：{0}")]
     Serialization(#[from] serde_json::Error),
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct LocalResourceCatalog {
-    pub schema_version: u32,
-    pub product_id: String,
-    pub updated_at: String,
-    pub package_profile: String,
-    pub bundle_policy: BundlePolicy,
-    pub capabilities: Vec<CapabilityDefinition>,
-    pub profiles: Vec<ProfileDefinition>,
-    pub resources: Vec<ResourceDefinition>,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct BundlePolicy {
-    pub maximum_exception_bytes: u64,
-    pub allowlisted_resource_ids: Vec<String>,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CapabilityDefinition {
-    pub id: String,
-    pub title: String,
-    #[serde(default)]
-    pub resource_ids: Vec<String>,
-    #[serde(default)]
-    pub profile_ids: Vec<String>,
-    #[serde(default)]
-    pub requires_capability_ids: Vec<String>,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ProfileDefinition {
-    pub id: String,
-    pub title: String,
-    #[serde(default)]
-    pub resource_ids: Vec<String>,
-    pub recommended: bool,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ResourceDefinition {
-    pub id: String,
-    pub version: String,
-    pub platform: String,
-    pub kind: String,
-    pub bundled: bool,
-    #[serde(default)]
-    pub installed_size: Option<u64>,
-    #[serde(default)]
-    pub expected_download_size: Option<u64>,
-    pub license: String,
-    pub source_page: String,
-    #[serde(default)]
-    pub artifact: Option<ResourceArtifact>,
-    #[serde(default)]
-    pub entrypoints: BTreeMap<String, String>,
-    pub health_check: String,
-    #[serde(default)]
-    pub source_commit: Option<String>,
-    #[serde(default)]
-    pub patch_sha256: Option<String>,
-    #[serde(default)]
-    pub requires: Option<String>,
-    #[serde(default)]
-    pub distribution: Option<ResourceDistribution>,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ResourceArtifact {
-    pub url: String,
-    pub size: u64,
-    pub sha256: String,
-    pub format: String,
-    #[serde(default)]
-    pub strip_components: Option<u32>,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ResourceDistribution {
-    pub status: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -168,6 +104,8 @@ pub struct PlanLocalResourceLocationInput {
 #[serde(rename_all = "camelCase")]
 pub struct ConfigureLocalResourceRootInput {
     pub parent_path: String,
+    pub resource_root: String,
+    pub plan_fingerprint: String,
     pub confirmed: bool,
 }
 
@@ -185,56 +123,15 @@ pub struct SetLocalResourceProxyInput {
 }
 
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum LocalResourceRootState {
-    SetupRequired,
-    Ready,
-    RootUnavailable,
-    RepairRequired,
-}
-
-#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-#[allow(dead_code)]
-pub enum LocalResourceCapabilityState {
-    SetupRequired,
-    NotReady,
-    Preparing,
-    Ready,
-    RepairRequired,
-    RootUnavailable,
-    UpdateAvailable,
-}
-
-#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
-pub struct LocalResourceCapabilityStatus {
-    pub id: String,
-    pub title: String,
-    pub state: LocalResourceCapabilityState,
-    pub required_resource_ids: Vec<String>,
-    pub missing_resource_ids: Vec<String>,
-}
-
-#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub struct LocalResourceStatus {
-    pub configured: bool,
-    pub selected_parent: Option<String>,
-    pub resource_root: Option<String>,
-    pub root_state: LocalResourceRootState,
-    pub free_space_bytes: Option<u64>,
-    pub preferred_profile: String,
-    pub capabilities: Vec<LocalResourceCapabilityStatus>,
-}
-
-#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct LocalResourceLocationPlan {
+    pub plan_fingerprint: String,
     pub selected_parent: String,
     pub resource_root: String,
     pub parent_exists: bool,
     pub resource_root_exists: bool,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub free_space_bytes: Option<u64>,
     pub confirmation_required: bool,
 }
@@ -264,6 +161,7 @@ pub struct ReceiptFile {
 }
 
 struct LocalResourceManager {
+    storage: Option<crate::storage::StorageManager>,
     config_path: PathBuf,
     configuration: Option<LocalResourceConfiguration>,
 }
@@ -283,7 +181,16 @@ struct LegacyRuntimeSettings {
 static MANAGER: OnceLock<RwLock<LocalResourceManager>> = OnceLock::new();
 static CATALOG: OnceLock<Result<LocalResourceCatalog, String>> = OnceLock::new();
 
+#[cfg(test)]
 pub fn initialize(data_directory: &Path) -> Result<(), LocalResourceError> {
+    initialize_store(data_directory, None)
+}
+
+pub fn initialize_managed(data_directory: &Path, storage: crate::storage::StorageManager) -> Result<(), LocalResourceError> {
+    initialize_store(data_directory, Some(storage))
+}
+
+fn initialize_store(data_directory: &Path, storage: Option<crate::storage::StorageManager>) -> Result<(), LocalResourceError> {
     validate_catalog(catalog()?)?;
     let manager = LocalResourceManager::load(data_directory)?;
     let state = MANAGER.get_or_init(|| RwLock::new(manager));
@@ -291,6 +198,7 @@ pub fn initialize(data_directory: &Path) -> Result<(), LocalResourceError> {
         .write()
         .map_err(|_| io::Error::other("本地资源设置锁不可用"))?;
     *state = LocalResourceManager::load(data_directory)?;
+    state.storage = storage;
     Ok(())
 }
 
@@ -312,18 +220,22 @@ pub fn plan_location(parent: &str) -> Result<LocalResourceLocationPlan, LocalRes
     with_manager_read(|manager| manager.plan_location(parent))
 }
 
+#[cfg(test)]
 pub fn configure_location(
     parent: &str,
     confirmed: bool,
 ) -> Result<LocalResourceStatus, LocalResourceError> {
+    let _maintenance = crate::resource_leases::maintain_all()?;
     with_manager_write(|manager| manager.configure_location(parent, confirmed))
 }
 
 pub fn repair_configured_root(confirmed: bool) -> Result<LocalResourceStatus, LocalResourceError> {
+    let _maintenance = crate::resource_leases::maintain_all()?;
     with_manager_write(|manager| manager.repair_configured_root(confirmed))
 }
 
 pub fn set_preferred_profile(profile_id: &str) -> Result<LocalResourceStatus, LocalResourceError> {
+    let _maintenance = crate::resource_leases::maintain_policy()?;
     with_manager_write(|manager| manager.set_preferred_profile(profile_id))
 }
 
@@ -336,10 +248,6 @@ pub fn configured_root() -> Option<PathBuf> {
 
 pub(crate) fn configured_proxy_url() -> Option<String> {
     configuration_snapshot().and_then(|configuration| configuration.proxy_url)
-}
-
-pub fn set_proxy_url(proxy_url: Option<&str>) -> Result<(), LocalResourceError> {
-    with_manager_write(|manager| manager.set_proxy_url(proxy_url))
 }
 
 pub fn resolve_entrypoint(resource_id: &str, entrypoint: &str) -> Option<PathBuf> {
@@ -390,17 +298,25 @@ pub(crate) fn installed_receipts(
     with_manager_read(|manager| manager.installed_receipts(resource_id))
 }
 
+pub(crate) fn install_resource(root: &Path, staged: &Path, receipt: ResourceReceipt) -> Result<(), LocalResourceError> {
+    with_manager_write(|manager| {
+        let configured = manager.configuration.as_ref().ok_or(LocalResourceError::ConfirmationRequired)?;
+        if configuration_root(configured) != root { return Err(LocalResourceError::InvalidReceipt("资源安装位置已改变，请重新准备".into())); }
+        activation::install(manager, receipt, staged)
+    })
+}
+
 pub(crate) fn deactivate_resource(
     resource_id: &str,
 ) -> Result<Option<ResourceReceipt>, LocalResourceError> {
     with_manager_write(|manager| manager.deactivate_resource(resource_id))
 }
 
-pub(crate) fn remove_inactive_receipt(
+pub(crate) fn remove_inactive_resource(
     resource_id: &str,
     version: &str,
 ) -> Result<bool, LocalResourceError> {
-    with_manager_write(|manager| manager.remove_inactive_receipt(resource_id, version))
+    with_manager_write(|manager| manager.remove_inactive_resource(resource_id, version))
 }
 
 pub(crate) fn configuration_snapshot() -> Option<LocalResourceConfiguration> {
@@ -445,6 +361,25 @@ pub(crate) fn development_path_override(name: &str) -> Option<PathBuf> {
     }
 }
 
+pub(crate) fn resource_change_pending() -> Result<bool, LocalResourceError> {
+    if MANAGER.get().is_none() { return Ok(false); }
+    with_manager_read(|manager| Ok(activation::pending(&manager.config_path)? || removal::pending(&manager.config_path)?))
+}
+
+pub(crate) fn receipt_inventory(resource_id: &str) -> Result<ReceiptInventory, LocalResourceError> {
+    with_manager_read(|manager| receipts::inventory(manager.configuration.as_ref(), resource_id))
+}
+
+pub(crate) fn maintenance_diagnostics() -> Result<ResourceMaintenanceDiagnostics, LocalResourceError> {
+    with_manager_read(maintenance_diagnostics::inspect)
+}
+
+pub(crate) fn recover_changes_for_use() -> Result<(), LocalResourceError> {
+    if MANAGER.get().is_none() { return Ok(()); }
+    with_manager_write(|_| Ok(()))
+}
+
+
 fn with_manager_read<T>(
     operation: impl FnOnce(&LocalResourceManager) -> Result<T, LocalResourceError>,
 ) -> Result<T, LocalResourceError> {
@@ -462,20 +397,22 @@ fn with_manager_write<T>(
     let mut state = state
         .write()
         .map_err(|_| io::Error::other("本地资源设置锁不可用"))?;
-    operation(&mut state)
+    state.mutate(operation)
+}
+
+fn recover_transactions(config: &Path) -> Result<bool, LocalResourceError> {
+    if activation::pending(config)? && removal::pending(config)? {
+        return Err(LocalResourceError::InvalidReceipt("存在冲突的资源变更记录，已保留文件".into()));
+    }
+    let activated = activation::recover(config)? != activation::Recovery::None;
+    Ok(removal::recover(config)? || activated)
 }
 
 impl LocalResourceManager {
     fn load(data_directory: &Path) -> Result<Self, LocalResourceError> {
         let config_path = data_directory.join(CONFIG_FILE_NAME);
-        let mut configuration = if config_path.is_file() {
-            let configuration =
-                serde_json::from_slice::<LocalResourceConfiguration>(&fs::read(&config_path)?)?;
-            validate_configuration(&configuration)?;
-            Some(configuration)
-        } else {
-            None
-        };
+        recover_transactions(&config_path)?;
+        let mut configuration = persistence::load_configuration(&config_path)?;
         let legacy_settings = load_legacy_runtime_settings(data_directory);
         let mut changed = false;
         if let Some(legacy_root) = legacy_settings.storage_root {
@@ -497,23 +434,13 @@ impl LocalResourceManager {
             persist_json(&config_path, configuration)?;
         }
         Ok(Self {
+            storage: None,
             config_path,
             configuration,
         })
     }
 
-    fn plan_location(&self, parent: &str) -> Result<LocalResourceLocationPlan, LocalResourceError> {
-        let (parent, root) = resolve_selected_location(parent)?;
-        Ok(LocalResourceLocationPlan {
-            selected_parent: path_string(&parent),
-            resource_root: path_string(&root),
-            parent_exists: true,
-            resource_root_exists: root.is_dir(),
-            free_space_bytes: available_space(&parent),
-            confirmation_required: true,
-        })
-    }
-
+    #[cfg(test)]
     fn configure_location(
         &mut self,
         parent: &str,
@@ -523,6 +450,9 @@ impl LocalResourceManager {
             return Err(LocalResourceError::ConfirmationRequired);
         }
         let (parent, root) = resolve_selected_location(parent)?;
+        self.configure_resolved_location(parent, root)
+    }
+    fn configure_resolved_location(&mut self, parent: PathBuf, root: PathBuf) -> Result<LocalResourceStatus, LocalResourceError> {
         fs::create_dir_all(&root)?;
         for relative in RESOURCE_SUBDIRECTORIES {
             fs::create_dir_all(root.join(relative))?;
@@ -573,11 +503,11 @@ impl LocalResourceManager {
         if !confirmed {
             return Err(LocalResourceError::ConfirmationRequired);
         }
-        let configuration = self
+        let mut configuration = self
             .configuration
-            .as_mut()
+            .clone()
             .ok_or(LocalResourceError::ConfirmationRequired)?;
-        let root = configuration_root(configuration);
+        let root = configuration_root(&configuration);
         let root_was_missing = !root.exists();
         fs::create_dir_all(&root)?;
         for relative in RESOURCE_SUBDIRECTORIES {
@@ -586,7 +516,8 @@ impl LocalResourceManager {
         verify_writable(&root.join("state"))?;
         if root_was_missing {
             configuration.active_resources.clear();
-            persist_json(&self.config_path, configuration)?;
+            persist_json(&self.config_path, &configuration)?;
+            self.configuration = Some(configuration);
         }
         self.status()
     }
@@ -626,29 +557,35 @@ impl LocalResourceManager {
         {
             return Err(LocalResourceError::UnknownProfile(profile_id.to_owned()));
         }
-        let configuration = self
+        let mut configuration = self
             .configuration
-            .as_mut()
+            .clone()
             .ok_or(LocalResourceError::ConfirmationRequired)?;
         configuration.preferred_profile = profile_id.to_owned();
-        persist_json(&self.config_path, configuration)?;
+        persist_json(&self.config_path, &configuration)?;
+        self.configuration = Some(configuration.clone());
         self.status()
     }
 
+    #[cfg(test)]
     fn set_proxy_url(&mut self, proxy_url: Option<&str>) -> Result<(), LocalResourceError> {
         let normalized = normalize_proxy_url(proxy_url)?;
-        let configuration = self
+        let mut configuration = self
             .configuration
-            .as_mut()
+            .clone()
             .ok_or(LocalResourceError::ConfirmationRequired)?;
         configuration.proxy_url = normalized;
-        persist_json(&self.config_path, configuration)
+        persist_json(&self.config_path, &configuration)?;
+        self.configuration = Some(configuration);
+        Ok(())
     }
 
     fn status(&self) -> Result<LocalResourceStatus, LocalResourceError> {
+        let snapshot_revision = status_contract::next_snapshot_revision()?;
         let catalog = catalog()?;
         let Some(configuration) = self.configuration.as_ref() else {
             return Ok(LocalResourceStatus {
+                snapshot_revision,
                 configured: false,
                 selected_parent: None,
                 resource_root: None,
@@ -690,6 +627,7 @@ impl LocalResourceManager {
             |resource_id| self.resource_update_available(resource_id),
         );
         Ok(LocalResourceStatus {
+            snapshot_revision,
             configured: true,
             selected_parent: Some(configuration.selected_parent.clone()),
             resource_root: Some(configuration.resource_root.clone()),
@@ -817,46 +755,11 @@ impl LocalResourceManager {
         let configuration = self.configuration.as_ref().ok_or_else(|| {
             LocalResourceError::ResourceNotReady(format!("{resource_id} 尚未配置"))
         })?;
-        let path = configuration_root(configuration)
-            .join("receipts")
-            .join(resource_id)
-            .join(format!("{version}.json"));
-        let receipt =
-            serde_json::from_slice::<ResourceReceipt>(&fs::read(&path).map_err(|_| {
-                LocalResourceError::ResourceNotReady(format!(
-                    "缺少资源安装凭据：{}",
-                    path.display()
-                ))
-            })?)?;
-        validate_receipt(&receipt, resource_id, version)?;
-        Ok(receipt)
+        receipts::read(configuration, resource_id, version)
     }
 
-    fn activate_receipt(&mut self, mut receipt: ResourceReceipt) -> Result<(), LocalResourceError> {
-        let configuration = self
-            .configuration
-            .as_mut()
-            .ok_or_else(|| LocalResourceError::ResourceNotReady(receipt.resource_id.clone()))?;
-        validate_receipt(&receipt, &receipt.resource_id, &receipt.version)?;
-        if receipt.health_status != "passed" {
-            return Err(LocalResourceError::InvalidReceipt(format!(
-                "{}@{} 的健康检查未通过，不能激活",
-                receipt.resource_id, receipt.version
-            )));
-        }
-        receipt.activated_at_ms = Some(now_ms());
-        let receipt_directory = configuration_root(configuration)
-            .join("receipts")
-            .join(&receipt.resource_id);
-        fs::create_dir_all(&receipt_directory)?;
-        persist_json(
-            &receipt_directory.join(format!("{}.json", receipt.version)),
-            &receipt,
-        )?;
-        configuration
-            .active_resources
-            .insert(receipt.resource_id.clone(), receipt.version.clone());
-        persist_json(&self.config_path, configuration)
+    fn activate_receipt(&mut self, receipt: ResourceReceipt) -> Result<(), LocalResourceError> {
+        activation::activate(self, receipt)
     }
 
     fn active_receipt(
@@ -876,94 +779,22 @@ impl LocalResourceManager {
         &self,
         resource_id: &str,
     ) -> Result<Vec<ResourceReceipt>, LocalResourceError> {
-        validate_identifier(resource_id, "资源 ID")?;
-        let Some(configuration) = self.configuration.as_ref() else {
-            return Ok(Vec::new());
-        };
-        let directory = configuration_root(configuration)
-            .join("receipts")
-            .join(resource_id);
-        if !directory.is_dir() {
-            return Ok(Vec::new());
-        }
-        let mut receipts = Vec::new();
-        for entry in fs::read_dir(directory)? {
-            let entry = entry?;
-            let path = entry.path();
-            if !entry.file_type()?.is_file()
-                || path.extension().and_then(|value| value.to_str()) != Some("json")
-            {
-                continue;
-            }
-            let Ok(receipt) = serde_json::from_slice::<ResourceReceipt>(&fs::read(&path)?) else {
-                continue;
-            };
-            if validate_receipt(&receipt, resource_id, &receipt.version).is_ok() {
-                receipts.push(receipt);
-            }
-        }
-        receipts.sort_by(|left, right| {
-            right
-                .activated_at_ms
-                .unwrap_or_default()
-                .cmp(&left.activated_at_ms.unwrap_or_default())
-                .then(right.version.cmp(&left.version))
-        });
-        Ok(receipts)
+        receipts::list(self.configuration.as_ref(), resource_id)
     }
 
     fn deactivate_resource(
         &mut self,
         resource_id: &str,
     ) -> Result<Option<ResourceReceipt>, LocalResourceError> {
-        let receipt = self.active_receipt(resource_id)?;
-        let Some(receipt) = receipt else {
-            return Ok(None);
-        };
-        let configuration = self.configuration.as_mut().ok_or_else(|| {
-            LocalResourceError::ResourceNotReady(format!("{resource_id} 尚未配置"))
-        })?;
-        configuration.active_resources.remove(resource_id);
-        persist_json(&self.config_path, configuration)?;
-        let receipt_path = configuration_root(configuration)
-            .join("receipts")
-            .join(resource_id)
-            .join(format!("{}.json", receipt.version));
-        if receipt_path.is_file() {
-            fs::remove_file(receipt_path)?;
-        }
-        Ok(Some(receipt))
+        removal::remove(self, resource_id)
     }
 
-    fn remove_inactive_receipt(
+    fn remove_inactive_resource(
         &mut self,
         resource_id: &str,
         version: &str,
     ) -> Result<bool, LocalResourceError> {
-        validate_identifier(resource_id, "资源 ID")?;
-        validate_identifier(version, "资源版本")?;
-        let configuration = self
-            .configuration
-            .as_ref()
-            .ok_or(LocalResourceError::ConfirmationRequired)?;
-        if configuration
-            .active_resources
-            .get(resource_id)
-            .is_some_and(|active| active == version)
-        {
-            return Err(LocalResourceError::ResourceNotReady(format!(
-                "不能删除活动版本 {resource_id}@{version}"
-            )));
-        }
-        let path = configuration_root(configuration)
-            .join("receipts")
-            .join(resource_id)
-            .join(format!("{version}.json"));
-        if !path.is_file() {
-            return Ok(false);
-        }
-        fs::remove_file(path)?;
-        Ok(true)
+        removal::remove_inactive(self, resource_id, version)
     }
 }
 
@@ -1458,34 +1289,6 @@ fn verify_writable(directory: &Path) -> Result<(), LocalResourceError> {
     Ok(())
 }
 
-fn persist_json(path: &Path, value: &impl Serialize) -> Result<(), LocalResourceError> {
-    let parent = path
-        .parent()
-        .ok_or_else(|| LocalResourceError::FileSystem(io::Error::other("配置路径没有父目录")))?;
-    fs::create_dir_all(parent)?;
-    let part_path = path.with_extension("json.part");
-    let backup_path = path.with_extension("json.bak");
-    let mut file = File::create(&part_path)?;
-    serde_json::to_writer_pretty(&mut file, value)?;
-    file.write_all(b"\n")?;
-    file.sync_all()?;
-    if path.exists() {
-        if backup_path.exists() {
-            fs::remove_file(&backup_path)?;
-        }
-        fs::rename(path, &backup_path)?;
-    }
-    if let Err(error) = fs::rename(&part_path, path) {
-        if backup_path.exists() {
-            let _ = fs::rename(&backup_path, path);
-        }
-        return Err(error.into());
-    }
-    if backup_path.exists() {
-        fs::remove_file(backup_path)?;
-    }
-    Ok(())
-}
 
 #[cfg(windows)]
 fn available_space(path: &Path) -> Option<u64> {
@@ -1902,4 +1705,13 @@ mod tests {
         assert!(manager.resolve_entrypoint("ffmpeg-cpu", "ffmpeg").is_err());
         assert!(safe_relative_path("../outside.exe", "fixture").is_err());
     }
+}
+
+mod mutation;
+#[cfg(test)]
+mod migration_guard_tests;
+
+pub(crate) fn storage_manager() -> io::Result<Option<crate::storage::StorageManager>> {
+    let Some(state) = MANAGER.get() else { return Ok(None); };
+    Ok(state.read().map_err(|_| io::Error::other("本地资源设置锁不可用"))?.storage.clone())
 }

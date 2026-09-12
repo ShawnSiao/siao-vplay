@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "examples": [
+    {
+      "customProxyUrl": null,
+      "effectiveMode": "direct",
+      "effectiveProxyAddress": null,
+      "effectiveSource": "direct",
+      "revision": 0,
+      "schemaVersion": 1
+    },
+    {
+      "customProxyUrl": "http://127.0.0.1:7890",
+      "effectiveMode": "custom",
+      "effectiveProxyAddress": "127.0.0.1:7890",
+      "effectiveSource": "custom",
+      "revision": 7,
+      "schemaVersion": 1
+    }
+  ],
+  "properties": {
+    "customProxyUrl": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "effectiveMode": {
+      "type": "string"
+    },
+    "effectiveProxyAddress": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "effectiveSource": {
+      "type": "string"
+    },
+    "revision": {
+      "format": "uint64",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "schemaVersion": {
+      "format": "uint32",
+      "maximum": 4294967295,
+      "minimum": 0,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "revision",
+    "customProxyUrl",
+    "effectiveMode",
+    "effectiveSource",
+    "effectiveProxyAddress"
+  ],
+  "title": "NetworkSettings",
+  "type": "object"
+}

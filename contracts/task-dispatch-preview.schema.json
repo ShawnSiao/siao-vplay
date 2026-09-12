@@ -1,0 +1,285 @@
+{
+  "$defs": {
+    "AiExecutionTarget": {
+      "oneOf": [
+        {
+          "properties": {
+            "kind": {
+              "const": "manual",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "codex",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "api",
+              "type": "string"
+            },
+            "modelId": {
+              "type": "string"
+            },
+            "serviceConfigId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "serviceConfigId",
+            "modelId"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "AiMaterialAuthorization": {
+      "properties": {
+        "currentQuestion": {
+          "type": "boolean"
+        },
+        "frames": {
+          "type": "boolean"
+        },
+        "serviceRevision": {
+          "format": "uint64",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "subtitles": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "subtitles",
+        "currentQuestion",
+        "frames",
+        "serviceRevision"
+      ],
+      "type": "object"
+    },
+    "DispatchFrame": {
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "sha256": {
+          "type": "string"
+        },
+        "timestampMs": {
+          "format": "int64",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "timestampMs",
+        "sha256"
+      ],
+      "type": "object"
+    },
+    "DispatchPrompt": {
+      "properties": {
+        "oneTimeRequirements": {
+          "type": "string"
+        },
+        "requirements": {
+          "type": "string"
+        },
+        "template": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "template",
+        "requirements",
+        "oneTimeRequirements"
+      ],
+      "type": "object"
+    },
+    "DispatchSubtitle": {
+      "properties": {
+        "language": {
+          "type": "string"
+        },
+        "role": {
+          "type": "string"
+        },
+        "versionId": {
+          "type": "string"
+        },
+        "versionNumber": {
+          "format": "int64",
+          "maximum": 9007199254740991,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "versionId",
+        "versionNumber",
+        "role",
+        "language"
+      ],
+      "type": "object"
+    },
+    "TaskDomain": {
+      "enum": [
+        "explanation",
+        "learning"
+      ],
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "examples": [
+    {
+      "authorization": {
+        "currentQuestion": true,
+        "frames": true,
+        "serviceRevision": null,
+        "subtitles": true
+      },
+      "confirmationSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "endpoint": null,
+      "execution": {
+        "kind": "codex"
+      },
+      "frames": [
+        {
+          "id": "frame",
+          "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "timestampMs": 900
+        }
+      ],
+      "model": "Codex 默认模型",
+      "playbackCutoffMs": 1000,
+      "prompt": {
+        "oneTimeRequirements": "",
+        "requirements": "",
+        "template": "模板"
+      },
+      "receiver": "OpenAI（经本机 Codex）",
+      "selectedText": null,
+      "subtitleCount": 1,
+      "subtitles": [
+        {
+          "language": "ja",
+          "role": "original",
+          "versionId": "version",
+          "versionNumber": 1
+        }
+      ],
+      "taskId": "task",
+      "taskKind": "explanation"
+    }
+  ],
+  "properties": {
+    "authorization": {
+      "$ref": "#/$defs/AiMaterialAuthorization"
+    },
+    "confirmationSha256": {
+      "type": "string"
+    },
+    "endpoint": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "execution": {
+      "$ref": "#/$defs/AiExecutionTarget"
+    },
+    "frames": {
+      "items": {
+        "$ref": "#/$defs/DispatchFrame"
+      },
+      "type": "array"
+    },
+    "model": {
+      "type": "string"
+    },
+    "playbackCutoffMs": {
+      "format": "int64",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "prompt": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/DispatchPrompt"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "receiver": {
+      "type": "string"
+    },
+    "selectedText": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "subtitleCount": {
+      "format": "uint",
+      "maximum": 9007199254740991,
+      "minimum": 1,
+      "type": "integer"
+    },
+    "subtitles": {
+      "items": {
+        "$ref": "#/$defs/DispatchSubtitle"
+      },
+      "type": "array"
+    },
+    "taskId": {
+      "type": "string"
+    },
+    "taskKind": {
+      "$ref": "#/$defs/TaskDomain"
+    }
+  },
+  "required": [
+    "taskId",
+    "taskKind",
+    "confirmationSha256",
+    "execution",
+    "authorization",
+    "receiver",
+    "endpoint",
+    "model",
+    "subtitles",
+    "subtitleCount",
+    "playbackCutoffMs",
+    "selectedText",
+    "prompt",
+    "frames"
+  ],
+  "title": "TaskDispatchPreview",
+  "type": "object"
+}

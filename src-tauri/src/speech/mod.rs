@@ -10,6 +10,7 @@ const MAX_SPEECH_CHARACTERS: usize = 1_000;
 const MAX_AUDIO_BYTES: u64 = 16 * 1024 * 1024;
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct SpeechVoice {
     pub id: String,
@@ -26,8 +27,10 @@ pub struct SpeechRequest {
 }
 
 #[derive(Clone, Debug, Serialize)]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct SpeechAudio {
+    #[cfg_attr(test, schemars(length(min = 1, max = 16777216)))]
     pub bytes: Vec<u8>,
     pub mime_type: String,
     pub voice_id: String,

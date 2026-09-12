@@ -1,6 +1,10 @@
+import { parseSummaryExport } from "./exportContract";
+import { parseVideoSummary, parseVideoSummaries } from "./resultContract";
+import { parseSummaryTask, parseSummaryTasks } from "./taskContract";
 import { invoke } from "@tauri-apps/api/core";
+export { previewSummaryDispatch } from "./dispatchGateway";
 
-import { chooseConfiguredStorageDirectory } from "../storage/directoryPicker";
+import { chooseConfiguredStorageDirectory } from "../../lib/storageDirectoryPicker";
 
 import type {
   PrepareSummaryTaskInput,
@@ -9,49 +13,52 @@ import type {
   VideoSummary,
 } from "./types";
 
-export function prepareSummaryTask(input: PrepareSummaryTaskInput): Promise<SummaryTask> {
-  return invoke("prepare_summary_task", { input });
+export async function prepareSummaryTask(input: PrepareSummaryTaskInput): Promise<SummaryTask> {
+  return parseSummaryTask(await invoke<unknown>("prepare_summary_task", { input }), { projectId: input.projectId });
 }
 
-export function startSummaryTask(taskId: string): Promise<SummaryTask> {
-  return invoke("start_summary_task", { input: { taskId } });
+export async function startSummaryTask(taskId: string, confirmationSha256: string): Promise<SummaryTask> {
+  return parseSummaryTask(await invoke<unknown>("start_summary_task", { input: { taskId, confirmationSha256 } }), { taskId });
 }
 
-export function resumeSummaryTask(taskId: string): Promise<SummaryTask> {
-  return invoke("resume_summary_task", { input: { taskId } });
+export async function resumeSummaryTask(taskId: string, confirmationSha256: string): Promise<SummaryTask> {
+  return parseSummaryTask(await invoke<unknown>("resume_summary_task", { input: { taskId, confirmationSha256 } }), { taskId });
 }
 
-export function cancelSummaryTask(taskId: string): Promise<SummaryTask> {
-  return invoke("cancel_summary_task", { input: { taskId } });
+export async function cancelSummaryTask(taskId: string): Promise<SummaryTask> {
+  return parseSummaryTask(await invoke<unknown>("cancel_summary_task", { input: { taskId } }), { taskId });
 }
 
-export function getSummaryTask(taskId: string): Promise<SummaryTask> {
-  return invoke("get_summary_task", { input: { taskId } });
+export async function getSummaryTask(taskId: string): Promise<SummaryTask> {
+  return parseSummaryTask(await invoke<unknown>("get_summary_task", { input: { taskId } }), { taskId });
 }
 
-export function listSummaryTasks(projectId: string): Promise<SummaryTask[]> {
-  return invoke("list_summary_tasks", { input: { projectId } });
+export async function listSummaryTasks(projectId: string): Promise<SummaryTask[]> {
+  return parseSummaryTasks(await invoke<unknown>("list_summary_tasks", { input: { projectId } }), projectId);
 }
 
-export function getVideoSummary(summaryId: string): Promise<VideoSummary> {
-  return invoke("get_video_summary", { input: { summaryId } });
+export async function getVideoSummary(summaryId: string): Promise<VideoSummary> {
+  return parseVideoSummary(await invoke<unknown>("get_video_summary", { input: { summaryId } }), { summaryId });
 }
 
-export function listVideoSummaries(projectId: string): Promise<VideoSummary[]> {
-  return invoke("list_video_summaries", { input: { projectId } });
+export async function listVideoSummaries(projectId: string): Promise<VideoSummary[]> {
+  return parseVideoSummaries(await invoke<unknown>("list_video_summaries", { input: { projectId } }), projectId);
 }
 
 export async function chooseSummaryExportDirectory(): Promise<string | null> {
   return chooseConfiguredStorageDirectory("report", "选择视频分析报告保存位置");
 }
 
-export function exportVideoSummary(
+export async function exportVideoSummary(
   summaryId: string,
   directory: string,
 ): Promise<SummaryExport> {
-  return invoke("export_video_summary", { input: { summaryId, directory } });
+  const value = await invoke<unknown>("export_video_summary", { input: { summaryId, directory } });
+  return parseSummaryExport(value, summaryId, directory);
 }
 
-export function openSummaryMaterials(taskId: string): Promise<boolean> {
-  return invoke("open_summary_materials", { input: { taskId } });
+export async function openSummaryMaterials(taskId: string): Promise<boolean> {
+  const value = await invoke<unknown>("open_summary_materials", { input: { taskId } });
+  if (typeof value !== "boolean") throw new Error("打开材料目录的结果尚未确认，请检查目录窗口。");
+  return value;
 }

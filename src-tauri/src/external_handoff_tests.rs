@@ -93,3 +93,203 @@ fn one_broken_task_does_not_block_later_external_results() {
     assert_eq!(updates[0].task_id, "valid-task");
     assert_eq!(updates[0].status, "completed");
 }
+
+#[test]
+fn completed_result_replays_after_reopening_when_delivery_was_lost() {
+    let fixture = crate::translation::fixture::TranslationFixture::new();
+    let task = fixture.prepare_manual();
+    let result = fixture.write_result("result.json", &fixture.result_value(&task));
+    let application = crate::translation::import_translation_result(
+        &fixture.store,
+        crate::translation::ImportTranslationResultInput {
+            task_id: task.id.clone(),
+            result_path: result.to_string_lossy().into_owned(),
+        },
+    )
+    .unwrap();
+    let reopened = ProjectStore::open(fixture.store.database_path()).unwrap();
+    for _ in 0..2 {
+        let replay =
+            super::reconcile_external_agent_results(&reopened, &Default::default()).unwrap();
+        assert_eq!(
+            replay.len(),
+            1,
+            "unacknowledged completion must survive a lost response"
+        );
+        assert_eq!(replay[0].task_id, task.id);
+        assert_eq!(replay[0].output_id, application.task.output_version_id);
+    }
+    let receipt = super::reconcile_external_agent_results(&reopened, &Default::default()).unwrap();
+    let mut wrong = receipt.clone();
+    wrong[0].output_id = Some("wrong-version".into());
+    crate::external_result_delivery::acknowledge(&reopened, &wrong).unwrap();
+    assert_eq!(
+        super::reconcile_external_agent_results(&reopened, &Default::default())
+            .unwrap()
+            .len(),
+        1
+    );
+    let mut invalid = receipt[0].clone();
+    invalid.status = "validating".into();
+    assert!(
+        crate::external_result_delivery::acknowledge(&reopened, &[receipt[0].clone(), invalid])
+            .is_err()
+    );
+    assert_eq!(
+        super::reconcile_external_agent_results(&reopened, &Default::default())
+            .unwrap()
+            .len(),
+        1
+    );
+    crate::external_result_delivery::acknowledge(&reopened, &receipt).unwrap();
+    crate::external_result_delivery::acknowledge(&reopened, &receipt).unwrap();
+    assert!(
+        super::reconcile_external_agent_results(&reopened, &Default::default())
+            .unwrap()
+            .is_empty()
+    );
+    assert_eq!(
+        crate::translation::get_translation_task(&reopened, &task.id)
+            .unwrap()
+            .status,
+        "completed"
+    );
+}
+
+#[test]
+fn delivery_persistence_failure_rolls_back_imported_assets() {
+    let fixture = crate::translation::fixture::TranslationFixture::new();
+    let task = fixture.prepare_manual();
+    let original = fixture.store.get_project(&fixture.project_id).unwrap();
+    fixture.store.connect().unwrap().execute_batch("CREATE TRIGGER fail_delivery BEFORE INSERT ON external_result_deliveries BEGIN SELECT RAISE(ABORT,'injected delivery disk failure'); END;").unwrap();
+    let result = fixture.write_result("result.json", &fixture.result_value(&task));
+    let imported = crate::translation::import_translation_result(
+        &fixture.store,
+        crate::translation::ImportTranslationResultInput {
+            task_id: task.id.clone(),
+            result_path: result.to_string_lossy().into_owned(),
+        },
+    );
+    assert!(imported.is_err());
+    assert_eq!(
+        fixture
+            .store
+            .get_project(&fixture.project_id)
+            .unwrap()
+            .revision,
+        original.revision
+    );
+    let connection = fixture.store.connect().unwrap();
+    let versions: i64 = connection.query_row("SELECT COUNT(*) FROM subtitle_versions v JOIN subtitle_tracks t ON t.id=v.track_id WHERE t.role='translation'", [], |r| r.get(0)).unwrap();
+    assert_eq!(versions, 0);
+    assert!(
+        crate::external_result_delivery::pending(&fixture.store)
+            .unwrap()
+            .is_empty()
+    );
+    let stored = crate::translation::get_translation_task(&fixture.store, &task.id).unwrap();
+    assert_eq!(stored.status, "awaiting_external_result");
+    assert!(stored.output_version_id.is_none());
+}
+
+#[test]
+fn version_19_upgrade_preserves_assets_without_replaying_historical_completions() {
+    let fixture = crate::translation::fixture::TranslationFixture::new();
+    let task = fixture.prepare_manual();
+    let result = fixture.write_result("result.json", &fixture.result_value(&task));
+    let application = crate::translation::import_translation_result(
+        &fixture.store,
+        crate::translation::ImportTranslationResultInput {
+            task_id: task.id.clone(),
+            result_path: result.to_string_lossy().into_owned(),
+        },
+    )
+    .unwrap();
+    fixture.store.connect().unwrap().execute_batch("DROP TABLE project_cleanup_receipts; DROP TABLE external_result_deliveries; DELETE FROM schema_migrations WHERE version>=20;").unwrap();
+    let reopened = ProjectStore::open(fixture.store.database_path()).unwrap();
+    assert!(
+        super::reconcile_external_agent_results(&reopened, &Default::default())
+            .unwrap()
+            .is_empty()
+    );
+    let stored = crate::translation::get_translation_task(&reopened, &task.id).unwrap();
+    assert_eq!(stored.output_version_id, application.task.output_version_id);
+    assert_eq!(stored.status, "completed");
+    let backups: Vec<_> = fs::read_dir(
+        reopened
+            .database_path()
+            .parent()
+            .unwrap()
+            .join("upgrade-backups"),
+    )
+    .unwrap()
+    .map(|entry| entry.unwrap().path())
+    .collect();
+    assert_eq!(backups.len(), 1);
+    let backup = rusqlite::Connection::open_with_flags(
+        &backups[0],
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+    )
+    .unwrap();
+    assert_eq!(
+        crate::database_upgrade::check_version(&backup, 20).unwrap(),
+        19
+    );
+    assert!(matches!(
+        crate::database_upgrade::check_version(&reopened.connect().unwrap(), 19),
+        Err(crate::store::StoreError::UnsupportedSchema { .. })
+    ));
+}
+
+#[test]
+fn pending_receipts_beyond_the_first_hundred_are_reachable_without_acknowledgement() {
+    let fixture = crate::translation::fixture::TranslationFixture::new();
+    let connection = fixture.store.connect().unwrap();
+    for index in 0..205 {
+        connection
+            .execute(
+                "INSERT INTO external_result_deliveries VALUES ('translation',?1,?2,?1,1)",
+                rusqlite::params![format!("task-{index:04}"), fixture.project_id],
+            )
+            .unwrap();
+    }
+    let delivery = crate::external_result_delivery::DeliveryQueue::default();
+    let mut seen = std::collections::HashSet::new();
+    for _ in 0..3 {
+        let page = super::reconcile_external_agent_results(&fixture.store, &delivery).unwrap();
+        assert!(page.len() <= 100);
+        seen.extend(page.into_iter().map(|update| update.task_id));
+    }
+    assert_eq!(
+        seen.len(),
+        205,
+        "unacknowledged early pages must not starve later results"
+    );
+    let wrapped = super::reconcile_external_agent_results(&fixture.store, &delivery).unwrap();
+    assert_eq!(wrapped.len(), 100);
+    assert_eq!(wrapped[0].task_id, "task-0000");
+    crate::external_result_delivery::acknowledge(&fixture.store, &wrapped).unwrap();
+    let next = super::reconcile_external_agent_results(&fixture.store, &delivery).unwrap();
+    assert_eq!(next[0].task_id, "task-0100");
+    let fresh = crate::external_result_delivery::DeliveryQueue::default();
+    assert_eq!(
+        fresh.next_pending(&fixture.store).unwrap()[0].task_id,
+        "task-0100"
+    );
+}
+
+#[test]
+fn automatic_result_reconciliation_respects_project_deletion() {
+    let fixture = crate::understanding::test_fixture::Fixture::new();
+    let task = fixture.prepare();
+    let result = fixture.result_path(&task, task.playback_cutoff_ms);
+    let destination = fixture.store.data_directory().join("agent-tasks").join(&task.id).join("output/result.json");
+    fs::copy(result, &destination).unwrap();
+    let active = ActiveManualTask { kind: "explanation".into(), id: task.id.clone(), project_id: fixture.project_id.clone(), status: "awaiting_external_result".into() };
+    let deleting = crate::project_operations::Deletion::acquire(&fixture.store, &fixture.project_id).unwrap();
+    assert!(super::reconcile_external_agent_result(&fixture.store, &active).is_err(),
+        "automatic reconciliation must not stage files while project deletion owns admission");
+    assert_eq!(crate::understanding::get_explanation_task(&fixture.store, &task.id).unwrap().status, "awaiting_external_result");
+    drop(deleting);
+    assert!(super::reconcile_external_agent_result(&fixture.store, &active).unwrap().is_some());
+}

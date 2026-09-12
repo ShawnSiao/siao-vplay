@@ -1,17 +1,24 @@
-import { useCallback, useEffect, useReducer, useRef } from "react";
+import { useLibraryHome } from "./useLibraryHome";
+import { useLibraryMutation } from "./useLibraryMutation";
+import { useLibraryRecoveryApply } from "./useLibraryRecoveryApply";
+import { useLibraryRecoveryPreview } from "./useLibraryRecoveryPreview";
+import { useLibraryFolderImport } from "./useLibraryFolderImport";
+import { useLibraryFolderScan } from "./useLibraryFolderScan";
+import { useLibrarySearch, type LibrarySearchAction } from "./useLibrarySearch";
+import { useLibraryCollectionPaging, type CollectionReadAction } from "./useLibraryCollectionPaging";
+import { useLibraryWatchActions, type WatchAction } from "./useLibraryWatchActions";
+import { applyWatchedProject } from "./applyWatchedProject";
+import { useCallback, useReducer, useRef } from "react";
 
-import { commandError } from "../../lib/desktop";
 import type {
   CollectionDetail,
   CollectionSortMode,
-  ConfirmLibraryImportInput,
   LibraryCollection,
   LibraryHome,
   LibraryImportResult,
   LibraryMediaSummary,
   LibraryRescanPreview,
   LibraryRescanResult,
-  ApplyLibraryRootRebuildInput,
   LibraryRootRebuildPreview,
   LibraryRootRebuildResult,
   LibraryRootRelocationPreview,
@@ -22,32 +29,17 @@ import type {
 } from "../../types";
 import {
   addProjectToCollection,
-  applyLibraryRescan,
-  applyLibraryRootRebuild,
-  applyLibraryRootRelocation,
-  cancelLibraryScan,
-  confirmLibraryImport,
   createCollection,
   deleteCollection,
   emptyLibraryHome,
-  getCollectionDetail,
-  getLibraryHome,
-  inspectLibraryRescan,
-  inspectLibraryRootRebuild,
-  inspectLibraryRootRelocation,
-  listCollectionEpisodes,
-  listenLibraryScanProgress,
   removeProjectFromCollection,
   revokeLibraryRoot,
-  scanLibraryFolder,
-  searchLibrary,
-  setWatchLater,
   toCollectionSummary,
   updateCollection,
 } from "./libraryGateway";
 import {
   emptySectionPages,
-  librarySectionStorageKey,
+  saveLibrarySection,
   reduceSectionPages,
   removeUnclassifiedProject,
   sectionsFromHome,
@@ -58,8 +50,6 @@ import {
 } from "./librarySectionState";
 import { useLibrarySectionPaging } from "./useLibrarySectionPaging";
 import {
-  draftCandidateItems,
-  draftItems,
   type LibraryImportDraftItem,
 } from "./libraryImportDraft";
 
@@ -154,22 +144,17 @@ type LibraryState = {
 };
 
 type LibraryAction =
+  | WatchAction
+  | { type: "home_failed"; message: string }
   | { type: "home_started" }
   | { type: "home_loaded"; home: LibraryHome; sequence: number }
   | { type: "failed"; message: string }
   | { type: "set_section"; section: LibrarySection }
   | LibrarySectionAction
-  | { type: "collection_started"; season: number | null }
-  | {
-      type: "collection_loaded";
-      detail: CollectionDetail;
-      episodes: LibraryMediaSummary[];
-      season: number | null;
-    }
+  | CollectionReadAction
   | { type: "close_collection" }
   | { type: "set_search_query"; query: string }
-  | { type: "search_started" }
-  | { type: "search_loaded"; results: LibrarySearchResult[] }
+  | LibrarySearchAction
   | { type: "mutation_started" }
   | { type: "mutation_finished" }
   | { type: "upsert_collection"; collection: LibraryCollection }
@@ -280,6 +265,8 @@ function initialState(): LibraryState {
 
 function libraryReducer(state: LibraryState, action: LibraryAction): LibraryState {
   switch (action.type) {
+    case "watch_state_changed":
+      return applyWatchedProject(state, action.project);
     case "home_started":
       return { ...state, loading: true };
     case "home_loaded": {
@@ -292,18 +279,18 @@ function libraryReducer(state: LibraryState, action: LibraryAction): LibraryStat
         refreshSequence: action.sequence,
       };
     }
+    case "home_failed":
+      return { ...state, loading: false, error: action.message };
+    case "collection_failed":
+      return { ...state, collectionLoading: false, error: action.message };
+    case "search_failed":
+      return { ...state, searchLoading: false, error: action.message };
     case "failed":
-      return {
-        ...state,
-        loading: false,
-        collectionLoading: false,
-        searchLoading: false,
-        mutationPending: false,
-        error: action.message,
-      };
+      return { ...state, error: action.message };
     case "set_section":
       return {
         ...state,
+        collectionLoading: false,
         section: action.section,
         currentCollection: null,
         currentEpisodes: [],
@@ -318,8 +305,11 @@ function libraryReducer(state: LibraryState, action: LibraryAction): LibraryStat
       };
     case "section_page_remove":
       return { ...state, sectionPages: reduceSectionPages(state.sectionPages, action) };
+    case "collection_window_loaded":
+      return state.currentCollection?.summary.id === action.collectionId && state.selectedSeason === action.season
+        ? { ...state, currentEpisodes: action.episodes } : state;
     case "collection_started":
-      return { ...state, collectionLoading: true, selectedSeason: action.season };
+      return { ...state, collectionLoading: true };
     case "collection_loaded":
       return {
         ...state,
@@ -332,6 +322,7 @@ function libraryReducer(state: LibraryState, action: LibraryAction): LibraryStat
     case "close_collection":
       return {
         ...state,
+        collectionLoading: false,
         currentCollection: null,
         currentEpisodes: [],
         selectedSeason: null,
@@ -374,7 +365,7 @@ function libraryReducer(state: LibraryState, action: LibraryAction): LibraryStat
           collections: [
             summary,
             ...state.home.collections.filter((item) => item.id !== summary.id),
-          ],
+          ].filter((item) => item.systemKey === null).slice(0, 4),
         },
       };
     }
@@ -387,12 +378,13 @@ function libraryReducer(state: LibraryState, action: LibraryAction): LibraryStat
             : state.currentCollection,
         home: {
           ...state.home,
+          watchLaterCount: action.detail.summary.systemKey === "watch_later" ? action.detail.summary.itemCount : state.home.watchLaterCount,
           collections: [
             action.detail.summary,
             ...state.home.collections.filter(
               (item) => item.id !== action.detail.summary.id,
             ),
-          ],
+          ].filter((item) => item.systemKey === null).slice(0, 4),
         },
       };
     case "remove_collection":
@@ -513,8 +505,8 @@ function libraryReducer(state: LibraryState, action: LibraryAction): LibraryStat
             ...state.home.collections.filter(
               (collection) => collection.id !== action.result.collection.summary.id,
             ),
-          ],
-          folders: [
+          ].filter((item) => item.systemKey === null).slice(0, 4),
+          folders: ([
             {
               id: action.result.rootId,
               path: action.importedRootPath,
@@ -525,7 +517,7 @@ function libraryReducer(state: LibraryState, action: LibraryAction): LibraryStat
               itemCount: importedItems,
             },
             ...state.home.folders.filter((folder) => folder.id !== action.result.rootId),
-          ],
+          ] satisfies LibraryHome["folders"]).slice(0, 4),
           totalProjectCount: state.home.totalProjectCount + createdProjects,
           collectionItemCount: state.home.collectionItemCount + importedItems,
         },
@@ -645,16 +637,16 @@ function libraryReducer(state: LibraryState, action: LibraryAction): LibraryStat
             : state.currentCollection,
         home: {
           ...state.home,
-          folders: [
+          folders: ([
             action.result.root,
             ...state.home.folders.filter((root) => root.id !== action.result.root.id),
-          ],
+          ] satisfies LibraryHome["folders"]).slice(0, 4),
           collections: [
             action.result.collection.summary,
             ...state.home.collections.filter(
               (collection) => collection.id !== action.result.collection.summary.id,
             ),
-          ],
+          ].filter((item) => item.systemKey === null).slice(0, 4),
           totalProjectCount:
             state.home.totalProjectCount + action.result.createdProjectCount,
           collectionItemCount: state.home.collectionItemCount + added,
@@ -672,16 +664,16 @@ function libraryReducer(state: LibraryState, action: LibraryAction): LibraryStat
         recovery: emptyRecovery,
         home: {
           ...state.home,
-          folders: [
+          folders: ([
             action.result.root,
             ...state.home.folders.filter((root) => root.id !== action.result.root.id),
-          ],
+          ] satisfies LibraryHome["folders"]).slice(0, 4),
           collections: [
             action.result.collection.summary,
             ...state.home.collections.filter(
               (collection) => collection.id !== action.result.collection.summary.id,
             ),
-          ],
+          ].filter((item) => item.systemKey === null).slice(0, 4),
           totalProjectCount:
             state.home.totalProjectCount + action.result.createdProjectCount,
           collectionItemCount: state.home.collectionItemCount + added,
@@ -694,10 +686,10 @@ function libraryReducer(state: LibraryState, action: LibraryAction): LibraryStat
         recovery: emptyRecovery,
         home: {
           ...state.home,
-          folders: [
+          folders: ([
             action.result.root,
             ...state.home.folders.filter((root) => root.id !== action.result.root.id),
-          ],
+          ] satisfies LibraryHome["folders"]).slice(0, 4),
         },
       };
     case "recovery_closed":
@@ -707,130 +699,21 @@ function libraryReducer(state: LibraryState, action: LibraryAction): LibraryStat
 
 export function useLibraryController() {
   const [state, dispatch] = useReducer(libraryReducer, initialState());
-  const homeRequestSequence = useRef(0);
   const collectionRequestSequence = useRef(0);
-  const searchRequestSequence = useRef(0);
-  const scanRequestSequence = useRef(0);
-  const recoveryRequestSequence = useRef(0);
-  const activeScanIdRef = useRef<string | null>(null);
 
-  useEffect(() => {
-    let active = true;
-    let stopListening: (() => void) | null = null;
-    void listenLibraryScanProgress((progress) => {
-      if (active && activeScanIdRef.current === progress.scanId) {
-        dispatch({ type: "scan_progress", progress });
-      }
-    }).then((unlisten) => {
-      if (active) {
-        stopListening = unlisten;
-      } else {
-        unlisten();
-      }
-    }).catch(() => {
-      // Progress events are supplemental; the scan command still returns its
-      // authoritative preview when the event channel is unavailable.
-    });
-    return () => {
-      active = false;
-      stopListening?.();
-    };
-  }, []);
+  const refresh = useLibraryHome(dispatch);
 
-  const refresh = useCallback(async () => {
-    const sequence = homeRequestSequence.current + 1;
-    homeRequestSequence.current = sequence;
-    dispatch({ type: "home_started" });
-    try {
-      const home = await getLibraryHome();
-      if (homeRequestSequence.current === sequence) {
-        dispatch({ type: "home_loaded", home, sequence });
-      }
-    } catch (error) {
-      if (homeRequestSequence.current === sequence) {
-        dispatch({ type: "failed", message: commandError(error).message });
-      }
-    }
-  }, []);
-
-  useEffect(() => {
-    void refresh();
-  }, [refresh]);
-
-  const { loadSectionPage, loadMoreSection } = useLibrarySectionPaging(
+  const { loadSectionPage, loadMoreSection, loadPreviousSection, retrySection } = useLibrarySectionPaging(
     state.section,
     state.sectionPages,
     dispatch,
   );
 
-  useEffect(() => {
-    const query = state.searchQuery.trim();
-    const sequence = searchRequestSequence.current + 1;
-    searchRequestSequence.current = sequence;
-    if (!query) {
-      dispatch({ type: "search_loaded", results: [] });
-      return undefined;
-    }
-    dispatch({ type: "search_started" });
-    const timer = window.setTimeout(() => {
-      void searchLibrary(query)
-        .then((results) => {
-          if (searchRequestSequence.current === sequence) {
-            dispatch({ type: "search_loaded", results });
-          }
-        })
-        .catch((error: unknown) => {
-          if (searchRequestSequence.current === sequence) {
-            dispatch({ type: "failed", message: commandError(error).message });
-          }
-        });
-    }, 180);
-    return () => window.clearTimeout(timer);
-  }, [state.searchQuery]);
+  useLibrarySearch(state.searchQuery, dispatch);
 
-  const loadCollection = useCallback(
-    async (collectionId: string, seasonNumber: number | null = null) => {
-      const sequence = collectionRequestSequence.current + 1;
-      collectionRequestSequence.current = sequence;
-      dispatch({ type: "collection_started", season: seasonNumber });
-      try {
-        const [detail, episodes] = await Promise.all([
-          getCollectionDetail(collectionId),
-          listCollectionEpisodes(collectionId, seasonNumber),
-        ]);
-        if (collectionRequestSequence.current === sequence) {
-          dispatch({
-            type: "collection_loaded",
-            detail,
-            episodes,
-            season: seasonNumber,
-          });
-        }
-      } catch (error) {
-        if (collectionRequestSequence.current === sequence) {
-          dispatch({ type: "failed", message: commandError(error).message });
-        }
-      }
-    },
-    [],
-  );
+  const { loadCollection, collectionPagination } = useLibraryCollectionPaging(state, dispatch, collectionRequestSequence);
 
-  const runMutation = useCallback(
-    async <T,>(operation: () => Promise<T>, apply: (result: T) => void) => {
-      dispatch({ type: "mutation_started" });
-      try {
-        const result = await operation();
-        apply(result);
-        dispatch({ type: "mutation_finished" });
-        void refresh();
-        return result;
-      } catch (error) {
-        dispatch({ type: "failed", message: commandError(error).message });
-        return null;
-      }
-    },
-    [refresh],
-  );
+  const runMutation = useLibraryMutation(dispatch, refresh);
 
   const createManualCollection = useCallback(
     (title: string) =>
@@ -879,49 +762,33 @@ export function useLibraryController() {
   );
 
   const removeFromCollection = useCallback(
-    (collectionId: string, projectId: string) =>
-      runMutation(
+    (collectionId: string, projectId: string) => {
+      const viewSequence = collectionRequestSequence.current;
+      return runMutation(
         () => removeProjectFromCollection(collectionId, projectId),
         (detail) => {
           dispatch({ type: "upsert_detail", detail });
-          if (state.currentCollection?.summary.id === collectionId) {
+          if (collectionRequestSequence.current === viewSequence && state.currentCollection?.summary.id === collectionId) {
             void loadCollection(collectionId, state.selectedSeason);
           }
         },
-      ),
+      );
+    },
     [loadCollection, runMutation, state.currentCollection?.summary.id, state.selectedSeason],
   );
 
-  const changeWatchLater = useCallback(
-    (projectId: string, enabled: boolean) =>
-      runMutation(
-        () => setWatchLater(projectId, enabled),
-        (detail) => {
-          if (detail) {
-            dispatch({ type: "upsert_detail", detail });
-          }
-          if (enabled) {
-            dispatch({ type: "remove_unclassified", projectId });
-          } else {
-            dispatch({
-              type: "section_page_remove",
-              section: "watch_later",
-              projectId,
-            });
-          }
-        },
-      ),
-    [runMutation],
-  );
+  const { changeWatchLater, changeWatched } = useLibraryWatchActions(runMutation, dispatch);
 
   const setSection = useCallback((section: LibrarySection) => {
-    window.localStorage.setItem(librarySectionStorageKey, section);
+    collectionRequestSequence.current += 1;
+    saveLibrarySection(section);
     dispatch({ type: "set_section", section });
   }, []);
   const setSearchQuery = useCallback((query: string) => {
     dispatch({ type: "set_search_query", query });
   }, []);
   const closeCollection = useCallback(() => {
+    collectionRequestSequence.current += 1;
     dispatch({ type: "close_collection" });
   }, []);
   const selectSeason = useCallback(
@@ -934,51 +801,7 @@ export function useLibraryController() {
     [loadCollection, state.currentCollection?.summary.id],
   );
 
-  const startFolderScan = useCallback(async (rootPath: string) => {
-    const sequence = scanRequestSequence.current + 1;
-    scanRequestSequence.current = sequence;
-    const scanId = crypto.randomUUID();
-    activeScanIdRef.current = scanId;
-    dispatch({ type: "scan_started", scanId, rootPath });
-    try {
-      const preview = await scanLibraryFolder({ scanId, rootPath });
-      if (scanRequestSequence.current === sequence) {
-        activeScanIdRef.current = null;
-        dispatch({ type: "scan_preview", preview, items: draftItems(preview) });
-      }
-      return preview;
-    } catch (error) {
-      if (scanRequestSequence.current === sequence) {
-        activeScanIdRef.current = null;
-        dispatch({ type: "scan_failed", message: commandError(error).message });
-      }
-      return null;
-    }
-  }, []);
-
-  const closeFolderImport = useCallback(() => {
-    const scanId = activeScanIdRef.current;
-    scanRequestSequence.current += 1;
-    activeScanIdRef.current = null;
-    dispatch({ type: "scan_closed" });
-    if (scanId) {
-      void cancelLibraryScan(scanId).catch(() => undefined);
-    }
-  }, []);
-
-  const cancelFolderScan = useCallback(async () => {
-    const scanId = activeScanIdRef.current;
-    scanRequestSequence.current += 1;
-    activeScanIdRef.current = null;
-    dispatch({ type: "scan_closed" });
-    if (scanId) {
-      try {
-        await cancelLibraryScan(scanId);
-      } catch {
-        // The scan may have completed between the click and the cancel command.
-      }
-    }
-  }, []);
+  const { startFolderScan, closeFolderImport, cancelFolderScan } = useLibraryFolderScan(dispatch);
 
   const setFolderImportTitle = useCallback((title: string) => {
     dispatch({ type: "scan_title_changed", title });
@@ -1007,125 +830,18 @@ export function useLibraryController() {
     dispatch({ type: "scan_duplicates_changed", confirmed });
   }, []);
 
-  const importScannedFolder = useCallback(async () => {
-    const snapshot = state.folderImport;
-    if (!snapshot.preview || snapshot.stage !== "preview") {
-      return null;
-    }
-    const input: ConfirmLibraryImportInput = {
-      previewToken: snapshot.preview.previewToken,
-      collectionTitle: snapshot.collectionTitle,
-      items: snapshot.items.map((item) => ({
-        candidateId: item.candidateId,
-        displayTitle: item.displayTitle,
-        seasonNumber: item.seasonNumber,
-        episodeNumber: item.episodeNumber,
-        absoluteOrder: item.absoluteOrder,
-        confirmed: item.confirmed,
-      })),
-      confirmFingerprintDuplicates: snapshot.confirmFingerprintDuplicates,
-    };
-    dispatch({ type: "scan_import_started" });
-    try {
-      const result = await confirmLibraryImport(input);
-      let episodes: LibraryMediaSummary[] = [];
-      try {
-        episodes = await listCollectionEpisodes(
-          result.collection.summary.id,
-          null,
-        );
-      } catch {
-        // The import transaction already succeeded and consumed its preview
-        // token. A secondary read must not turn that success into a retryable
-        // import error; the background home refresh will reconcile the view.
-      }
-      dispatch({
-        type: "scan_import_succeeded",
-        result,
-        episodes,
-        importedRootPath: snapshot.preview.rootPath,
-        importedRootName: snapshot.preview.rootDisplayName,
-      });
+  const importScannedFolder = useLibraryFolderImport(state.folderImport, {
+    started: () => dispatch({ type: "scan_import_started" }),
+    committed: async (result, source) => {
+      dispatch({ type: "scan_import_succeeded", result, episodes: [],
+        importedRootPath: source.rootPath, importedRootName: source.rootDisplayName });
+      await loadCollection(result.collection.summary.id, null, result.collection);
       void refresh();
-      return result;
-    } catch (error) {
-      dispatch({ type: "scan_failed", message: commandError(error).message });
-      return null;
-    }
-  }, [refresh, state.folderImport]);
-
-  const inspectRootRescan = useCallback(async (rootId: string) => {
-    const sequence = recoveryRequestSequence.current + 1;
-    recoveryRequestSequence.current = sequence;
-    dispatch({ type: "recovery_started", stage: "inspecting_rescan", rootId });
-    try {
-      const preview = await inspectLibraryRescan(rootId);
-      if (recoveryRequestSequence.current === sequence) {
-        dispatch({
-          type: "rescan_preview",
-          preview,
-          items: draftCandidateItems(preview.newCandidates),
-        });
-      }
-      return preview;
-    } catch (error) {
-      if (recoveryRequestSequence.current === sequence) {
-        dispatch({ type: "recovery_failed", message: commandError(error).message });
-      }
-      return null;
-    }
-  }, []);
-
-  const inspectRootRebuild = useCallback(
-    async (rootId: string, newRootPath: string | null = null) => {
-      const sequence = recoveryRequestSequence.current + 1;
-      recoveryRequestSequence.current = sequence;
-      dispatch({ type: "recovery_started", stage: "inspecting_rebuild", rootId });
-      try {
-        const preview = await inspectLibraryRootRebuild({ rootId, newRootPath });
-        if (recoveryRequestSequence.current === sequence) {
-          dispatch({
-            type: "rebuild_preview",
-            preview,
-            items: draftCandidateItems(preview.newCandidates),
-          });
-        }
-        return preview;
-      } catch (error) {
-        if (recoveryRequestSequence.current === sequence) {
-          dispatch({ type: "recovery_failed", message: commandError(error).message });
-        }
-        return null;
-      }
     },
-    [],
-  );
-
-  const inspectRootRelocation = useCallback(
-    async (rootId: string, newRootPath: string) => {
-      const sequence = recoveryRequestSequence.current + 1;
-      recoveryRequestSequence.current = sequence;
-      dispatch({ type: "recovery_started", stage: "inspecting_relocation", rootId });
-      try {
-        const preview = await inspectLibraryRootRelocation(rootId, newRootPath);
-        if (recoveryRequestSequence.current === sequence) {
-          dispatch({ type: "relocation_preview", preview });
-        }
-        return preview;
-      } catch (error) {
-        if (recoveryRequestSequence.current === sequence) {
-          dispatch({ type: "recovery_failed", message: commandError(error).message });
-        }
-        return null;
-      }
-    },
-    [],
-  );
-
-  const closeRecovery = useCallback(() => {
-    recoveryRequestSequence.current += 1;
-    dispatch({ type: "recovery_closed" });
-  }, []);
+    failed: message => dispatch({ type: "scan_failed", message }),
+    refreshFailed: message => dispatch({ type: "failed", message }),
+  });
+  const { inspectRootRescan, inspectRootRebuild, inspectRootRelocation, closeRecovery } = useLibraryRecoveryPreview(dispatch);
 
   const updateRecoveryItem = useCallback(
     (
@@ -1156,97 +872,22 @@ export function useLibraryController() {
     [],
   );
 
-  const applyRescan = useCallback(async () => {
-    const snapshot = state.recovery;
-    if (!snapshot.rescanPreview || snapshot.stage !== "rescan_preview") {
-      return null;
-    }
-    dispatch({ type: "recovery_applying" });
-    try {
-      const result = await applyLibraryRescan({
-        previewToken: snapshot.rescanPreview.previewToken,
-        newItems: snapshot.newItems.map((item) => ({
-          candidateId: item.candidateId,
-          displayTitle: item.displayTitle,
-          seasonNumber: item.seasonNumber,
-          episodeNumber: item.episodeNumber,
-          absoluteOrder: item.absoluteOrder,
-          confirmed: item.confirmed,
-        })),
-        confirmMissing: snapshot.confirmMissing,
-        confirmChanged: snapshot.confirmChanged,
-        confirmFingerprintDuplicates: snapshot.confirmFingerprintDuplicates,
-      });
-      dispatch({ type: "rescan_succeeded", result });
+  const { applyRescan, applyRebuild, applyRootRelocation } = useLibraryRecoveryApply(state.recovery, {
+    started: () => dispatch({ type: "recovery_applying" }),
+    rescanCommitted: async result => { dispatch({ type: "rescan_succeeded", result }); void refresh(); },
+    rebuildCommitted: async result => {
+      dispatch({ type: "rebuild_succeeded", result, episodes: [] });
+      await loadCollection(result.collection.summary.id, null, result.collection);
       void refresh();
-      return result;
-    } catch (error) {
-      dispatch({ type: "recovery_failed", message: commandError(error).message });
-      return null;
-    }
-  }, [refresh, state.recovery]);
+    },
+    relocationCommitted: async result => { dispatch({ type: "relocation_succeeded", result }); void refresh(); },
+    failed: message => dispatch({ type: "recovery_failed", message }),
+    refreshFailed: message => dispatch({ type: "failed", message }),
+  });
 
   const setRebuildCollectionTitle = useCallback((title: string) => {
     dispatch({ type: "rebuild_title_changed", title });
   }, []);
-
-  const applyRebuild = useCallback(async () => {
-    const snapshot = state.recovery;
-    if (!snapshot.rebuildPreview || snapshot.stage !== "rebuild_preview") {
-      return null;
-    }
-    const input: ApplyLibraryRootRebuildInput = {
-      previewToken: snapshot.rebuildPreview.previewToken,
-      collectionTitle: snapshot.rebuildCollectionTitle,
-      newItems: snapshot.newItems.map((item) => ({
-        candidateId: item.candidateId,
-        displayTitle: item.displayTitle,
-        seasonNumber: item.seasonNumber,
-        episodeNumber: item.episodeNumber,
-        absoluteOrder: item.absoluteOrder,
-        confirmed: item.confirmed,
-      })),
-      confirmMissing: snapshot.confirmMissing,
-      confirmChanged: snapshot.confirmChanged,
-      confirmUncertainMatches: snapshot.confirmUncertainMatches,
-      confirmFingerprintDuplicates: snapshot.confirmFingerprintDuplicates,
-    };
-    dispatch({ type: "recovery_applying" });
-    try {
-      const result = await applyLibraryRootRebuild(input);
-      let episodes: LibraryMediaSummary[] = [];
-      try {
-        episodes = await listCollectionEpisodes(result.collection.summary.id, null);
-      } catch {
-        // The rebuild transaction already succeeded; refresh below reconciles the home view.
-      }
-      dispatch({ type: "rebuild_succeeded", result, episodes });
-      void refresh();
-      return result;
-    } catch (error) {
-      dispatch({ type: "recovery_failed", message: commandError(error).message });
-      return null;
-    }
-  }, [refresh, state.recovery]);
-
-  const applyRootRelocation = useCallback(async () => {
-    const snapshot = state.recovery;
-    if (!snapshot.relocationPreview || snapshot.stage !== "relocation_preview") {
-      return null;
-    }
-    dispatch({ type: "recovery_applying" });
-    try {
-      const result = await applyLibraryRootRelocation(
-        snapshot.relocationPreview.previewToken,
-      );
-      dispatch({ type: "relocation_succeeded", result });
-      void refresh();
-      return result;
-    } catch (error) {
-      dispatch({ type: "recovery_failed", message: commandError(error).message });
-      return null;
-    }
-  }, [refresh, state.recovery]);
 
   const revokeRoot = useCallback(
     (rootId: string) =>
@@ -1263,8 +904,10 @@ export function useLibraryController() {
     setSection,
     loadSectionPage,
     loadMoreSection,
+    loadPreviousSection, retrySection,
     setSearchQuery,
     openCollection: loadCollection,
+    collectionPagination,
     closeCollection,
     selectSeason,
     createManualCollection,
@@ -1273,6 +916,7 @@ export function useLibraryController() {
     addToCollection,
     removeFromCollection,
     changeWatchLater,
+    changeWatched,
     startFolderScan,
     cancelFolderScan,
     closeFolderImport,

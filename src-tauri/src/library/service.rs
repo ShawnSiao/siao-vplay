@@ -6,16 +6,13 @@ use uuid::Uuid;
 use super::{
     AddProjectToCollectionInput, Collection, CollectionDetail, CollectionKind, CollectionSortMode,
     CreateCollectionInput, EpisodeNeighbors, LibraryCollectionDeletionResult, LibraryError,
-    LibraryHome, LibraryRootRevokeResult, LibraryRootStatus, MediaSummary, SearchResult,
+    LibraryRootRevokeResult, LibraryRootStatus, MediaSummary, SearchResult,
     UpdateCollectionInput,
     repository::{LibraryRepository, NewMembership},
 };
 
 const WATCH_LATER_KEY: &str = "watch_later";
 const WATCH_LATER_TITLE: &str = "稍后观看";
-const HOME_CONTINUE_LIMIT: i64 = 12;
-const HOME_UNCLASSIFIED_LIMIT: i64 = 24;
-const HOME_RECENTLY_ADDED_LIMIT: i64 = 5;
 const SEARCH_LIMIT: i64 = 50;
 const MAX_TITLE_CHARS: usize = 200;
 
@@ -27,24 +24,6 @@ pub(crate) struct LibraryService {
 impl LibraryService {
     pub(crate) fn new(store: ProjectStore) -> Self {
         Self { store }
-    }
-
-    pub(crate) fn get_home(&self) -> Result<LibraryHome, LibraryError> {
-        let connection = self.store.connect()?;
-        let repository = LibraryRepository::new(&connection);
-        let (total_project_count, collection_item_count, unclassified_count) =
-            repository.counts()?;
-        Ok(LibraryHome {
-            continue_watching: repository.list_continue_watching(HOME_CONTINUE_LIMIT)?,
-            continue_watching_count: repository.continue_watching_count()?,
-            collections: repository.list_collection_summaries()?,
-            folders: repository.list_roots()?,
-            unclassified: repository.list_unclassified(HOME_UNCLASSIFIED_LIMIT)?,
-            recently_added: repository.list_recently_added(HOME_RECENTLY_ADDED_LIMIT)?,
-            total_project_count,
-            collection_item_count,
-            unclassified_count,
-        })
     }
 
     pub(crate) fn search(&self, query: &str) -> Result<Vec<SearchResult>, LibraryError> {
@@ -182,9 +161,19 @@ impl LibraryService {
         &self,
         collection_id: &str,
     ) -> Result<CollectionDetail, LibraryError> {
+        self.get_collection_detail_with_checkpoint(collection_id, || {})
+    }
+
+    fn get_collection_detail_with_checkpoint(
+        &self, collection_id: &str, after_summary: impl FnOnce(),
+    ) -> Result<CollectionDetail, LibraryError> {
         validate_id("集合", collection_id)?;
-        let connection = self.store.connect()?;
-        LibraryRepository::new(&connection).get_collection_detail(collection_id)
+        let mut connection = self.store.connect()?;
+        let transaction = connection.transaction()?;
+        let detail = LibraryRepository::new(&transaction)
+            .get_collection_detail_with_checkpoint(collection_id, after_summary)?;
+        transaction.commit()?;
+        Ok(detail)
     }
 
     pub(crate) fn project_media_location(&self, project_id: &str) -> Result<String, LibraryError> {
@@ -280,19 +269,7 @@ impl LibraryService {
         validate_id("集合", collection_id)?;
         validate_id("视频", project_id)?;
         let connection = self.store.connect()?;
-        let episodes =
-            LibraryRepository::new(&connection).list_episode_references(collection_id)?;
-        let index = episodes
-            .iter()
-            .position(|episode| episode.project_id == project_id)
-            .ok_or_else(|| LibraryError::MembershipNotFound {
-                collection_id: collection_id.to_owned(),
-                project_id: project_id.to_owned(),
-            })?;
-        Ok(EpisodeNeighbors {
-            previous: index.checked_sub(1).map(|value| episodes[value].clone()),
-            next: episodes.get(index + 1).cloned(),
-        })
+        LibraryRepository::new(&connection).get_episode_neighbors(collection_id, project_id)
     }
 
     pub(crate) fn set_watch_later(
@@ -368,7 +345,7 @@ pub(super) fn validate_title(value: &str) -> Result<String, LibraryError> {
     Ok(title.to_owned())
 }
 
-fn validate_id(label: &str, value: &str) -> Result<(), LibraryError> {
+pub(super) fn validate_id(label: &str, value: &str) -> Result<(), LibraryError> {
     Uuid::parse_str(value)
         .map(|_| ())
         .map_err(|_| LibraryError::Validation(format!("{label} ID 无效")))
@@ -539,6 +516,13 @@ mod tests {
         }
     }
     include!("section_service_tests.rs");
+    include!("section_snapshot_tests.rs");
+    include!("overview_window_tests.rs");
+    include!("overview_page_tests.rs");
+    include!("episode_page_tests.rs");
+    include!("episode_neighbor_tests.rs");
+    include!("episode_snapshot_tests.rs");
+    include!("search_service_tests.rs");
     #[test]
     fn collection_crud_preserves_projects_and_updates_home_counts() {
         let fixture = Fixture::new();
@@ -787,9 +771,12 @@ mod tests {
             .expect("repeat add should be harmless");
 
         let home = fixture.service.get_home().expect("home should load");
-        let watch_later = home
-            .collections
-            .iter()
+        assert_eq!(home.watch_later_count, 1);
+        assert_eq!(home.collection_count, 0);
+        assert!(home.collections.is_empty());
+        let connection = fixture.service.store.connect().unwrap();
+        let summaries = LibraryRepository::new(&connection).list_collection_summaries().unwrap();
+        let watch_later = summaries.iter()
             .find(|value| value.collection.system_key.as_deref() == Some(WATCH_LATER_KEY))
             .expect("watch later collection should exist");
         assert_eq!(watch_later.item_count, 1);

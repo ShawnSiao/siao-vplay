@@ -1,207 +1,30 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-import type { LocalResourcesController } from "../features/resources/useLocalResources";
 import type {
   LocalResourceCatalog,
   LocalResourceStatus,
   ResourceDownloadTask,
 } from "../types";
 import { LocalResourcesDialog } from "./LocalResourcesDialog";
-const catalog: LocalResourceCatalog = {
-  schemaVersion: 1,
-  productId: "siaovplay",
-  updatedAt: "2026-08-20",
-  packageProfile: "app-only",
-  bundlePolicy: {
-    maximumExceptionBytes: 20_000_000,
-    allowlistedResourceIds: [],
-  },
-  capabilities: [
-    {
-      id: "basic_media",
-      title: "基础视频支持",
-      resourceIds: ["ffmpeg-cpu"],
-      profileIds: [],
-      requiresCapabilityIds: [],
-    },
-    {
-      id: "url_import",
-      title: "在线视频导入",
-      resourceIds: ["ffmpeg-cpu", "yt-dlp"],
-      profileIds: [],
-      requiresCapabilityIds: [],
-    },
-  ],
-  profiles: [],
-  resources: [
-    {
-      id: "ffmpeg-cpu",
-      version: "8.1.2-34-g9b6c8969e0",
-      platform: "windows-x86_64",
-      kind: "archive",
-      bundled: false,
-      installedSize: 175_929_962,
-      license: "LGPL-2.1-or-later",
-      sourcePage: "https://example.com/ffmpeg",
-      artifact: {
-        url: "https://example.com/ffmpeg.zip",
-        size: 70_508_781,
-        sha256: "a".repeat(64),
-        format: "zip",
-      },
-      entrypoints: {},
-      healthCheck: "ffmpeg-version",
-    },
-    {
-      id: "yt-dlp",
-      version: "2026.08.19",
-      platform: "windows-x86_64",
-      kind: "file",
-      bundled: false,
-      installedSize: 17_840_399,
-      license: "GPL-3.0-or-later",
-      sourcePage: "https://example.com/yt-dlp",
-      artifact: {
-        url: "https://example.com/yt-dlp.exe",
-        size: 17_840_399,
-        sha256: "b".repeat(64),
-        format: "file",
-      },
-      entrypoints: {},
-      healthCheck: "yt-dlp-version",
-    },
-  ],
-};
-
-const setupStatus: LocalResourceStatus = {
-  configured: false,
-  selectedParent: null,
-  resourceRoot: null,
-  rootState: "setup_required",
-  freeSpaceBytes: null,
-  preferredProfile: "standard",
-  capabilities: [
-    {
-      id: "basic_media",
-      title: "基础视频支持",
-      state: "setup_required",
-      requiredResourceIds: ["ffmpeg-cpu"],
-      missingResourceIds: ["ffmpeg-cpu"],
-    },
-    {
-      id: "url_import",
-      title: "在线视频导入",
-      state: "setup_required",
-      requiredResourceIds: ["ffmpeg-cpu", "yt-dlp"],
-      missingResourceIds: ["ffmpeg-cpu", "yt-dlp"],
-    },
-  ],
-};
-
-function makeController(
-  overrides: Partial<LocalResourcesController> = {},
-): LocalResourcesController {
-  return {
-    catalog,
-    status: setupStatus,
-    tasks: [],
-    taskMetrics: {},
-    networkStatus: {
-      mode: "proxy",
-      proxySource: "windows_system",
-      proxyAddress: "http://127.0.0.1:7897",
-    },
-    loading: false,
-    error: null,
-    refresh: vi.fn().mockResolvedValue(setupStatus),
-    clearError: vi.fn(),
-    chooseLocation: vi.fn().mockResolvedValue({
-      selectedParent: "W:\\SiaoVPlay",
-      resourceRoot: "W:\\SiaoVPlay\\SiaoVPlay",
-      parentExists: true,
-      resourceRootExists: false,
-      freeSpaceBytes: 500_000_000_000,
-      confirmationRequired: true,
-    }),
-    confirmLocation: vi.fn().mockResolvedValue({
-      ...setupStatus,
-      configured: true,
-      resourceRoot: "W:\\SiaoVPlay\\SiaoVPlay",
-      rootState: "ready",
-    }),
-    chooseExistingResources: vi.fn().mockResolvedValue(null),
-    adoptResources: vi.fn().mockResolvedValue({
-      adoptedResourceIds: [],
-      alreadyActiveResourceIds: [],
-      rejectedResourceIds: [],
-      reusableBytes: 0,
-    }),
-    chooseMoveLocation: vi.fn().mockResolvedValue(null),
-    moveLocation: vi.fn(),
-    repairRoot: vi.fn(),
-    reconnectRoot: vi.fn().mockResolvedValue(null),
-    planCleanup: vi.fn().mockResolvedValue({
-      resourceIds: [],
-      reclaimableBytes: 0,
-      confirmationRequired: true,
-    }),
-    cleanupUnused: vi.fn().mockResolvedValue({
-      removedResourceIds: [],
-      reclaimedBytes: 0,
-    }),
-    loadDiagnostics: vi.fn().mockResolvedValue({
-      diagnostics: {
-        generatedAtMs: 1,
-        catalogSource: "embedded",
-        remoteCatalogEnabled: false,
-        remoteSignaturePolicy: "ed25519-detached-v1-required-before-enable",
-        rootState: "ready",
-        resourceRoot: "W:\\SiaoVPlay\\SiaoVPlay",
-        preferredProfile: "standard",
-        resources: [],
-        tasks: [],
-      },
-      thirdPartyNotices: "# 第三方许可说明",
-    }),
-    diagnosticSummary: vi.fn().mockResolvedValue("脱敏诊断摘要"),
-    updateResource: vi.fn(),
-    rollbackResource: vi.fn(),
-    planOldVersionCleanup: vi.fn().mockResolvedValue({
-      candidates: [],
-      protectedVersions: [],
-      reclaimableBytes: 0,
-      confirmationRequired: true,
-    }),
-    cleanupOldVersions: vi.fn().mockResolvedValue({
-      removedVersions: [],
-      reclaimedBytes: 0,
-    }),
-    selectProfile: vi.fn().mockResolvedValue(setupStatus),
-    setProxy: vi.fn().mockResolvedValue({
-      mode: "proxy",
-      proxySource: "custom",
-      proxyAddress: "http://127.0.0.1:7897",
-    }),
-    prepareCapability: vi.fn().mockResolvedValue({
-      capabilityId: "basic_media",
-      pendingActionId: null,
-      state: "preparing",
-      resourceIds: ["ffmpeg-cpu"],
-      readyResourceIds: [],
-      taskIds: ["00000000-0000-4000-8000-000000000001"],
-    }),
-    pauseTask: vi.fn(),
-    resumeTask: vi.fn(),
-    cancelTask: vi.fn(),
-    retryTask: vi.fn(),
-    repairResource: vi.fn(),
-    removeResource: vi.fn(),
-    ...overrides,
-  };
-}
+import { catalog, setupStatus, makeController } from "../test-fixtures/localResources";
 
 describe("LocalResourcesDialog", () => {
+  it("prepares only the requested capability and hides unrelated model choices and maintenance", async () => {
+    const controller = makeController({
+      catalog: { ...catalog, profiles: [{ id: "standard", title: "标准", resourceIds: [], recommended: true }] },
+      status: { ...setupStatus, configured: true, rootState: "ready", resourceRoot: "W:\\SiaoVPlay", capabilities: setupStatus.capabilities.map(capability => ({ ...capability, state: "not_ready" })) },
+    });
+    render(<LocalResourcesDialog controller={controller} firstRun={false}
+      pendingAction={{ id: "pending-basic", capabilityId: "basic_media", label: "继续打开视频" }}
+      previewMode={false} onClose={vi.fn()} onDismissFirstRun={vi.fn()} onNotice={vi.fn()} />);
+    expect(screen.queryByRole("checkbox", { name: "选择准备在线视频导入" })).not.toBeInTheDocument();
+    expect(screen.queryByText("字幕识别方式")).not.toBeInTheDocument();
+    expect(screen.getByText("高级维护：存储位置、迁移、修复和清理").parentElement).not.toHaveAttribute("open");
+    fireEvent.click(screen.getByRole("button", { name: "开始准备所选功能" }));
+    await waitFor(() => expect(controller.prepareCapability).toHaveBeenCalledWith("basic_media", "pending-basic"));
+    expect(controller.prepareCapability).toHaveBeenCalledTimes(1);
+  });
   it("keeps first run limited to an optional save location", () => {
     const onDismissFirstRun = vi.fn();
     render(
@@ -253,7 +76,7 @@ describe("LocalResourcesDialog", () => {
     );
     await waitFor(() =>
       expect(controller.confirmLocation).toHaveBeenCalledWith(
-        "W:\\SiaoVPlay",
+        expect.objectContaining({ selectedParent: "W:\\SiaoVPlay", planFingerprint: "a".repeat(64) }),
       ),
     );
     expect(controller.prepareCapability).not.toHaveBeenCalled();
@@ -298,12 +121,13 @@ describe("LocalResourcesDialog", () => {
       errorMessage: null,
       createdAtMs: 1,
       updatedAtMs: 2,
-      forceReinstall: false,
+      forceReinstall: false, generation: 1, revision: 1,
     };
     const pauseTask = vi.fn().mockResolvedValue({ ...task, state: "paused" });
     const controller = makeController({
       status: {
         ...setupStatus,
+        snapshotRevision: 1,
         configured: true,
         resourceRoot: "W:\\SiaoVPlay\\SiaoVPlay",
         rootState: "ready",
@@ -352,6 +176,7 @@ describe("LocalResourcesDialog", () => {
   it("supports verified adoption, copy-before-switch moves, and unavailable-root recovery", async () => {
     const readyStatus: LocalResourceStatus = {
       ...setupStatus,
+      snapshotRevision: 1,
       configured: true,
       selectedParent: "W:\\SiaoVPlay",
       resourceRoot: "W:\\SiaoVPlay\\SiaoVPlay",
@@ -360,7 +185,7 @@ describe("LocalResourcesDialog", () => {
     const chooseExistingResources = vi.fn().mockResolvedValue({
       sourcePath: "W:\\LegacySiaoVPlay",
       preview: {
-        sources: [{ kind: "selected_directory", path: "W:\\LegacySiaoVPlay" }],
+        planFingerprint: "a".repeat(64), resourceRoot: "W:/target", sources: [{ kind: "selected_directory", path: "W:\\LegacySiaoVPlay" }],
         candidates: [
           {
             sourceKind: "selected_directory",
@@ -378,13 +203,13 @@ describe("LocalResourcesDialog", () => {
       },
     });
     const adoptResources = vi.fn().mockResolvedValue({
-      adoptedResourceIds: ["yt-dlp"],
+      interruption: null, adoptedResourceIds: ["yt-dlp"],
       alreadyActiveResourceIds: [],
       rejectedResourceIds: [],
       reusableBytes: 18_202_192,
     });
     const chooseMoveLocation = vi.fn().mockResolvedValue({
-      previousRoot: "W:\\SiaoVPlay\\SiaoVPlay",
+      planFingerprint: "a".repeat(64), previousRoot: "W:\\SiaoVPlay\\SiaoVPlay",
       selectedParent: "E:\\Resources",
       resourceRoot: "E:\\Resources\\SiaoVPlay",
       bytesToCopy: 194_129_082,
@@ -394,20 +219,14 @@ describe("LocalResourcesDialog", () => {
       destinationExists: false,
       confirmationRequired: true,
     });
-    const moveLocation = vi.fn().mockResolvedValue({
-      previousRoot: "W:\\SiaoVPlay\\SiaoVPlay",
-      currentRoot: "E:\\Resources\\SiaoVPlay",
-      copiedBytes: 194_129_082,
-      verifiedFileCount: 12,
-      crossVolume: true,
-      previousRootRetained: true,
-    });
+    const cancelMove = vi.fn().mockResolvedValue(true);
+    const moveLocation = vi.fn(() => new Promise<never>(() => undefined));
     const controller = makeController({
       status: readyStatus,
       chooseExistingResources,
       adoptResources,
       chooseMoveLocation,
-      moveLocation,
+      moveLocation, moving: true, cancelMove,
     });
     render(
       <LocalResourcesDialog
@@ -426,14 +245,16 @@ describe("LocalResourcesDialog", () => {
     expect(screen.getByText(/只检查了明确选择的目录/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "接管已验证资源" }));
     await waitFor(() =>
-      expect(adoptResources).toHaveBeenCalledWith("W:\\LegacySiaoVPlay"),
+      expect(adoptResources).toHaveBeenCalledWith(expect.objectContaining({ planFingerprint: "a".repeat(64), resourceRoot: "W:/target", sources: [{ kind: "selected_directory", path: "W:\\LegacySiaoVPlay" }] })),
     );
 
     fireEvent.click(screen.getByRole("button", { name: "移动保存位置" }));
     expect(await screen.findByText("E:\\Resources\\SiaoVPlay")).toBeInTheDocument();
     expect(screen.getByText(/切换成功后原目录仍保留/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "确认复制并切换" }));
-    await waitFor(() => expect(moveLocation).toHaveBeenCalledWith("E:\\Resources"));
+    await waitFor(() => expect(moveLocation).toHaveBeenCalledWith(expect.objectContaining({ selectedParent: "E:\\Resources", planFingerprint: "a".repeat(64) })));
+    fireEvent.click(screen.getByRole("button", { name: "取消复制" }));
+    expect(cancelMove).toHaveBeenCalledOnce();
   });
 
   it("keeps records when the resource disk is unavailable and offers repair or reconnect", async () => {
@@ -444,6 +265,7 @@ describe("LocalResourcesDialog", () => {
         controller={makeController({
           status: {
             ...setupStatus,
+            snapshotRevision: 1,
             configured: true,
             resourceRoot: "W:\\SiaoVPlay\\SiaoVPlay",
             rootState: "root_unavailable",
@@ -500,6 +322,7 @@ describe("LocalResourcesDialog", () => {
       resources: [
         ...catalog.resources,
         {
+          ...{ installedSize: null, expectedDownloadSize: null, artifact: null, entrypoints: {}, sourceCommit: null, patchSha256: null, requires: null, distribution: null },
           id: "whisper-cpu",
           version: "1.9.1",
           platform: "windows-x86_64",
@@ -509,6 +332,7 @@ describe("LocalResourcesDialog", () => {
           license: "MIT",
           sourcePage: "https://example.com/whisper-cpu",
           artifact: {
+            stripComponents: null,
             url: "https://example.com/whisper-bin-x64.zip",
             size: 7_982_101,
             sha256: "f".repeat(64),
@@ -518,6 +342,7 @@ describe("LocalResourcesDialog", () => {
           healthCheck: "whisper-cli-version",
         },
         {
+          ...{ installedSize: null, expectedDownloadSize: null, artifact: null, entrypoints: {}, sourceCommit: null, patchSha256: null, requires: null, distribution: null },
           id: "whisper-model-base",
           version: "ggml-base",
           platform: "any",
@@ -527,6 +352,7 @@ describe("LocalResourcesDialog", () => {
           license: "MIT",
           sourcePage: "https://example.com/base",
           artifact: {
+            stripComponents: null,
             url: "https://example.com/ggml-base.bin",
             size: 147_951_465,
             sha256: "c".repeat(64),
@@ -536,6 +362,7 @@ describe("LocalResourcesDialog", () => {
           healthCheck: "whisper-model-magic",
         },
         {
+          ...{ installedSize: null, expectedDownloadSize: null, artifact: null, entrypoints: {}, sourceCommit: null, patchSha256: null, requires: null, distribution: null },
           id: "whisper-model-small",
           version: "ggml-small",
           platform: "any",
@@ -545,6 +372,7 @@ describe("LocalResourcesDialog", () => {
           license: "MIT",
           sourcePage: "https://example.com/small",
           artifact: {
+            stripComponents: null,
             url: "https://example.com/ggml-small.bin",
             size: 487_601_967,
             sha256: "d".repeat(64),
@@ -557,6 +385,7 @@ describe("LocalResourcesDialog", () => {
     };
     const transcriptionStatus: LocalResourceStatus = {
       ...setupStatus,
+      snapshotRevision: 1,
       configured: true,
       resourceRoot: "W:\\SiaoVPlay\\SiaoVPlay",
       rootState: "ready",
@@ -614,6 +443,7 @@ describe("LocalResourcesDialog", () => {
   it("keeps versions, hashes, sources, and repair actions inside advanced diagnostics", () => {
     const readyStatus: LocalResourceStatus = {
       ...setupStatus,
+      snapshotRevision: 1,
       configured: true,
       resourceRoot: "W:\\SiaoVPlay\\SiaoVPlay",
       rootState: "ready",
@@ -650,12 +480,13 @@ describe("LocalResourcesDialog", () => {
   it("shows Windows proxy status and allows a simple custom override", async () => {
     const readyStatus: LocalResourceStatus = {
       ...setupStatus,
+      snapshotRevision: 1,
       configured: true,
       resourceRoot: "W:\\SiaoVPlay\\SiaoVPlay",
       rootState: "ready",
     };
     const setProxy = vi.fn().mockResolvedValue({
-      mode: "proxy",
+      snapshotRevision: 1, mode: "proxy",
       proxySource: "custom",
       proxyAddress: "http://127.0.0.1:8899",
     });
@@ -685,6 +516,7 @@ describe("LocalResourcesDialog", () => {
   it("loads version history, supports safe update and rollback, and copies a redacted summary", async () => {
     const readyStatus: LocalResourceStatus = {
       ...setupStatus,
+      snapshotRevision: 1,
       configured: true,
       resourceRoot: "W:\\SiaoVPlay\\SiaoVPlay",
       rootState: "ready",
@@ -699,7 +531,7 @@ describe("LocalResourcesDialog", () => {
         generatedAtMs: 1,
         catalogSource: "embedded",
         remoteCatalogEnabled: false,
-        remoteSignaturePolicy: "ed25519-detached-v1-required-before-enable",
+        maintenance: { transactionState: "none", scanState: "complete", stagingReviewCount: 0, receiptRecoveryCopyCount: 0 }, remoteSignaturePolicy: "ed25519-detached-v1-required-before-enable",
         rootState: "ready",
         resourceRoot: "W:\\SiaoVPlay\\SiaoVPlay",
         preferredProfile: "standard",
@@ -714,7 +546,7 @@ describe("LocalResourcesDialog", () => {
             artifactSha256: "b".repeat(64),
             artifactUrl: "https://example.com/yt-dlp.exe",
             healthCheck: "yt-dlp-version",
-            versions: [
+            versionsReadable: true, unverifiedReceiptCount: 0, versions: [
               {
                 version: "2026.05.01",
                 active: true,
@@ -791,4 +623,30 @@ describe("LocalResourcesDialog", () => {
     fireEvent.click(screen.getByRole("button", { name: "更新 yt-dlp" }));
     await waitFor(() => expect(updateResource).toHaveBeenCalledWith("yt-dlp"));
   });
+});
+
+it("expires a move confirmation after a failed attempt", async () => {
+  const moveLocation = vi.fn().mockRejectedValue(new Error("copy interrupted"));
+  const chooseMoveLocation = vi.fn().mockResolvedValue({ planFingerprint: "a".repeat(64), previousRoot: "W:/old", selectedParent: "W:/new",
+    resourceRoot: "W:/new/SiaoVPlay", bytesToCopy: 10, fileCount: 1, freeSpaceBytes: 100,
+    crossVolume: false, destinationExists: false, confirmationRequired: true });
+  render(<LocalResourcesDialog controller={makeController({ status: { ...setupStatus, configured: true,
+    rootState: "ready", resourceRoot: "W:/old" }, chooseMoveLocation, moveLocation })} firstRun={false}
+    pendingAction={null} previewMode={false} onClose={vi.fn()} onDismissFirstRun={vi.fn()} onNotice={vi.fn()} />);
+  fireEvent.click(screen.getByText("高级维护：存储位置、迁移、修复和清理"));
+  fireEvent.click(screen.getByRole("button", { name: "移动保存位置" }));
+  fireEvent.click(await screen.findByRole("button", { name: "确认复制并切换" }));
+  expect(await screen.findByText("copy interrupted")).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "确认复制并切换" })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "移动保存位置" }));
+  expect(await screen.findByRole("button", { name: "确认复制并切换" })).toBeEnabled();
+  expect(chooseMoveLocation).toHaveBeenCalledTimes(2); expect(moveLocation).toHaveBeenCalledOnce();
+});
+
+it("offers a read retry even when previous resource status remains available", async () => {
+  const refresh = vi.fn().mockResolvedValue(setupStatus);
+  render(<LocalResourcesDialog controller={makeController({ error: "移动已完成，资源状态刷新失败", canRetryRead: true, refresh })}
+    firstRun={false} pendingAction={null} previewMode={false} onClose={vi.fn()} onDismissFirstRun={vi.fn()} onNotice={vi.fn()} />);
+  fireEvent.click(screen.getByRole("button", { name: "重新读取资源状态" }));
+  await waitFor(() => expect(refresh).toHaveBeenCalledOnce());
 });

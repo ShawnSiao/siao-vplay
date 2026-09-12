@@ -1,0 +1,62 @@
+{
+  "$defs": {
+    "AiModelInfo": {
+      "properties": {
+        "capabilitySource": {
+          "type": "string"
+        },
+        "displayName": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "vision": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "displayName",
+        "vision",
+        "capabilitySource"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "examples": [
+    {
+      "manualEntryAllowed": true,
+      "models": []
+    },
+    {
+      "manualEntryAllowed": true,
+      "models": [
+        {
+          "capabilitySource": "unknown",
+          "displayName": "Model",
+          "id": "model",
+          "vision": false
+        }
+      ]
+    }
+  ],
+  "properties": {
+    "manualEntryAllowed": {
+      "type": "boolean"
+    },
+    "models": {
+      "items": {
+        "$ref": "#/$defs/AiModelInfo"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "models",
+    "manualEntryAllowed"
+  ],
+  "title": "AiModelList",
+  "type": "object"
+}

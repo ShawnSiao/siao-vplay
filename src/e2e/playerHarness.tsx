@@ -1,10 +1,10 @@
+import { createPlayerSubtitleFixtures } from "./playerSubtitleFixtures";
 import { StrictMode, useState } from "react";
 import { createRoot } from "react-dom/client";
 
 import { PlayerScreen } from "../features/playback/PlayerScreen";
 import { UnderstandingResultView } from "../features/analysis/UnderstandingResultView";
-import { SummaryPreview } from "./SummaryPreview";
-import { LearningSpeechPreview } from "./LearningSpeechPreview";
+import { renderFeaturePreview } from "./playerFeaturePreview";
 import { DesktopShell } from "../features/shell/DesktopShell";
 import type {
   ShellContextMenu,
@@ -16,7 +16,6 @@ import type {
   LibraryMediaSummary,
   MediaPreparation,
   Project,
-  SubtitleVersion,
 } from "../types";
 import { createUnderstandingFixtures } from "../test-fixtures/understanding";
 import "../styles.css";
@@ -109,69 +108,7 @@ const preparation: MediaPreparation = {
   reusedProxy: false,
 };
 
-const originalSubtitle: SubtitleVersion = {
-  id: "e2e-original",
-  trackId: "e2e-original-track",
-  projectId: project.id,
-  role: "original",
-  versionNumber: 1,
-  status: "ready",
-  sourceKind: "transcription",
-  sourceLabel: "交互测试转写",
-  sourceSha256: "b".repeat(64),
-  mediaSha256: "a".repeat(64),
-  languageCode: "en",
-  projectRevision: 1,
-  parentVersionId: null,
-  sourceTaskId: null,
-  preflight: {} as SubtitleVersion["preflight"],
-  createdAtMs: 1,
-  isCurrent: true,
-  segments: [{
-    id: "e2e-original-segment",
-    lineageId: "e2e-original-segment",
-    sourceSegmentId: null,
-    issueKind: null,
-    ordinal: 0,
-    startMs: 14_000,
-    endMs: 18_000,
-    text: "Okay, and that's essentially how the system stores the new memories.",
-    confidence: 0.95,
-    words: [
-      { ordinal: 0, startMs: 14_000, endMs: 14_300, text: "okay", confidence: 0.95 },
-      { ordinal: 1, startMs: 14_300, endMs: 14_500, text: ",", confidence: 0.95 },
-      { ordinal: 2, startMs: 14_500, endMs: 14_800, text: "and", confidence: 0.95 },
-      { ordinal: 3, startMs: 14_800, endMs: 15_300, text: "essentially", confidence: 0.95 },
-      { ordinal: 4, startMs: 15_300, endMs: 15_600, text: "how", confidence: 0.95 },
-      { ordinal: 5, startMs: 15_600, endMs: 15_850, text: "the", confidence: 0.95 },
-      { ordinal: 6, startMs: 15_850, endMs: 16_250, text: "system", confidence: 0.95 },
-      { ordinal: 7, startMs: 16_250, endMs: 16_650, text: "stores", confidence: 0.95 },
-      { ordinal: 8, startMs: 16_650, endMs: 16_900, text: "the", confidence: 0.95 },
-      { ordinal: 9, startMs: 16_900, endMs: 17_200, text: "new", confidence: 0.95 },
-      { ordinal: 10, startMs: 17_200, endMs: 17_800, text: "memories", confidence: 0.95 },
-      { ordinal: 11, startMs: 17_800, endMs: 18_000, text: ".", confidence: 0.95 },
-    ],
-  }],
-};
-
-const translatedSubtitle: SubtitleVersion = {
-  ...originalSubtitle,
-  id: "e2e-translation",
-  trackId: "e2e-translation-track",
-  role: "translation",
-  sourceKind: "agent_translation",
-  sourceLabel: "交互测试翻译",
-  sourceSha256: "c".repeat(64),
-  languageCode: "zh-cn",
-  segments: [{
-    ...originalSubtitle.segments[0],
-    id: "e2e-translation-segment",
-    lineageId: "e2e-translation-segment",
-    sourceSegmentId: originalSubtitle.segments[0].id,
-    text: "这句话会跟随每一个单词。",
-    words: [],
-  }],
-};
+const { originalSubtitle, translatedSubtitle } = createPlayerSubtitleFixtures(project.id);
 
 if (subtitleScriptSample) {
   originalSubtitle.segments[0].text = subtitleScriptSample.original;
@@ -277,18 +214,29 @@ function UnderstandingResultPreview() {
 }
 
 export function PlayerHarness() {
+  const episodeState = new URLSearchParams(window.location.search).get("episodeState");
+  const pagedEpisodes = new URLSearchParams(window.location.search).has("episodePages");
+  const countParam = new URLSearchParams(window.location.search).get("episodeCount");
+  const accumulatedCount = countParam === "1000" || countParam === "10000" ? Number(countParam) : 0;
+  const bounded = new URLSearchParams(window.location.search).has("boundedEpisodes");
+  const [episodeOffset, setEpisodeOffset] = useState(0);
+  const [loadedMore, setLoadedMore] = useState(false);
+  const [pageError, setPageError] = useState(false);
+  const [pageAttempt, setPageAttempt] = useState(0);
+  const episodeItems = accumulatedCount ? Array.from({ length: bounded ? Math.min(24, accumulatedCount - episodeOffset) : accumulatedCount }, (_, row) => {
+    const index = row + (bounded ? episodeOffset : 0);
+    return episodeSummary(index === 0 ? project.id : `episode-${index + 1}`, index + 1, `第 ${index + 1} 集`);
+  }) : [episodeSummary(project.id, 1, "站台相遇"), episodeSummary(nextEpisode.projectId, 2, nextEpisode.displayTitle)]
+    .slice(0, pagedEpisodes && !loadedMore ? 1 : 2);
+
   const [drawerTab, setDrawerTab] = useState<ShellDrawerTab | null>(null);
   const [contextMenu, setContextMenu] = useState<ShellContextMenu | null>(null);
 
+  const featurePreview = renderFeaturePreview(new URLSearchParams(window.location.search), originalSubtitle, project);
+  if (featurePreview) return featurePreview;
+
   if (new URLSearchParams(window.location.search).get("understanding") === "result") {
     return <UnderstandingResultPreview />;
-  }
-  const summaryPreview = new URLSearchParams(window.location.search).get("summary");
-  if (summaryPreview === "progress" || summaryPreview === "result") {
-    return <SummaryPreview state={summaryPreview} />;
-  }
-  if (new URLSearchParams(window.location.search).get("learning") === "speech") {
-    return <LearningSpeechPreview />;
   }
 
   const toggleDrawer = (tab: ShellDrawerTab) => {
@@ -303,13 +251,14 @@ export function PlayerHarness() {
       drawerTab={drawerTab}
       dropFeedback={requestedDropFeedback()}
       appStatus={{
-        appName: "SiaoVPlay",
+        appName: "SiaoVPlay", interruptedTranscriptionCount: 0,
         version: "test",
         platform: "browser-test",
         dataDirectory: "",
         startupMediaPath: null,
       }}
       localResourceStatus={{
+        snapshotRevision: 1,
         configured: true,
         selectedParent: "W:\\SiaoVPlay",
         resourceRoot: "W:\\SiaoVPlay\\LocalResources",
@@ -367,15 +316,25 @@ export function PlayerHarness() {
         drawerTab={drawerTab}
         contextMenu={contextMenu}
         episodeNavigation={{
-          detail: collectionDetail,
-          episodes: [
-            episodeSummary(project.id, 1, "站台相遇"),
-            episodeSummary(nextEpisode.projectId, 2, nextEpisode.displayTitle),
-          ],
+          detail: episodeState === "single" || episodeState === "loading" ? null : accumulatedCount ? { ...collectionDetail, summary: { ...collectionDetail.summary, itemCount: accumulatedCount } } : collectionDetail,
+          episodes: episodeItems,
+          currentEpisode: bounded ? episodeSummary(project.id, 1, "站台相遇") : undefined,
           neighbors: { previous: null, next: nextEpisode },
-          loading: false,
-          error: null,
+          loading: episodeState === "loading",
+          error: episodeState === "error" ? "Fixture episode read failed" : null,
         }}
+        episodePagination={bounded ? {
+          items: episodeItems, totalCount: accumulatedCount, offset: episodeOffset,
+          nextOffset: episodeOffset + 24 < accumulatedCount ? episodeOffset + 24 : null, loading: false, error: null,
+          loadMore: async () => { setEpisodeOffset(value => value + 24); return true; },
+          loadPrevious: async () => { setEpisodeOffset(value => Math.max(0, value - 24)); return true; },
+          reload: () => setEpisodeOffset(0),
+        } : pagedEpisodes ? {
+          items: episodeItems, totalCount: accumulatedCount || 2, nextOffset: accumulatedCount || loadedMore ? null : 1, loading: false,
+          error: pageError ? "读取暂时失败" : null,
+          loadMore: async () => { if (pageAttempt === 0) { setPageError(true); setPageAttempt(1); return false; } else { setLoadedMore(true); setPageError(false); return true; } },
+          reload: () => { setLoadedMore(false); setPageError(false); setPageAttempt(0); },
+        } : undefined}
         onBack={() => undefined}
         onCloseDrawer={() => setDrawerTab(null)}
         onSelectDrawer={setDrawerTab}
@@ -383,7 +342,10 @@ export function PlayerHarness() {
         onCloseContextMenu={() => setContextMenu(null)}
         onManageSubtitles={() => undefined}
         onNeedProxy={() => undefined}
-        onPersist={async () => undefined}
+        onPersist={async (values) => {
+          const state = window as unknown as { playbackSaves?: unknown[] };
+          (state.playbackSaves ??= []).push(values);
+        }}
         onSwitchEpisode={async () => undefined}
         onNotice={() => undefined}
         onRetryPlayback={() => undefined}

@@ -6,6 +6,18 @@ use std::{
 use super::*;
 
 #[test]
+fn disk_full_errors_keep_an_actionable_code_at_the_command_boundary() {
+    for error in [
+        MediaError::FileSystem(std::io::ErrorKind::StorageFull.into()),
+        MediaError::Store(StoreError::FileSystem(std::io::ErrorKind::StorageFull.into())),
+        MediaError::ProxyFailed("av_interleaved_write_frame(): No space left on device".into()),
+    ] {
+        let failure = crate::commands::CommandError::from(error);
+        assert_eq!(failure.code, "insufficient_storage");
+    }
+}
+
+#[test]
 #[ignore = "requires SIAOVPLAY_PROJECT_DATABASE, SIAOVPLAY_PROJECT_ID and the local FFmpeg runtime"]
 fn real_persistent_project_playback_proxy() {
     let database_path = env::var_os("SIAOVPLAY_PROJECT_DATABASE")

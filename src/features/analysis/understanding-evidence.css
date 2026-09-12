@@ -1,0 +1,4 @@
+.understanding-evidence.readable { display: grid; gap: 6px; margin-top: 8px; font-size: 12px; }
+.understanding-evidence.readable button { background: transparent; border: 0; color: var(--accent, #b8cc62); cursor: pointer; padding: 2px 4px; font: inherit; text-decoration: underline; text-underline-offset: 3px; }
+.understanding-evidence.readable button:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+.understanding-evidence.readable blockquote { margin: 4px 0 0; padding-left: 8px; border-left: 2px solid #626758; overflow-wrap: anywhere; white-space: pre-wrap; }

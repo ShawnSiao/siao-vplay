@@ -53,7 +53,8 @@ describe("SummaryResultView", () => {
     expect(screen.getByText(/03:14–03:18/)).toBeInTheDocument();
     expect(screen.queryByText(/private-uuid/)).not.toBeInTheDocument();
     expect(screen.getByText("尚未进行外部事实检索。")).toBeInTheDocument();
-    expect(screen.getByText("flowchart LR A-->B")).toBeInTheDocument();
+    expect(screen.getByText("A → B")).toBeInTheDocument();
+    expect(screen.queryByText(/flowchart/)).not.toBeInTheDocument();
     fireEvent.click(screen.getByText(/03:14–03:18/));
     expect(onPausePlayback).toHaveBeenCalledOnce();
     expect(onJump).toHaveBeenCalledWith(194_000);
@@ -68,7 +69,7 @@ describe("SummaryResultView", () => {
     legacy.result.formatVersion = 1;
     delete legacy.result.principlesOrArchitecture[0].evidence[0].citations;
     render(<SummaryResultView summary={legacy} exporting={false} exportNotice={null} onExport={vi.fn()} onNewSummary={vi.fn()} />);
-    expect(screen.getByText("1 条字幕证据")).toBeInTheDocument();
+    expect(screen.getByText("1 条字幕引用不可用")).toBeInTheDocument();
     expect(screen.queryByText(/private-uuid/)).not.toBeInTheDocument();
   });
 });

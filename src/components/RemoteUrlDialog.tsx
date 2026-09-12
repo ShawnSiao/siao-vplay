@@ -1,3 +1,5 @@
+import { usePublicResolverConsent } from "../features/library/usePublicResolverConsent";
+import { PublicResolverConsent } from "./PublicResolverConsent";
 import { useState } from "react";
 
 import {
@@ -28,6 +30,7 @@ type UrlImportPreview =
   | {
       kind: "public_page";
       platform: "youtube" | "x";
+      resolverBase: string | null;
       value: YouTubeMediaPreview;
     };
 
@@ -104,6 +107,7 @@ export function RemoteUrlDialog({
   onImported,
 }: RemoteUrlDialogProps) {
   const [url, setUrl] = useState("");
+  const resolver = usePublicResolverConsent(url, publicPagePlatform(url) === "x" && !previewMode);
   const [preview, setPreview] = useState<UrlImportPreview | null>(null);
   const [checking, setChecking] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -130,7 +134,8 @@ export function RemoteUrlDialog({
         setPreview({
           kind: "public_page",
           platform,
-          value: await inspectYouTubeUrl(candidate),
+          resolverBase: resolver.resolverBase,
+          value: await inspectYouTubeUrl(candidate, resolver.resolverBase),
         });
       } else {
         setPreview({
@@ -161,6 +166,7 @@ export function RemoteUrlDialog({
               preview.value.originalUrl,
               preview.value.previewToken,
               nextOperationId,
+              preview.resolverBase,
             )
           : await importRemoteMediaUrl(
               preview.value.originalUrl,
@@ -259,6 +265,7 @@ export function RemoteUrlDialog({
           value={url}
           disabled={checking || importing}
           onChange={(event) => {
+            resolver.authorize(false);
             setUrl(event.target.value);
             setPreview(null);
             setError(null);
@@ -274,6 +281,8 @@ export function RemoteUrlDialog({
           只接受 HTTPS 和公开单视频；请仅导入有权处理或已获授权的内容，单次上限 20 GB。
         </small>
       </label>
+
+      {publicPagePlatform(url) === "x" ? <PublicResolverConsent {...resolver} disabled={checking || importing} onChange={(value) => { resolver.authorize(value); setPreview(null); }} /> : null}
 
       {error ? (
         <div className="notice danger remote-url-notice" role="alert">

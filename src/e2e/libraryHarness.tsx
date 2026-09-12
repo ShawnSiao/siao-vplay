@@ -1,3 +1,10 @@
+import { useSectionWindowPreview } from "./useSectionWindowPreview";
+import { homeCount, homeMatrixItems, homeMatrixSearch, recordHomeSelection } from "./libraryHomeMatrix";
+import { collectionPickerFixture } from "./collectionPickerFixture";
+import { rootOverviewFixture } from "./rootOverviewFixture";
+import { useLibraryPagesPreview } from "./useLibraryPagesPreview";
+import { ActivityPreview } from "./ActivityPreview";
+import { ProjectCleanupNotice } from "../components/ProjectCleanupNotice";
 import { StrictMode, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { LibraryFolderImportDialog } from "../components/LibraryFolderImportDialog";
@@ -11,9 +18,8 @@ import type {
 } from "../features/library/useLibraryController";
 import { DesktopShell } from "../features/shell/DesktopShell";
 import type { LibraryHome, LibraryMediaSummary, Project } from "../types";
-import { emptyLibraryHome } from "./libraryHarnessData";
+import { emptyLibraryHome, offlineRecovery } from "./libraryHarnessData";
 import "../styles.css";
-
 const project: Project = {
   id: "e2e-library-project",
   title: "雨站台",
@@ -68,16 +74,21 @@ const mediaSummary: LibraryMediaSummary = {
   episodeTitle: null,
   itemAvailability: null,
 };
-const unclassifiedItems = Array.from({ length: 12 }, (_, index) => ({
+const longListMode = new URLSearchParams(location.search).has("long-list");
+const listCountParam = new URLSearchParams(location.search).get("mediaCount");
+const loadedListCount = listCountParam === "1000" || listCountParam === "10000" ? Number(listCountParam) : 0;
+const unclassifiedItems = Array.from({ length: homeCount ?? (loadedListCount || (longListMode ? 20 : 12)) }, (_, index) => ({
   ...mediaSummary,
   projectId: `e2e-library-project-${index + 1}`,
-  projectTitle: `雨站台 ${index + 1}`,
-  displayName: `rain-platform-${index + 1}.mp4`,
+  projectTitle: longListMode ? `第 ${index + 1} 集 ${"很长的视频名称与跨语言学习内容".repeat(12)}` : `雨站台 ${index + 1}`,
+  displayName: longListMode ? `${"long_unbroken_filename_".repeat(14)}${index + 1}.mp4` : `rain-platform-${index + 1}.mp4`,
   mediaLocator: `W:\\Videos\\rain-platform-${index + 1}.mp4`,
 }));
 
 const libraryHome: LibraryHome = {
   continueWatching: [mediaSummary],
+  continueWatchingCount: 1,
+  collectionCount: 1, folderCount: 1, watchLaterCount: 0,
   collections: [
     {
       id: "e2e-library-collection",
@@ -113,6 +124,8 @@ const libraryHome: LibraryHome = {
   unclassifiedCount: unclassifiedItems.length,
 };
 
+const readCollections = collectionPickerFixture(libraryHome.collections[0]);
+const readRoots = rootOverviewFixture(libraryHome.folders[0]);
 const unresolvedItem: LibraryImportDraftItem = {
   candidateId: "e2e-folder-candidate",
   relativePath: "Special.mp4",
@@ -166,56 +179,34 @@ const folderPreview: LibraryFolderImportState = {
   error: null,
 };
 
-const offlineRecovery: LibraryRecoveryState = {
-  stage: "rescan_preview",
-  rootId: "e2e-library-root",
-  rescanPreview: {
-    previewToken: "e2e-rescan-preview",
-    rootId: "e2e-library-root",
-    rootPath: "W:\\Series\\Rain",
-    rootDisplayName: "Rain",
-    collectionId: "e2e-library-collection",
-    rootOffline: true,
-    newCandidates: [],
-    missingItems: [],
-    changedItems: [],
-    availableItemCount: 0,
-    ignoredCount: 0,
-    expiresAtMs: 1_900_000_000_000,
-  },
-  relocationPreview: null,
-  rebuildPreview: null,
-  newItems: [],
-  rebuildCollectionTitle: "",
-  confirmMissing: false,
-  confirmChanged: false,
-  confirmUncertainMatches: false,
-  confirmFingerprintDuplicates: false,
-  error: null,
-};
 export function LibraryHarness() {
-  const emptyMode = new URLSearchParams(window.location.search).has("empty");
-  const [folderImport, setFolderImport] = useState<LibraryFolderImportState | null>(null); const [section, setSection] = useState<LibrarySection>("home");
+  const sectionWindow = useSectionWindowPreview(mediaSummary);
+  const collectionPreview = useLibraryPagesPreview();
+  const [searchQuery, setSearchQuery] = useState("");
+  const emptyMode = homeCount === 0 || new URLSearchParams(window.location.search).has("empty");
+  const [folderImport, setFolderImport] = useState<LibraryFolderImportState | null>(null); const [section, setSection] = useState<LibrarySection>(homeCount !== null ? "home" : sectionWindow ? sectionWindow.initialSection : loadedListCount ? (new URLSearchParams(location.search).get("section") === "watch_later" ? "watch_later" : "unclassified") : longListMode ? "unclassified" : "home");
   const [recovery, setRecovery] = useState<LibraryRecoveryState | null>(null);
-  const [watchLaterItems, setWatchLaterItems] = useState([mediaSummary]);
+  const [watchLaterItems, setWatchLaterItems] = useState(loadedListCount ? unclassifiedItems : [mediaSummary]);
   const [uncategorizedItems, setUncategorizedItems] = useState(unclassifiedItems);
   const openFolderImport = () => setFolderImport(folderPreview);
-  const visibleHome: LibraryHome = emptyMode ? emptyLibraryHome : { ...libraryHome, unclassified: uncategorizedItems, unclassifiedCount: uncategorizedItems.length };
+  const visibleHome: LibraryHome = emptyMode ? emptyLibraryHome : { ...libraryHome, unclassified: uncategorizedItems, unclassifiedCount: uncategorizedItems.length,
+    ...homeMatrixItems(uncategorizedItems) };
   return (
     <>
       <DesktopShell
-      activeView="library"
+      activeView={new URLSearchParams(location.search).has("activityRightEdge") ? "player" : "library"}
       navigationCollapsed={false}
       drawerTab={null}
       dropFeedback={null}
       appStatus={{
-        appName: "SiaoVPlay",
+        appName: "SiaoVPlay", interruptedTranscriptionCount: 0,
         version: "test",
         platform: "browser-test",
         dataDirectory: "",
         startupMediaPath: null,
       }}
       localResourceStatus={{
+        snapshotRevision: 1,
         configured: true,
         selectedParent: "W:\\SiaoVPlay",
         resourceRoot: "W:\\SiaoVPlay\\LocalResources",
@@ -247,15 +238,16 @@ export function LibraryHarness() {
         unclassified: emptyMode ? 0 : uncategorizedItems.length,
       }}
       librarySection={section}
-      searchQuery=""
-      searchResults={[]}
+      searchQuery={searchQuery}
+      searchResults={homeMatrixSearch(uncategorizedItems, searchQuery)}
       searchLoading={false}
       onToggleNavigation={() => undefined}
       onToggleDrawer={() => undefined}
       onGoLibrary={() => undefined}
       onSelectLibrarySection={setSection}
-      onSearchQueryChange={() => undefined}
-      onOpenSearchResult={() => undefined}
+      onSearchQueryChange={setSearchQuery}
+      onOpenSearchResult={recordHomeSelection}
+      activityControl={new URLSearchParams(location.search).has("activity") ? <ActivityPreview /> : undefined}
       onOpenFile={() => undefined}
       onOpenFolder={openFolderImport}
       onOpenUrl={() => undefined}
@@ -265,10 +257,13 @@ export function LibraryHarness() {
       onDeliverSubtitles={() => undefined}
       onOpenSettings={() => undefined}
     >
+      {new URLSearchParams(location.search).has("cleanup") ? <ProjectCleanupNotice revision={0} /> : null}
       <LibraryScreen
+        readCollections={readCollections}
+        readRoots={readRoots}
         home={visibleHome}
         section={section}
-        sectionPages={{
+        sectionPages={sectionWindow?.pages ?? {
           continue_watching: {
             items: libraryHome.continueWatching,
             totalCount: libraryHome.continueWatching.length,
@@ -293,8 +288,7 @@ export function LibraryHarness() {
             error: null,
           },
         }}
-        currentCollection={null}
-        currentEpisodes={[]}
+        {...collectionPreview}
         selectedSeason={null}
         loading={false}
         collectionLoading={false}
@@ -330,8 +324,10 @@ export function LibraryHarness() {
         onDelete={() => undefined}
         onOpenLocation={() => undefined}
         onSelectSection={setSection}
-        onLoadMoreSection={() => undefined}
-        onReloadSection={() => undefined}
+        onLoadMoreSection={sectionWindow?.loadMore ?? (async () => false)}
+        onPreviousSection={sectionWindow?.previous}
+        onRetrySectionPage={sectionWindow?.retry}
+        onReloadSection={sectionWindow?.reload ?? (() => undefined)}
         onOpenCollection={() => undefined}
         onCloseCollection={() => undefined}
         onSelectSeason={() => undefined}
@@ -342,6 +338,10 @@ export function LibraryHarness() {
           setUncategorizedItems((items) => items.filter((item) => item.projectId !== projectId));
         }}
         onRemoveFromCollection={async () => undefined}
+        onSetWatched={async (projectId, watched) => {
+          const update = (items: LibraryMediaSummary[]) => items.map(item => item.projectId === projectId ? { ...item, completedAtMs: watched ? Date.now() : null } : item);
+          setUncategorizedItems(update); setWatchLaterItems(update);
+        }}
         onSetWatchLater={async (projectId, enabled) => {
           if (enabled) {
             const item = uncategorizedItems.find((candidate) => candidate.projectId === projectId);

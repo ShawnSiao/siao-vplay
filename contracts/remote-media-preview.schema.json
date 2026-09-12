@@ -1,0 +1,55 @@
+{
+  "$defs": {
+    "RemoteMediaKind": {
+      "enum": [
+        "direct_file",
+        "hls"
+      ],
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "contentLength": {
+      "format": "uint64",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "contentType": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "displayName": {
+      "type": "string"
+    },
+    "finalUrl": {
+      "type": "string"
+    },
+    "mediaKind": {
+      "$ref": "#/$defs/RemoteMediaKind"
+    },
+    "originalUrl": {
+      "type": "string"
+    },
+    "previewToken": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "originalUrl",
+    "finalUrl",
+    "displayName",
+    "mediaKind",
+    "contentType",
+    "contentLength",
+    "previewToken"
+  ],
+  "title": "RemoteMediaPreview",
+  "type": "object"
+}

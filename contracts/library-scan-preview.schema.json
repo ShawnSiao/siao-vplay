@@ -1,0 +1,188 @@
+{
+  "$defs": {
+    "EpisodeRecognition": {
+      "enum": [
+        "sxx_exx",
+        "season_x_episode",
+        "chinese_episode",
+        "numeric_prefix",
+        "season_directory",
+        "unresolved",
+        "conflict"
+      ],
+      "type": "string"
+    },
+    "IgnoredEntryReason": {
+      "enum": [
+        "hidden",
+        "system",
+        "reparse_point",
+        "ignored_name",
+        "temporary",
+        "unsupported_extension",
+        "outside_root",
+        "unreadable"
+      ],
+      "type": "string"
+    },
+    "IgnoredLibraryEntry": {
+      "properties": {
+        "reason": {
+          "$ref": "#/$defs/IgnoredEntryReason"
+        },
+        "relativePath": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "relativePath",
+        "reason"
+      ],
+      "type": "object"
+    },
+    "LibraryScanCandidate": {
+      "properties": {
+        "absoluteOrder": {
+          "format": "int64",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "candidateId": {
+          "type": "string"
+        },
+        "confirmationReason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "displayTitle": {
+          "type": "string"
+        },
+        "episodeNumber": {
+          "format": "int64",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "needsConfirmation": {
+          "type": "boolean"
+        },
+        "quickFingerprint": {
+          "type": "string"
+        },
+        "recognition": {
+          "$ref": "#/$defs/EpisodeRecognition"
+        },
+        "relativePath": {
+          "type": "string"
+        },
+        "seasonNumber": {
+          "format": "int64",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "sourceModifiedAtMs": {
+          "format": "int64",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "sourceSizeBytes": {
+          "format": "uint64",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "candidateId",
+        "relativePath",
+        "displayTitle",
+        "seasonNumber",
+        "episodeNumber",
+        "absoluteOrder",
+        "recognition",
+        "needsConfirmation",
+        "confirmationReason",
+        "sourceSizeBytes",
+        "sourceModifiedAtMs",
+        "quickFingerprint"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "candidates": {
+      "items": {
+        "$ref": "#/$defs/LibraryScanCandidate"
+      },
+      "type": "array"
+    },
+    "expiresAtMs": {
+      "format": "int64",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "ignoredCount": {
+      "format": "uint64",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "ignoredEntries": {
+      "items": {
+        "$ref": "#/$defs/IgnoredLibraryEntry"
+      },
+      "type": "array"
+    },
+    "needsConfirmationCount": {
+      "format": "uint64",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "previewToken": {
+      "type": "string"
+    },
+    "rootDisplayName": {
+      "type": "string"
+    },
+    "rootPath": {
+      "type": "string"
+    },
+    "scanId": {
+      "type": "string"
+    },
+    "suggestedCollectionTitle": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "scanId",
+    "previewToken",
+    "rootPath",
+    "rootDisplayName",
+    "suggestedCollectionTitle",
+    "candidates",
+    "ignoredEntries",
+    "ignoredCount",
+    "needsConfirmationCount",
+    "expiresAtMs"
+  ],
+  "title": "LibraryScanPreview",
+  "type": "object"
+}

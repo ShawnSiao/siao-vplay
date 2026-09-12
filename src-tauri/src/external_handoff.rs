@@ -59,16 +59,9 @@ impl ExternalHandoffError {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ExternalAgentResultUpdate {
-    pub task_kind: String,
-    pub task_id: String,
-    pub project_id: String,
-    pub status: String,
-    pub output_id: Option<String>,
-    pub message: String,
-}
+#[path = "external_result_contract.rs"]
+mod contract;
+pub use contract::ExternalAgentResultUpdate;
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -80,11 +73,16 @@ struct ResultAttempt {
 
 pub fn reconcile_external_agent_results(
     store: &ProjectStore,
+    delivery: &crate::external_result_delivery::DeliveryQueue,
 ) -> Result<Vec<ExternalAgentResultUpdate>, ExternalHandoffError> {
-    Ok(reconcile_active_tasks_with(
+    let mut updates = reconcile_active_tasks_with(
         active_manual_tasks(store)?,
         |task| reconcile_external_agent_result(store, task),
-    ))
+    );
+    // Completions must come from the durable queue, including after a lost IPC response.
+    updates.retain(|update| update.status != "completed");
+    updates.extend(delivery.next_pending(store)?);
+    Ok(updates)
 }
 
 fn reconcile_active_tasks_with<F>(
@@ -112,6 +110,7 @@ fn reconcile_external_agent_result(
     store: &ProjectStore,
     task: &ActiveManualTask,
 ) -> Result<Option<ExternalAgentResultUpdate>, ExternalHandoffError> {
+    let _project_operation = crate::project_operations::Operation::acquire(store, &task.project_id)?;
     let Some(candidate) = result_candidate(store, &task.id)? else {
         return Ok(None);
     };

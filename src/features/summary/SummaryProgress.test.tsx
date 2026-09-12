@@ -1,0 +1,47 @@
+import { fireEvent, render, screen } from "@testing-library/react";
+import { expect, it, vi } from "vitest";
+import { createSummaryFixtures } from "../../test-fixtures/summary";
+import { SummaryProgress } from "./SummaryProgress";
+import { summaryChunkLabel, summaryStageLabel } from "./summaryStatus";
+
+it("lets the user cancel a failed summary without resuming it", () => {
+  const { task } = createSummaryFixtures();
+  const onCancel = vi.fn();
+  const onResume = vi.fn();
+  render(<SummaryProgress task={{ ...task, status: "failed" }} busy={false}
+    onCancel={onCancel} onResume={onResume} onOpenMaterials={vi.fn()} />);
+  fireEvent.click(screen.getByRole("button", { name: "取消总结" }));
+  expect(onCancel).toHaveBeenCalledTimes(1);
+  expect(onResume).not.toHaveBeenCalled();
+});
+
+it("shows Chinese task and chunk states instead of internal enums", () => {
+  const { task } = createSummaryFixtures();
+  render(<SummaryProgress task={task} busy={false} onCancel={vi.fn()} onResume={vi.fn()} onOpenMaterials={vi.fn()} />);
+  expect(screen.getByText(/正在分析字幕片段/)).toBeInTheDocument();
+  expect(screen.queryByText(/analyzing_chunks|^prepared$|^running$/)).not.toBeInTheDocument();
+});
+
+it("covers all persisted states and uses a readable fallback for new states", () => {
+  for (const state of ["prepared", "awaiting_external_result", "queued", "running", "paused", "validating", "completed", "failed", "cancelled", "interrupted", "analyzing_chunks", "synthesizing"]) {
+    expect(summaryStageLabel(state)).toMatch(/[\u4e00-\u9fff]/);
+  }
+  for (const state of ["prepared", "queued", "running", "completed", "failed", "cancelled"]) expect(summaryChunkLabel(state)).toMatch(/[\u4e00-\u9fff]/);
+  expect(summaryStageLabel("unknown_stage")).toBe("正在处理");
+  expect(summaryChunkLabel("unknown_state")).toBe("状态待更新");
+});
+
+it.each([
+  ["synthesizing_summary", "正在整理总结"],
+  ["merging", "正在整合结果"],
+  ["cancelling", "正在停止总结"],
+  ["awaiting_confirmation", "等待确认发送清单"],
+])("translates the %s execution stage", (stage, label) => {
+  expect(summaryStageLabel(stage)).toBe(label);
+});
+
+it("shows actual cancellation progress without promising another full request", () => {
+  const { task } = createSummaryFixtures();
+  render(<SummaryProgress task={{ ...task, cancelRequested: true }} busy={false} onCancel={vi.fn()} onResume={vi.fn()} onOpenMaterials={vi.fn()} />);
+  expect(screen.getByRole("button", { name: "正在停止总结" })).toBeDisabled();
+});

@@ -1,4 +1,12 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCodexDetection } from "../features/ai-tasks/useCodexDetection";
+import { CodexDetectionNotice } from "../features/ai-tasks/CodexDetectionNotice";
+import { previewTranslationDispatch, type TranslationDispatchPreview } from "../features/ai-tasks/translationDispatch";
+import { TranslationDispatchConfirm } from "../features/ai-tasks/TranslationDispatchConfirm";
+import { AiExecutionConfirm } from "../features/ai-tasks/AiExecutionConfirm";
+import { useAiExecutionChoice } from "../features/ai-tasks/useAiExecutionChoice";
+import { prepareApiTranslation, startApiTranslation } from "../features/ai-tasks/apiTranslation";
+import { useEffect, useMemo, useState } from "react";
+import { useTranslationResultRead } from "../features/ai-tasks/useTranslationResultRead";
 
 import {
   cancelTranslationTask,
@@ -15,7 +23,6 @@ import {
   startCodexTranslationTask,
 } from "../lib/desktop";
 import type {
-  CodexRuntimeStatus,
   SubtitleVersion,
   TranslationTask,
 } from "../types";
@@ -26,6 +33,7 @@ import {
 import { TranslationDialogFrame } from "./TranslationDialogFrame";
 import { TranslationLanguageSelectors } from "./TranslationLanguageSelectors";
 import {
+  copyTranslationPrompt,
   translationResultFileName,
   translationStatusTone,
   translationTaskStage,
@@ -46,8 +54,6 @@ type TranslationDialogProps = {
   ) => Promise<void>;
 };
 
-type HandoffKind = "codex" | "manual";
-
 const activeStatuses = new Set([
   "awaiting_external_result",
   "queued",
@@ -65,7 +71,6 @@ export function TranslationDialog({
   onPrepareOriginal,
   onTaskCompleted,
 }: TranslationDialogProps) {
-  const notifiedTaskRef = useRef<string | null>(null);
   const requestedKey = [...(requestedSegmentIds ?? [])].sort().join("|");
   const requestedSet = useMemo(
     () => new Set(requestedSegmentIds ?? []),
@@ -75,22 +80,27 @@ export function TranslationDialog({
   const isSelectedRetranslation =
     requestedSet.size > 0 &&
     requestedSet.size < (sourceVersion?.segments.length ?? 0);
-  const [handoff, setHandoff] = useState<HandoffKind>("codex");
+  const choice = useAiExecutionChoice(false);
+  const { kind: handoff, setKind: setHandoff } = choice;
   const [sourceLanguageCode, setSourceLanguageCode] = useState(
     sourceVersion?.languageCode.toLowerCase() ?? "en",
   );
   const [targetLanguageCode, setTargetLanguageCode] = useState(() =>
     defaultTargetLanguage(sourceVersion?.languageCode ?? "en"),
   );
-  const [runtime, setRuntime] = useState<CodexRuntimeStatus | null>(null);
+  const codexDetection = useCodexDetection(getCodexRuntimeStatus);
+  const { runtime } = codexDetection;
+  const [dispatch, setDispatch] = useState<TranslationDispatchPreview | null>(null);
   const [task, setTask] = useState<TranslationTask | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [historyAttempt, setHistoryAttempt] = useState(0);
+  const [historyRead, setHistoryRead] = useState<{ key: string; projectId: string; error: string | null } | null>(null);
   const [operation, setOperation] = useState<string | null>(null);
   const [prompt, setPrompt] = useState<string | null>(null);
   const [promptExpanded, setPromptExpanded] = useState(false);
   const [copyNotice, setCopyNotice] = useState<string | null>(null);
   const [resultPath, setResultPath] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const resultRead = useTranslationResultRead(task, translationVersions, onTaskCompleted);
 
   const currentTranslation = useMemo(
     () =>
@@ -104,6 +114,10 @@ export function TranslationDialog({
   const taskVersion =
     translationVersions.find((version) => version.id === task?.outputVersionId) ??
     null;
+  const historyKey = JSON.stringify([projectId, requestedKey, sourceLanguageCode, targetLanguageCode,
+    sourceVersion?.id, sourceVersion?.segments.length, currentTranslation?.id, historyAttempt]);
+  const loading = historyRead?.key !== historyKey;
+  const historyError = loading ? null : historyRead?.error;
   const targetLanguageLabel = translationLanguageLabel(targetLanguageCode);
   const sourceById = useMemo(
     () =>
@@ -115,15 +129,11 @@ export function TranslationDialog({
 
   useEffect(() => {
     let active = true;
-    void Promise.all([
-      getCodexRuntimeStatus(),
-      listTranslationTasks(projectId),
-    ])
-      .then(([nextRuntime, tasks]) => {
+    void listTranslationTasks(projectId)
+      .then((tasks) => {
         if (!active) {
           return;
         }
-        setRuntime(nextRuntime);
         const activeTask = tasks.find((item) => activeStatuses.has(item.status));
         const taskMatchesSelection = (item: TranslationTask) => {
           const taskKey = [...item.authorizedSegmentIds].sort().join("|");
@@ -156,22 +166,20 @@ export function TranslationDialog({
         if (currentTask) {
           setHandoff(currentTask.handoffKind);
         }
+        setHistoryRead({ key: historyKey, projectId, error: null });
       })
       .catch((cause: unknown) => {
         if (active) {
-          setError(commandError(cause).message);
-        }
-      })
-      .finally(() => {
-        if (active) {
-          setLoading(false);
+          setHistoryRead({ key: historyKey, projectId, error: commandError(cause).message });
         }
       });
     return () => {
       active = false;
     };
   }, [
+    historyKey,
     projectId,
+    setHandoff,
     requestedKey,
     sourceLanguageCode,
     sourceVersion?.id,
@@ -235,31 +243,16 @@ export function TranslationDialog({
     };
   }, [task]);
 
-  useEffect(() => {
-    if (
-      !task ||
-      task.status !== "completed" ||
-      notifiedTaskRef.current === task.id
-    ) {
-      return;
-    }
-    if (translationVersions.some((version) => version.id === task.outputVersionId)) {
-      notifiedTaskRef.current = task.id;
-      return;
-    }
-    notifiedTaskRef.current = task.id;
-    void onTaskCompleted(task);
-  }, [onTaskCompleted, task, translationVersions]);
-
   const prepare = async () => {
-    if (!sourceVersion) {
+    if (!sourceVersion || loading || historyError) {
       return;
     }
     setOperation("prepare");
     setError(null);
     setCopyNotice(null);
     try {
-      const prepared = requestedSegmentIds?.length
+      const prepared = handoff === "api" ? await prepareApiTranslation(projectId, sourceLanguageCode, targetLanguageCode,
+        requestedSegmentIds, choice.execution, choice.authorization.serviceRevision ?? null) : requestedSegmentIds?.length
         ? await prepareTranslationTask(
             projectId,
             handoff,
@@ -274,14 +267,7 @@ export function TranslationDialog({
             targetLanguageCode,
           );
       setTask(prepared);
-      if (handoff === "codex") {
-        const started = await startCodexTranslationTask(prepared.id);
-        setTask(started);
-      } else {
-        const value = await readTranslationPrompt(prepared.id);
-        setPrompt(value);
-        setPromptExpanded(true);
-      }
+      setDispatch(await previewTranslationDispatch(prepared.id));
     } catch (cause) {
       setError(commandError(cause).message);
       const tasks = await listTranslationTasks(projectId).catch(() => []);
@@ -294,16 +280,39 @@ export function TranslationDialog({
     }
   };
 
-  const startQueued = async () => {
+  const reviewDispatch = async () => {
     if (!task) {
       return;
     }
     setOperation("start");
     setError(null);
     try {
-      setTask(await startCodexTranslationTask(task.id));
+      setDispatch(await previewTranslationDispatch(task.id));
     } catch (cause) {
       setError(commandError(cause).message);
+    } finally {
+      setOperation(null);
+    }
+  };
+
+  const confirmDispatch = async () => {
+    if (!task || !dispatch || task.id !== dispatch.taskId) return;
+    setOperation("dispatch");
+    setError(null);
+    try {
+      if (dispatch.handoffKind === "manual") {
+        setPrompt(await readTranslationPrompt(task.id));
+        setPromptExpanded(true);
+      } else if (dispatch.handoffKind === "api") {
+        setTask(await startApiTranslation(task.id, dispatch.confirmationSha256));
+      } else {
+        const run = task.status === "queued" ? startCodexTranslationTask : resumeCodexTranslationTask;
+        setTask(await run(task.id, undefined, dispatch.confirmationSha256));
+      }
+      setDispatch(null);
+    } catch (cause) {
+      setError(commandError(cause).message);
+      setDispatch(null);
     } finally {
       setOperation(null);
     }
@@ -324,38 +333,11 @@ export function TranslationDialog({
     }
   };
 
-  const resume = async () => {
-    if (!task) {
-      return;
-    }
-    setOperation("resume");
-    setError(null);
-    try {
-      setTask(await resumeCodexTranslationTask(task.id));
-    } catch (cause) {
-      setError(commandError(cause).message);
-    } finally {
-      setOperation(null);
-    }
-  };
-
   const copyPrompt = async () => {
-    if (!prompt) {
-      return;
-    }
-    setCopyNotice(null);
-    if (!navigator.clipboard?.writeText) {
-      setPromptExpanded(true);
-      setCopyNotice("系统未授权自动复制，可以在下方选择完整提示词。");
-      return;
-    }
-    try {
-      await navigator.clipboard.writeText(prompt);
-      setCopyNotice("完整任务提示词已复制。");
-    } catch {
-      setPromptExpanded(true);
-      setCopyNotice("自动复制没有完成，可以在下方选择完整提示词。");
-    }
+    if (!prompt) return;
+    const notice = await copyTranslationPrompt(prompt);
+    setPromptExpanded(true);
+    setCopyNotice(notice);
   };
 
   const chooseResult = async () => {
@@ -391,11 +373,13 @@ export function TranslationDialog({
     setError(null);
     try {
       const application = await importTranslationResult(task.id, resultPath);
-      notifiedTaskRef.current = application.task.id;
       setTask(application.task);
-      await onTaskCompleted(application.task, application.subtitleVersion);
     } catch (cause) {
-      setError(commandError(cause).message);
+      const failure = commandError(cause);
+      setError(failure.message);
+      if (failure.code === "project_changed") {
+        setTask(current => current?.id === task.id ? { ...current, errorCode: failure.code, errorMessage: failure.message } : current);
+      }
     } finally {
       setOperation(null);
     }
@@ -403,6 +387,7 @@ export function TranslationDialog({
 
   const resetToSetup = () => {
     setTask(null);
+    setDispatch(null);
     setPrompt(null);
     setPromptExpanded(false);
     setResultPath(null);
@@ -413,8 +398,10 @@ export function TranslationDialog({
   const busy = operation !== null;
   const setup = !task;
   const running = task && ["running", "validating"].includes(task.status);
+  const requiresNewTask = task?.errorCode === "project_changed";
   const canResume =
-    task?.handoffKind === "codex" &&
+    !requiresNewTask &&
+    task?.handoffKind !== "manual" && task &&
     ["failed", "cancelled", "interrupted"].includes(task.status);
 
   let actions: React.ReactNode = (
@@ -432,7 +419,7 @@ export function TranslationDialog({
           className="button primary"
           type="button"
           disabled={
-            busy ||
+            busy || choice.loading || (handoff === "api" && !choice.execution) ||
             sourceLanguageCode === targetLanguageCode ||
             (handoff === "codex" && !runtime?.available)
           }
@@ -440,8 +427,8 @@ export function TranslationDialog({
         >
           {operation === "prepare"
             ? "正在准备…"
-            : handoff === "codex"
-              ? "确认范围并开始翻译"
+            : handoff !== "manual"
+              ? "准备翻译材料"
               : "生成完整任务提示词"}
         </button>
       </>
@@ -460,10 +447,10 @@ export function TranslationDialog({
         <button
           className="button primary"
           type="button"
-          disabled={busy || !runtime?.available}
-          onClick={() => void startQueued()}
+          disabled={busy || (task.handoffKind === "codex" && !runtime?.available)}
+          onClick={() => void reviewDispatch()}
         >
-          {operation === "start" ? "正在启动…" : "开始本机翻译"}
+          {operation === "start" ? "正在启动…" : "查看发送清单"}
         </button>
       </>
     );
@@ -487,6 +474,8 @@ export function TranslationDialog({
         </button>
       </>
     );
+  } else if (requiresNewTask) {
+    actions = <button className="button primary" type="button" disabled={busy} onClick={resetToSetup}>重新准备翻译</button>;
   } else if (task?.status === "awaiting_external_result") {
     actions = (
       <>
@@ -533,16 +522,16 @@ export function TranslationDialog({
     actions = (
       <>
         <button className="button quiet" type="button" onClick={resetToSetup}>
-          改用其他方式
+          {requiresNewTask ? "重新准备翻译" : "改用其他方式"}
         </button>
         {canResume ? (
           <button
             className="button primary"
             type="button"
-            disabled={busy || !runtime?.available}
-            onClick={() => void resume()}
+            disabled={busy || (task.handoffKind === "codex" && !runtime?.available)}
+            onClick={() => void reviewDispatch()}
           >
-            {operation === "resume" ? "正在重新开始…" : "重新开始本机翻译"}
+            {operation === "resume" ? "正在重新开始…" : task.handoffKind === "api" ? "重试未完成批次" : "重新开始本机翻译"}
           </button>
         ) : null}
       </>
@@ -551,10 +540,15 @@ export function TranslationDialog({
 
   const content = (
     <>
-      {loading ? (
+      {loading && (historyRead?.projectId !== projectId || historyRead.error) ? (
         <div className="translation-loading" role="status">
           <span className="spinner"></span>
           <span>正在读取翻译状态</span>
+        </div>
+      ) : historyError ? (
+        <div className="notice warning" role="alert">
+          <p>{historyError}</p>
+          <button className="button quiet small" type="button" onClick={() => setHistoryAttempt(value => value + 1)}>重新读取翻译记录</button>
         </div>
       ) : !sourceVersion ? (
         <div className="translation-empty">
@@ -586,50 +580,12 @@ export function TranslationDialog({
             onTargetLanguageChange={setTargetLanguageCode}
           />
 
-          <section className="translation-section">
-            <h3>选择处理方式</h3>
-            <div className="translation-handoff-options">
-              <button
-                className={handoff === "codex" ? "selected" : ""}
-                type="button"
-                onClick={() => setHandoff("codex")}
-              >
-                <span>
-                  <strong>在本机 Codex 中处理</strong>
-                  <small>任务完成后自动检查结果并生成草稿。</small>
-                </span>
-                <em
-                  className={`status-pill ${
-                    runtime?.available ? "ready" : "warning"
-                  }`}
-                >
-                  {runtime?.available ? "本机已就绪" : "当前不可使用"}
-                </em>
-              </button>
-              <button
-                className={handoff === "manual" ? "selected" : ""}
-                type="button"
-                onClick={() => setHandoff("manual")}
-              >
-                <span>
-                  <strong>复制任务提示词</strong>
-                  <small>交给自行选择的 Agent，再导入 result.json。</small>
-                </span>
-                <em className="status-pill">不会自动发送</em>
-              </button>
-            </div>
-            {handoff === "codex" && runtime && !runtime.available ? (
-              <div className="notice warning translation-runtime-notice">
-                <strong>本机 Codex 还不能开始</strong>
-                <p>{runtime.errorMessage}</p>
-              </div>
-            ) : null}
-          </section>
+          <AiExecutionConfirm controller={choice} runtime={runtime} allowFrames={false} translationAvailable={false} taskLabel="翻译" translationScope />
 
           <section className="translation-section">
             <div className="translation-section-heading">
               <h3>
-                {handoff === "codex" ? "将发送给本机 Codex" : "提示词包含"}
+                {handoff === "api" ? "准备翻译的内容" : handoff === "codex" ? "准备发送给 OpenAI（通过 Codex）" : "提示词包含"}
               </h3>
               <span>点击底部操作前不会处理</span>
             </div>
@@ -699,6 +655,11 @@ export function TranslationDialog({
                   </div>
                 );
                 })}
+            </div>
+          ) : resultRead.failed ? (
+            <div className="notice warning" role="alert">
+              <p>翻译已完成，但字幕暂时无法读取。请重试读取。</p>
+              <button className="button" type="button" onClick={resultRead.retry}>重新读取字幕</button>
             </div>
           ) : (
             <div className="translation-loading" role="status">
@@ -812,7 +773,7 @@ export function TranslationDialog({
                   ? "等待开始"
                   : task.handoffKind === "manual"
                     ? "正在检查"
-                    : "本机处理中"}
+                    : "翻译中"}
               </span>
               <h3>{translationTaskStage(task)}</h3>
               <p>
@@ -866,7 +827,7 @@ export function TranslationDialog({
               `原文字幕和已有${targetLanguageLabel}字幕没有改变。`}
           </p>
           <p className="translation-recovery-note">
-            重新开始会从受控任务包的第一批字幕开始，不复用未确认的中间结果。
+            {requiresNewTask ? "项目或原文已经变化。请重新准备翻译，并再次确认接收方和发送范围。" : task.handoffKind === "api" ? "重试会保留已校验的批次，只发送未完成的字幕批次。" : "重新开始会从受控任务包的第一批字幕开始，不复用未确认的中间结果。"}
           </p>
         </div>
       )}
@@ -896,9 +857,13 @@ export function TranslationDialog({
       running={Boolean(running)}
       busy={busy}
       onClose={onClose}
-      actions={actions}
+      actions={loading || historyError ? <button className="button quiet" type="button" onClick={onClose}>关闭</button> : dispatch ? null : actions}
     >
-      {content}
+      <CodexDetectionNotice {...codexDetection} />
+      {dispatch ? <>
+        <TranslationDispatchConfirm preview={dispatch} busy={busy} onConfirm={() => void confirmDispatch()} onBack={() => setDispatch(null)} />
+        {error ? <div className="notice warning" role="alert">{error}</div> : null}
+      </> : content}
     </TranslationDialogFrame>
   );
 }

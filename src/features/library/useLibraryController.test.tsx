@@ -1,3 +1,4 @@
+import { setupLibraryQueryMocks } from "../../test/libraryQueryMocks";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -12,6 +13,7 @@ import type {
 } from "../../types";
 import {
   collection,
+  deferred,
   importedDetail,
   libraryHome,
   mediaSummary,
@@ -26,7 +28,7 @@ const gatewayMocks = vi.hoisted(() => ({
   updateCollection: vi.fn(),
   deleteCollection: vi.fn(),
   getCollectionDetail: vi.fn(),
-  listCollectionEpisodes: vi.fn(),
+  listCollectionEpisodes: vi.fn(), listCollectionEpisodePage: vi.fn(),
   addProjectToCollection: vi.fn(),
   removeProjectFromCollection: vi.fn(),
   getEpisodeNeighbors: vi.fn(),
@@ -37,6 +39,8 @@ const gatewayMocks = vi.hoisted(() => ({
   confirmLibraryImport: vi.fn(),
   inspectLibraryRescan: vi.fn(),
   applyLibraryRescan: vi.fn(),
+  inspectLibraryRootRebuild: vi.fn(),
+  applyLibraryRootRebuild: vi.fn(),
   inspectLibraryRootRelocation: vi.fn(),
   applyLibraryRootRelocation: vi.fn(),
 }));
@@ -53,16 +57,10 @@ vi.mock("./libraryGateway", async (importOriginal) => ({
 
 import { useLibraryController } from "./useLibraryController";
 
-function deferred<T>() {
-  let resolve!: (value: T) => void;
-  const promise = new Promise<T>((next) => {
-    resolve = next;
-  });
-  return { promise, resolve };
-}
 
 beforeEach(() => {
   vi.clearAllMocks();
+  setupLibraryQueryMocks(gatewayMocks);
   window.localStorage.clear();
   gatewayMocks.searchLibrary.mockResolvedValue([]);
   gatewayMocks.listLibrarySection.mockResolvedValue({
@@ -78,18 +76,18 @@ afterEach(() => {
 });
 
 describe("useLibraryController", () => {
-  it("restores a valid section and appends paged media without duplicates", async () => {
+  it("restores a valid section and replaces snapshot-bound pages", async () => {
     window.localStorage.setItem("siaovplay-library-section", "watch_later");
     gatewayMocks.getLibraryHome.mockResolvedValue(libraryHome(0));
     gatewayMocks.listLibrarySection
       .mockResolvedValueOnce({
         items: [mediaSummary("first")],
-        totalCount: 2,
+        snapshotToken: "snapshot", totalCount: 2,
         nextOffset: 1,
       })
       .mockResolvedValueOnce({
-        items: [mediaSummary("first"), mediaSummary("second")],
-        totalCount: 2,
+        items: [mediaSummary("second")],
+        snapshotToken: "snapshot", totalCount: 2,
         nextOffset: null,
       });
     const { result } = renderHook(() => useLibraryController());
@@ -103,7 +101,7 @@ describe("useLibraryController", () => {
     });
     expect(
       result.current.state.sectionPages.watch_later.items.map((item) => item.projectId),
-    ).toEqual(["first", "second"]);
+    ).toEqual(["second"]);
     expect(result.current.state.sectionPages.watch_later.nextOffset).toBeNull();
   });
 
@@ -114,7 +112,12 @@ describe("useLibraryController", () => {
     expect(result.current.state.section).toBe("home");
 
     act(() => result.current.setSection("folders"));
-    expect(window.localStorage.getItem("siaovplay-library-section")).toBe("folders");
+    expect(JSON.parse(window.localStorage.getItem("siaovplay-preferences.library-section")!)).toEqual({ version: 1, value: "folders" });
+    const write = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("quota"); });
+    try {
+      act(() => result.current.setSection("series"));
+      expect(result.current.state.section).toBe("series");
+    } finally { write.mockRestore(); }
   });
 
   it("ignores a late home response after a newer refresh completes", async () => {
@@ -369,6 +372,7 @@ describe("useLibraryController", () => {
         previewToken: preview.previewToken,
         newItems: [expect.objectContaining({ episodeNumber: 2 })],
       }),
+      preview,
     );
     expect(result.current.state.recovery.stage).toBe("closed");
     expect(result.current.state.home.totalProjectCount).toBe(2);
@@ -410,5 +414,25 @@ describe("useLibraryController", () => {
       await inspection!;
     });
     expect(result.current.state.recovery.stage).toBe("closed");
+  });
+  it("passes the confirmed relocation preview when applying", async () => {
+    const preview = { previewToken: "token", rootId: "root", currentRootPath: "W:\\Old", newRootPath: "W:\\Moved", matchedItemCount: 1, mismatches: [], expiresAtMs: 1_900_000_000_000 };
+    gatewayMocks.inspectLibraryRootRelocation.mockResolvedValue(preview);
+    gatewayMocks.applyLibraryRootRelocation.mockResolvedValue({ root: { id: "root", path: "W:\\Moved", displayName: "Moved", availability: "available", status: "linked", lastScannedAtMs: 1, itemCount: 1 }, updatedItemCount: 1 });
+    const { result } = renderHook(() => useLibraryController());
+    await waitFor(() => expect(result.current.state.loading).toBe(false));
+    await act(async () => { await result.current.inspectRootRelocation("root", "W:\\Moved"); });
+    await act(async () => { await result.current.applyRootRelocation(); });
+    expect(gatewayMocks.applyLibraryRootRelocation).toHaveBeenCalledWith(preview);
+  });
+  it("passes the confirmed rebuild preview when applying", async () => {
+    const preview = { previewToken: "token", rootId: "root", currentRootPath: "W:\\Old", rootPath: "W:\\Moved", rootDisplayName: "Moved", suggestedCollectionTitle: "Rain", rootOffline: false, newCandidates: [], matchedItems: [], missingItems: [], changedItems: [], uncertainItems: [], ignoredCount: 0, expiresAtMs: 1_900_000_000_000 };
+    gatewayMocks.inspectLibraryRootRebuild.mockResolvedValue(preview);
+    gatewayMocks.applyLibraryRootRebuild.mockRejectedValue(new Error("test failure"));
+    const { result } = renderHook(() => useLibraryController());
+    await waitFor(() => expect(result.current.state.loading).toBe(false));
+    await act(async () => { await result.current.inspectRootRebuild("root"); });
+    await act(async () => { await result.current.applyRebuild(); });
+    expect(gatewayMocks.applyLibraryRootRebuild).toHaveBeenCalledWith(expect.objectContaining({ previewToken: "token" }), preview);
   });
 });

@@ -1,11 +1,20 @@
 {
   "name": "siao-vplay",
   "private": true,
+  "license": "MIT",
+  "engines": {
+    "node": "24.18.0"
+  },
   "version": "0.4.1",
   "type": "module",
   "scripts": {
+    "check:release": "node tools/release-metadata.mjs",
+    "release:sync": "node tools/release-metadata.mjs --sync",
+    "test:tools": "node --test tools/release-metadata.test.mjs tools/ipc-schema.test.mjs tools/gateway-boundary.test.mjs tools/check-deferred-build.test.mjs && powershell -NoProfile -ExecutionPolicy Bypass -File tools/build-policy.test.ps1",
+    "notices:generate": "node tools/generate-third-party-notices.mjs",
+    "notices:check": "node tools/generate-third-party-notices.mjs --check",
     "dev": "vite --host 127.0.0.1 --port 1420",
-    "build": "tsc -b && vite build",
+    "build": "tsc -b && vite build --manifest && node tools/check-deferred-build.mjs",
     "build:e2e": "tsc -b && vite build --mode e2e",
     "preview": "vite preview",
     "typecheck": "tsc -b --pretty false",
@@ -15,7 +24,9 @@
     "test:e2e": "playwright test",
     "test:watch": "vitest",
     "desktop:build": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/build-app-only.ps1",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "contracts:generate": "node tools/generate-contracts.mjs --write",
+    "contracts:check": "node tools/generate-contracts.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "2.11.1",
@@ -33,11 +44,13 @@
     "@types/react": "19.2.17",
     "@types/react-dom": "19.2.3",
     "@vitejs/plugin-react": "6.0.4",
+    "ajv": "8.20.0",
     "eslint": "10.8.0",
     "eslint-plugin-react-hooks": "7.1.1",
     "eslint-plugin-react-refresh": "0.5.3",
     "globals": "17.8.0",
     "jsdom": "30.0.1",
+    "json-schema-to-typescript": "16.0.0",
     "typescript": "6.0.3",
     "typescript-eslint": "8.65.0",
     "vite": "8.1.5",

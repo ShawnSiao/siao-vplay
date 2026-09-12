@@ -3,7 +3,7 @@ use serde_json::{Value, json};
 
 use super::{
     GenerationInput, ProviderFailure, ProviderOutput, checked, client, endpoint, generation_client,
-    json_value, parse_data_url, send_error,
+    json_value, send_generation, parse_data_url, send_error,
 };
 use crate::ai::{
     error::AiError,
@@ -68,14 +68,12 @@ pub fn generate(
         }
     });
     let path = format!("/models/{}:generateContent", input.model_id);
-    let response = generation_client(input)?
+    let request = generation_client(input)?
         .post(endpoint(&service.base_url, &path))
         .header("x-goog-api-key", &service.api_key)
         .header(CONTENT_TYPE, "application/json")
-        .json(&body)
-        .send()
-        .map_err(send_error)?;
-    let (payload, request_id) = json_value(checked(response, AiError::ModelNotFound)?)?;
+        .json(&body);
+    let (payload, request_id) = send_generation(request, input)?;
     let output_text = payload
         .pointer("/candidates/0/content/parts/0/text")
         .and_then(Value::as_str)

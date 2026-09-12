@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub enum StorageArea {
     AppData,
     RemoteMedia,
@@ -38,6 +39,7 @@ pub struct ClearPlaybackCacheResult {
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub enum StorageMigrationMode {
     Copy,
     Rebuild,
@@ -45,6 +47,7 @@ pub enum StorageMigrationMode {
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub enum StorageMigrationStatus {
     Prepared,
     Running,
@@ -79,6 +82,7 @@ pub struct StorageMigrationTaskInput {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct StorageMigrationTask {
     pub id: String,
     pub area: StorageArea,
@@ -86,16 +90,23 @@ pub struct StorageMigrationTask {
     pub status: StorageMigrationStatus,
     pub source_root: String,
     pub destination_root: String,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub bytes_to_copy: u64,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub copied_bytes: u64,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub file_count: usize,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub verified_file_count: usize,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub free_space_bytes: Option<u64>,
     pub previous_root_retained: bool,
     pub restart_required: bool,
     pub error_code: Option<String>,
     pub error_message: Option<String>,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub created_at_ms: i64,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub updated_at_ms: i64,
 }
 
@@ -105,7 +116,9 @@ fn default_migration_mode() -> StorageMigrationMode {
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct SaveStorageSettingsInput {
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740990_u64)))]
     pub expected_revision: u64,
     pub remote_media_root: Option<String>,
     pub media_cache_root: Option<String>,
@@ -115,7 +128,9 @@ pub struct SaveStorageSettingsInput {
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct StorageSettingsView {
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub revision: u64,
     pub app_data_root: String,
     pub app_data_root_locked_by_environment: bool,
@@ -125,9 +140,13 @@ pub struct StorageSettingsView {
     pub media_cache_uses_default: bool,
     pub default_subtitle_export_directory: Option<String>,
     pub default_video_report_export_directory: Option<String>,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub app_data_used_bytes: u64,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub app_data_free_space_bytes: Option<u64>,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub remote_media_used_bytes: u64,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub media_cache_used_bytes: u64,
     pub app_data_available: bool,
     pub remote_media_available: bool,
@@ -135,17 +154,22 @@ pub struct StorageSettingsView {
     pub pending_app_data_root: Option<String>,
 }
 
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct StorageSettingsFile {
-    #[serde(default = "settings_version")]
+    #[serde(default = "legacy_settings_version")]
     pub version: u32,
+    #[serde(default)]
+    pub pending_migration_commit: Option<super::migration_commit::CommitIntent>,
     #[serde(default = "initial_revision")]
     pub revision: u64,
     #[serde(default)]
     pub active_app_data_root: Option<String>,
     #[serde(default)]
     pub pending_app_data_root: Option<String>,
+    #[serde(default)]
+    pub pending_app_data_receipt: Option<super::migration_receipt::ReceiptReference>,
     #[serde(default)]
     pub remote_media_root: Option<String>,
     #[serde(default)]
@@ -160,9 +184,11 @@ impl Default for StorageSettingsFile {
     fn default() -> Self {
         Self {
             version: settings_version(),
+            pending_migration_commit: None,
             revision: initial_revision(),
             active_app_data_root: None,
             pending_app_data_root: None,
+            pending_app_data_receipt: None,
             remote_media_root: None,
             media_cache_root: None,
             default_subtitle_export_directory: None,
@@ -172,9 +198,11 @@ impl Default for StorageSettingsFile {
 }
 
 pub(crate) const fn settings_version() -> u32 {
-    1
+    3
 }
 
 const fn initial_revision() -> u64 {
     1
 }
+
+const fn legacy_settings_version() -> u32 { 1 }

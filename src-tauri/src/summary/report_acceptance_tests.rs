@@ -53,6 +53,7 @@ fn real_media_exports_a_verified_private_markdown_report() {
     )
     .unwrap();
     let result = summary_result();
+    SummaryTaskRepository::new(&store).set_task_state(&task.id, "validating", "validating", 0.9).unwrap();
     let summary = SummaryResultRepository::new(&store)
         .save_summary(&task.id, &result, false)
         .unwrap();
@@ -142,6 +143,15 @@ fn real_codex_completes_a_schema_validated_summary() {
 
 #[test]
 fn manual_handoff_imports_a_schema_valid_result() {
+    manual_handoff(false);
+}
+
+#[test]
+fn cancelled_manual_handoff_cannot_import_a_valid_late_result() {
+    manual_handoff(true);
+}
+
+fn manual_handoff(cancel_before_import: bool) {
     let directory = tempfile::tempdir().unwrap();
     let media_path = directory.path().join("fixture.mp4");
     fs::write(&media_path, b"authorized fixture").unwrap();
@@ -181,6 +191,22 @@ fn manual_handoff_imports_a_schema_valid_result() {
         serde_json::to_vec_pretty(&summary_result()).unwrap(),
     )
     .unwrap();
+    if cancel_before_import {
+        SummaryTaskRepository::new(&store).finish_cancelled(&task.id).unwrap();
+        assert!(executor::start_or_resume(&store, &task.id).is_err());
+        assert!(SummaryResultRepository::new(&store).list_summaries(&task.project_id).unwrap().is_empty());
+        return;
+    }
+    let error = executor::start_or_resume(&store, &task.id).unwrap_err();
+    assert!(error.to_string().contains("未提供的画面"));
+    assert!(SummaryResultRepository::new(&store).list_summaries(&task.project_id).unwrap().is_empty());
+    let mut corrected = summary_result();
+    for sections in [&mut corrected.speaker_narrative, &mut corrected.timeline,
+        &mut corrected.core_concepts, &mut corrected.principles_or_architecture,
+        &mut corrected.examples_and_scenarios, &mut corrected.design_tradeoffs, &mut corrected.conclusions] {
+        for section in sections { for evidence in &mut section.evidence { evidence.frame_timestamps_ms.clear(); } }
+    }
+    fs::write(Path::new(&task.materials_directory).join("result.json"), serde_json::to_vec(&corrected).unwrap()).unwrap();
     let completed = executor::start_or_resume(&store, &task.id).unwrap();
     assert_eq!(completed.status, "completed");
     assert!(completed.output_summary_id.is_some());
@@ -248,4 +274,37 @@ fn summary_result() -> SummaryResult {
         }],
         mermaid: Some("flowchart LR\nA --> B".to_owned()),
     }
+}
+
+#[test]
+fn interrupted_export_directory_does_not_block_a_new_verified_report() {
+    let (directory, store, task) = super::test_support::prepared_summary();
+    // No frame timestamp is within this isolated zero-cutoff report.
+    store.connect().unwrap().execute(
+        "UPDATE summary_tasks SET playback_cutoff_ms=0 WHERE id=?1", [&task.id],
+    ).unwrap();
+    SummaryTaskRepository::new(&store).set_task_state(&task.id, "validating", "validating", 0.9).unwrap();
+    let summary = SummaryResultRepository::new(&store).save_summary(&task.id, &summary_result(), false).unwrap();
+    let output = directory.path().join("reports");
+    fs::create_dir(&output).unwrap();
+    let abandoned = output.join(format!(".siaovplay-summary-{}.tmp", summary.id));
+    fs::create_dir(&abandoned).unwrap();
+    fs::write(abandoned.join("report.md"), b"interrupted export retained").unwrap();
+    let run = || report::export(&store, ExportVideoSummaryInput {
+        summary_id: summary.id.clone(), directory: output.to_string_lossy().into_owned(),
+    }).unwrap();
+    let first = run();
+    let first_bytes = fs::read(&first.report_path).unwrap();
+    let second = run();
+    assert_ne!(first.directory, second.directory);
+    assert_eq!(fs::read(&first.report_path).unwrap(), first_bytes);
+    assert_eq!(fs::read(abandoned.join("report.md")).unwrap(), b"interrupted export retained");
+    for exported in [first, second] {
+        assert_eq!(exported.asset_count, 0);
+        let bytes = fs::read(&exported.report_path).unwrap();
+        assert_eq!(format!("{:x}", Sha256::digest(&bytes)), exported.report_sha256);
+        let manifest: Value = serde_json::from_slice(&fs::read(&exported.manifest_path).unwrap()).unwrap();
+        assert_eq!(manifest["reportSha256"], exported.report_sha256);
+    }
+    assert_eq!(fs::read_dir(output).unwrap().count(), 3);
 }

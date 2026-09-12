@@ -56,6 +56,8 @@ const media: LibraryMediaSummary = {
 function home(overrides: Partial<LibraryHome> = {}): LibraryHome {
   return {
     continueWatching: [],
+    continueWatchingCount: 0,
+    collectionCount: overrides.collections?.length ?? 1, folderCount: overrides.folders?.length ?? 0, watchLaterCount: 0,
     collections: [collection],
     folders: [],
     unclassified: [],
@@ -85,6 +87,11 @@ function renderScreen(
     },
   } satisfies React.ComponentProps<typeof LibraryScreen>["sectionPages"];
   const props: React.ComponentProps<typeof LibraryScreen> = {
+      readRoots: async input => {
+        const items = overrides.home?.folders ?? [];
+        return { scope: "roots", offset: input.offset, snapshotToken: "a".repeat(64), totalCount: items.length,
+          nextOffset: input.offset + 24 < items.length ? input.offset + 24 : null, items: items.slice(input.offset, input.offset + 24) };
+      },
       home: home(),
       section: "home",
       sectionPages,
@@ -108,7 +115,7 @@ function renderScreen(
       onDelete: () => undefined,
       onOpenLocation: () => undefined,
       onSelectSection: () => undefined,
-      onLoadMoreSection: () => undefined,
+      onLoadMoreSection: async () => false,
       onReloadSection: () => undefined,
       onOpenCollection: () => undefined,
       onCloseCollection: () => undefined,
@@ -119,6 +126,7 @@ function renderScreen(
       onAddToCollection: async () => undefined,
       onRemoveFromCollection: async () => undefined,
       onSetWatchLater: async () => undefined,
+      onSetWatched: async () => undefined,
       ...overrides,
   };
   return render(
@@ -192,10 +200,40 @@ describe("LibraryScreen library lifecycle", () => {
     fireEvent.click(screen.getByRole("button", { name: "确认删除合集" }));
     await waitFor(() => expect(onDeleteCollection).toHaveBeenCalledWith(collection.id));
     expect(onSelectSection).toHaveBeenCalledWith("folders");
-    expect(screen.getByRole("status")).toHaveTextContent("已保留 1 个视频项目");
+    expect(screen.getByText(/已保留 1 个视频项目/)).toHaveAttribute("role", "status");
   });
 
-  it("shows orphaned folders with rebuild and revoke actions only", () => {
+  it("disables revoke confirmation while another mutation is pending", async () => {
+    const onRebuildRoot = vi.fn();
+    const onRevokeRoot = vi.fn();
+    renderScreen({
+      section: "folders",
+      mutationPending: true,
+      home: home({
+        folders: [{
+          id: "20000000-0000-4000-8000-000000000001",
+          path: "W:\\Rain",
+          displayName: "Rain",
+          availability: "available",
+          status: "orphaned",
+          lastScannedAtMs: 1,
+          itemCount: 1,
+        }],
+      }),
+      onRebuildRoot,
+      onRevokeRoot,
+    });
+
+    await screen.findByText("待重建");
+    fireEvent.click(screen.getByRole("button", { name: "Rain 的文件夹操作" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "撤销授权" }));
+    const confirm = screen.getByRole("button", { name: "撤销授权" });
+    expect(confirm).toBeDisabled();
+    fireEvent.click(confirm);
+    expect(onRevokeRoot).not.toHaveBeenCalled();
+  });
+
+  it("shows orphaned folders with rebuild and revoke actions only", async () => {
     const onRebuildRoot = vi.fn();
     const onRevokeRoot = vi.fn();
     renderScreen({
@@ -215,7 +253,7 @@ describe("LibraryScreen library lifecycle", () => {
       onRevokeRoot,
     });
 
-    expect(screen.getByText("待重建")).toBeInTheDocument();
+    expect(await screen.findByText("待重建")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "重建剧集 Rain" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Rain 的文件夹操作" }));
     expect(screen.getByRole("menuitem", { name: "撤销授权" })).toBeInTheDocument();

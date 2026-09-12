@@ -30,7 +30,7 @@ pub enum MediaError {
     RuntimeUnavailable(String),
     #[error("媒体探测失败：{0}")]
     ProbeFailed(String),
-    #[error("媒体在探测期间发生变化，请重新尝试")]
+    #[error("源视频已发生变化，请重新尝试")]
     SourceChanged,
     #[error("媒体不包含可用的视频轨")]
     MissingVideo,
@@ -50,6 +50,7 @@ pub enum MediaError {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub enum PlaybackDecision {
     Direct,
     RuntimeValidationRequired,
@@ -59,6 +60,7 @@ pub enum PlaybackDecision {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct PlaybackGate {
     pub decision: PlaybackDecision,
     pub reason_codes: Vec<String>,
@@ -67,30 +69,43 @@ pub struct PlaybackGate {
 
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct VideoStream {
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub index: i64,
     pub codec_name: String,
     pub profile: Option<String>,
     pub pixel_format: Option<String>,
+    #[cfg_attr(test, schemars(range(min = 0, max = 4294967295_u64)))]
     pub width: u32,
+    #[cfg_attr(test, schemars(range(min = 0, max = 4294967295_u64)))]
     pub height: u32,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991.0)))]
     pub frame_rate: Option<f64>,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub duration_ms: Option<i64>,
 }
 
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct AudioStream {
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub index: i64,
     pub codec_name: String,
+    #[cfg_attr(test, schemars(range(min = 0, max = 4294967295_u64)))]
     pub channels: Option<u32>,
+    #[cfg_attr(test, schemars(range(min = 0, max = 4294967295_u64)))]
     pub sample_rate_hz: Option<u32>,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub duration_ms: Option<i64>,
 }
 
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct SubtitleStream {
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub index: i64,
     pub codec_name: String,
     pub language: Option<String>,
@@ -100,6 +115,7 @@ pub struct SubtitleStream {
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub enum EmbeddedSubtitleKind {
     Text,
     Image,
@@ -109,10 +125,14 @@ pub enum EmbeddedSubtitleKind {
 
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct MediaProbe {
     pub container_formats: Vec<String>,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub duration_ms: Option<i64>,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub size_bytes: Option<u64>,
+    #[cfg_attr(test, schemars(range(min = 0, max = 9007199254740991_u64)))]
     pub bit_rate: Option<u64>,
     pub video_streams: Vec<VideoStream>,
     pub audio_streams: Vec<AudioStream>,
@@ -121,6 +141,7 @@ pub struct MediaProbe {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct MediaInspection {
     pub project_id: String,
     pub media_source_id: String,
@@ -133,6 +154,7 @@ pub struct MediaInspection {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub enum PlaybackSourceKind {
     Original,
     Proxy,
@@ -140,6 +162,7 @@ pub enum PlaybackSourceKind {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct MediaPreparation {
     pub inspection: MediaInspection,
     pub playback_source_kind: PlaybackSourceKind,
@@ -150,6 +173,7 @@ pub struct MediaPreparation {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
 pub struct MediaRuntimeStatus {
     pub available: bool,
     pub ffmpeg_path: Option<String>,
@@ -158,68 +182,12 @@ pub struct MediaRuntimeStatus {
     pub error_message: Option<String>,
 }
 
-#[derive(Clone, Debug)]
-struct MediaRuntime {
-    ffmpeg_path: PathBuf,
-    ffprobe_path: PathBuf,
-    version: String,
-}
-
-impl MediaRuntime {
-    fn resolve() -> Result<Self, MediaError> {
-        let ffmpeg_path = resolve_runtime_tool("SIAOVPLAY_FFMPEG", "ffmpeg.exe")?;
-        let ffprobe_path = resolve_runtime_tool("SIAOVPLAY_FFPROBE", "ffprobe.exe")?;
-        let version = tool_version(&ffmpeg_path)?;
-        Ok(Self {
-            ffmpeg_path,
-            ffprobe_path,
-            version,
-        })
-    }
-
-    fn status() -> MediaRuntimeStatus {
-        match Self::resolve() {
-            Ok(runtime) => MediaRuntimeStatus {
-                available: true,
-                ffmpeg_path: Some(path_to_string(&runtime.ffmpeg_path)),
-                ffprobe_path: Some(path_to_string(&runtime.ffprobe_path)),
-                version: Some(runtime.version),
-                error_message: None,
-            },
-            Err(error) => MediaRuntimeStatus {
-                available: false,
-                ffmpeg_path: None,
-                ffprobe_path: None,
-                version: None,
-                error_message: Some(error.to_string()),
-            },
-        }
-    }
-
-    fn probe(&self, media_path: &Path) -> Result<MediaProbe, MediaError> {
-        let output = hidden_command(&self.ffprobe_path)
-            .args([
-                "-v",
-                "error",
-                "-show_format",
-                "-show_streams",
-                "-of",
-                "json",
-            ])
-            .arg(media_path)
-            .output()
-            .map_err(|error| {
-                MediaError::ProbeFailed(format!(
-                    "无法启动 {}：{error}",
-                    self.ffprobe_path.display()
-                ))
-            })?;
-        if !output.status.success() {
-            return Err(MediaError::ProbeFailed(command_error_message(&output)));
-        }
-        parse_probe_output(&output.stdout)
-    }
-}
+mod preparation;
+#[cfg(test)]
+pub use preparation::prepare_project_media;
+pub(crate) use preparation::prepare_project_media_controlled;
+mod runtime;
+use runtime::MediaRuntime;
 
 pub fn media_runtime_status() -> MediaRuntimeStatus {
     MediaRuntime::status()
@@ -317,48 +285,6 @@ pub fn inspect_project_media(
 ) -> Result<MediaInspection, MediaError> {
     let runtime = MediaRuntime::resolve()?;
     inspect_with_runtime(store, project_id, &runtime)
-}
-
-pub fn prepare_project_media(
-    store: &ProjectStore,
-    media_cache_root: &Path,
-    input: PrepareProjectMediaInput,
-) -> Result<MediaPreparation, MediaError> {
-    let runtime = MediaRuntime::resolve()?;
-    let inspection = inspect_with_runtime(store, &input.project_id, &runtime)?;
-    let project = store.get_project(&input.project_id)?;
-    let source_path = PathBuf::from(&project.media_source.locator);
-
-    if inspection.playback_gate.decision == PlaybackDecision::Unsupported {
-        return Err(MediaError::MissingVideo);
-    }
-    let needs_proxy =
-        input.force_proxy || inspection.playback_gate.decision == PlaybackDecision::ProxyRequired;
-    if !needs_proxy {
-        return Ok(MediaPreparation {
-            inspection,
-            playback_source_kind: PlaybackSourceKind::Original,
-            playback_path: path_to_string(&source_path),
-            proxy_artifact: None,
-            reused_proxy: false,
-        });
-    }
-
-    let (artifact, reused_proxy) = generate_playback_proxy(
-        store,
-        media_cache_root,
-        &runtime,
-        &project,
-        &inspection,
-        &source_path,
-    )?;
-    Ok(MediaPreparation {
-        inspection,
-        playback_source_kind: PlaybackSourceKind::Proxy,
-        playback_path: artifact.path.clone(),
-        proxy_artifact: Some(artifact),
-        reused_proxy,
-    })
 }
 
 pub fn ensure_project_poster(
@@ -525,7 +451,9 @@ fn inspect_with_runtime(
             reused_probe: true,
         });
     }
-    let source_sha256 = hash_file(&source_path)?;
+    runtime.stage(crate::preparation::Stage::Fingerprint)?;
+    let source_sha256 = hash_file_controlled(&source_path, &runtime.cancel)?;
+    runtime.stage(crate::preparation::Stage::Inspect)?;
     let probe = runtime.probe(&source_path)?;
     let after = FileIdentity::read(&source_path)?;
     if before != after {
@@ -558,110 +486,6 @@ fn valid_poster(path: &Path) -> bool {
     fs::metadata(path)
         .map(|metadata| metadata.is_file() && metadata.len() > 100)
         .unwrap_or(false)
-}
-
-fn generate_playback_proxy(
-    store: &ProjectStore,
-    media_cache_root: &Path,
-    runtime: &MediaRuntime,
-    project: &crate::domain::Project,
-    inspection: &MediaInspection,
-    source_path: &Path,
-) -> Result<(MediaArtifact, bool), MediaError> {
-    let project_cache = media_cache_root.join(&project.id);
-    fs::create_dir_all(&project_cache)?;
-    let fingerprint_prefix = &inspection.source_sha256[..16];
-    let final_path = project_cache.join(format!("playback-{fingerprint_prefix}.mp4"));
-    let temporary_path = project_cache.join(format!("playback-{fingerprint_prefix}.part.mp4"));
-
-    if let Some(artifact) = store.find_completed_playback_proxy(
-        &project.id,
-        &inspection.source_sha256,
-        PLAYBACK_PROXY_PROFILE,
-    )? && Path::new(&artifact.path) == final_path
-        && playback_proxy_is_valid(runtime, &final_path)
-    {
-        return Ok((artifact, true));
-    }
-
-    let artifact = store.begin_playback_proxy(
-        &project.id,
-        &project.media_source.id,
-        &inspection.source_sha256,
-        PLAYBACK_PROXY_PROFILE,
-        &final_path,
-    )?;
-    store.update_media_artifact_status(&artifact.id, MediaArtifactStatus::Running, None, None)?;
-
-    remove_controlled_file_if_present(&temporary_path, &project_cache)?;
-    remove_controlled_file_if_present(&final_path, &project_cache)?;
-    let mut command = hidden_command(&runtime.ffmpeg_path);
-    command
-        .args(["-y", "-hide_banner", "-nostdin", "-v", "error", "-i"])
-        .arg(source_path)
-        .args(["-map", "0:v:0", "-map", "0:a:0?"])
-        .args(h264_video_encode_args(&inspection.probe))
-        .args([
-            "-force_key_frames",
-            "expr:gte(t,n_forced*2)",
-            "-c:a",
-            "aac",
-            "-b:a",
-            "192k",
-            "-movflags",
-            "+faststart",
-        ])
-        .arg(&temporary_path);
-    let output = command.output().map_err(|error| {
-        fail_proxy(
-            store,
-            &artifact.id,
-            &temporary_path,
-            &project_cache,
-            "ffmpeg_start_failed",
-            &format!("无法启动 FFmpeg：{error}"),
-        )
-    })?;
-
-    if !output.status.success() {
-        let message = command_error_message(&output);
-        return Err(fail_proxy(
-            store,
-            &artifact.id,
-            &temporary_path,
-            &project_cache,
-            "ffmpeg_failed",
-            &message,
-        ));
-    }
-    if !playback_proxy_is_valid(runtime, &temporary_path) {
-        return Err(fail_proxy(
-            store,
-            &artifact.id,
-            &temporary_path,
-            &project_cache,
-            "proxy_validation_failed",
-            "FFmpeg 已结束，但代理文件不满足 H.264 yuv420p 与 AAC MP4 门禁",
-        ));
-    }
-
-    fs::rename(&temporary_path, &final_path).map_err(|error| {
-        fail_proxy(
-            store,
-            &artifact.id,
-            &temporary_path,
-            &project_cache,
-            "proxy_finalize_failed",
-            &format!("无法完成代理文件：{error}"),
-        )
-    })?;
-    let completed = store.update_media_artifact_status(
-        &artifact.id,
-        MediaArtifactStatus::Completed,
-        None,
-        None,
-    )?;
-    Ok((completed, false))
 }
 
 fn fail_proxy(
@@ -992,12 +816,18 @@ impl FileIdentity {
     }
 }
 
+#[cfg(test)]
 fn hash_file(path: &Path) -> Result<String, MediaError> {
+    hash_file_controlled(path, &crate::cancellable_process::Cancellation::default())
+}
+
+fn hash_file_controlled(path: &Path, cancel: &crate::cancellable_process::Cancellation) -> Result<String, MediaError> {
     let file = File::open(path)?;
     let mut reader = BufReader::new(file);
     let mut hasher = Sha256::new();
     let mut buffer = [0_u8; 1024 * 1024];
     loop {
+        cancel.check()?;
         let count = reader.read(&mut buffer)?;
         if count == 0 {
             break;
@@ -1099,10 +929,8 @@ fn push_unique(candidates: &mut Vec<PathBuf>, path: PathBuf) {
     }
 }
 
-fn tool_version(path: &Path) -> Result<String, MediaError> {
-    let output = hidden_command(path)
-        .arg("-version")
-        .output()
+fn tool_version(path: &Path, cancel: &crate::cancellable_process::Cancellation) -> Result<String, MediaError> {
+    let output = crate::cancellable_process::output(hidden_command(path).arg("-version"), cancel)
         .map_err(|error| MediaError::RuntimeUnavailable(error.to_string()))?;
     if !output.status.success() {
         return Err(MediaError::RuntimeUnavailable(command_error_message(
@@ -1136,7 +964,9 @@ fn command_error_message(output: &Output) -> String {
     } else {
         stderr.trim()
     };
-    if message.is_empty() {
+    if let Some(message) = crate::storage_failure::process_message(message) {
+        message.to_owned()
+    } else if message.is_empty() {
         format!("进程退出码：{}", output.status)
     } else {
         truncate_message(message, 2_000)
