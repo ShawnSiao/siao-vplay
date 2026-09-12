@@ -46,6 +46,34 @@ fn gibibyte_move_preserves_hashes_and_reopens_selected_root() {
         fs::create_dir(&target).unwrap();
         let plan = plan_resource_root_move(target.to_str().unwrap()).unwrap();
         assert!(plan.bytes_to_copy >= 1024 * 1024 * 1024);
+        let cancelled_id = Uuid::new_v4().to_string();
+        let registration = move_control::register(&cancelled_id).unwrap();
+        let input = MoveLocalResourceRootInput { parent_path: plan.selected_parent.clone(),
+            plan_fingerprint: plan.plan_fingerprint.clone(), confirmed: true };
+        let worker_id = cancelled_id.clone();
+        let (send, receive) = std::sync::mpsc::channel();
+        let worker = std::thread::spawn(move || {
+            let result = registration.run(|| move_resource_root(input, &worker_id));
+            send.send(result).unwrap();
+        });
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
+        loop {
+            let writing = fs::read_dir(&target).unwrap().filter_map(Result::ok).any(|entry| {
+                entry.file_name().to_string_lossy().starts_with(".SiaoVPlay-moving-") &&
+                fs::metadata(entry.path().join("large-fixture.bin"))
+                    .is_ok_and(|metadata| metadata.len() > 0 && metadata.len() < 1024 * 1024 * 1024)
+            });
+            if writing { break; }
+            assert!(!worker.is_finished(), "move completed before an in-progress copy was observed");
+            assert!(std::time::Instant::now() < deadline, "copy did not start within 60 seconds");
+            std::thread::sleep(std::time::Duration::from_millis(2));
+        }
+        assert!(move_control::cancel(&cancelled_id).unwrap());
+        let cancelled = receive.recv_timeout(std::time::Duration::from_secs(5)).unwrap();
+        worker.join().unwrap();
+        assert!(matches!(cancelled, Err(ResourceMigrationError::Cancelled)));
+        assert_eq!(local_resources::configured_root().unwrap(), root);
+        assert!(!Path::new(&plan.resource_root).exists());
         let id = Uuid::new_v4().to_string();
         let result = move_control::register(&id).unwrap().run(|| move_resource_root(
             MoveLocalResourceRootInput { parent_path: plan.selected_parent,
