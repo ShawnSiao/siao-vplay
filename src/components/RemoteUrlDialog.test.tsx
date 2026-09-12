@@ -64,6 +64,7 @@ describe("RemoteUrlDialog", () => {
 
   it("discloses the configured X recipient and requires an explicit fallback choice", async () => {
     desktopMocks.inspectYouTubeUrl.mockResolvedValue(xPreview);
+    desktopMocks.importYouTubeUrl.mockRejectedValueOnce({ code: "public_resolver_consent_changed", message: "changed" });
     render(<RemoteUrlDialog previewMode={false} onClose={() => undefined} onImported={() => undefined} />);
     fireEvent.change(screen.getByLabelText("视频 URL"), { target: { value: xPreview.originalUrl } });
     const consent = await screen.findByRole("checkbox", { name: /允许直接解析失败后/ });
@@ -72,10 +73,29 @@ describe("RemoteUrlDialog", () => {
     fireEvent.click(consent);
     fireEvent.click(screen.getByRole("button", { name: "检查 URL" }));
     await waitFor(() => expect(desktopMocks.inspectYouTubeUrl).toHaveBeenCalledWith(xPreview.originalUrl, "https://resolver.example/status/"));
+    fireEvent.click(await screen.findByRole("button", { name: "确认并导入" }));
+    await waitFor(() => expect(desktopMocks.importYouTubeUrl).toHaveBeenCalledWith(
+      xPreview.originalUrl, xPreview.previewToken, expect.any(String), "https://resolver.example/status/",
+    ));
+    expect(await screen.findByRole("alert")).toHaveTextContent("第三方解析服务已改变");
+    expect(desktopMocks.inspectYouTubeUrl).toHaveBeenCalledTimes(1);
+    expect(desktopMocks.importYouTubeUrl).toHaveBeenCalledTimes(1);
     fireEvent.change(screen.getByLabelText("视频 URL"), { target: { value: "https://x.com/openai/status/9876543210" } });
     expect(screen.getByRole("checkbox", { name: /允许直接解析失败后/ })).not.toBeChecked();
     fireEvent.change(screen.getByLabelText("视频 URL"), { target: { value: xPreview.originalUrl } });
     expect(screen.getByRole("checkbox", { name: /允许直接解析失败后/ })).not.toBeChecked();
+  });
+
+  it("does not retry a failed direct inspection with implicit resolver consent", async () => {
+    desktopMocks.inspectYouTubeUrl.mockRejectedValueOnce({ code: "youtube_inspection_failed", message: "failed" });
+    render(<RemoteUrlDialog previewMode={false} onClose={() => undefined} onImported={() => undefined} />);
+    fireEvent.change(screen.getByLabelText("视频 URL"), { target: { value: xPreview.originalUrl } });
+    const consent = await screen.findByRole("checkbox", { name: /允许直接解析失败后/ });
+    fireEvent.click(screen.getByRole("button", { name: "检查 URL" }));
+    await screen.findByRole("alert");
+    expect(desktopMocks.inspectYouTubeUrl).toHaveBeenCalledExactlyOnceWith(xPreview.originalUrl, null);
+    expect(desktopMocks.importYouTubeUrl).not.toHaveBeenCalled();
+    expect(consent).not.toBeChecked();
   });
 
   it("does not expose raw downloader output when a public video import fails", async () => {
