@@ -3,7 +3,8 @@ import { expect } from "vitest";
 
 /** Runs after the real App has accepted a newly imported translation result. */
 export async function verifyNewTranslationWhileWatching(original: string, translation: string) {
-  fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "关闭" }));
+  // Completion may add a footer close action; the header action always comes first.
+  fireEvent.click(within(screen.getByRole("dialog")).getAllByRole("button", { name: "关闭" })[0]);
   await waitFor(() => expect(document.querySelector("video")).not.toBeNull());
   const video = document.querySelector("video")!;
   video.currentTime = 0.5;
