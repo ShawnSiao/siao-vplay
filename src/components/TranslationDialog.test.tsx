@@ -12,6 +12,7 @@ vi.mock("../lib/desktop", async (original) => ({
   listTranslationTasks: mocks.list,
   prepareTranslationTask: mocks.prepare,
   startCodexTranslationTask: mocks.start,
+  readTranslationPrompt: vi.fn().mockResolvedValue("controlled prompt"),
 }));
 vi.mock("../features/ai-tasks/useAiExecutionChoice", () => ({
   useAiExecutionChoice: () => ({ kind: "codex", setKind: mocks.setKind, services: [] }),
@@ -27,6 +28,14 @@ it("offers a new task instead of retrying a changed project baseline", async () 
   await screen.findByText("项目已变化");
   expect(screen.queryByRole("button", { name: "重试未完成批次" })).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "重新准备翻译" }));
+  expect(await screen.findByRole("button", { name: "准备翻译材料" })).toBeInTheDocument();
+  expect(mocks.prepare).not.toHaveBeenCalled();
+});
+
+it("lets an invalidated manual handoff return to preparation", async () => {
+  mocks.list.mockResolvedValue([{ ...completed, status: "awaiting_external_result", handoffKind: "manual", outputVersionId: null, errorCode: "project_changed", errorMessage: "项目已变化" }]);
+  render(<TranslationDialog projectId={source.projectId} sourceVersion={source} translationVersions={[]} onClose={vi.fn()} onPrepareOriginal={vi.fn()} onTaskCompleted={vi.fn()} />);
+  fireEvent.click(await screen.findByRole("button", { name: "重新准备翻译" }));
   expect(await screen.findByRole("button", { name: "准备翻译材料" })).toBeInTheDocument();
   expect(mocks.prepare).not.toHaveBeenCalled();
 });

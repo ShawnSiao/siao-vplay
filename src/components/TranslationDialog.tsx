@@ -375,7 +375,11 @@ export function TranslationDialog({
       const application = await importTranslationResult(task.id, resultPath);
       setTask(application.task);
     } catch (cause) {
-      setError(commandError(cause).message);
+      const failure = commandError(cause);
+      setError(failure.message);
+      if (failure.code === "project_changed") {
+        setTask(current => current?.id === task.id ? { ...current, errorCode: failure.code, errorMessage: failure.message } : current);
+      }
     } finally {
       setOperation(null);
     }
@@ -470,6 +474,8 @@ export function TranslationDialog({
         </button>
       </>
     );
+  } else if (requiresNewTask) {
+    actions = <button className="button primary" type="button" disabled={busy} onClick={resetToSetup}>重新准备翻译</button>;
   } else if (task?.status === "awaiting_external_result") {
     actions = (
       <>
