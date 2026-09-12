@@ -14,6 +14,9 @@ export async function verifyTranscriptionChoicesResume(mocks: Record<"getTranscr
   mocks.getTranscriptionRuntimeStatus.mockResolvedValue({ available: false, preferredBackend: "cpu", runtimes: [], models: [] });
   render(<App />);
   fireEvent.click(await screen.findByRole("button", { name: /继续播放/ }));
+  await waitFor(() => expect(document.querySelector("video")).not.toBeNull());
+  const video = document.querySelector("video")!;
+  video.currentTime = 12;
   fireEvent.click(await screen.findByRole("button", { name: "添加字幕" }));
   fireEvent.click(await screen.findByRole("tab", { name: "从视频生成" }));
   fireEvent.change(await screen.findByRole("combobox", { name: /视频原声语言/ }), { target: { value: "ja" } });
@@ -32,6 +35,8 @@ export async function verifyTranscriptionChoicesResume(mocks: Record<"getTranscr
   await waitFor(() => expect(screen.getByRole("combobox", { name: /视频原声语言/ })).toHaveValue("ja"));
   expect(screen.getAllByRole("radio").find(input => (input as HTMLInputElement).value === "standard")!).toBeChecked();
   expect(mocks.setLocalResourceProfile).toHaveBeenCalledTimes(failFirst ? 2 : 1);
+  expect(document.querySelector("video")).toBe(video);
+  expect(video.currentTime).toBe(12);
 }
 
 export async function verifyStaleTranscriptionPreparation(mocks: Record<"getTranscriptionRuntimeStatus" | "setLocalResourceProfile", Mock>, ready?: LocalResourceStatus, leavePlayer = true) {

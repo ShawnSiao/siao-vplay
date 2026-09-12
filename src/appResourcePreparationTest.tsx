@@ -21,7 +21,8 @@ export async function verifyDismissedResourceAction({ desktopMocks, readyLocalRe
     render(<App />);
     await screen.findByText("本地功能按需准备");
     fireEvent.click(await getAddMediaCommand(/打开本地视频/));
-    const settings = await screen.findByRole("dialog", { name: "设置" });
+    await screen.findByText("继续打开本地视频");
+    const settings = screen.getByRole("dialog", { name: "设置" });
     expect(settings).toHaveTextContent("继续打开本地视频");
     fireEvent.click(within(settings).getByRole("button", { name: "关闭" }));
     expect(screen.queryByRole("dialog", { name: "设置" })).toBeNull();
@@ -71,7 +72,8 @@ export async function verifySelectedResourceResume({ desktopMocks, readyLocalRes
     await screen.findByText("本地功能按需准备");
     fireEvent.click(await getAddMediaCommand(/打开本地视频/));
 
-    const resources = await screen.findByRole("dialog", {
+    await screen.findByText("继续打开本地视频");
+    const resources = screen.getByRole("dialog", {
       name: "设置",
     });
     expect(resources).toHaveTextContent("继续打开本地视频");

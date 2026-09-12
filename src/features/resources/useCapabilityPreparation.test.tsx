@@ -59,6 +59,19 @@ it("resumes a prepared intent exactly once and keeps close independent of downlo
   expect(resume).toHaveBeenCalledTimes(1);
 });
 
+it("does not resume a cancelled operation when its resources later finish preparing", async () => {
+  const resume = vi.fn(); const { result, rerender, notice } = setup();
+  await act(async () => result.current.requestCapability("basic_media", "打开所选视频", resume));
+  expect(result.current.localResourcesOpen).toBe(true);
+  act(() => result.current.closeLocalResources());
+  rerender({ current: status(true) });
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 10)); });
+  expect(result.current.pendingResourceAction).toBeNull();
+  expect(result.current.localResourcesOpen).toBe(false);
+  expect(resume).not.toHaveBeenCalled();
+  expect(notice).toHaveBeenCalledWith("此次操作已取消；已开始的功能准备任务不会被删除。");
+});
+
 it("does not invoke a late ready response after unmount", async () => {
   const request = deferred(); const resume = vi.fn();
   const { result, unmount } = setup(vi.fn(() => request.promise));
