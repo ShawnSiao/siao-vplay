@@ -51,13 +51,13 @@ export function AiServiceEditor({ controller }: { controller: EnvironmentSetting
         <div className="environment-detail-heading">
           <div>
             <h2>{configured ? draft.displayName : custom ? "添加其他兼容服务" : `配置 ${draft.displayName}`}</h2>
-            <p>用于字幕理解与学习辅助</p>
+            <p>用于字幕翻译、内容理解与学习辅助</p>
           </div>
           {controller.dirtySelectionIds.includes(controller.selectionId) ? <span className="environment-status-chip">未保存</span> : configured ? <span className="environment-status-chip">已保存</span> : null}
         </div>
 
         <div className="environment-capabilities" aria-label="服务能力">
-          <span>字幕理解</span>
+          <span>翻译与理解</span>
           <span>学习辅助</span>
           <span className={capabilities.vision ? "" : "disabled"}>
             {capabilities.vision ? "可读取画面" : "仅使用字幕"}
