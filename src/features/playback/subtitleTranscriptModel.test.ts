@@ -56,6 +56,35 @@ function version(
 }
 
 describe("subtitle transcript model", () => {
+  it("keeps simultaneous speakers attached to their source when translation order differs", () => {
+    const cues = buildTranscriptCues(version("original", [
+      segment("speaker-a", 1_000, 3_000, "Alice: stay"),
+      segment("speaker-b", 1_000, 3_000, "Bob: go"),
+    ]), version("translation", [
+      { ...segment("tb", 1_000, 3_000, "鲍勃：走"), sourceSegmentId: "speaker-b" },
+      { ...segment("ta", 1_000, 3_000, "爱丽丝：留下"), sourceSegmentId: "speaker-a" },
+    ]));
+    expect(cues).toHaveLength(2);
+    expect(cues.find((cue) => cue.originalSegmentId === "speaker-a")?.translatedText)
+      .toBe("爱丽丝：留下");
+    expect(cues.find((cue) => cue.originalSegmentId === "speaker-b")?.translatedText)
+      .toBe("鲍勃：走");
+  });
+
+  it("uses source lineage after a whole-track offset without shifting translations to adjacent lines", () => {
+    const cues = buildTranscriptCues(version("original", [
+      { ...segment("revised-a", 11_000, 12_000, "first"), lineageId: "old-a" },
+      { ...segment("revised-b", 21_000, 22_000, "second"), lineageId: "old-b" },
+    ]), version("translation", [
+      { ...segment("ta", 1_000, 2_000, "第一句"), sourceSegmentId: "old-a" },
+      { ...segment("tb", 11_000, 12_000, "第二句"), sourceSegmentId: "old-b" },
+    ]));
+    expect(cues.map((cue) => [cue.startMs, cue.originalText, cue.translatedText])).toEqual([
+      [11_000, "first", "第一句"],
+      [21_000, "second", "第二句"],
+    ]);
+  });
+
   it("honors source identity before overlapping timestamps", () => {
     const translated = { ...segment("t", 900, 2_500, "第二句"), sourceSegmentId: "o-2" };
     const cues = buildTranscriptCues(version("original", [
