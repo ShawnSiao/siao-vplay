@@ -75,6 +75,25 @@ describe("subtitle edit drafts", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: "返回观看" })).toBeEnabled());
     confirm.mockRestore();
   });
+
+  it("keeps a committed revision when parent refresh fails and continues from its new baseline", async () => {
+    const { onVersionCreated } = setup();
+    onVersionCreated.mockRejectedValueOnce(new Error("refresh unavailable"));
+    const saved = track("translation");
+    saved.id = "saved-v2"; saved.versionNumber = 2; saved.projectRevision = 2;
+    saved.segments[0] = { ...saved.segments[0], id: "saved-line", text: "已保存修正" };
+    revise.mockResolvedValueOnce(saved).mockRejectedValueOnce(new Error("再次保存失败"));
+    fireEvent.change(screen.getByRole("textbox", { name: "简体中文字幕" }), { target: { value: "已保存修正" } });
+    fireEvent.click(screen.getByRole("button", { name: /保存为新版本/ }));
+    await screen.findByText("字幕已保存，但主界面刷新失败。可以继续修正，或关闭后重新打开视频。");
+    fireEvent.click(screen.getByRole("button", { name: /保存为新版本/ }));
+    expect(revise).toHaveBeenCalledTimes(1);
+    fireEvent.change(screen.getByRole("textbox", { name: "简体中文字幕" }), { target: { value: "下一次修正" } });
+    fireEvent.click(screen.getByRole("button", { name: /保存为新版本/ }));
+    await screen.findByText("再次保存失败");
+    expect(revise.mock.calls[1].slice(0, 3)).toEqual(["p", "saved-v2", 2]);
+    expect(screen.getByRole("textbox", { name: "简体中文字幕" })).toHaveValue("下一次修正");
+  });
 });
 
 it("restores a metadata-only historical version and retains prior versions as metadata", async () => {
