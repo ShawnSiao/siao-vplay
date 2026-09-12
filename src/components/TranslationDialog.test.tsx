@@ -21,6 +21,16 @@ const source = { id: "source-1", projectId: "project-1", languageCode: "ja", seg
 const completed = { ...createTranslationTask(source.projectId, source), status: "completed" as const, outputVersionId: "translated-1" };
 beforeEach(() => { vi.clearAllMocks(); mocks.list.mockResolvedValue([completed]); });
 
+it("offers a new task instead of retrying a changed project baseline", async () => {
+  mocks.list.mockResolvedValue([{ ...completed, status: "failed", handoffKind: "api", outputVersionId: null, errorCode: "project_changed", errorMessage: "项目已变化" }]);
+  render(<TranslationDialog projectId={source.projectId} sourceVersion={source} translationVersions={[]} onClose={vi.fn()} onPrepareOriginal={vi.fn()} onTaskCompleted={vi.fn()} />);
+  await screen.findByText("项目已变化");
+  expect(screen.queryByRole("button", { name: "重试未完成批次" })).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "重新准备翻译" }));
+  expect(await screen.findByRole("button", { name: "准备翻译材料" })).toBeInTheDocument();
+  expect(mocks.prepare).not.toHaveBeenCalled();
+});
+
 it("retries reading completed subtitles without translating again", async () => {
   const read = vi.fn().mockRejectedValueOnce(new Error("database busy")).mockResolvedValue(undefined);
   render(<TranslationDialog projectId={source.projectId} sourceVersion={source} translationVersions={[]} onClose={vi.fn()} onPrepareOriginal={vi.fn()} onTaskCompleted={read} />);

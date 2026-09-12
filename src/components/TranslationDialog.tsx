@@ -394,7 +394,9 @@ export function TranslationDialog({
   const busy = operation !== null;
   const setup = !task;
   const running = task && ["running", "validating"].includes(task.status);
+  const requiresNewTask = task?.errorCode === "project_changed";
   const canResume =
+    !requiresNewTask &&
     task?.handoffKind !== "manual" && task &&
     ["failed", "cancelled", "interrupted"].includes(task.status);
 
@@ -514,7 +516,7 @@ export function TranslationDialog({
     actions = (
       <>
         <button className="button quiet" type="button" onClick={resetToSetup}>
-          改用其他方式
+          {requiresNewTask ? "重新准备翻译" : "改用其他方式"}
         </button>
         {canResume ? (
           <button
@@ -819,7 +821,7 @@ export function TranslationDialog({
               `原文字幕和已有${targetLanguageLabel}字幕没有改变。`}
           </p>
           <p className="translation-recovery-note">
-            {task.handoffKind === "api" ? "重试会保留已校验的批次，只发送未完成的字幕批次。" : "重新开始会从受控任务包的第一批字幕开始，不复用未确认的中间结果。"}
+            {requiresNewTask ? "项目或原文已经变化。请重新准备翻译，并再次确认接收方和发送范围。" : task.handoffKind === "api" ? "重试会保留已校验的批次，只发送未完成的字幕批次。" : "重新开始会从受控任务包的第一批字幕开始，不复用未确认的中间结果。"}
           </p>
         </div>
       )}
