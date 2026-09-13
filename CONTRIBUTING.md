@@ -84,11 +84,23 @@ npx playwright test e2e/library-window.spec.ts --workers=1
 
 ## 安装包
 
+构建 NSIS 安装包不需要预先下载媒体运行时或转写模型。在仓库根目录执行：
+
 ```powershell
 npm run desktop:build
 ```
 
-默认使用仓库的 `src-tauri/target` 与 `artifacts/<version>`。可通过 `CARGO_TARGET_DIR`、`SIAOVPLAY_ARTIFACT_DIR`，或脚本的 `-BuildRoot`、`-OutputDirectory` 参数指定其他磁盘。维护者本机继续采用自己的非系统盘存储规范，外部构建无需 W 盘。
+默认使用仓库中已忽略的 `src-tauri/target` 与 `artifacts/<version>`。可通过 `CARGO_TARGET_DIR`、`SIAOVPLAY_ARTIFACT_DIR`，或脚本的 `-BuildRoot`、`-OutputDirectory` 参数指定其他目录，无需特定盘符。显式参数优先于环境变量。
+
+例如，将构建缓存和候选包放在仓库内已忽略的 `.tmp` 目录；也可将路径替换为空间充足的位置：
+
+```powershell
+$buildRoot = Join-Path (Get-Location).Path '.tmp\build-cache'
+$packageDirectory = Join-Path (Get-Location).Path '.tmp\packages'
+powershell -NoProfile -ExecutionPolicy Bypass -File tools/build-app-only.ps1 -BuildRoot $buildRoot -OutputDirectory $packageDirectory
+```
+
+构建前检查版本与资源清单；媒体运行时和模型的来源、固定版本与哈希见 `src-tauri/resources/local-resource-catalog.json`。隔离安装和文件清单检查使用 `tools/verify-app-only-install.ps1`，构建命令不会自动安装应用。
 
 生成文件属于本地候选，不会自动发布。产物清单包含源码 commit、工作区状态、组件清单摘要、签名状态与文件哈希。正式稳定渠道要求可信签名。
 
@@ -96,8 +108,13 @@ npm run desktop:build
 
 ## 提交与协作
 
+- 修改 README 时同步更新 `README.md` 和 `README.zh-CN.md`，正文保持一致，导航链接分别指向另一入口。文档修改检查内容、链接和 `git diff --check`，无需重新构建安装包。
 - 一个 PR 解决一个连贯问题，说明影响、验证和未覆盖的情况。
 - 提交前检查差异，避免格式化无关文件。
 - Bug 使用问题模板；安全问题使用 SECURITY.md 中的私密报告方式。
 - 不上传私人设计、计划、验收原始资料或受版权限制的媒体。
 - 版本以 release.json 为来源；修改后运行 `npm run release:sync` 并检查生成差异。渠道为 development、beta 或 stable；更改渠道不代表验收已经完成。
+
+## 本地调试资源
+
+开发版本支持通过 `SIAOVPLAY_RUNTIME_DIR`、`SIAOVPLAY_MODEL_DIR`、`SIAOVPLAY_FFMPEG` 和 `SIAOVPLAY_FFPROBE` 指定受控资源。这些设置用于开发调试，不属于普通安装流程。也可向应用可执行文件传入获准使用的本地媒体路径。

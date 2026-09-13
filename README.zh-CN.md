@@ -1,6 +1,6 @@
 # SiaoVPlay
 
-[简体中文](README.zh-CN.md)
+[项目首页](README.md) · 简体中文
 
 SiaoVPlay 是一款 Windows 本地优先的跨语言智能播放器。它面向已经找到海外视频、但缺少可靠简体中文字幕的中文用户。
 
